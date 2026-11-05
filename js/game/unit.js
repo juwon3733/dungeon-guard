@@ -21,7 +21,8 @@ function createCorruptUnit(corpse) {
         x: corpse.x, y: corpse.y, homeX: corpse.x, homeY: corpse.y, d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
         range: def.range, ranged: !!def.ranged, atk: 0, atkPose: 0, flash: 0, anim: 0, target: null,
-        facing: 1, dir: corpse.dir === 'right' ? 'left' : 'down', rise: 0.5
+        // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.
+        facing: 1, dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
     };
 }
 
