@@ -125,7 +125,7 @@ function updateMageCast(h, dt) {
     }
     if (!target) { h.cast = 0.4; return; }
     h.cast = def.stunEvery;
-    h.atkPose = h.atkPoseMax = def.atkTime;
+    h.atkPose = h.atkPoseMax = def.atkTime || ATTACK_POSE_TIME; // 정예 그림에는 atkTime이 없다
     target.stun = def.stunTime;
     Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 8, 0.3);
     Fx.ring(target.x, target.y - 20, 74, '#7fd8ff', 0.4);
