@@ -410,7 +410,14 @@ const UI = {
             UIKit.frame(ctx, x + 14, ry - 2, 56, 56, 'dark', 4);
             if (img) {
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(img, x + 10, ry - 8, 64, 64);
+                if (img.width < 64) { // PixelLab 그림은 정수 2배로 그리고 틀 밖은 자른다
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(x + 14, ry - 2, 56, 56);
+                    ctx.clip();
+                    ctx.drawImage(img, x + 42 - img.width, ry + 26 - img.height, img.width * 2, img.height * 2);
+                    ctx.restore();
+                } else ctx.drawImage(img, x + 10, ry - 8, 64, 64);
             }
             UIKit.text(ctx, name, x + 80, ry + 13, 22, '#ffffff');
             UIKit.plain(ctx, note, x + 80, ry + 39, 17, '#b8a9d0');
@@ -419,7 +426,7 @@ const UI = {
         };
         for (const [type, count] of entries) {
             const def = HEROES[type];
-            row(Assets.get(`${def.sprite}_walk_down0`), def.name, def.counter, count);
+            row(Assets.get(def.pl ? `${def.pl}/rotations/south` : `${def.sprite}_walk_down0`), def.name, def.counter, count);
         }
         if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
     },

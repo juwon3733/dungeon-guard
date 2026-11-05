@@ -13,6 +13,9 @@ const Assets = {
                 for (let i = 0; i < 2; i++) list.push(`${base}_act_${dir}_atk${i}`, `${base}_act_${dir}_cast${i}`);
             }
         }
+        for (const def of Object.values(HEROES)) {
+            if (def.pl) for (const dir of Object.values(PL_DIRS)) list.push(`${def.pl}/rotations/${dir}`);
+        }
         for (const pose of ['down', 'left', 'cast', 'slam', 'windup']) {
             list.push(`boss_fallen_knight_${pose}`, `boss_rift_lord_${pose}`);
         }

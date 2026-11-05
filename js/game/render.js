@@ -117,6 +117,14 @@ const Render = {
         ctx.fill();
     },
 
+    // 그릴 그림 이름과 배율, 발 위치. PixelLab 그림이 있는 용사는 그쪽을 쓴다(동작은 아직 없어 방향 그림만).
+    heroSprite(type, female, dir, anim, atkPose, casting) {
+        const def = HEROES[type];
+        const plName = def.pl && `${def.pl}/rotations/${PL_DIRS[dir] || 'south'}`;
+        if (plName && Assets.get(plName)) return { name: plName, scale: PL_SCALE, foot: def.plFoot }; // 그림이 아직 없으면 Asteria 그림을 쓴다
+        return { name: this.heroSpriteName(type, female, dir, anim, atkPose, casting), scale: HERO_SCALE, foot: 57 };
+    },
+
     heroSpriteName(type, female, dir, anim, atkPose, casting) {
         const base = HEROES[type].sprite + (female ? '_female' : '');
         if (atkPose > 0) {
@@ -150,10 +158,10 @@ const Render = {
             this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
             const casting = h.type === 'mage';
-            const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
+            const spr = this.heroSprite(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
             this.shadow(ctx, p.x, p.y + 9, 19, 6);
-            const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.sprite(ctx, img, p.x, p.y + 10, HERO_SCALE, 57);
+            const img = h.flash > 0 ? Assets.tinted(spr.name, '#ffffff', 0.85) : Assets.get(spr.name);
+            this.sprite(ctx, img, p.x, p.y + 10, spr.scale, spr.foot);
             this.healthBar(ctx, p.x, p.y - 64, h.hp / h.maxHp, 40, '#ff5a5a');
         }
         if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : 72));
@@ -184,7 +192,8 @@ const Render = {
             this.sprite(ctx, img, u.x, u.y + 10, HERO_SCALE, 56, u.facing > 0);
         } else {
             const casting = u.heroType === 'mage';
-            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
+            const spr = this.heroSprite(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
+            const name = spr.name;
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -198,7 +207,7 @@ const Render = {
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.48);
             ctx.save();
             ctx.globalAlpha = 0.4 + 0.6 * risen;
-            this.sprite(ctx, img, u.x, u.y + 10 + (1 - risen) * 14, HERO_SCALE, 57);
+            this.sprite(ctx, img, u.x, u.y + 10 + (1 - risen) * 14, spr.scale, spr.foot);
             ctx.restore();
         }
         this.healthBar(ctx, u.x, u.y - 66, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
@@ -309,7 +318,8 @@ const Render = {
     },
 
     drawCorpse(ctx, c) {
-        const name = `${HEROES[c.type].sprite}${c.female ? '_female' : ''}_walk_down0`;
+        const spr = this.heroSprite(c.type, c.female, 'down', 0, 0, false);
+        const name = spr.name;
         const left = 1 - c.age / c.life;
         const blink = left < 0.3 ? (Math.floor(Game.time * 8) % 2 === 0 ? 0.45 : 0.9) : 0.9;
         const hovered = UI.hoverCorpse === c;
@@ -320,7 +330,9 @@ const Render = {
         const img = hovered ? Assets.tinted(name, '#b56bff', 0.45) : Assets.tinted(name, '#1b1030', 0.35);
         if (img) {
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, -40, -58, 80, 80);
+            const w = img.width * spr.scale;
+            const h = img.height * spr.scale;
+            ctx.drawImage(img, -w / 2, -18 - h / 2, w, h);
         }
         ctx.restore();
 

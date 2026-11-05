@@ -34,7 +34,7 @@ function upgradeCost(type, nextTier) {
 
 const HEROES = {
     warrior: {
-        name: '전사', sprite: 'swordsman', hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
+        name: '전사', sprite: 'swordsman', pl: 'pl_hero_warrior', plFoot: 40, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
         counter: '갑옷, 강한 공격으로'
     },
     rogue: {
