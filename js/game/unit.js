@@ -9,7 +9,7 @@ function createOrc(owner, slot, stats) {
     return {
         kind: 'orc', owner, slot, x: owner.x, y: owner.y, homeX: p.x - p.dy * side, homeY: p.y + p.dx * side, d: owner.rally.d + offset,
         hp: stats.unitHp, maxHp: stats.unitHp, damage: stats.damage, interval: stats.interval, armor: stats.armor,
-        range: 1.1, blockCount: 0, atk: 0, atkPose: 0, flash: 0, anim: Math.random() * 4, target: null,
+        range: 1.1, blockCount: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: Math.random() * 4, target: null,
         facing: 1, ranged: false
     };
 }
@@ -20,7 +20,7 @@ function createCorruptUnit(corpse) {
         kind: 'corrupt', heroType: corpse.type, female: corpse.female, owner: null, slot: -1,
         x: corpse.x, y: corpse.y, homeX: corpse.x, homeY: corpse.y, d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
-        range: def.range, ranged: !!def.ranged, atk: 0, atkPose: 0, flash: 0, anim: 0, target: null,
+        range: def.range, ranged: !!def.ranged, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
         // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.
         facing: 1, dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
     };
@@ -85,7 +85,7 @@ function updateUnit(u, dt) {
     u.atk -= dt;
     if (u.atk <= 0) {
         u.atk = u.interval;
-        u.atkPose = 0.22;
+        u.atkPose = u.atkPoseMax = ATTACK_POSE_TIME;
         if (u.ranged) {
             Game.projectiles.push({ kind: 'arrow', x: u.x, y: u.y - 70, target: u.target, damage: u.damage, speed: 1100, big: false, trail: 0 });
             Sfx.play('orb');

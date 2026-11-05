@@ -59,6 +59,22 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 | 부대장 | 만들지 않음, Asteria `boss_fallen_knight` 사용 | 0 |
 | 96px 마왕 (만든다면 1종당) | 만들기 3 + 동작 3개, south만 8~11 | 약 11~14 (추정) |
 
+## 전투 효과 (pixelfx)
+
+자주 나오는 효과 넷은 PixelLab이 아니라 pixelfx(https://github.com/patch-gg/pixelfx, MIT, 커밋 `a841596`)로 만든 시트를 쓴다. 표기는 `NOTICE.md`.
+
+| 옛 이름 | pixelfx id | 옵션 | 쓴 프레임 (30fps) | 재생 | 시트 |
+|---|---|---|---|---|---|
+| fx_hit_physical | `impacts/hit-spark` | 기본값 | 0~14 | 0.5초 | `assets/fx/pfx_hit_spark.png` 122×71 ×15, 25KB |
+| fx_hit_crit | `impacts/crit-hit` | 기본값 | 0~17 | 0.6초 | `assets/fx/pfx_crit_hit.png` 174×131 ×18, 160KB |
+| fx_explosion | `spawn/poof` | 기본값 | 0~34, 2칸마다 | 0.6초 | `assets/fx/pfx_poof.png` 91×76 ×18, 57KB |
+| fx_blastViolet | `arcane/mana-burst` | `{"palette":["#160a28","#2e1456","#4a2088","#6a32b8","#8f52e0","#c28bff","#e6ccff","#ffffff"]}` | 6~36, 2칸마다 | 0.53초 | `assets/fx/pfx_mana_burst.png` 170×146 ×16, 266KB |
+
+- 만드는 법: pixelfx를 저장소 밖에 clone하고 `tools/lib/fxlib.mjs`의 `renderFrames(fx, { bg: "none", actor: false, options })`로 렌더링한 뒤, 위 프레임만 골라 모든 프레임을 덮는 상자로 잘라 한 줄 8칸 시트로 붙인다. 결과 크기와 기준점은 `js/data/fx_sheets.js`에 적는다.
+- 기준점: 효과의 origin(바닥)에서 위로 hit-spark 20, crit-hit 26, poof 25, mana-burst 28px 올린 점을 `Fx.anim` 좌표에 맞춘다. 타격 섬광과 폭발 중심이 맞는 자리다.
+- 그리기: `Render.drawSheetEffects`가 보통 합성으로 그린다(빛이 시트에 이미 들어 있다). 화면 배율은 `round(size × WORLD_ZOOM / fit)`(최소 1)이라 대부분 1배, 수정 폭발 강화(반경 2칸)는 2배다.
+- 옛 Asteria `fx_` 그림은 아직 불러온다. 정리는 따로 한다.
+
 ## 진행 순서
 
 1. 용사 3종, 오크, 시설 3종은 만들어 연결했다(`boss_captain`은 만들지 않음).

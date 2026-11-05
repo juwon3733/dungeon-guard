@@ -1,10 +1,17 @@
 // 화면 UI: 버튼 배치와 입력 처리, HUD 그리기.
+const BAR_H = 124; // 하단 바 높이
+const BAR_TAB_X = 206; // 체력 구슬 오른쪽의 탭 버튼
+const BAR_SLOT_X = 362; // 첫 슬롯 위치
+const BAR_SLOT_W = 236;
+const BUILD_TYPES = ['archer', 'crystal', 'barracks']; // 타워 탭 슬롯 순서이자 단축키 1, 2, 3
+
 const UI = {
     mouse: { x: 0, y: 0 },
     buttons: [],
     hoverCell: null,
-    selectedCell: null,
     selectedFacility: null,
+    tab: 'tower', // 하단 바 탭: 'tower' 시설 건설, 'demon' 마왕 스킬
+    placing: null, // 건설 모드에서 지을 시설 종류
     hoverCorpse: null,
     hoverButton: null,
     targeting: false,
@@ -44,21 +51,32 @@ const UI = {
         small('pause', G.paused ? '▶' : 'II', G.paused, () => { G.paused = !G.paused; });
         small('speed', `${G.speed}x`, G.speed > 1, () => { G.speed = G.speed === 1 ? 2 : 1; });
 
-        // 하단 스킬과 다음 웨이브
-        const cy = GAME_HEIGHT - 112;
-        const cx = GAME_WIDTH / 2;
-        this.button('lightning', cx - 250, cy, 96, 96, { skill: 'lightning', onClick: () => this.toggleLightning() });
-        this.button('roar', cx - 144, cy, 96, 96, { skill: 'roar', onClick: () => this.useRoar() });
+        // 하단 바: 탭 두 개, 탭에 따라 시설 슬롯이나 마왕 스킬 슬롯, 다음 웨이브
+        const barY = GAME_HEIGHT - BAR_H;
+        this.button('tab_tower', BAR_TAB_X, barY + 8, 136, 52, { tab: 'tower', label: '타워', onClick: () => this.setTab('tower') });
+        this.button('tab_demon', BAR_TAB_X, barY + 66, 136, 52, { tab: 'demon', label: '마왕', onClick: () => this.setTab('demon') });
+        const slotY = barY + 12;
+        const slotX = i => BAR_SLOT_X + i * (BAR_SLOT_W + 10);
+        if (this.tab === 'tower') {
+            BUILD_TYPES.forEach((type, i) => {
+                this.button(`build_${type}`, slotX(i), slotY, BAR_SLOT_W, 104, {
+                    card: type, hotkey: String(i + 1), disabled: G.gold < FACILITIES[type].cost,
+                    onClick: () => this.pickFacility(type)
+                });
+            });
+        } else {
+            this.button('lightning', slotX(0), slotY, BAR_SLOT_W, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
+            this.button('roar', slotX(1), slotY, BAR_SLOT_W, 104, { skill: 'roar', onClick: () => this.useRoar() });
+        }
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
-            this.button('next', cx - 36, cy + 6, 330, 84, {
+            this.button('next', slotX(3) + 20, barY + 22, 330, 84, {
                 label: G.waveIndex === 0 ? '첫 웨이브 시작' : `다음 웨이브  +${bonus}G`, theme: 'gold', size: 28,
                 sub: `${Math.ceil(Math.max(0, G.prepTimer))}초 뒤 자동 시작`,
                 onClick: () => { G.startWave(); this.clearSelection(); }
             });
         }
 
-        if (this.selectedCell) this.layoutBuildMenu();
         if (this.selectedFacility) this.layoutFacilityMenu();
     },
 
@@ -70,27 +88,6 @@ const UI = {
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
         const y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
         return { x, y };
-    },
-
-    layoutBuildMenu() {
-        const { col, row } = this.selectedCell;
-        const types = ['archer', 'crystal', 'barracks'];
-        const w = 340;
-        const rowH = 104;
-        const h = rowH * types.length + 20;
-        const o = this.popupOrigin(tileX(col), tileY(row), w, h);
-        this.popup = { x: o.x, y: o.y, w, h };
-        types.forEach((type, i) => {
-            const def = FACILITIES[type];
-            this.button(`build_${type}`, o.x + 10, o.y + 10 + i * rowH, w - 20, rowH - 8, {
-                card: type, disabled: Game.gold < def.cost,
-                onClick: () => {
-                    const f = Game.build(type, col, row);
-                    if (f) this.clearSelection();
-                    else this.showToast('골드가 부족합니다.');
-                }
-            });
-        });
     },
 
     layoutFacilityMenu() {
@@ -129,19 +126,49 @@ const UI = {
     },
 
     clearSelection() {
-        this.selectedCell = null;
         this.selectedFacility = null;
         this.popup = null;
+    },
+
+    // 우클릭과 Esc: 건설 모드, 번개 조준, 시설 선택을 모두 끈다
+    cancel() {
+        this.clearSelection();
+        this.placing = null;
+        this.targeting = false;
     },
 
     startGame() {
         Game.reset();
         Game.speed = 1;
-        this.clearSelection();
-        this.targeting = false;
+        this.cancel();
+        this.tab = 'tower';
     },
 
+    setTab(tab) {
+        if (this.tab === tab) return;
+        this.tab = tab;
+        if (tab !== 'tower') this.placing = null;
+        if (tab !== 'demon') this.targeting = false;
+    },
+
+    // 시설 슬롯을 고르면 건설 모드가 된다. 같은 슬롯을 다시 고르면 취소한다
+    pickFacility(type) {
+        this.setTab('tower');
+        if (this.placing === type) { this.placing = null; return; }
+        const def = FACILITIES[type];
+        if (Game.gold < def.cost) {
+            this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
+            return;
+        }
+        this.placing = type;
+        this.targeting = false;
+        this.clearSelection();
+    },
+
+    canPlaceAt(col, row) { return isBuildCell(col, row) && !Game.facilityAt(col, row); },
+
     toggleLightning() {
+        this.setTab('demon');
         if (Game.skills.lightning > 0) {
             this.showToast(`번개 재사용까지 ${Math.ceil(Game.skills.lightning)}초`);
             return;
@@ -151,6 +178,7 @@ const UI = {
     },
 
     useRoar() {
+        this.setTab('demon');
         if (Game.hp > COMBAT_RULES.roar.unlockHp) {
             this.showToast(`마왕 체력 ${COMBAT_RULES.roar.unlockHp} 이하에서 쓸 수 있습니다.`);
             return;
@@ -183,10 +211,11 @@ const UI = {
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
         const inGame = Game.state === 'prep' || Game.state === 'wave';
-        this.hoverCell = inGame && !this.hoverButton && !this.targeting && isBuildCell(col, row) ? { col, row } : null;
+        this.hoverCell = inGame && this.placing && !this.hoverButton && col >= 0 && row >= 0 ? { col, row } : null;
     },
 
-    onClick(x, y) {
+    // shift: Shift를 누른 채 지으면 건설 모드를 이어 간다
+    onClick(x, y, shift) {
         Sfx.unlock();
         this.layout();
         const b = this.buttonAt(x, y);
@@ -204,6 +233,19 @@ const UI = {
             if (castLightning(wx, wy)) this.targeting = false;
             return;
         }
+        const col = Math.floor(wx / TILE);
+        const row = Math.floor((wy - MAP_TOP) / TILE);
+        // 건설 모드: 지을 수 있는 칸이면 짓는다. 아니면 아래 타락과 안내로 넘어간다
+        if (this.placing && this.canPlaceAt(col, row)) {
+            const def = FACILITIES[this.placing];
+            if (G.build(this.placing, col, row)) {
+                if (!shift) this.placing = null;
+            } else {
+                this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
+                this.placing = null;
+            }
+            return;
+        }
         const corpse = this.corpseAt(wx, wy);
         if (corpse) {
             const res = corruptCorpse(corpse);
@@ -211,18 +253,20 @@ const UI = {
             this.corruptHintShown = true;
             return;
         }
-        const col = Math.floor(wx / TILE);
-        const row = Math.floor((wy - MAP_TOP) / TILE);
+        if (this.placing) {
+            this.showToast(G.facilityAt(col, row) ? '이미 시설이 있는 칸입니다.' : '빛나는 칸에만 지을 수 있습니다.');
+            return;
+        }
         const f = G.facilityAt(col, row);
         if (f) {
             this.selectedFacility = this.selectedFacility === f ? null : f;
-            this.selectedCell = null;
             this.popup = null;
             return;
         }
         if (isBuildCell(col, row)) {
-            this.selectedCell = { col, row };
-            this.selectedFacility = null;
+            this.clearSelection();
+            this.setTab('tower');
+            this.showToast('아래 타워 탭에서 지을 시설을 고르세요.');
             return;
         }
         this.clearSelection();
@@ -238,9 +282,11 @@ const UI = {
         if (code === 'Space') { G.startWave(); this.clearSelection(); }
         else if (code === 'KeyQ') this.toggleLightning();
         else if (code === 'KeyW') this.useRoar();
+        else if (code === 'Tab') this.setTab(this.tab === 'tower' ? 'demon' : 'tower');
+        else if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3') this.pickFacility(BUILD_TYPES[Number(code.slice(5)) - 1]);
         else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
         else if (code === 'KeyP') G.paused = !G.paused;
-        else if (code === 'Escape') { this.clearSelection(); this.targeting = false; }
+        else if (code === 'Escape') this.cancel();
     },
 
     update(dt) {
@@ -253,13 +299,19 @@ const UI = {
         this.hoverButton = this.buttonAt(this.mouse.x, this.mouse.y);
     },
 
-    // 세계 위에 깔리는 사거리 표시
+    // 세계 위에 깔리는 사거리 표시와 건설 모드의 반투명 시설
     drawRanges(ctx) {
-        let hoveredType = null;
-        if (this.hoverButton && this.hoverButton.card) hoveredType = this.hoverButton.card;
-        if (this.selectedCell && hoveredType) {
-            const def = FACILITIES[hoveredType];
-            Render.rangeRing(ctx, tileX(this.selectedCell.col), tileY(this.selectedCell.row), def.range * TILE, 'rgba(255,224,138,1)');
+        const cell = this.placing && this.hoverCell;
+        if (cell) {
+            const ok = this.canPlaceAt(cell.col, cell.row);
+            const x = tileX(cell.col);
+            const y = tileY(cell.row);
+            Render.rangeRing(ctx, x, y, FACILITIES[this.placing].range * TILE, ok ? 'rgba(255,224,138,1)' : 'rgba(255,90,110,1)');
+            const art = FACILITY_ART[this.placing];
+            ctx.save();
+            ctx.globalAlpha = ok ? 0.6 : 0.3;
+            Render.sprite(ctx, Assets.get(art.sprite), x, y + 34, 1 / WORLD_ZOOM, art.footPx); // drawFacility와 같은 위치와 배율
+            ctx.restore();
         }
         if (this.selectedFacility) {
             const f = this.selectedFacility;
@@ -332,10 +384,10 @@ const UI = {
         UIKit.text(ctx, `타락 ${corrupt}/${COMBAT_RULES.corruptMax}`, 22, 40, 26, '#d7a8ff');
     },
 
-    // Asteria 구성의 하단 바: 왼쪽 체력 구슬, 가운데 스킬, 오른쪽 재화
+    // Asteria 구성의 하단 바: 왼쪽 체력 구슬, 탭과 슬롯, 오른쪽 재화
     drawBottomBar(ctx) {
         const G = Game;
-        const y = GAME_HEIGHT - 124;
+        const y = GAME_HEIGHT - BAR_H;
         const bar = ctx.createLinearGradient(0, y, 0, GAME_HEIGHT);
         bar.addColorStop(0, '#1a1633');
         bar.addColorStop(1, '#090713');
@@ -380,16 +432,6 @@ const UI = {
         UIKit.text(ctx, String(G.hp), ox, oy - 8, 46, '#ffffff', 'center');
         UIKit.text(ctx, `/ ${COMBAT_RULES.maxHp}`, ox, oy + 30, 22, '#ffd9e2', 'center');
 
-        // 마왕 이름
-        const portrait = Assets.get('portrait_riftLord');
-        UIKit.frame(ctx, 200, y + 18, 88, 88, 'dark', 6);
-        if (portrait) {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(portrait, 212, y + 30, 64, 64);
-        }
-        UIKit.text(ctx, '마왕', 304, y + 42, 30, '#ffffff');
-        UIKit.plain(ctx, '왕좌를 지키는 중', 304, y + 84, 20, '#c9b6ea');
-
         // 골드: 코인이 도착하면 잠깐 커진다
         const pulse = 1 + Fx.goldPulse * 0.2;
         ctx.fillStyle = '#6b3f0a';
@@ -407,19 +449,20 @@ const UI = {
         const x = GAME_WIDTH - 372;
         const y = 76;
         const entries = Object.entries(wave.members);
-        const h = 92 + entries.length * 62 + (wave.boss ? 62 : 0);
+        const elites = Object.entries(wave.elites || {});
+        const h = 92 + (entries.length + elites.length) * 62 + (wave.boss ? 62 : 0);
         UIKit.frame(ctx, x, y, 360, h, 'panel', 8);
         UIKit.plain(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 20, y + 28, 20, '#c9b6ea');
         UIKit.text(ctx, wave.party, x + 20, y + 60, 25, '#ffe08a');
         let ry = y + 90;
-        const row = (img, name, note, count) => {
-            UIKit.frame(ctx, x + 14, ry - 2, 56, 56, 'dark', 4);
+        const row = (img, name, note, count, elite) => {
+            UIKit.frame(ctx, x + 14, ry - 2, 56, 56, elite ? 'gold' : 'dark', 4);
             if (img) {
                 ctx.imageSmoothingEnabled = false;
                 const size = img.width * Math.max(1, Math.floor(64 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
                 ctx.drawImage(img, x + 42 - size / 2, ry + 24 - size / 2, size, size);
             }
-            UIKit.text(ctx, name, x + 80, ry + 13, 22, '#ffffff');
+            UIKit.text(ctx, name, x + 80, ry + 13, 22, elite ? '#ffd76a' : '#ffffff');
             UIKit.plain(ctx, note, x + 80, ry + 39, 17, '#b8a9d0');
             if (count) UIKit.text(ctx, `x${count}`, x + 340, ry + 22, 28, '#ffffff', 'right');
             ry += 62;
@@ -427,6 +470,10 @@ const UI = {
         for (const [type, count] of entries) {
             const def = HEROES[type];
             row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count);
+        }
+        for (const [type, count] of elites) {
+            const def = HEROES[type];
+            row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count, true);
         }
         if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
     },
@@ -456,10 +503,11 @@ const UI = {
         ctx.restore();
     },
 
-    drawCardIcon(ctx, type, x, y) {
+    // 시설 그림을 size 크기 네모 안에 그린다 (원본 96px)
+    drawCardIcon(ctx, type, x, y, size) {
         ctx.imageSmoothingEnabled = false;
         const i = Assets.get(FACILITY_ART[type].sprite);
-        if (i) ctx.drawImage(i, x - 8, y - 8, 96, 96);
+        if (i) ctx.drawImage(i, x, y, size, size);
     },
 
     drawPopup(ctx) {
@@ -484,6 +532,7 @@ const UI = {
             const hover = this.hoverButton === b && !b.disabled;
             if (b.skill) this.drawSkillButton(ctx, b, hover);
             else if (b.card) this.drawCardButton(ctx, b, hover);
+            else if (b.tab) this.drawTabButton(ctx, b, hover);
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, hover);
             else {
                 let theme = b.theme || 'button';
@@ -501,48 +550,68 @@ const UI = {
         const cd = Game.skills[b.skill];
         const max = lightning ? COMBAT_RULES.lightning.cooldown : COMBAT_RULES.roar.cooldown;
         const locked = !lightning && Game.hp > COMBAT_RULES.roar.unlockHp;
+        const active = lightning && this.targeting;
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, active ? 'goldHover' : (hover ? 'buttonHover' : 'dark'), 6);
+        // 왼쪽 네모: 스킬 칸 그림, 아이콘, 재사용 가림막
+        const sx = b.x + 8;
+        const sy = b.y + 8;
+        const ss = b.h - 16;
         const slot = Assets.get('ui_skillSlot');
         ctx.imageSmoothingEnabled = false;
-        if (slot) ctx.drawImage(slot, b.x, b.y, b.w, b.h);
-        else UIKit.frame(ctx, b.x, b.y, b.w, b.h, 'dark', 6);
-        if (lightning) {
-            const icon = Assets.get('icon_power_thunderStrike');
-            if (icon) ctx.drawImage(icon, b.x + 16, b.y + 16, 64, 64);
-        } else {
-            const icon = Assets.get('portrait_riftLord');
-            if (icon) ctx.drawImage(icon, b.x + 16, b.y + 16, 64, 64);
-        }
+        if (slot) ctx.drawImage(slot, sx, sy, ss, ss);
+        else UIKit.frame(ctx, sx, sy, ss, ss, 'dark', 6);
+        const icon = Assets.get(lightning ? 'icon_power_thunderStrike' : 'portrait_riftLord');
+        if (icon) ctx.drawImage(icon, sx + 14, sy + 14, ss - 28, ss - 28);
         if (cd > 0 || locked) {
             const ratio = locked ? 1 : cd / max;
             ctx.fillStyle = 'rgba(4,2,12,0.72)';
-            ctx.fillRect(b.x + 12, b.y + 12 + (b.h - 24) * (1 - ratio), b.w - 24, (b.h - 24) * ratio);
-            if (!locked) UIKit.text(ctx, String(Math.ceil(cd)), b.x + b.w / 2, b.y + b.h / 2, 32, '#ffffff', 'center');
+            ctx.fillRect(sx + 10, sy + 10 + (ss - 20) * (1 - ratio), ss - 20, (ss - 20) * ratio);
+            if (!locked) UIKit.text(ctx, String(Math.ceil(cd)), sx + ss / 2, sy + ss / 2, 30, '#ffffff', 'center');
         }
-        if (hover || (lightning && this.targeting)) {
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#ffe08a';
-            ctx.strokeRect(b.x + 6, b.y + 6, b.w - 12, b.h - 12);
-        }
-        UIKit.text(ctx, lightning ? 'Q' : 'W', b.x + 18, b.y + 20, 22, '#ffffff', 'center');
+        const tx = b.x + ss + 24;
+        UIKit.text(ctx, lightning ? '번개' : '호통', tx, b.y + 32, 24, locked ? '#a59db5' : '#ffffff');
+        let status = '준비됨';
+        let color = '#9dffb0';
+        if (active) { status = '조준 중'; color = '#ffe08a'; }
+        else if (locked) { status = `체력 ${COMBAT_RULES.roar.unlockHp} 이하`; color = '#c9b6ea'; }
+        else if (cd > 0) { status = `${Math.ceil(cd)}초`; color = '#ff8f8f'; }
+        UIKit.text(ctx, status, tx, b.y + 72, 19, color);
+        UIKit.text(ctx, lightning ? 'Q' : 'W', b.x + b.w - 16, b.y + 30, 22, '#ffe08a', 'right');
         if (hover) {
             const name = lightning ? '마왕의 번개' : '마왕의 호통';
             const desc = lightning ? `범위 피해 ${COMBAT_RULES.lightning.damage}, 재사용 ${max}초` : `모든 용사 ${COMBAT_RULES.roar.duration}초 정지, 체력 ${COMBAT_RULES.roar.unlockHp} 이하`;
-            UIKit.frame(ctx, b.x - 60, b.y - 92, 430, 82, 'dark', 6);
-            UIKit.text(ctx, name, b.x - 40, b.y - 68, 24, '#ffe08a');
-            UIKit.plain(ctx, desc, b.x - 40, b.y - 36, 19, '#ffffff');
+            this.drawTooltip(ctx, b.x, b.y - 92, name, desc);
         }
+    },
+
+    // 슬롯 위에 뜨는 설명
+    drawTooltip(ctx, x, y, title, desc) {
+        UIKit.frame(ctx, x, y, 430, 82, 'dark', 6);
+        UIKit.text(ctx, title, x + 20, y + 24, 24, '#ffe08a');
+        UIKit.plain(ctx, desc, x + 20, y + 56, 19, '#ffffff');
+    },
+
+    drawTabButton(ctx, b, hover) {
+        const on = this.tab === b.tab;
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, on ? 'gold' : (hover ? 'buttonHover' : 'dark'), 6);
+        UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2, 26, on ? '#ffffff' : '#c9b6ea', 'center');
     },
 
     drawCardButton(ctx, b, hover) {
         const def = FACILITIES[b.card];
-        UIKit.frame(ctx, b.x, b.y, b.w, b.h, b.disabled ? 'off' : (hover ? 'buttonHover' : 'dark'), 6);
+        const active = this.placing === b.card;
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, active ? 'goldHover' : (b.disabled ? 'off' : (hover ? 'buttonHover' : 'dark')), 6);
         ctx.save();
-        if (b.disabled) ctx.globalAlpha = 0.5;
-        this.drawCardIcon(ctx, b.card, b.x + 6, b.y + 4);
+        if (b.disabled) ctx.globalAlpha = 0.4;
+        this.drawCardIcon(ctx, b.card, b.x + 6, b.y + 6, b.h - 12);
         ctx.restore();
-        UIKit.text(ctx, def.name, b.x + 92, b.y + 26, 23, b.disabled ? '#a59db5' : '#ffffff');
-        UIKit.plain(ctx, def.desc, b.x + 92, b.y + 62, 16, '#c9b6ea');
-        UIKit.text(ctx, `${def.cost}G`, b.x + b.w - 14, b.y + 26, 23, b.disabled ? '#ff8f8f' : '#ffe08a', 'right');
+        const tx = b.x + b.h + 4;
+        UIKit.text(ctx, def.name, tx, b.y + 32, 21, b.disabled ? '#8a8299' : '#ffffff');
+        UIKit.text(ctx, `${def.cost}G`, tx, b.y + 72, 24, b.disabled ? '#ff8f8f' : '#ffe08a');
+        UIKit.text(ctx, b.hotkey, b.x + b.w - 16, b.y + 72, 22, '#e4d8fa', 'right');
+        if (this.hoverButton === b) { // 골드가 모자라 어두운 슬롯도 설명은 보여 준다
+            this.drawTooltip(ctx, b.x, b.y - 92, `${def.name} · ${def.role}`, def.desc);
+        }
     },
 
     drawUpgradeButton(ctx, b, hover) {
@@ -554,11 +623,12 @@ const UI = {
 
     drawHints(ctx) {
         const G = Game;
-        UIKit.text(ctx, 'Space 다음 웨이브 · F 배속 · P 일시정지 · M 소리', GAME_WIDTH - 20, GAME_HEIGHT - 146, 20, '#e4d8fa', 'right');
+        UIKit.text(ctx, 'Tab 탭 전환 · Space 다음 웨이브 · F 배속 · P 일시정지 · M 소리', GAME_WIDTH - 20, GAME_HEIGHT - 146, 20, '#e4d8fa', 'right');
 
         let hint = null;
         if (this.targeting) hint = '번개를 떨어뜨릴 곳을 누르세요. Esc로 취소합니다.';
-        else if (G.waveIndex === 0 && G.state === 'prep' && G.facilities.length === 0) hint = '길 옆의 빛나는 칸을 눌러 시설을 지으세요.';
+        else if (this.placing) hint = '빛나는 칸을 눌러 지으세요. Shift 이어 짓기 · 우클릭/Esc 취소';
+        else if (G.waveIndex === 0 && G.state === 'prep' && G.facilities.length === 0) hint = '아래 타워 탭에서 시설을 고른 뒤 길 옆 칸을 누르세요.';
         else if (G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
         if (hint) {
             const pulse = 1 + Math.sin(G.time * 5) * 0.03;
@@ -620,9 +690,9 @@ const UI = {
         UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 442, 36, '#ffffff', 'center');
         UIKit.frame(ctx, cx - 460, 500, 920, 216, 'panel', 8);
         const lines = [
-            '길 옆 칸을 눌러 시설을 지으면 용사를 자동으로 공격합니다.',
+            '아래 타워 탭에서 시설을 고르고 길 옆 칸에 지으세요.',
             '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
-            'Q로 마왕의 번개를 떨어뜨리고, 체력이 낮으면 W로 호통치세요.',
+            '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!',
             '용사가 왕좌에 닿으면 마왕의 체력이 줄어듭니다.'
         ];
         lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 548 + i * 42, 26, '#efe6ff', 'center'));

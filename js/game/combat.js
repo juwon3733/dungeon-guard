@@ -7,7 +7,7 @@ function damageHero(hero, amount, fromX, fromY, color) {
     hero.hp -= dealt;
     hero.flash = 0.09;
     const p = heroWorld(hero);
-    Fx.number(hero, p.x, p.y - (hero.boss ? 130 : 74), Math.round(dealt), color || '#ffe36b', dealt >= 30);
+    Fx.number(hero, p.x, p.y - (hero.boss || hero.elite ? 130 : 74), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     Fx.burst(p.x, p.y - (hero.boss ? 70 : 30), color || '#ffd26a', 2, 200, 0.28, 5);
     Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-14, 14), p.y - (hero.boss ? 70 : 32) + randRange(-12, 12), dealt >= 20 ? 150 : 90, 0.26);
     if (hero.hp <= 0) killHero(hero, p);

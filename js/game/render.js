@@ -117,18 +117,23 @@ const Render = {
         ctx.fill();
     },
 
-    heroSpriteName(type, female, dir, anim, atkPose, casting) {
+    // 공격 동작의 몇 번째 프레임인지: 남은 표시 시간(atkPose)을 처음 길이(atkPoseMax)로 나눠 계산한다
+    attackFrame(atkPose, atkPoseMax, frames) {
+        return clamp(Math.floor((1 - atkPose / (atkPoseMax || atkPose)) * frames), 0, frames - 1);
+    },
+
+    heroSpriteName(type, female, dir, anim, atkPose, casting, atkPoseMax) {
         const def = HEROES[type];
         if (def.anim) {
             if (atkPose > 0) {
                 const clip = def.anim.attack;
-                return this.plFrame(def, clip, dir, clamp(Math.floor((1 - atkPose / (def.atkTime || 0.22)) * clip.frames), 0, clip.frames - 1));
+                return this.plFrame(def, clip, dir, this.attackFrame(atkPose, atkPoseMax, clip.frames));
             }
             return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
         }
         const base = def.sprite + (female ? '_female' : '');
         if (atkPose > 0) {
-            const frame = atkPose > 0.11 ? 0 : 1;
+            const frame = this.attackFrame(atkPose, atkPoseMax, 2);
             return `${base}_act_${dir}_${casting ? 'cast' : 'atk'}${frame}`;
         }
         return `${base}_walk_${dir}${Math.floor(anim) % 4}`;
@@ -155,6 +160,27 @@ const Render = {
         const pick = this.plPick(clip, dir);
         const foot = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
         this.sprite(ctx, img, x, footY, def.scale, foot, pick.flip);
+    },
+
+    // 용사 그림 한 장을 그린다. PixelLab 그림은 동작별 발 위치와 반전을 쓰고, Asteria 그림은 방향별 그림을 그대로 쓴다
+    heroSprite(ctx, img, def, atkPose, dir, x, footY) {
+        if (def.anim) this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
+        else this.sprite(ctx, img, x, footY, def.scale, def.footPx);
+    },
+
+    // 정예 표시: 발밑의 금색 빛 고리
+    eliteRing(ctx, x, y) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const pulse = 0.55 + Math.sin(Game.time * 5) * 0.15;
+        ctx.fillStyle = `rgba(255,190,60,${pulse * 0.35})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 46, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(255,215,100,${pulse})`;
+        ctx.stroke();
+        ctx.restore();
     },
 
     // 서 있는 그림: 다음 파티 목록과 Asteria 그림의 시체에 쓴다
@@ -187,12 +213,19 @@ const Render = {
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
-            const casting = h.type === 'mage';
             const def = HEROES[h.type];
-            const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
-            this.shadow(ctx, p.x, p.y + 9, 19, 6);
+            const casting = !!def.stunEvery;
+            // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = h.blocker ? 0 : h.anim;
+            const name = this.heroSpriteName(h.type, h.female, h.dir, anim, h.atkPose, casting, h.atkPoseMax);
+            if (h.elite) {
+                this.shadow(ctx, p.x, p.y + 9, 34, 11);
+                this.eliteRing(ctx, p.x, p.y + 9);
+            } else {
+                this.shadow(ctx, p.x, p.y + 9, 19, 6);
+            }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.plSprite(ctx, img, def, h.atkPose > 0 ? def.anim.attack : def.anim.walk, h.dir, p.x, p.y + 10);
+            this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
             this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
         }
         if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : (HEROES[h.type].barY || 64) + 8));
@@ -219,20 +252,21 @@ const Render = {
         if (u.kind === 'orc') {
             const art = ORC_ART;
             const clip = u.atkPose > 0 ? art.anim.attack : art.anim.walk;
-            const i = u.atkPose > 0 ? clamp(Math.floor((1 - u.atkPose / 0.22) * clip.frames), 0, clip.frames - 1) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
+            const i = u.atkPose > 0 ? this.attackFrame(u.atkPose, u.atkPoseMax, clip.frames) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
             const name = this.plFrame(art, clip, u.dir, i);
             this.shadow(ctx, u.x, u.y + 8, 20, 7);
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
         } else {
-            const casting = u.heroType === 'mage';
-            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
             const def = HEROES[u.heroType];
-            const clip = u.atkPose > 0 ? def.anim.attack : def.anim.walk;
+            const casting = !!def.stunEvery;
+            // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = u.moving ? u.anim : 0;
+            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
             const risen = u.rise > 0 ? clamp(1 - u.rise / 0.5, 0, 1) : 1;
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
             this.drawCorruptAura(ctx, u.x, u.y + 9, risen, u.x * 0.013);
-            this.drawCorruptSprite(ctx, name, def, clip, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
+            this.drawCorruptSprite(ctx, name, def, u.atkPose, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
         }
         const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
         this.healthBar(ctx, u.x, u.y - barY, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
@@ -288,7 +322,7 @@ const Render = {
 
     // 타락 그림: 본 그림은 살짝만 물들이고, 밝은 자주색 윤곽선으로 어두운 바닥에서 떼어 낸다.
     // 일어나는 중에는 발밑 아래를 잘라 땅속에서 솟아오르게 하고 윤곽선이 하얗게 달아올랐다 식는다.
-    drawCorruptSprite(ctx, name, def, clip, dir, x, footY, risen, flash) {
+    drawCorruptSprite(ctx, name, def, atkPose, dir, x, footY, risen, flash) {
         const ease = 1 - Math.pow(1 - risen, 3);
         const sink = (1 - ease) * 100;
         ctx.save();
@@ -309,7 +343,7 @@ const Render = {
             ctx.rect(x - 120, footY - 260, 240, 262);
             ctx.clip();
         }
-        const draw = (img, ox, oy) => this.plSprite(ctx, img, def, clip, dir, x + ox, footY + sink + oy);
+        const draw = (img, ox, oy) => this.heroSprite(ctx, img, def, atkPose, dir, x + ox, footY + sink + oy);
         this.corruptOutline(ctx, name, def.scale || 2, draw, risen < 1 ? '#ffe6ff' : '#ff6be6', 1);
         draw(flash ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.22), 0, 0);
         ctx.restore();
@@ -428,8 +462,10 @@ const Render = {
             draw(img, 0, 0);
         } else if (img) {
             ctx.imageSmoothingEnabled = false;
-            const size = img.width * HERO_SCALE;
-            ctx.drawImage(img, -size / 2, -size * 0.725, size, size);
+            const size = img.width * (def.scale || HERO_SCALE);
+            const draw = (im, ox, oy) => ctx.drawImage(im, -size / 2 + ox, -size * 0.725 + oy, size, size);
+            if (ready) this.corruptOutline(ctx, name, def.scale || HERO_SCALE, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
+            draw(img, 0, 0);
         }
         ctx.restore();
 
@@ -474,29 +510,36 @@ const Render = {
     },
 
     drawBuildPads(ctx) {
-        const showAll = Game.state === 'prep' || UI.selectedCell;
-        if (!showAll) return;
-        const pulse = 0.14 + Math.sin(Game.time * 3) * 0.05;
+        // 건설 모드에서는 지을 수 있는 칸을 밝게, 준비 시간에는 흐리게 보여 준다
+        const placing = !!UI.placing;
+        if (!placing && Game.state !== 'prep') return;
+        const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
             if (Game.facilityAt(c, r)) continue;
             const x = c * TILE;
             const y = MAP_TOP + r * TILE;
+            if (placing) {
+                ctx.fillStyle = `rgba(190,150,255,${pulse * 0.15})`;
+                ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
+            }
             ctx.strokeStyle = `rgba(190,150,255,${pulse})`;
             ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
         }
     },
 
+    // 건설 모드에서 마우스가 있는 칸: 지을 수 있으면 금색, 없으면 빨간색
     drawHoverCell(ctx) {
-        const cell = UI.selectedCell || UI.hoverCell;
+        const cell = UI.placing && UI.hoverCell;
         if (!cell || Game.state === 'title') return;
+        const ok = UI.canPlaceAt(cell.col, cell.row);
         const x = cell.col * TILE;
         const y = MAP_TOP + cell.row * TILE;
         ctx.lineWidth = 4;
-        ctx.strokeStyle = '#ffe08a';
+        ctx.strokeStyle = ok ? '#ffe08a' : '#ff5a6e';
         ctx.strokeRect(x + 5, y + 5, TILE - 10, TILE - 10);
-        ctx.fillStyle = 'rgba(255,224,138,0.12)';
+        ctx.fillStyle = ok ? 'rgba(255,224,138,0.18)' : 'rgba(255,60,80,0.3)';
         ctx.fillRect(x + 5, y + 5, TILE - 10, TILE - 10);
     },
 
@@ -545,11 +588,31 @@ const Render = {
         }
     },
 
+    // pixelfx 시트 효과. 빛이 이미 색과 알파로 합쳐져 있어 lighter가 아니라 보통 합성으로 그린다.
+    // 화면에서 정수 배율(1배, 큰 효과는 2배)이 되도록 1 / WORLD_ZOOM 단위로 키우고 화면 픽셀에 맞춘다
+    drawSheetEffects(ctx) {
+        ctx.imageSmoothingEnabled = false;
+        for (const a of Fx.anims) {
+            const sheet = FX_SHEETS[a.name];
+            const img = sheet && Assets.get(sheet.image);
+            if (!img) continue;
+            const frame = Math.min(sheet.frames - 1, Math.floor(a.age / a.life * sheet.frames));
+            const k = Math.max(1, Math.round(a.size * WORLD_ZOOM / sheet.fit));
+            const s = k / WORLD_ZOOM;
+            const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            ctx.drawImage(img, (frame % sheet.cols) * sheet.w, Math.floor(frame / sheet.cols) * sheet.h, sheet.w, sheet.h,
+                x, y, sheet.w * s, sheet.h * s);
+        }
+    },
+
     drawEffects(ctx) {
         ctx.save();
+        this.drawSheetEffects(ctx);
         ctx.globalCompositeOperation = 'lighter';
         ctx.imageSmoothingEnabled = false;
         for (const a of Fx.anims) {
+            if (FX_SHEETS[a.name]) continue;
             const img = Assets.get(a.name);
             if (!img) continue;
             const frame = Math.min(7, Math.floor(a.age / a.life * 8));

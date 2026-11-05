@@ -96,7 +96,7 @@ const Game = {
         }
         const wave = this.currentWave();
         const queue = [];
-        for (const [type, count] of Object.entries(wave.members)) {
+        for (const [type, count] of [...Object.entries(wave.members), ...Object.entries(wave.elites || {})]) {
             for (let i = 0; i < count; i++) queue.push(type);
         }
         // 직업이 섞여 파티처럼 보이도록 순서를 섞는다

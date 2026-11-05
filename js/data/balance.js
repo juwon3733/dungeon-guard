@@ -76,12 +76,38 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 50 } },
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
         },
-        atkTime: 0.35, // 주문 동작은 근접 공격보다 길다
+        atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
         name: '마법사', sprite: 'pl_hero_mage', scale: 2, barY: 84, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
         counter: '시설 정지, 먼저 처치'
     }
 };
+
+// 정예 용사: 같은 직업(base)의 능력치를 물려받고 여기 적은 값만 바꾼다. 수치는 플레이 후 고칠 초안이다.
+// 그림은 Asteria 직업 그림(동작 정의 anim 없음)이다. sprite에 '_female'을 붙인 그림도 쓴다.
+// footPx는 64px 캔버스 안의 발끝 높이, barY는 체력바 높이(발 기준 위쪽 세계 px)다.
+const ELITE_RULES = {
+    bountyMul: 3,     // 현상금: 같은 직업의 몇 배
+    throneDamage: 3,  // 왕좌 도착 시 깎는 마왕 체력(일반 용사는 1)
+    corruptMul: 2     // 타락 정예의 체력과 피해: 같은 직업 타락 유닛의 몇 배
+};
+
+const ELITES = {
+    elite_swordsman: {
+        base: 'warrior', name: '정예 검사', sprite: 'swordsman', hpMul: 4, armor: 4,
+        counter: '갑옷 자랑꾼, 큰 한 방으로'
+    },
+    elite_tamer: {
+        base: 'rogue', name: '정예 조련사', sprite: 'beast_tamer', hpMul: 4, speed: 1.3,
+        counter: '산책 중독, 오크로 막기'
+    },
+    elite_stormcaller: {
+        base: 'mage', name: '정예 뇌술사', sprite: 'stormcaller', hpMul: 4, stunEvery: 4, stunRange: 4,
+        counter: '정전 유발범, 먼저 처치'
+    }
+};
+// Why: 세계 2배(scale 2)는 일반 용사보다 1.25배 정도라 구분이 안 됐다. 2 / WORLD_ZOOM이면 화면에서 원본 2배라 도트도 고르다.
+const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
 
 const FLOOR_BOSS = {
     name: '용사단 부대장', hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0,
@@ -114,23 +140,45 @@ const CORRUPTED = {
     mage: { name: '타락 마법사', hp: 30, damage: 10, interval: 1.2, range: 2.5, ranged: true }
 };
 
+// elites는 일반 인원(members)에 더해 섞이는 정예 용사 수다
 const WAVES = [
     { party: '신참 원정대', members: { warrior: 9 } },
     { party: '마을 자경단', members: { warrior: 12 } },
-    { party: '날쌘 도굴꾼', members: { rogue: 8 } },
-    { party: '수상한 혼성대', members: { warrior: 12, rogue: 6 } },
-    { party: '견습 마법사와 친구들', members: { warrior: 15, mage: 3 } },
-    { party: '보물 사냥단', members: { rogue: 20 } },
-    { party: '왕국 정찰대', members: { warrior: 18, rogue: 9, mage: 3 } },
-    { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 } },
-    { party: '최후의 선봉대', members: { warrior: 24, rogue: 15, mage: 9 } },
-    { party: '용사단 본대', boss: true, members: { warrior: 16, mage: 4 } }
+    { party: '날쌘 도굴꾼', members: { rogue: 8 }, elites: { elite_tamer: 1 } },
+    { party: '수상한 혼성대', members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
+    { party: '견습 마법사와 친구들', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
+    { party: '보물 사냥단', members: { rogue: 20 }, elites: { elite_tamer: 2 } },
+    { party: '왕국 정찰대', members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
+    { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2 } },
+    { party: '최후의 선봉대', members: { warrior: 24, rogue: 15, mage: 9 }, elites: { elite_swordsman: 1, elite_tamer: 1, elite_stormcaller: 1 } },
+    { party: '용사단 본대', boss: true, members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } }
 ];
+
+// 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.
+for (const [type, elite] of Object.entries(ELITES)) {
+    const base = HEROES[elite.base];
+    const { anim, atkTime, ...stats } = base; // Asteria 그림이라 PixelLab 동작 정의는 물려받지 않는다
+    const { base: baseType, hpMul, ...overrides } = elite;
+    HEROES[type] = {
+        ...stats, ...ELITE_ART, ...overrides,
+        elite: true, baseType,
+        hp: base.hp * hpMul,
+        bounty: base.bounty * ELITE_RULES.bountyMul,
+        throneDamage: ELITE_RULES.throneDamage
+    };
+    const corrupt = CORRUPTED[elite.base];
+    CORRUPTED[type] = {
+        ...corrupt, name: `타락 ${elite.name}`,
+        hp: corrupt.hp * ELITE_RULES.corruptMul,
+        damage: corrupt.damage * ELITE_RULES.corruptMul
+    };
+}
 
 const SPEECH = {
     waveStart: ['또 왔어?', '문 좀 닫고 다녀라.', '이번엔 몇 명이야?', '내 낮잠 시간인데.'],
     throneHit: ['내 의자 만지지 마!', '거기 먼지 묻잖아!', '아야, 내 왕좌!'],
     corrupt: ['복지가 더 좋네요.', '여기 야근 있나요?', '마왕님 만세, 네.'],
     arrive: ['다시 올 거야!', '왕좌 찍었다!', '인증샷 완료!'],
-    boss: ['부대장이 왔다. 넌 끝이야!', '내 경력을 걸고 베겠다!']
+    boss: ['부대장이 왔다. 넌 끝이야!', '내 경력을 걸고 베겠다!'],
+    elite: ['정예 등장. 사인은 나중에.', '연봉이 다르다, 연봉이!', '나 이번 달 승진 심사야.']
 };
