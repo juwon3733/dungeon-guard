@@ -1,0 +1,13 @@
+{
+  "name": "dungeon-guard",
+  "private": true,
+  "description": "던전 수호대 품질 시험판. 게임은 빌드 없이 index.html로 실행하고, 이 파일은 개발 도구 의존성만 담는다.",
+  "scripts": {
+    "smoke": "node tools/smoke.js",
+    "simulate": "node tools/simulate.js",
+    "capture": "node tools/capture.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}
