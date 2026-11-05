@@ -457,11 +457,31 @@ const Render = {
         }
     },
 
+    // pixelfx 시트 효과. 빛이 이미 색과 알파로 합쳐져 있어 lighter가 아니라 보통 합성으로 그린다.
+    // 화면에서 정수 배율(1배, 큰 효과는 2배)이 되도록 1 / WORLD_ZOOM 단위로 키우고 화면 픽셀에 맞춘다
+    drawSheetEffects(ctx) {
+        ctx.imageSmoothingEnabled = false;
+        for (const a of Fx.anims) {
+            const sheet = FX_SHEETS[a.name];
+            const img = sheet && Assets.get(sheet.image);
+            if (!img) continue;
+            const frame = Math.min(sheet.frames - 1, Math.floor(a.age / a.life * sheet.frames));
+            const k = Math.max(1, Math.round(a.size * WORLD_ZOOM / sheet.fit));
+            const s = k / WORLD_ZOOM;
+            const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            ctx.drawImage(img, (frame % sheet.cols) * sheet.w, Math.floor(frame / sheet.cols) * sheet.h, sheet.w, sheet.h,
+                x, y, sheet.w * s, sheet.h * s);
+        }
+    },
+
     drawEffects(ctx) {
         ctx.save();
+        this.drawSheetEffects(ctx);
         ctx.globalCompositeOperation = 'lighter';
         ctx.imageSmoothingEnabled = false;
         for (const a of Fx.anims) {
+            if (FX_SHEETS[a.name]) continue;
             const img = Assets.get(a.name);
             if (!img) continue;
             const frame = Math.min(7, Math.floor(a.age / a.life * 8));

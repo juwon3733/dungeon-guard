@@ -16,10 +16,12 @@ const Fx = {
     },
 
     // Asteria의 8프레임 효과 스트립을 재생한다. size는 화면에 그릴 한 변의 길이(px)
+    // pixelfx 시트로 바꾼 효과(FX_SHEETS)는 시트에 정한 길이만큼 재생한다. 그림만 바뀌고 전투 계산과는 무관하다
     anim(name, x, y, size, life, angle) {
         if (this.reduce && this.anims.length > 24) return;
         if (this.anims.length > 90) this.anims.shift();
-        this.anims.push({ name, x, y, size, age: 0, life: life || 0.36, angle: angle || 0 });
+        const sheet = typeof FX_SHEETS !== 'undefined' ? FX_SHEETS[name] : null;
+        this.anims.push({ name, x, y, size, age: 0, life: sheet ? sheet.life : life || 0.36, angle: angle || 0 });
     },
 
     burst(x, y, color, count, speed, life, size) {
