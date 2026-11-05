@@ -76,7 +76,7 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 50 } },
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
         },
-        atkTime: 0.35, // 주문 동작은 근접 공격보다 길다
+        atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
         name: '마법사', sprite: 'pl_hero_mage', scale: 2, barY: 84, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
         counter: '시설 정지, 먼저 처치'

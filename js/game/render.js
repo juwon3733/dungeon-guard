@@ -117,18 +117,23 @@ const Render = {
         ctx.fill();
     },
 
-    heroSpriteName(type, female, dir, anim, atkPose, casting) {
+    // 공격 동작의 몇 번째 프레임인지: 남은 표시 시간(atkPose)을 처음 길이(atkPoseMax)로 나눠 계산한다
+    attackFrame(atkPose, atkPoseMax, frames) {
+        return clamp(Math.floor((1 - atkPose / (atkPoseMax || atkPose)) * frames), 0, frames - 1);
+    },
+
+    heroSpriteName(type, female, dir, anim, atkPose, casting, atkPoseMax) {
         const def = HEROES[type];
         if (def.anim) {
             if (atkPose > 0) {
                 const clip = def.anim.attack;
-                return this.plFrame(def, clip, dir, clamp(Math.floor((1 - atkPose / (def.atkTime || 0.22)) * clip.frames), 0, clip.frames - 1));
+                return this.plFrame(def, clip, dir, this.attackFrame(atkPose, atkPoseMax, clip.frames));
             }
             return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
         }
         const base = def.sprite + (female ? '_female' : '');
         if (atkPose > 0) {
-            const frame = atkPose > 0.11 ? 0 : 1;
+            const frame = this.attackFrame(atkPose, atkPoseMax, 2);
             return `${base}_act_${dir}_${casting ? 'cast' : 'atk'}${frame}`;
         }
         return `${base}_walk_${dir}${Math.floor(anim) % 4}`;
@@ -189,7 +194,9 @@ const Render = {
         } else {
             const casting = h.type === 'mage';
             const def = HEROES[h.type];
-            const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
+            // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = h.blocker ? 0 : h.anim;
+            const name = this.heroSpriteName(h.type, h.female, h.dir, anim, h.atkPose, casting, h.atkPoseMax);
             this.shadow(ctx, p.x, p.y + 9, 19, 6);
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.plSprite(ctx, img, def, h.atkPose > 0 ? def.anim.attack : def.anim.walk, h.dir, p.x, p.y + 10);
@@ -219,14 +226,16 @@ const Render = {
         if (u.kind === 'orc') {
             const art = ORC_ART;
             const clip = u.atkPose > 0 ? art.anim.attack : art.anim.walk;
-            const i = u.atkPose > 0 ? clamp(Math.floor((1 - u.atkPose / 0.22) * clip.frames), 0, clip.frames - 1) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
+            const i = u.atkPose > 0 ? this.attackFrame(u.atkPose, u.atkPoseMax, clip.frames) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
             const name = this.plFrame(art, clip, u.dir, i);
             this.shadow(ctx, u.x, u.y + 8, 20, 7);
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
         } else {
             const casting = u.heroType === 'mage';
-            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
+            // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = u.moving ? u.anim : 0;
+            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
