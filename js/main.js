@@ -74,15 +74,16 @@ canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
     const p = toVirtual(e);
     UI.onMove(p.x, p.y);
-    if (ready) UI.onClick(p.x, p.y);
+    if (!ready) return;
+    if (e.button === 2) UI.cancel(); // 우클릭은 건설 모드와 조준을 취소한다
+    else UI.onClick(p.x, p.y, e.shiftKey);
 });
 canvas.addEventListener('contextmenu', e => {
     e.preventDefault();
-    UI.clearSelection();
-    UI.targeting = false;
+    UI.cancel();
 });
 window.addEventListener('keydown', e => {
-    if (e.code === 'Space') e.preventDefault();
+    if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
     if (e.repeat || !ready) return;
     Sfx.unlock();
     UI.onKey(e.code);

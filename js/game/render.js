@@ -395,29 +395,36 @@ const Render = {
     },
 
     drawBuildPads(ctx) {
-        const showAll = Game.state === 'prep' || UI.selectedCell;
-        if (!showAll) return;
-        const pulse = 0.14 + Math.sin(Game.time * 3) * 0.05;
+        // 건설 모드에서는 지을 수 있는 칸을 밝게, 준비 시간에는 흐리게 보여 준다
+        const placing = !!UI.placing;
+        if (!placing && Game.state !== 'prep') return;
+        const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
             if (Game.facilityAt(c, r)) continue;
             const x = c * TILE;
             const y = MAP_TOP + r * TILE;
+            if (placing) {
+                ctx.fillStyle = `rgba(190,150,255,${pulse * 0.15})`;
+                ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
+            }
             ctx.strokeStyle = `rgba(190,150,255,${pulse})`;
             ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
         }
     },
 
+    // 건설 모드에서 마우스가 있는 칸: 지을 수 있으면 금색, 없으면 빨간색
     drawHoverCell(ctx) {
-        const cell = UI.selectedCell || UI.hoverCell;
+        const cell = UI.placing && UI.hoverCell;
         if (!cell || Game.state === 'title') return;
+        const ok = UI.canPlaceAt(cell.col, cell.row);
         const x = cell.col * TILE;
         const y = MAP_TOP + cell.row * TILE;
         ctx.lineWidth = 4;
-        ctx.strokeStyle = '#ffe08a';
+        ctx.strokeStyle = ok ? '#ffe08a' : '#ff5a6e';
         ctx.strokeRect(x + 5, y + 5, TILE - 10, TILE - 10);
-        ctx.fillStyle = 'rgba(255,224,138,0.12)';
+        ctx.fillStyle = ok ? 'rgba(255,224,138,0.18)' : 'rgba(255,60,80,0.3)';
         ctx.fillRect(x + 5, y + 5, TILE - 10, TILE - 10);
     },
 
