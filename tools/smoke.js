@@ -10,8 +10,10 @@ const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infini
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 vm.runInContext(`
-const click = (x, y) => { UI.onMove(x, y); UI.onClick(x, y); };
-const worldClick = (x, y) => click(x * WORLD_ZOOM, y * WORLD_ZOOM);
+const click = (x, y, shift) => { UI.onMove(x, y); UI.onClick(x, y, shift); };
+const worldClick = (x, y, shift) => click(x * WORLD_ZOOM, y * WORLD_ZOOM, shift);
+const cellClick = (c, r, shift) => worldClick(tileX(c), tileY(r), shift);
+const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
 const btn = id => { UI.update(0); const b = UI.buttons.find(b => b.id === id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
 const tick = s => { for (let i = 0; i < s * 30; i++) { UI.update(1 / 30); Game.update(1 / 30); } };
 
@@ -21,23 +23,87 @@ btn('start');
 assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 
-// 길 위와 벽은 지을 수 없다
-worldClick(tileX(2), tileY(3));
-assert.strictEqual(UI.selectedCell, null, 'path cell must not open the menu');
+// 시작은 타워 탭: 시설 슬롯 3개, 스킬 슬롯은 없다
+assert.strictEqual(UI.tab, 'tower');
+assert(hasBtn('build_archer') && hasBtn('build_crystal') && hasBtn('build_barracks'));
+assert(!hasBtn('lightning') && !hasBtn('roar'));
 
-// 궁수탑 건설
-worldClick(tileX(3), tileY(4));
-assert(UI.selectedCell, 'build cell opens menu');
+// 탭 전환: 클릭과 Tab 키
+btn('tab_demon');
+assert.strictEqual(UI.tab, 'demon');
+assert(hasBtn('lightning') && hasBtn('roar') && !hasBtn('build_archer'));
+UI.onKey('Tab');
+assert.strictEqual(UI.tab, 'tower');
+assert(hasBtn('build_archer'));
+
+// 슬롯 없이 빈 칸을 눌러도 건설 팝업은 뜨지 않는다
+cellClick(3, 4);
+assert.strictEqual(Game.facilities.length, 0);
+assert.strictEqual(UI.placing, null);
+
+// 건설 모드 취소: 같은 슬롯 다시 클릭, Esc, 우클릭(cancel), 마왕 탭 전환
 btn('build_archer');
+assert.strictEqual(UI.placing, 'archer');
+btn('build_archer');
+assert.strictEqual(UI.placing, null, 'same slot cancels');
+UI.onKey('Digit1');
+assert.strictEqual(UI.placing, 'archer');
+UI.onKey('Escape');
+assert.strictEqual(UI.placing, null, 'Esc cancels');
+btn('build_archer');
+UI.cancel(); // main.js의 우클릭 처리
+assert.strictEqual(UI.placing, null, 'right click cancels');
+btn('build_archer');
+UI.onKey('Tab');
+assert.strictEqual(UI.placing, null, 'leaving tower tab cancels');
+UI.onKey('Tab');
+
+// 길 위와 벽은 지을 수 없고, 건설 모드는 이어진다
+btn('build_archer');
+cellClick(2, 3);
+assert.strictEqual(Game.facilities.length, 0, 'path cell must not build');
+assert.strictEqual(UI.placing, 'archer');
+UI.onMove(tileX(2) * WORLD_ZOOM, tileY(3) * WORLD_ZOOM);
+assert(UI.hoverCell && !UI.canPlaceAt(UI.hoverCell.col, UI.hoverCell.row), 'invalid hover cell');
+
+// 궁수탑 건설: 지으면 건설 모드가 끝난다
+cellClick(3, 4);
 assert.strictEqual(Game.facilities.length, 1);
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 50);
-assert.strictEqual(UI.selectedCell, null);
+assert.strictEqual(UI.placing, null);
 
-// 돈이 모자라면 짓지 못한다
-worldClick(tileX(5), tileY(4));
-btn('build_crystal');
+// 이미 지은 칸에는 못 짓는다
+UI.onKey('Digit1');
+cellClick(3, 4);
 assert.strictEqual(Game.facilities.length, 1);
-UI.clearSelection();
+assert.strictEqual(UI.placing, 'archer');
+UI.onKey('Escape');
+
+// 돈이 모자라면 슬롯이 꺼져 있고 건설 모드가 되지 않는다
+assert(Game.gold < FACILITIES.crystal.cost);
+UI.update(0);
+assert(UI.buttons.find(b => b.id === 'build_crystal').disabled, 'crystal slot dimmed');
+btn('build_crystal');
+assert.strictEqual(UI.placing, null);
+UI.onKey('Digit2');
+assert.strictEqual(UI.placing, null);
+assert(UI.toast, 'gold toast');
+
+// Shift를 누른 채 지으면 이어서 짓는다
+Game.gold = 200;
+UI.onKey('Digit3');
+assert.strictEqual(UI.placing, 'barracks');
+cellClick(5, 4, true);
+assert.strictEqual(UI.placing, 'barracks', 'shift keeps build mode');
+cellClick(5, 5, true);
+assert.strictEqual(Game.facilities.length, 3);
+assert.strictEqual(Game.gold, 200 - 140);
+// 이어 짓다가 돈이 떨어지면 건설 모드가 끝난다
+cellClick(3, 6, true);
+assert.strictEqual(Game.facilities.length, 3);
+assert.strictEqual(UI.placing, null);
+for (const x of Game.facilities.slice(1)) Game.sell(x);
+Game.gold = COMBAT_RULES.startGold - 50;
 
 // 강화와 판매
 const f = Game.facilityAt(3, 4);
@@ -71,16 +137,28 @@ assert.strictEqual(Game.state, 'wave');
 tick(14);
 assert(Game.stats.kills > 0 || Game.heroes.length > 0);
 
-// 번개
+// 번개: Q는 타워 탭에서도 동작하고 마왕 탭으로 바꾼다. 건설 모드는 끝난다
+UI.onKey('Digit1');
+assert.strictEqual(UI.tab, 'tower');
+assert.strictEqual(UI.placing, 'archer');
 UI.onKey('KeyQ');
+assert.strictEqual(UI.tab, 'demon');
+assert.strictEqual(UI.placing, null);
+assert.strictEqual(UI.targeting, true);
+UI.onKey('KeyQ');
+assert.strictEqual(UI.targeting, false);
+btn('lightning');
 assert.strictEqual(UI.targeting, true);
 worldClick(tileX(4), tileY(5));
 assert.strictEqual(UI.targeting, false);
 assert.strictEqual(Game.skills.lightning, COMBAT_RULES.lightning.cooldown);
 tick(0.5);
 
-// 호통은 체력이 충분하면 막히고, 낮으면 쓸 수 있다
+// 호통은 체력이 충분하면 막히고, 낮으면 쓸 수 있다. W도 마왕 탭으로 바꾼다
+UI.onKey('Tab');
+assert.strictEqual(UI.tab, 'tower');
 UI.onKey('KeyW');
+assert.strictEqual(UI.tab, 'demon');
 assert.strictEqual(Game.skills.roar, 0);
 Game.hp = 8;
 UI.onKey('KeyW');
@@ -147,6 +225,7 @@ btn('retry');
 assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 assert.strictEqual(Game.facilities.length, 0);
+assert.strictEqual(UI.tab, 'tower', 'retry starts on tower tab');
 assert.strictEqual(Game.units.length, 0);
 
 // 한 판 끝까지: 보스 패턴 포함, 예외 없이 승리 화면까지 간다

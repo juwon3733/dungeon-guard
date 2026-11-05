@@ -30,6 +30,7 @@ const Assets = {
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
             'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison']) list.push(`fx_${fx}`);
+        for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image); // pixelfx 시트, assets/fx/
         for (const art of Object.values(FACILITY_ART)) list.push(art.sprite);
         list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
             'tile_shadow_detailB', 'tile_shadow_rare', 'ui_skillSlot', 'icon_power_thunderStrike');
@@ -49,7 +50,7 @@ const Assets = {
             };
             img.onload = () => { this.images[name] = img; done(); };
             img.onerror = () => { console.warn('그림을 찾지 못했습니다:', name); done(); };
-            img.src = `assets/sprites/${name}${/^(island|void|bridgedeck)_/.test(name) ? '.webp' : '.png'}`;
+            img.src = name.startsWith('pfx_') ? `assets/fx/${name}.png` : `assets/sprites/${name}${/^(island|void|bridgedeck)_/.test(name) ? '.webp' : '.png'}`;
         }
     },
 

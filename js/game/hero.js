@@ -1,5 +1,8 @@
 // 용사: 경로를 따라 왕좌로 걷고, 막히면 막은 유닛과 싸운다.
 
+// Why: 공격 동작(6프레임)을 보여 주는 시간. 표시 전용이며 피해량·공격 간격과는 무관하다.
+const ATTACK_POSE_TIME = 0.4;
+
 function createHero(type, waveIndex, delay, isBoss) {
     const def = HEROES[type];
     const scale = 1 + COMBAT_RULES.hpPerWave * waveIndex;
@@ -25,6 +28,7 @@ function createHero(type, waveIndex, delay, isBoss) {
         anim: Math.random() * 4,
         atk: 0,
         atkPose: 0,
+        atkPoseMax: ATTACK_POSE_TIME,
         flash: 0,
         stun: 0,
         cast: def.stunEvery ? randRange(1.5, def.stunEvery) : 0,
@@ -80,7 +84,7 @@ function updateHero(h, dt) {
         h.atk -= dt;
         if (h.atk <= 0) {
             h.atk = h.interval;
-            h.atkPose = 0.22;
+            h.atkPose = h.atkPoseMax = ATTACK_POSE_TIME;
             damageUnit(blocker, h.damage);
             Sfx.play('slash');
         }
@@ -121,7 +125,7 @@ function updateMageCast(h, dt) {
     }
     if (!target) { h.cast = 0.4; return; }
     h.cast = def.stunEvery;
-    h.atkPose = 0.35;
+    h.atkPose = h.atkPoseMax = def.atkTime;
     target.stun = def.stunTime;
     Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 8, 0.3);
     Fx.ring(target.x, target.y - 20, 74, '#7fd8ff', 0.4);

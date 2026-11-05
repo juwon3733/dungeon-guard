@@ -117,18 +117,23 @@ const Render = {
         ctx.fill();
     },
 
-    heroSpriteName(type, female, dir, anim, atkPose, casting) {
+    // 공격 동작의 몇 번째 프레임인지: 남은 표시 시간(atkPose)을 처음 길이(atkPoseMax)로 나눠 계산한다
+    attackFrame(atkPose, atkPoseMax, frames) {
+        return clamp(Math.floor((1 - atkPose / (atkPoseMax || atkPose)) * frames), 0, frames - 1);
+    },
+
+    heroSpriteName(type, female, dir, anim, atkPose, casting, atkPoseMax) {
         const def = HEROES[type];
         if (def.anim) {
             if (atkPose > 0) {
                 const clip = def.anim.attack;
-                return this.plFrame(def, clip, dir, clamp(Math.floor((1 - atkPose / (def.atkTime || 0.22)) * clip.frames), 0, clip.frames - 1));
+                return this.plFrame(def, clip, dir, this.attackFrame(atkPose, atkPoseMax, clip.frames));
             }
             return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
         }
         const base = def.sprite + (female ? '_female' : '');
         if (atkPose > 0) {
-            const frame = atkPose > 0.11 ? 0 : 1;
+            const frame = this.attackFrame(atkPose, atkPoseMax, 2);
             return `${base}_act_${dir}_${casting ? 'cast' : 'atk'}${frame}`;
         }
         return `${base}_walk_${dir}${Math.floor(anim) % 4}`;
@@ -210,7 +215,9 @@ const Render = {
         } else {
             const def = HEROES[h.type];
             const casting = !!def.stunEvery;
-            const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
+            // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = h.blocker ? 0 : h.anim;
+            const name = this.heroSpriteName(h.type, h.female, h.dir, anim, h.atkPose, casting, h.atkPoseMax);
             if (h.elite) {
                 this.shadow(ctx, p.x, p.y + 9, 34, 11);
                 this.eliteRing(ctx, p.x, p.y + 9);
@@ -245,7 +252,7 @@ const Render = {
         if (u.kind === 'orc') {
             const art = ORC_ART;
             const clip = u.atkPose > 0 ? art.anim.attack : art.anim.walk;
-            const i = u.atkPose > 0 ? clamp(Math.floor((1 - u.atkPose / 0.22) * clip.frames), 0, clip.frames - 1) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
+            const i = u.atkPose > 0 ? this.attackFrame(u.atkPose, u.atkPoseMax, clip.frames) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
             const name = this.plFrame(art, clip, u.dir, i);
             this.shadow(ctx, u.x, u.y + 8, 20, 7);
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
@@ -253,7 +260,9 @@ const Render = {
         } else {
             const def = HEROES[u.heroType];
             const casting = !!def.stunEvery;
-            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
+            // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
+            const anim = u.moving ? u.anim : 0;
+            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -412,29 +421,36 @@ const Render = {
     },
 
     drawBuildPads(ctx) {
-        const showAll = Game.state === 'prep' || UI.selectedCell;
-        if (!showAll) return;
-        const pulse = 0.14 + Math.sin(Game.time * 3) * 0.05;
+        // 건설 모드에서는 지을 수 있는 칸을 밝게, 준비 시간에는 흐리게 보여 준다
+        const placing = !!UI.placing;
+        if (!placing && Game.state !== 'prep') return;
+        const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
             if (Game.facilityAt(c, r)) continue;
             const x = c * TILE;
             const y = MAP_TOP + r * TILE;
+            if (placing) {
+                ctx.fillStyle = `rgba(190,150,255,${pulse * 0.15})`;
+                ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
+            }
             ctx.strokeStyle = `rgba(190,150,255,${pulse})`;
             ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
         }
     },
 
+    // 건설 모드에서 마우스가 있는 칸: 지을 수 있으면 금색, 없으면 빨간색
     drawHoverCell(ctx) {
-        const cell = UI.selectedCell || UI.hoverCell;
+        const cell = UI.placing && UI.hoverCell;
         if (!cell || Game.state === 'title') return;
+        const ok = UI.canPlaceAt(cell.col, cell.row);
         const x = cell.col * TILE;
         const y = MAP_TOP + cell.row * TILE;
         ctx.lineWidth = 4;
-        ctx.strokeStyle = '#ffe08a';
+        ctx.strokeStyle = ok ? '#ffe08a' : '#ff5a6e';
         ctx.strokeRect(x + 5, y + 5, TILE - 10, TILE - 10);
-        ctx.fillStyle = 'rgba(255,224,138,0.12)';
+        ctx.fillStyle = ok ? 'rgba(255,224,138,0.18)' : 'rgba(255,60,80,0.3)';
         ctx.fillRect(x + 5, y + 5, TILE - 10, TILE - 10);
     },
 
@@ -483,11 +499,31 @@ const Render = {
         }
     },
 
+    // pixelfx 시트 효과. 빛이 이미 색과 알파로 합쳐져 있어 lighter가 아니라 보통 합성으로 그린다.
+    // 화면에서 정수 배율(1배, 큰 효과는 2배)이 되도록 1 / WORLD_ZOOM 단위로 키우고 화면 픽셀에 맞춘다
+    drawSheetEffects(ctx) {
+        ctx.imageSmoothingEnabled = false;
+        for (const a of Fx.anims) {
+            const sheet = FX_SHEETS[a.name];
+            const img = sheet && Assets.get(sheet.image);
+            if (!img) continue;
+            const frame = Math.min(sheet.frames - 1, Math.floor(a.age / a.life * sheet.frames));
+            const k = Math.max(1, Math.round(a.size * WORLD_ZOOM / sheet.fit));
+            const s = k / WORLD_ZOOM;
+            const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            ctx.drawImage(img, (frame % sheet.cols) * sheet.w, Math.floor(frame / sheet.cols) * sheet.h, sheet.w, sheet.h,
+                x, y, sheet.w * s, sheet.h * s);
+        }
+    },
+
     drawEffects(ctx) {
         ctx.save();
+        this.drawSheetEffects(ctx);
         ctx.globalCompositeOperation = 'lighter';
         ctx.imageSmoothingEnabled = false;
         for (const a of Fx.anims) {
+            if (FX_SHEETS[a.name]) continue;
             const img = Assets.get(a.name);
             if (!img) continue;
             const frame = Math.min(7, Math.floor(a.age / a.life * 8));
