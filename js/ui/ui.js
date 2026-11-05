@@ -62,7 +62,9 @@ const UI = {
         if (this.selectedFacility) this.layoutFacilityMenu();
     },
 
-    popupOrigin(cx, cy, w, h) {
+    popupOrigin(worldX, worldY, w, h) {
+        const cx = worldX * WORLD_ZOOM;
+        const cy = worldY * WORLD_ZOOM;
         // 칸 오른쪽을 우선으로, 화면 밖으로 나가면 왼쪽에 연다
         let x = cx + 64;
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
@@ -175,9 +177,11 @@ const UI = {
         this.mouse.x = x;
         this.mouse.y = y;
         this.hoverButton = this.buttonAt(x, y);
-        this.hoverCorpse = this.hoverButton ? null : this.corpseAt(x, y);
-        const col = Math.floor(x / TILE);
-        const row = Math.floor((y - MAP_TOP) / TILE);
+        const wx = x / WORLD_ZOOM;
+        const wy = y / WORLD_ZOOM;
+        this.hoverCorpse = this.hoverButton ? null : this.corpseAt(wx, wy);
+        const col = Math.floor(wx / TILE);
+        const row = Math.floor((wy - MAP_TOP) / TILE);
         const inGame = Game.state === 'prep' || Game.state === 'wave';
         this.hoverCell = inGame && !this.hoverButton && !this.targeting && isBuildCell(col, row) ? { col, row } : null;
     },
@@ -194,19 +198,21 @@ const UI = {
         const G = Game;
         if (G.state !== 'prep' && G.state !== 'wave') return;
 
+        const wx = x / WORLD_ZOOM;
+        const wy = y / WORLD_ZOOM;
         if (this.targeting) {
-            if (castLightning(x, y)) this.targeting = false;
+            if (castLightning(wx, wy)) this.targeting = false;
             return;
         }
-        const corpse = this.corpseAt(x, y);
+        const corpse = this.corpseAt(wx, wy);
         if (corpse) {
             const res = corruptCorpse(corpse);
             if (!res.ok) this.showToast(res.reason === 'gold' ? `타락에는 ${corpse.cost}골드가 필요합니다.` : `타락 유닛은 층당 ${COMBAT_RULES.corruptMax}명까지입니다.`);
             this.corruptHintShown = true;
             return;
         }
-        const col = Math.floor(x / TILE);
-        const row = Math.floor((y - MAP_TOP) / TILE);
+        const col = Math.floor(wx / TILE);
+        const row = Math.floor((wy - MAP_TOP) / TILE);
         const f = G.facilityAt(col, row);
         if (f) {
             this.selectedFacility = this.selectedFacility === f ? null : f;
@@ -410,7 +416,8 @@ const UI = {
             UIKit.frame(ctx, x + 14, ry - 2, 56, 56, 'dark', 4);
             if (img) {
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(img, x + 10, ry - 8, 64, 64);
+                const size = img.width * Math.max(1, Math.floor(64 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
+                ctx.drawImage(img, x + 42 - size / 2, ry + 24 - size / 2, size, size);
             }
             UIKit.text(ctx, name, x + 80, ry + 13, 22, '#ffffff');
             UIKit.plain(ctx, note, x + 80, ry + 39, 17, '#b8a9d0');
@@ -419,7 +426,7 @@ const UI = {
         };
         for (const [type, count] of entries) {
             const def = HEROES[type];
-            row(Assets.get(`${def.sprite}_walk_down0`), def.name, def.counter, count);
+            row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count);
         }
         if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
     },
@@ -451,16 +458,8 @@ const UI = {
 
     drawCardIcon(ctx, type, x, y) {
         ctx.imageSmoothingEnabled = false;
-        if (type === 'archer') {
-            const i = Assets.get('facility_archer');
-            if (i) ctx.drawImage(i, x + 8, y, 64, 88);
-        } else if (type === 'crystal') {
-            const i = Assets.get('prop_shard');
-            if (i) ctx.drawImage(i, x - 8, y - 8, 96, 96);
-        } else {
-            const i = Assets.get('anim_boarWarrior_walk0');
-            if (i) ctx.drawImage(i, x + 4, y + 8, 72, 72);
-        }
+        const i = Assets.get(FACILITY_ART[type].sprite);
+        if (i) ctx.drawImage(i, x - 8, y - 8, 96, 96);
     },
 
     drawPopup(ctx) {

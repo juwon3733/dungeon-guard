@@ -32,17 +32,52 @@ function upgradeCost(type, nextTier) {
     return Math.round(FACILITIES[type].cost * (nextTier === 2 ? 0.8 : 1.5));
 }
 
+// PixelLab 동작 그림. dirs가 있으면 그 방향만 있고, 서쪽은 동쪽을 뒤집어 쓴다.
+// footPx는 캔버스 안의 발끝 높이다. 캔버스 크기가 방향마다 달라 방향별로 적기도 한다
+const PL_DIRS = ['south', 'east', 'north'];
+const ORC_ART = {
+    sprite: 'pl_orc_guard', scale: 2, barY: 84,
+    anim: {
+        walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 58 } },
+        attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 50, east: 52, north: 51 } }
+    }
+};
+
+const FACILITY_ART = {
+    archer: { sprite: 'pl_fac_archer', footPx: 92 },
+    crystal: { sprite: 'pl_fac_crystal', footPx: 91 },
+    barracks: { sprite: 'pl_fac_barracks', footPx: 91 }
+};
+
 const HEROES = {
     warrior: {
-        name: '전사', sprite: 'swordsman', hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
+        // PixelLab 그림. barY는 체력바 높이(발 기준 위쪽 세계 px)
+        // anim은 animations 아래 폴더 이름과 프레임 수, footPx는 64px 캔버스 안의 발끝 높이다
+        anim: {
+            walk: { folder: 'walking', frames: 6, footPx: 54 },
+            attack: { folder: 'slash', frames: 6, footPx: 53 },
+            death: { folder: 'falling_backward', frames: 7, footPx: 55 }
+        },
+        name: '전사', sprite: 'pl_hero_warrior', scale: 2, barY: 84, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
         counter: '갑옷, 강한 공격으로'
     },
     rogue: {
-        name: '도적', sprite: 'beast_tamer', hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
+        anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 62, east: 53, north: 54 } },
+            attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 53, north: 52 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 55 }
+        },
+        name: '도적', sprite: 'pl_hero_rogue', scale: 2, barY: 84, hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
         counter: '빠름, 오크로 막기'
     },
     mage: {
-        name: '마법사', sprite: 'stormcaller', hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
+        anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 53, north: 52 } },
+            attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 50 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
+        },
+        atkTime: 0.35, // 주문 동작은 근접 공격보다 길다
+        name: '마법사', sprite: 'pl_hero_mage', scale: 2, barY: 84, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
         counter: '시설 정지, 먼저 처치'
     }

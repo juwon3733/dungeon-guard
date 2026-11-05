@@ -65,7 +65,7 @@ const Fx = {
     bolt(x, y, color) {
         const points = [];
         let cx = x + randRange(-30, 30);
-        for (let py = y - 900; py < y; py += 60) {
+        for (let py = y - WORLD_HEIGHT; py < y; py += 60) {
             points.push([cx, py]);
             cx += randRange(-46, 46);
             cx = x + (cx - x) * 0.82;
@@ -77,7 +77,8 @@ const Fx = {
     coin(x, y, amount) {
         const n = Math.min(6, Math.max(2, Math.round(amount / 3)));
         for (let i = 0; i < n; i++) {
-            this.coins.push({ x, y, vx: randRange(-170, 170), vy: randRange(-420, -220), age: 0, delay: 0.42 + i * 0.03 });
+            // 동전은 HUD로 날아가므로 화면 좌표로 바꿔 둔다
+            this.coins.push({ x: x * WORLD_ZOOM, y: y * WORLD_ZOOM, vx: randRange(-170, 170), vy: randRange(-420, -220), age: 0, delay: 0.42 + i * 0.03 });
         }
     },
 

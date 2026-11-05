@@ -11,6 +11,7 @@ const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infini
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 vm.runInContext(`
 const click = (x, y) => { UI.onMove(x, y); UI.onClick(x, y); };
+const worldClick = (x, y) => click(x * WORLD_ZOOM, y * WORLD_ZOOM);
 const btn = id => { UI.update(0); const b = UI.buttons.find(b => b.id === id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
 const tick = s => { for (let i = 0; i < s * 30; i++) { UI.update(1 / 30); Game.update(1 / 30); } };
 
@@ -21,11 +22,11 @@ assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 
 // 길 위와 벽은 지을 수 없다
-click(tileX(2), tileY(3));
+worldClick(tileX(2), tileY(3));
 assert.strictEqual(UI.selectedCell, null, 'path cell must not open the menu');
 
 // 궁수탑 건설
-click(tileX(3), tileY(4));
+worldClick(tileX(3), tileY(4));
 assert(UI.selectedCell, 'build cell opens menu');
 btn('build_archer');
 assert.strictEqual(Game.facilities.length, 1);
@@ -33,14 +34,14 @@ assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 50);
 assert.strictEqual(UI.selectedCell, null);
 
 // 돈이 모자라면 짓지 못한다
-click(tileX(5), tileY(4));
+worldClick(tileX(5), tileY(4));
 btn('build_crystal');
 assert.strictEqual(Game.facilities.length, 1);
 UI.clearSelection();
 
 // 강화와 판매
 const f = Game.facilityAt(3, 4);
-click(f.x, f.y);
+worldClick(f.x, f.y);
 assert.strictEqual(UI.selectedFacility, f);
 Game.gold = 500;
 btn('up2');
@@ -73,7 +74,7 @@ assert(Game.stats.kills > 0 || Game.heroes.length > 0);
 // 번개
 UI.onKey('KeyQ');
 assert.strictEqual(UI.targeting, true);
-click(tileX(4), tileY(5));
+worldClick(tileX(4), tileY(5));
 assert.strictEqual(UI.targeting, false);
 assert.strictEqual(Game.skills.lightning, COMBAT_RULES.lightning.cooldown);
 tick(0.5);
@@ -87,9 +88,10 @@ assert.strictEqual(Game.skills.roar, COMBAT_RULES.roar.cooldown);
 Game.hp = 20;
 
 // 타락: 비용 차감, 부하 생성, 최대 인원 제한
+Game.corpses.length = 0; // 전투로 생긴 시체가 클릭 위치에 겹치면 그쪽이 먼저 선택된다
 Game.corpses.push({ type: 'warrior', female: false, x: tileX(4), y: tileY(5), d: 800, dir: 'down', age: 0, life: 5, cost: 15 });
 const goldBefore = Game.gold;
-click(tileX(4), tileY(5) - 30);
+worldClick(tileX(4), tileY(5) - 30);
 assert.strictEqual(Game.gold, goldBefore - 15);
 assert.strictEqual(Game.units.filter(u => u.kind === 'corrupt').length, 1);
 for (let i = 0; i < 2; i++) corruptCorpse({ type: 'rogue', female: true, x: 400, y: 300, d: 300, dir: 'down', cost: 18 });

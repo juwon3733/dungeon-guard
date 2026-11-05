@@ -1,6 +1,6 @@
 // 1지역 지하 감옥의 경로. 꺾이는 지점만 적고, 거리 계산은 아래에서 만든다.
-const PATH_TILES = [[0, 3], [4, 3], [4, 7], [8, 7], [8, 3], [12, 3], [12, 8], [16, 8], [16, 5], [18, 5]];
-const THRONE_TILE = { col: 18, row: 5 };
+const PATH_TILES = [[0, 3], [4, 3], [4, 7], [8, 7], [8, 3], [12, 3], [12, 8], [16, 8], [16, 4], [20, 4], [20, 10], [23, 10], [23, 7]];
+const THRONE_TILE = { col: 23, row: 7 };
 
 const PATH = (function buildPath() {
     const points = PATH_TILES.map(([c, r]) => ({ x: tileX(c), y: tileY(r), c, r }));
@@ -56,28 +56,34 @@ function isPathCell(col, row) { return PATH.cells.has(col + ',' + row); }
 
 // 장식이 놓인 칸: 건설 불가
 const DECOR = [
-    { sprite: 'prop_pillarShadow', col: 17, row: 3 },
-    { sprite: 'prop_pillarShadow', col: 17, row: 7 },
-    { sprite: 'prop_shard', col: 10, row: 8 },
-    { sprite: 'prop_crystal', col: 2, row: 8 },
+    { sprite: 'prop_pillarShadow', col: 22, row: 5 },
+    { sprite: 'prop_pillarShadow', col: 25, row: 9 },
+    { sprite: 'prop_shard', col: 10, row: 10 },
+    { sprite: 'prop_crystal', col: 2, row: 10 },
     { sprite: 'prop_shard', col: 6, row: 1 },
-    { sprite: 'prop_crystal', col: 14, row: 1 }
+    { sprite: 'prop_crystal', col: 14, row: 1 },
+    { sprite: 'prop_crystal', col: 15, row: 10 },
+    { sprite: 'prop_shard', col: 18, row: 1 }
 ];
 
 // 섬 위에 세운 화로 위치(길에서 떨어진 칸)
-const TORCHES = [[1, 1], [10, 1], [13, 1], [1, 9], [6, 9], [10, 9]];
+const TORCHES = [[1, 1], [10, 1], [13, 1], [1, 10], [6, 10], [12, 10], [18, 10], [17, 1]];
 
-// Why: 경로에 붙은 칸에만 지을 수 있어야 사거리 낭비 없이 배치 판단에 집중할 수 있다.
+const BUILD_REACH = 2; // 길에서 이 칸 수까지 지을 수 있다
+
+// Why: 길에서 너무 먼 칸까지 열면 사거리 낭비만 늘고, 2칸까지는 가까이 지을지 물러날지 판단이 생긴다.
 const BUILD_CELLS = (function findBuildCells() {
     const result = new Set();
-    for (let r = 1; r <= 9; r++) {
-        for (let c = 1; c <= 18; c++) {
+    for (let r = 2; r <= MAP_ROWS - 5; r++) { // 맨 위는 상단 HUD, 아래 네 줄은 절벽과 하단 HUD 자리다
+        for (let c = 1; c <= MAP_COLS - 2; c++) {
             if (isPathCell(c, r)) continue;
             if (DECOR.some(p => p.col === c && p.row === r)) continue;
+            if (TORCHES.some(([tc, tr]) => tc === c && tr === r)) continue;
+            if (c >= 21 && r <= 3) continue; // 오른쪽 위 파티 정보 창에 가린다
             if (Math.abs(c - THRONE_TILE.col) <= 1 && Math.abs(r - THRONE_TILE.row) <= 1) continue;
             let near = false;
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -BUILD_REACH; dy <= BUILD_REACH; dy++) {
+                for (let dx = -BUILD_REACH; dx <= BUILD_REACH; dx++) {
                     if (isPathCell(c + dx, r + dy)) near = true;
                 }
             }

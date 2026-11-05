@@ -4,26 +4,26 @@ const Render = {
 
     buildMap() {
         const c = document.createElement('canvas');
-        c.width = GAME_WIDTH;
-        c.height = GAME_HEIGHT;
+        c.width = WORLD_WIDTH;
+        c.height = WORLD_HEIGHT;
         const g = c.getContext('2d');
         g.imageSmoothingEnabled = false;
 
         // 우주 배경 위에 떠 있는 섬: Asteria의 지역 구성과 같다
         const space = Assets.get('void_shadow');
-        if (space) g.drawImage(space, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+        if (space) g.drawImage(space, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         // Why: 섬 원본은 정사각형이라 윗면이 화면 전체를 덮도록 가로로 더 늘린다. 절벽은 하단 HUD 뒤로 이어진다.
         const island = Assets.get('island_shadow');
-        if (island) g.drawImage(island, -24, -26, 1968, 1400);
+        if (island) g.drawImage(island, -24 / WORLD_ZOOM, -26 / WORLD_ZOOM, 1968 / WORLD_ZOOM, 1400 / WORLD_ZOOM);
 
         // 지면이 어두우면 전투가 묻히므로 은은하게 밝힌다
         g.save();
         g.globalCompositeOperation = 'lighter';
-        const lift = g.createRadialGradient(GAME_WIDTH * 0.5, GAME_HEIGHT * 0.46, 120, GAME_WIDTH * 0.5, GAME_HEIGHT * 0.46, 1000);
+        const lift = g.createRadialGradient(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46, 120, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46, 1000 / WORLD_ZOOM);
         lift.addColorStop(0, 'rgba(70,45,110,0.28)');
         lift.addColorStop(1, 'rgba(70,45,110,0)');
         g.fillStyle = lift;
-        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         g.restore();
 
         this.drawThroneDais(g);
@@ -32,11 +32,11 @@ const Render = {
         const portal = Assets.get('prop_fieldPortal');
         if (portal) g.drawImage(portal, -28, tileY(3) - 112, 192, 192);
 
-        const v = g.createRadialGradient(GAME_WIDTH / 2, GAME_HEIGHT / 2, 560, GAME_WIDTH / 2, GAME_HEIGHT / 2, 1180);
+        const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 560 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 1180 / WORLD_ZOOM);
         v.addColorStop(0, 'rgba(0,0,10,0)');
         v.addColorStop(1, 'rgba(0,0,10,0.42)');
         g.fillStyle = v;
-        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         this.mapLayer = c;
     },
 
@@ -44,7 +44,7 @@ const Render = {
     drawDeck(g) {
         const deck = Assets.get('bridgedeck_shadow');
         if (!deck) return;
-        const DECK = { top: 230, bottom: 770, width: 150 }; // 원본의 난간 포함 세로 범위와 화면 폭
+        const DECK = { top: 230, bottom: 770, width: 120 }; // 원본의 난간 포함 세로 범위와 세계 좌표 폭
         const srcH = DECK.bottom - DECK.top;
         const unit = deck.width * DECK.width / srcH;
         const half = DECK.width / 2;
@@ -118,12 +118,50 @@ const Render = {
     },
 
     heroSpriteName(type, female, dir, anim, atkPose, casting) {
-        const base = HEROES[type].sprite + (female ? '_female' : '');
+        const def = HEROES[type];
+        if (def.anim) {
+            if (atkPose > 0) {
+                const clip = def.anim.attack;
+                return this.plFrame(def, clip, dir, clamp(Math.floor((1 - atkPose / (def.atkTime || 0.22)) * clip.frames), 0, clip.frames - 1));
+            }
+            return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
+        }
+        const base = def.sprite + (female ? '_female' : '');
         if (atkPose > 0) {
             const frame = atkPose > 0.11 ? 0 : 1;
             return `${base}_act_${dir}_${casting ? 'cast' : 'atk'}${frame}`;
         }
         return `${base}_walk_${dir}${Math.floor(anim) % 4}`;
+    },
+
+    plFacing(dir) {
+        return { down: 'south', up: 'north', left: 'west', right: 'east' }[dir] || 'south';
+    },
+
+    // 그 동작에 실제로 있는 방향을 고른다. 서쪽이 없으면 동쪽을 뒤집어 쓴다
+    plPick(clip, dir) {
+        const facing = this.plFacing(dir);
+        if (!clip.dirs || clip.dirs.includes(facing)) return { facing, flip: false };
+        if (facing === 'west' && clip.dirs.includes('east')) return { facing: 'east', flip: true };
+        return { facing: clip.dirs[0], flip: false };
+    },
+
+    plFrame(def, clip, dir, i) {
+        return `${def.sprite}/animations/${clip.folder}/${this.plPick(clip, dir).facing}/frame_${String(i).padStart(3, '0')}`;
+    },
+
+    // 이번 프레임의 동작 그림을 발 위치와 좌우 반전까지 맞춰 그린다
+    plSprite(ctx, img, def, clip, dir, x, footY) {
+        const pick = this.plPick(clip, dir);
+        const foot = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
+        this.sprite(ctx, img, x, footY, def.scale, foot, pick.flip);
+    },
+
+    // 서 있는 그림: 다음 파티 목록과 Asteria 그림의 시체에 쓴다
+    heroStandName(type, female, dir) {
+        const def = HEROES[type];
+        if (def.anim) return `${def.sprite}/rotations/south`;
+        return `${def.sprite}${female ? '_female' : ''}_walk_${dir || 'down'}0`;
     },
 
     drawHero(ctx, h) {
@@ -150,13 +188,14 @@ const Render = {
             this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
             const casting = h.type === 'mage';
+            const def = HEROES[h.type];
             const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
             this.shadow(ctx, p.x, p.y + 9, 19, 6);
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.sprite(ctx, img, p.x, p.y + 10, HERO_SCALE, 57);
-            this.healthBar(ctx, p.x, p.y - 64, h.hp / h.maxHp, 40, '#ff5a5a');
+            this.plSprite(ctx, img, def, h.atkPose > 0 ? def.anim.attack : def.anim.walk, h.dir, p.x, p.y + 10);
+            this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
         }
-        if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : 72));
+        if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : (HEROES[h.type].barY || 64) + 8));
     },
 
     healthBar(ctx, x, y, ratio, w, color) {
@@ -178,10 +217,13 @@ const Render = {
 
     drawUnit(ctx, u) {
         if (u.kind === 'orc') {
-            const name = u.atkPose > 0 ? 'anim_boarWarrior_attack' : (u.moving ? `anim_boarWarrior_walk${Math.floor(u.anim) % 2}` : 'anim_boarWarrior_walk0');
+            const art = ORC_ART;
+            const clip = u.atkPose > 0 ? art.anim.attack : art.anim.walk;
+            const i = u.atkPose > 0 ? clamp(Math.floor((1 - u.atkPose / 0.22) * clip.frames), 0, clip.frames - 1) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
+            const name = this.plFrame(art, clip, u.dir, i);
             this.shadow(ctx, u.x, u.y + 8, 20, 7);
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.sprite(ctx, img, u.x, u.y + 10, HERO_SCALE, 56, u.facing > 0);
+            this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
         } else {
             const casting = u.heroType === 'mage';
             const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
@@ -198,22 +240,18 @@ const Render = {
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.48);
             ctx.save();
             ctx.globalAlpha = 0.4 + 0.6 * risen;
-            this.sprite(ctx, img, u.x, u.y + 10 + (1 - risen) * 14, HERO_SCALE, 57);
+            const def = HEROES[u.heroType];
+            this.plSprite(ctx, img, def, u.atkPose > 0 ? def.anim.attack : def.anim.walk, u.dir || 'down', u.x, u.y + 10 + (1 - risen) * 14);
             ctx.restore();
         }
-        this.healthBar(ctx, u.x, u.y - 66, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
+        const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
+        this.healthBar(ctx, u.x, u.y - barY, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
     },
 
     drawFacility(ctx, f) {
         const stunned = f.stun > 0;
         const recoil = f.recoil * 5;
-        // 돌 받침과 뒤쪽 빛: 어두운 바닥에서 시설의 실루엣이 먼저 보이게 한다
-        ctx.fillStyle = '#17112a';
-        ctx.fillRect(f.x - 42, f.y + 8, 84, 34);
-        ctx.fillStyle = '#4a3d6e';
-        ctx.fillRect(f.x - 38, f.y + 8, 76, 6);
-        ctx.fillStyle = '#2a2144';
-        ctx.fillRect(f.x - 38, f.y + 14, 76, 22);
+        // 뒤쪽 빛: 어두운 바닥에서 시설의 실루엣이 먼저 보이게 한다
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const tint = { archer: '120,170,255', crystal: '190,90,255', barracks: '255,130,70' }[f.type];
@@ -235,35 +273,13 @@ const Render = {
             ctx.fill();
             ctx.restore();
         }
-        let name;
-        let footPx;
-        let y = f.y + 34;
-        if (f.type === 'archer') {
-            name = 'facility_archer';
-            footPx = 86;
-            y += recoil;
-        } else if (f.type === 'crystal') {
-            name = 'prop_shard';
-            footPx = 74;
-            y = f.y + 28 + Math.sin(f.bob) * 5 + recoil;
-        } else {
-            name = 'wall_shadow_doorOpen';
-            footPx = 44;
-            y = f.y + 30;
-        }
-        const img = stunned ? Assets.tinted(name, '#7fc6ff', 0.55) : Assets.get(name);
-        this.sprite(ctx, img, f.x, y, 2, footPx);
+        const art = FACILITY_ART[f.type];
+        const img = stunned ? Assets.tinted(art.sprite, '#7fc6ff', 0.55) : Assets.get(art.sprite);
+        this.sprite(ctx, img, f.x, f.y + 34 + (f.type === 'barracks' ? 0 : recoil), 1 / WORLD_ZOOM, art.footPx); // 화면에서 원본 1배가 된다
 
-        if (f.type === 'barracks') {
-            // 초소 깃발: 전용 그림이 나오기 전까지 도형으로 표시한다
-            ctx.fillStyle = '#332148';
-            ctx.fillRect(f.x - 4, f.y - 74, 6, 42);
-            ctx.fillStyle = f.tier >= 3 ? '#ffb45a' : '#b5392f';
-            ctx.fillRect(f.x + 2, f.y - 74, 26, 16);
-        }
         if (f.muzzle > 0) {
             const ox = f.x;
-            const oy = f.y - (f.type === 'archer' ? 120 : 92);
+            const oy = f.y - (f.type === 'archer' ? 85 : 60);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
             ctx.fillStyle = 'rgba(205,160,255,0.85)';
@@ -283,7 +299,7 @@ const Render = {
         }
         if (stunned) {
             this.stunStars(ctx, f.x, f.y - 112);
-            UIKit.text(ctx, '정지', f.x, f.y - 138, 22, '#9fdcff', 'center');
+            UIKit.text(ctx, '정지', f.x, f.y - 138, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
         }
     },
 
@@ -309,18 +325,23 @@ const Render = {
     },
 
     drawCorpse(ctx, c) {
-        const name = `${HEROES[c.type].sprite}${c.female ? '_female' : ''}_walk_down0`;
+        const def = HEROES[c.type];
+        const fall = def.anim && def.anim.death; // 쓰러지는 동작을 재생한 뒤 마지막 프레임을 유지한다
+        const name = fall ? this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * 14))) : this.heroStandName(c.type, c.female, 'down');
         const left = 1 - c.age / c.life;
         const blink = left < 0.3 ? (Math.floor(Game.time * 8) % 2 === 0 ? 0.45 : 0.9) : 0.9;
         const hovered = UI.hoverCorpse === c;
         ctx.save();
         ctx.translate(c.x, c.y + 8);
-        ctx.rotate(Math.PI / 2 * 0.92);
+        if (!fall) ctx.rotate(Math.PI / 2 * 0.92);
         ctx.globalAlpha = blink;
         const img = hovered ? Assets.tinted(name, '#b56bff', 0.45) : Assets.tinted(name, '#1b1030', 0.35);
-        if (img) {
+        if (img && fall) {
+            this.plSprite(ctx, img, def, fall, c.dir, 0, 2);
+        } else if (img) {
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, -40, -58, 80, 80);
+            const size = img.width * HERO_SCALE;
+            ctx.drawImage(img, -size / 2, -size * 0.725, size, size);
         }
         ctx.restore();
 
@@ -336,7 +357,7 @@ const Render = {
         ctx.arc(c.x, c.y - 46, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
         ctx.stroke();
         ctx.restore();
-        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 70, hovered ? 24 : 18, Game.gold >= c.cost ? '#e9c8ff' : '#8f8599', 'center');
+        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 70, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), Game.gold >= c.cost ? '#e9c8ff' : '#8f8599', 'center');
     },
 
     drawProjectile(ctx, p) {
@@ -502,7 +523,7 @@ const Render = {
         for (const n of Fx.numbers) {
             // 처음 120ms는 크게 튀어나온다 (Asteria와 같은 기준)
             const pop = n.age < 0.12 ? 1.55 - (n.age / 0.12) * 0.55 : 1;
-            const size = Math.round((n.big ? 50 : 26) * pop);
+            const size = Math.round((n.big ? 50 : 26) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
             ctx.save();
             ctx.globalAlpha = clamp((n.life - n.age) / 0.25, 0, 1);
             UIKit.text(ctx, String(n.amount), n.x, n.y, size, n.color, 'center');
@@ -515,11 +536,11 @@ const Render = {
             const a = clamp(Math.min(s.age / 0.1, (s.life - s.age) / 0.2), 0, 1);
             ctx.save();
             ctx.globalAlpha = a;
-            ctx.font = `24px ${UI_FONT}`;
-            const w = ctx.measureText(s.text).width + 32;
-            const x = clamp(s.x, w / 2 + 8, GAME_WIDTH - w / 2 - 8);
+            ctx.font = `${Math.round(24 / WORLD_ZOOM)}px ${UI_FONT}`;
+            const w = ctx.measureText(s.text).width + 42;
+            const x = clamp(s.x, w / 2 + 8, WORLD_WIDTH - w / 2 - 8);
             const y = s.y - (1 - a) * 8;
-            UIKit.frame(ctx, x - w / 2, y - 26, w, 48, s.boss ? 'danger' : 'speech', 6);
+            UIKit.frame(ctx, x - w / 2, y - 34, w, 64, s.boss ? 'danger' : 'speech', 6);
             ctx.fillStyle = s.boss ? '#ffe6ea' : '#1c1428';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -545,6 +566,7 @@ const Render = {
         if (Fx.shake > 0.5) {
             ctx.translate(Math.round(randRange(-Fx.shake, Fx.shake)), Math.round(randRange(-Fx.shake, Fx.shake)));
         }
+        ctx.scale(WORLD_ZOOM, WORLD_ZOOM);
         if (this.mapLayer) ctx.drawImage(this.mapLayer, 0, 0);
 
         for (const d of Fx.decals) {
@@ -580,7 +602,7 @@ const Render = {
 
         if (UI.targeting) {
             const rule = COMBAT_RULES.lightning;
-            this.rangeRing(ctx, UI.mouse.x, UI.mouse.y, rule.radius * TILE, 'rgba(160,220,255,1)');
+            this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, rule.radius * TILE, 'rgba(160,220,255,1)');
         }
 
         for (const c of Game.corpses) this.drawCorpse(ctx, c);
@@ -603,7 +625,7 @@ const Render = {
 
         if (Fx.dim > 0) {
             ctx.fillStyle = `rgba(4,2,16,${Fx.dim * 0.72})`;
-            ctx.fillRect(-40, -40, GAME_WIDTH + 80, GAME_HEIGHT + 80);
+            ctx.fillRect(-40, -40, WORLD_WIDTH + 80, WORLD_HEIGHT + 80);
         }
 
         for (const p of Game.projectiles) this.drawProjectile(ctx, p);

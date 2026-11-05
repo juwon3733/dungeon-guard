@@ -54,6 +54,7 @@ function updateUnit(u, dt) {
     if (toHome > 6) {
         const v = 170 * dt;
         u.facing = u.homeX >= u.x ? 1 : -1;
+        u.dir = dirFromVector(u.homeX - u.x, u.homeY - u.y);
         u.x += (u.homeX - u.x) / toHome * Math.min(v, toHome);
         u.y += (u.homeY - u.y) / toHome * Math.min(v, toHome);
         u.moving = true;

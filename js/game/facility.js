@@ -58,7 +58,7 @@ function updateFacility(f, dt) {
     f.recoil = 1;
     f.muzzle = 0.09;
     const tp = heroWorld(target);
-    const originY = f.y - (f.type === 'archer' ? 120 : 92);
+    const originY = f.y - (f.type === 'archer' ? 85 : 60); // 건물 꼭대기와 수정 위치
     if (f.type === 'archer') {
         G.projectiles.push({
             kind: 'arrow', x: f.x, y: originY, target, damage: stats.damage,
@@ -79,7 +79,7 @@ function updateFacility(f, dt) {
 
 function fireCrystalBeam(f, stats, tp) {
     const ox = f.x;
-    const oy = f.y - 92;
+    const oy = f.y - 60;
     const len = distance(ox, oy, tp.x, tp.y - 30) || 1;
     const dx = (tp.x - ox) / len;
     const dy = (tp.y - 30 - oy) / len;

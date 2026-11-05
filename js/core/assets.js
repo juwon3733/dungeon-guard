@@ -7,7 +7,16 @@ const Assets = {
 
     names() {
         const list = [];
-        for (const base of ['swordsman', 'swordsman_female', 'beast_tamer', 'beast_tamer_female', 'stormcaller', 'stormcaller_female']) {
+        for (const def of [...Object.values(HEROES), ORC_ART]) {
+            if (!def.anim) continue;
+            list.push(`${def.sprite}/rotations/south`);
+            for (const clip of Object.values(def.anim)) {
+                for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {
+                    for (let i = 0; i < clip.frames; i++) list.push(`${def.sprite}/animations/${clip.folder}/${dir}/frame_${String(i).padStart(3, '0')}`);
+                }
+            }
+        }
+        for (const base of ['beast_tamer', 'beast_tamer_female', 'stormcaller', 'stormcaller_female']) {
             for (const dir of ['down', 'up', 'left', 'right']) {
                 for (let i = 0; i < 4; i++) list.push(`${base}_walk_${dir}${i}`);
                 for (let i = 0; i < 2; i++) list.push(`${base}_act_${dir}_atk${i}`, `${base}_act_${dir}_cast${i}`);
@@ -19,8 +28,8 @@ const Assets = {
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
             'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison', 'slash']) list.push(`fx_${fx}`);
-        list.push('portrait_riftLord', 'portrait_fallenKnight', 'facility_archer', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
-            'anim_boarWarrior_walk0', 'anim_boarWarrior_walk1', 'anim_boarWarrior_attack',
+        for (const art of Object.values(FACILITY_ART)) list.push(art.sprite);
+        list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
             'tile_shadow_plain', 'tile_shadow_detailA', 'tile_shadow_detailB', 'tile_shadow_rare',
             'tile_void_plain', 'tile_void_detailA', 'tile_void_detailB', 'tile_void_rare',
             'wall_shadow_block', 'wall_shadow_corner', 'wall_shadow_doorOpen',
