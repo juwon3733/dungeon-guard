@@ -16,25 +16,15 @@ const Assets = {
                 }
             }
         }
-        for (const base of ['beast_tamer', 'beast_tamer_female', 'stormcaller', 'stormcaller_female']) {
-            for (const dir of ['down', 'up', 'left', 'right']) {
-                for (let i = 0; i < 4; i++) list.push(`${base}_walk_${dir}${i}`);
-                for (let i = 0; i < 2; i++) list.push(`${base}_act_${dir}_atk${i}`, `${base}_act_${dir}_cast${i}`);
-            }
-        }
-        for (const pose of ['down', 'left', 'cast', 'slam', 'windup']) {
-            list.push(`boss_fallen_knight_${pose}`, `boss_rift_lord_${pose}`);
-        }
+        for (const pose of ['down', 'left', 'slam', 'windup']) list.push(`boss_fallen_knight_${pose}`);
+        list.push('boss_rift_lord_down', 'boss_rift_lord_cast');
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
-            'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison', 'slash']) list.push(`fx_${fx}`);
+            'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison']) list.push(`fx_${fx}`);
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image); // pixelfx 시트, assets/fx/
         for (const art of Object.values(FACILITY_ART)) list.push(art.sprite);
         list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
-            'tile_shadow_plain', 'tile_shadow_detailA', 'tile_shadow_detailB', 'tile_shadow_rare',
-            'tile_void_plain', 'tile_void_detailA', 'tile_void_detailB', 'tile_void_rare',
-            'wall_shadow_block', 'wall_shadow_corner', 'wall_shadow_doorOpen',
-            'ui_button', 'ui_buttonHover', 'ui_skillSlot', 'ui_window', 'ui_itemSlot', 'icon_power_thunderStrike');
+            'tile_shadow_detailB', 'tile_shadow_rare', 'ui_skillSlot', 'icon_power_thunderStrike');
         return list;
     },
 
