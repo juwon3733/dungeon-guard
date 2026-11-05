@@ -263,24 +263,106 @@ const Render = {
             // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
             const anim = u.moving ? u.anim : 0;
             const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
+            const risen = u.rise > 0 ? clamp(1 - u.rise / 0.5, 0, 1) : 1;
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const pulse = 0.2 + Math.sin(Game.time * 4) * 0.08;
-            ctx.fillStyle = `rgba(150,60,230,${pulse})`;
-            ctx.beginPath();
-            ctx.ellipse(u.x, u.y + 9, 30, 11, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-            const risen = u.rise > 0 ? 1 - u.rise / 0.5 : 1;
-            const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.48);
-            ctx.save();
-            ctx.globalAlpha = 0.4 + 0.6 * risen;
-            this.heroSprite(ctx, img, def, u.atkPose, u.dir || 'down', u.x, u.y + 10 + (1 - risen) * 14);
-            ctx.restore();
+            this.drawCorruptAura(ctx, u.x, u.y + 9, risen, u.x * 0.013);
+            this.drawCorruptSprite(ctx, name, def, u.atkPose, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
         }
         const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
         this.healthBar(ctx, u.x, u.y - barY, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
+    },
+
+    // 타락 표시: 발밑에서 도는 도트 룬 고리와 위로 떠오르는 입자. seed로 유닛마다 박자를 어긋낸다.
+    // 일어나는 중(risen < 1)에는 고리가 안에서 밖으로 퍼진다. calm이면 입자 없이 고리만 그린다(타락 가능한 시체).
+    drawCorruptAura(ctx, x, y, risen, seed, calm) {
+        const t = Game.time + seed;
+        const grow = 0.35 + 0.65 * risen;
+        const rx = 34 * grow;
+        const ry = 12 * grow;
+        const snap = v => Math.round(v / 2) * 2;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        // 고리 안쪽의 은은한 빛
+        const pulse = 0.22 + Math.sin(t * 4) * 0.06;
+        const glow = ctx.createRadialGradient(x, y, 2, x, y, rx);
+        glow.addColorStop(0, `rgba(200,70,255,${pulse + 0.1})`);
+        glow.addColorStop(1, 'rgba(200,70,255,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // 도트 고리: 작은 점 사이사이에 십자 모양 룬 4개
+        const spin = t * 0.9;
+        for (let i = 0; i < 20; i++) {
+            const a = spin + i / 20 * Math.PI * 2;
+            const px = snap(x + Math.cos(a) * rx);
+            const py = snap(y + Math.sin(a) * ry);
+            const front = Math.sin(a) > 0; // 앞쪽 절반을 더 밝게 해 바닥에 누운 고리처럼 보이게 한다
+            if (i % 5 === 0) {
+                ctx.fillStyle = front ? '#ff9cf2' : 'rgba(230,110,255,0.7)';
+                ctx.fillRect(px - 2, py - 6, 4, 12);
+                ctx.fillRect(px - 6, py - 2, 12, 4);
+            } else {
+                ctx.fillStyle = front ? 'rgba(240,120,255,0.95)' : 'rgba(170,70,240,0.6)';
+                ctx.fillRect(px - 2, py - 2, 4, 4);
+            }
+        }
+        // 떠오르는 입자: 상태 없이 시간만으로 계산한다
+        for (let i = 0; i < (calm ? 0 : 7); i++) {
+            const k = (t * 0.7 + i / 7 + Math.sin(i * 12.9898 + seed) * 0.5 + 1) % 1;
+            const px = snap(x + Math.sin(i * 2.4 + seed * 3) * rx * 0.8 + Math.sin(t * 2 + i) * 3);
+            const py = snap(y - k * 90 * grow);
+            const a = (1 - k) * (k < 0.1 ? k * 10 : 1);
+            ctx.fillStyle = i % 3 === 0 ? `rgba(255,210,255,${a})` : `rgba(220,90,255,${a})`;
+            const s = i % 3 === 0 ? 4 : 6;
+            ctx.fillRect(px - s / 2, py - s / 2, s, s);
+        }
+        ctx.restore();
+    },
+
+    // 타락 그림: 본 그림은 살짝만 물들이고, 밝은 자주색 윤곽선으로 어두운 바닥에서 떼어 낸다.
+    // 일어나는 중에는 발밑 아래를 잘라 땅속에서 솟아오르게 하고 윤곽선이 하얗게 달아올랐다 식는다.
+    drawCorruptSprite(ctx, name, def, atkPose, dir, x, footY, risen, flash) {
+        const ease = 1 - Math.pow(1 - risen, 3);
+        const sink = (1 - ease) * 100;
+        ctx.save();
+        if (risen < 1) {
+            // 땅에서 솟는 빛기둥: 시체 타락 연출의 빛줄기에서 이어져 다 일어나면 꺼진다
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const k = 1 - ease;
+            const col = ctx.createLinearGradient(0, footY - 150, 0, footY);
+            col.addColorStop(0, 'rgba(230,110,255,0)');
+            col.addColorStop(1, `rgba(255,170,250,${0.75 * k})`);
+            ctx.fillStyle = col;
+            ctx.fillRect(x - 30, footY - 150, 60, 150);
+            ctx.fillStyle = `rgba(255,235,255,${0.8 * k})`;
+            ctx.fillRect(x - 40, footY - 4, 80, 6);
+            ctx.restore();
+            ctx.beginPath();
+            ctx.rect(x - 120, footY - 260, 240, 262);
+            ctx.clip();
+        }
+        const draw = (img, ox, oy) => this.heroSprite(ctx, img, def, atkPose, dir, x + ox, footY + sink + oy);
+        this.corruptOutline(ctx, name, def.scale || 2, draw, risen < 1 ? '#ffe6ff' : '#ff6be6', 1);
+        draw(flash ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.22), 0, 0);
+        ctx.restore();
+    },
+
+    // 상하좌우로 1도트 어긋난 밝은 실루엣과, 그 바깥 2도트의 보라 발광을 먼저 깐다. 위에 본 그림을 그리면 윤곽선만 남는다.
+    // draw(img, ox, oy)는 그림을 제자리에서 (ox, oy)만큼 밀어 그리는 함수다.
+    corruptOutline(ctx, name, dot, draw, color, strength) {
+        const ring = (img, r) => {
+            for (const [ox, oy] of [[-r, 0], [r, 0], [0, -r], [0, r]]) draw(img, ox * dot, oy * dot);
+        };
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.45 * strength;
+        ring(Assets.tinted(name, '#c040ff', 1), 2);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = strength;
+        ring(Assets.tinted(name, color, 1), 1);
+        ctx.restore();
     },
 
     drawFacility(ctx, f) {
@@ -366,17 +448,24 @@ const Render = {
         const left = 1 - c.age / c.life;
         const blink = left < 0.3 ? (Math.floor(Game.time * 8) % 2 === 0 ? 0.45 : 0.9) : 0.9;
         const hovered = UI.hoverCorpse === c;
+        // 지금 클릭하면 바로 타락시킬 수 있는 시체만 고리와 윤곽선으로 부른다
+        const ready = Game.gold >= c.cost && Game.units.filter(u => u.kind === 'corrupt').length < COMBAT_RULES.corruptMax;
+        if (ready) this.drawCorruptAura(ctx, c.x, c.y + 10, hovered ? 1 : 0.8, c.x * 0.013, true);
         ctx.save();
         ctx.translate(c.x, c.y + 8);
         if (!fall) ctx.rotate(Math.PI / 2 * 0.92);
         ctx.globalAlpha = blink;
-        const img = hovered ? Assets.tinted(name, '#b56bff', 0.45) : Assets.tinted(name, '#1b1030', 0.35);
+        const img = hovered ? Assets.tinted(name, '#b56bff', 0.3) : Assets.tinted(name, '#1b1030', ready ? 0.2 : 0.4);
         if (img && fall) {
-            this.plSprite(ctx, img, def, fall, c.dir, 0, 2);
+            const draw = (im, ox, oy) => this.plSprite(ctx, im, def, fall, c.dir, ox, 2 + oy);
+            if (ready) this.corruptOutline(ctx, name, def.scale || 2, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
+            draw(img, 0, 0);
         } else if (img) {
             ctx.imageSmoothingEnabled = false;
             const size = img.width * (def.scale || HERO_SCALE);
-            ctx.drawImage(img, -size / 2, -size * 0.725, size, size);
+            const draw = (im, ox, oy) => ctx.drawImage(im, -size / 2 + ox, -size * 0.725 + oy, size, size);
+            if (ready) this.corruptOutline(ctx, name, def.scale || HERO_SCALE, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
+            draw(img, 0, 0);
         }
         ctx.restore();
 
@@ -387,12 +476,12 @@ const Render = {
         ctx.beginPath();
         ctx.arc(c.x, c.y - 46, 12, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.strokeStyle = Game.gold >= c.cost ? '#c56bff' : '#6a5f7c';
+        ctx.strokeStyle = ready ? '#ff6be6' : '#6a5f7c';
         ctx.beginPath();
         ctx.arc(c.x, c.y - 46, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
         ctx.stroke();
         ctx.restore();
-        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 70, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), Game.gold >= c.cost ? '#e9c8ff' : '#8f8599', 'center');
+        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 70, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), ready ? '#ffd6fb' : '#8f8599', 'center');
     },
 
     drawProjectile(ctx, p) {
