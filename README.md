@@ -5,5 +5,6 @@
 - 범위: 지하 감옥 1개 층, 웨이브 10개, 시설 3종, 용사 3종과 층 보스, 타락, 마왕 스킬 2개, 파티 예고, 3단계 강화
 - 조작: 칸 클릭으로 건설과 강화, Q 번개, W 호통, Space 다음 웨이브, F 배속, P 일시정지, M 소리
 - 규칙 시험: `node tools/simulate.js` (전략별 승률), `node tools/smoke.js` (클릭 흐름)
+- 화면 캡처: `npm install` 후 `node tools/capture.js [title|prep|combat|units]` → `captures/`에 PNG 저장, 평균 FPS 출력, 콘솔 오류·빠진 그림이 있으면 종료 코드 1 (Edge 또는 Chrome 필요)
 - 그림: Asteria 원본 에셋을 재사용했습니다. 궁수탑은 벽과 유령을 합성한 임시 그림이고, 오크 초소의 깃발은 도형입니다.
 - 소리: Web Audio 합성음입니다. 3단계에서 음원으로 교체합니다.
