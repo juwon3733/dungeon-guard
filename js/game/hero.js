@@ -7,6 +7,8 @@ function createHero(type, waveIndex, delay, isBoss) {
     return {
         type,
         boss: !!isBoss,
+        elite: !isBoss && !!def.elite,
+        throneDamage: isBoss ? FLOOR_BOSS.throneDamage : (def.throneDamage || 1),
         name: isBoss ? FLOOR_BOSS.name : def.name,
         female: Math.random() < 0.5,
         d: 0,
@@ -52,6 +54,10 @@ function updateHero(h, dt) {
         if (h.delay <= 0) {
             h.waiting = false;
             Sfx.play('spawn');
+            if (h.elite && Math.random() < 0.5) {
+                const w = heroWorld(h);
+                Fx.say(w.x, w.y - 150, randItem(SPEECH.elite), 1.4);
+            }
         }
         return;
     }
@@ -98,12 +104,12 @@ function updateHero(h, dt) {
         const w = heroWorld(h);
         if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 100, randItem(SPEECH.arrive), 1.5);
         if (h.boss) { G.hp = 0; damageThrone(FLOOR_BOSS.throneDamage); }
-        else damageThrone(1);
+        else damageThrone(h.throneDamage);
     }
 }
 
 function updateMageCast(h, dt) {
-    const def = HEROES.mage;
+    const def = HEROES[h.type]; // 마법사와 정예 뇌술사가 함께 쓴다
     h.cast -= dt;
     if (h.cast > 0) return;
     const w = heroWorld(h);
@@ -117,7 +123,7 @@ function updateMageCast(h, dt) {
     h.cast = def.stunEvery;
     h.atkPose = 0.35;
     target.stun = def.stunTime;
-    Fx.beam(w.x, w.y - 44, target.x, target.y - 60, '#7fd8ff', 8, 0.3);
+    Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 8, 0.3);
     Fx.ring(target.x, target.y - 20, 74, '#7fd8ff', 0.4);
     if (Math.random() < 0.3) Fx.say(w.x, w.y - 90, '멈춰라!', 0.9);
     Sfx.play('stun');

@@ -157,6 +157,27 @@ const Render = {
         this.sprite(ctx, img, x, footY, def.scale, foot, pick.flip);
     },
 
+    // 용사 그림 한 장을 그린다. PixelLab 그림은 동작별 발 위치와 반전을 쓰고, Asteria 그림은 방향별 그림을 그대로 쓴다
+    heroSprite(ctx, img, def, atkPose, dir, x, footY) {
+        if (def.anim) this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
+        else this.sprite(ctx, img, x, footY, def.scale, def.footPx);
+    },
+
+    // 정예 표시: 발밑의 금색 빛 고리
+    eliteRing(ctx, x, y) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const pulse = 0.55 + Math.sin(Game.time * 5) * 0.15;
+        ctx.fillStyle = `rgba(255,190,60,${pulse * 0.35})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 46, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(255,215,100,${pulse})`;
+        ctx.stroke();
+        ctx.restore();
+    },
+
     // 서 있는 그림: 다음 파티 목록과 Asteria 그림의 시체에 쓴다
     heroStandName(type, female, dir) {
         const def = HEROES[type];
@@ -187,12 +208,17 @@ const Render = {
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
-            const casting = h.type === 'mage';
             const def = HEROES[h.type];
+            const casting = !!def.stunEvery;
             const name = this.heroSpriteName(h.type, h.female, h.dir, h.anim, h.atkPose, casting);
-            this.shadow(ctx, p.x, p.y + 9, 19, 6);
+            if (h.elite) {
+                this.shadow(ctx, p.x, p.y + 9, 34, 11);
+                this.eliteRing(ctx, p.x, p.y + 9);
+            } else {
+                this.shadow(ctx, p.x, p.y + 9, 19, 6);
+            }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.plSprite(ctx, img, def, h.atkPose > 0 ? def.anim.attack : def.anim.walk, h.dir, p.x, p.y + 10);
+            this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
             this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
         }
         if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : (HEROES[h.type].barY || 64) + 8));
@@ -225,7 +251,8 @@ const Render = {
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
         } else {
-            const casting = u.heroType === 'mage';
+            const def = HEROES[u.heroType];
+            const casting = !!def.stunEvery;
             const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting);
             this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
             ctx.save();
@@ -240,8 +267,7 @@ const Render = {
             const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.48);
             ctx.save();
             ctx.globalAlpha = 0.4 + 0.6 * risen;
-            const def = HEROES[u.heroType];
-            this.plSprite(ctx, img, def, u.atkPose > 0 ? def.anim.attack : def.anim.walk, u.dir || 'down', u.x, u.y + 10 + (1 - risen) * 14);
+            this.heroSprite(ctx, img, def, u.atkPose, u.dir || 'down', u.x, u.y + 10 + (1 - risen) * 14);
             ctx.restore();
         }
         const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
@@ -340,7 +366,7 @@ const Render = {
             this.plSprite(ctx, img, def, fall, c.dir, 0, 2);
         } else if (img) {
             ctx.imageSmoothingEnabled = false;
-            const size = img.width * HERO_SCALE;
+            const size = img.width * (def.scale || HERO_SCALE);
             ctx.drawImage(img, -size / 2, -size * 0.725, size, size);
         }
         ctx.restore();
