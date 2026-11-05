@@ -176,6 +176,47 @@ for (let i = 0; i < 2; i++) corruptCorpse({ type: 'rogue', female: true, x: 400,
 assert.strictEqual(Game.units.filter(u => u.kind === 'corrupt').length, 3);
 assert.strictEqual(corruptCorpse({ type: 'mage', female: true, x: 400, y: 300, d: 300, dir: 'down', cost: 24 }).reason, 'limit');
 
+// 정예: 같은 직업 기준 배율, 왕좌 피해 3, 시체와 타락
+const ew = HEROES.elite_swordsman, et = HEROES.elite_tamer, es = HEROES.elite_stormcaller;
+assert.strictEqual(ew.hp, HEROES.warrior.hp * 4);
+assert.strictEqual(ew.armor, 4);
+assert.strictEqual(et.speed, 1.3);
+assert.strictEqual(es.stunEvery, 4);
+assert.strictEqual(es.stunRange, 4);
+assert.strictEqual(es.bounty, HEROES.mage.bounty * 3);
+assert(!ew.anim && ew.sprite === 'swordsman', 'elite uses Asteria art');
+assert.strictEqual(CORRUPTED.elite_tamer.hp, CORRUPTED.rogue.hp * 2);
+assert.strictEqual(CORRUPTED.elite_tamer.damage, CORRUPTED.rogue.damage * 2);
+assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
+    const n = Object.values(w.elites || {}).reduce((a, b) => a + b, 0);
+    return n >= 1 && n <= 3;
+}), 'elites from wave 3, 1~3 each');
+{
+    const hpBefore = Game.hp;
+    const e = createHero('elite_swordsman', 3, 0, false);
+    e.waiting = false;
+    e.d = PATH.length - 57;
+    Game.heroes.push(e);
+    updateHero(e, 0.1);
+    assert(e.arrived, 'elite reached throne');
+    assert.strictEqual(Game.hp, hpBefore - 3);
+    Game.hp = 20;
+    const k = createHero('elite_stormcaller', 4, 0, false);
+    k.waiting = false;
+    Game.heroes.push(k);
+    const corpsesBefore = Game.corpses.length;
+    damageHero(k, 9999);
+    const corpse = Game.corpses[Game.corpses.length - 1];
+    assert.strictEqual(Game.corpses.length, corpsesBefore + 1);
+    assert.strictEqual(corpse.type, 'elite_stormcaller');
+    Game.units = Game.units.filter(u => u.kind !== 'corrupt');
+    Game.gold += corpse.cost;
+    assert(corruptCorpse(corpse).ok);
+    const cu = Game.units.find(u => u.heroType === 'elite_stormcaller');
+    assert.strictEqual(cu.maxHp, CORRUPTED.mage.hp * 2);
+    assert(cu.ranged);
+}
+
 // 패배 후 다시 시작하면 모두 초기화
 Game.hp = 1;
 damageThrone(1);
@@ -192,15 +233,18 @@ Game.gold = 6000;
 [[3,4,'archer'],[5,5,'crystal'],[3,6,'barracks'],[7,6,'archer'],[9,5,'crystal'],[9,2,'archer'],[11,4,'barracks'],[13,5,'crystal'],[13,7,'crystal'],[15,7,'archer'],[11,6,'crystal'],[15,5,'crystal']].forEach(([c,r,t]) => Game.build(t,c,r));
 for (const x of Game.facilities) { Game.upgrade(x); Game.upgrade(x, 'A'); }
 let guard = 0, sawCharge = false, sawStomp = false;
+const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
     if (Game.state === 'prep') Game.startWave();
     UI.update(1 / 30);
     Game.update(1 / 30);
+    if (Game.heroes.some(h => h.elite)) eliteWaves.add(Game.waveIndex);
     const b = Game.heroes.find(h => h.boss);
     if (b && b.chargeTime > 0) sawCharge = true;
     if (b && b.stomped) sawStomp = true;
 }
 assert.strictEqual(Game.state, 'victory');
 assert(sawCharge && sawStomp, 'boss patterns fired');
+assert.strictEqual(eliteWaves.size, WAVES.length - 2, 'elites appeared in waves 3..' + WAVES.length);
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });

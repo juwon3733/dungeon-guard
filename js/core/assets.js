@@ -8,7 +8,16 @@ const Assets = {
     names() {
         const list = [];
         for (const def of [...Object.values(HEROES), ORC_ART]) {
-            if (!def.anim) continue;
+            if (!def.anim) {
+                // Asteria 직업 그림(정예 용사): 4방향 걷기 4장, 공격과 주문 2장씩, 남녀 두 벌
+                for (const base of [def.sprite, `${def.sprite}_female`]) {
+                    for (const dir of ['down', 'up', 'left', 'right']) {
+                        for (let i = 0; i < 4; i++) list.push(`${base}_walk_${dir}${i}`);
+                        for (let i = 0; i < 2; i++) list.push(`${base}_act_${dir}_atk${i}`, `${base}_act_${dir}_cast${i}`);
+                    }
+                }
+                continue;
+            }
             list.push(`${def.sprite}/rotations/south`);
             for (const clip of Object.values(def.anim)) {
                 for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {

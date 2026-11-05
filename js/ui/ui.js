@@ -449,19 +449,20 @@ const UI = {
         const x = GAME_WIDTH - 372;
         const y = 76;
         const entries = Object.entries(wave.members);
-        const h = 92 + entries.length * 62 + (wave.boss ? 62 : 0);
+        const elites = Object.entries(wave.elites || {});
+        const h = 92 + (entries.length + elites.length) * 62 + (wave.boss ? 62 : 0);
         UIKit.frame(ctx, x, y, 360, h, 'panel', 8);
         UIKit.plain(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 20, y + 28, 20, '#c9b6ea');
         UIKit.text(ctx, wave.party, x + 20, y + 60, 25, '#ffe08a');
         let ry = y + 90;
-        const row = (img, name, note, count) => {
-            UIKit.frame(ctx, x + 14, ry - 2, 56, 56, 'dark', 4);
+        const row = (img, name, note, count, elite) => {
+            UIKit.frame(ctx, x + 14, ry - 2, 56, 56, elite ? 'gold' : 'dark', 4);
             if (img) {
                 ctx.imageSmoothingEnabled = false;
                 const size = img.width * Math.max(1, Math.floor(64 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
                 ctx.drawImage(img, x + 42 - size / 2, ry + 24 - size / 2, size, size);
             }
-            UIKit.text(ctx, name, x + 80, ry + 13, 22, '#ffffff');
+            UIKit.text(ctx, name, x + 80, ry + 13, 22, elite ? '#ffd76a' : '#ffffff');
             UIKit.plain(ctx, note, x + 80, ry + 39, 17, '#b8a9d0');
             if (count) UIKit.text(ctx, `x${count}`, x + 340, ry + 22, 28, '#ffffff', 'right');
             ry += 62;
@@ -469,6 +470,10 @@ const UI = {
         for (const [type, count] of entries) {
             const def = HEROES[type];
             row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count);
+        }
+        for (const [type, count] of elites) {
+            const def = HEROES[type];
+            row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count, true);
         }
         if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
     },
