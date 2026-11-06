@@ -116,6 +116,79 @@ const SCENES = {
                 document.body.appendChild(el);
             }
         }
+    },
+
+    // 정예 4종이 함께 걷는 장면: 음유시인 노래(음표), 뇌술사 범위 감전 경고 원, 오크에 막힌 검사, 오크를 지나는 조련사
+    elites: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 2000;
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Fx.reset();
+            Game.waveIndex = 6;
+            Game.startWave();
+            const rally = Game.monsters.find(f => f.rally).rally.d;
+            const put = (type, d, lane) => {
+                const h = createHero(type, Game.waveIndex, 0, false);
+                Object.assign(h, { waiting: false, d, lane, cast: 99, song: 99 });
+                return h;
+            };
+            // 앞에서부터: 조련사(오크를 지나 앞서 감), 검사(오크에 막힘), 뇌술사, 음유시인과 일반 용사 무리
+            const tamer = put('elite_tamer', rally - 0.2 * TILE, -25);
+            const sword = put('elite_swordsman', rally - 0.6 * TILE, 10);
+            const storm = put('elite_stormcaller', rally - 3.2 * TILE, 0);
+            const bard = put('elite_rhapsodist', rally - 5.6 * TILE, 0);
+            const crowd = [put('warrior', rally - 5 * TILE, 30), put('warrior', rally - 6.3 * TILE, -30), put('mage', rally - 6.6 * TILE, 25)];
+            Fx.reset();
+            const step = 1 / 30;
+            // 오크가 길로 나올 때까지 돌린다(용사는 멈춰 둔다)
+            Game.heroes = [];
+            for (let i = 0; i < 90; i++) Game.update(step);
+            Game.heroes = [tamer, sword, storm, bard, ...crowd];
+            // 검사가 막히고 조련사가 지나가도록 잠깐 걷게 한다. 뇌술사는 아직 오크에 닿지 않는다
+            for (let i = 0; i < 25; i++) { UI.update(step); Game.update(step); }
+            bard.song = 0.01;
+            storm.cast = 0.01;
+            for (let i = 0; i < 6; i++) { UI.update(step); Game.update(step); }
+            freezeScene(); // fps를 재는 2초 동안 경고 원이 사라지지 않게 바로 멈춘다
+        }
+    },
+
+    // 대마도사 보스: 체력 25% 넓은 범위 감전 경고 중. 보스 체력바가 위에 나온다
+    archmage: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 2000;
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
+            Fx.reset();
+            Game.waveIndex = 0;
+            Game.startWave();
+            const rally = Game.monsters.find(f => f.rally).rally.d;
+            const boss = createHero(null, 0, 0, 'archmage');
+            Object.assign(boss, { waiting: false, d: rally - 1.5 * TILE });
+            Game.heroes = [boss];
+            Fx.reset();
+            const step = 1 / 30;
+            boss.hp = boss.maxHp * 0.5;
+            for (let i = 0; i < 60; i++) Game.update(step); // 50% 감전을 끝까지 쓴다
+            boss.hp = boss.maxHp * 0.24;
+            for (let i = 0; i < 20; i++) { UI.update(step); Game.update(step); }
+            freezeScene(); // 넓은 감전 경고 원이 보이는 순간에 멈춘다
+        }
+    },
+
+    // 대마도사 이름 배너(보스 웨이브 시작 연출)
+    archmageIntro: {
+        setup: () => {
+            pressButton('start');
+            WAVES[WAVES.length - 1].boss = 'archmage';
+            Game.waveIndex = WAVES.length - 1;
+            Game.startWave();
+            for (let i = 0; i < 30; i++) { UI.update(1 / 30); Game.update(1 / 30); }
+        }
     }
 };
 

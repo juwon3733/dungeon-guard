@@ -54,27 +54,62 @@ const ELITE_RULES = {
     corruptMul: 2     // 타락 정예의 체력과 피해: 같은 직업 타락 유닛의 몇 배
 };
 
+// 직업 능력 수치도 여기서 고친다. 거리는 칸, 시간은 초다.
+// - song: 음유시인의 노래. every초마다 반경 radius 안 용사(자신 포함)의 이동 속도를 speedMul배로 duration초 동안 올린다
+// - stunArea: 뇌술사의 범위 감전. warn초 동안 바닥에 경고 원을 띄운 뒤 사거리(stunRange) 안 방어 쪽 전부를 stunTime초 정지
+// - breakthrough: 검사의 돌파. 막힌 뒤 after초가 지나면 막은 유닛을 길 옆으로 push칸 밀치고 stun초 정지시킨 뒤,
+//   free초 동안 막히지 않고 지나간다
+// - passOrcs: 조련사는 오크에게 막히지 않는다(타락 유닛에게는 막힌다)
 const ELITES = {
     elite_swordsman: {
         base: 'warrior', name: '정예 검사', sprite: 'swordsman', hpMul: 4, armor: 4,
-        counter: '갑옷 자랑꾼, 큰 한 방으로'
+        breakthrough: { after: 2, push: 0.7, stun: 0.8, free: 1.2 },
+        counter: '막히면 돌파, 큰 한 방'
     },
     elite_tamer: {
-        base: 'rogue', name: '정예 조련사', sprite: 'beast_tamer', hpMul: 4, speed: 1.3,
-        counter: '산책 중독, 오크로 막기'
+        base: 'rogue', name: '정예 조련사', sprite: 'beast_tamer', hpMul: 4, speed: 1.3, passOrcs: true,
+        counter: '오크를 지나침, 탑으로'
     },
     elite_stormcaller: {
-        base: 'mage', name: '정예 뇌술사', sprite: 'stormcaller', hpMul: 4, stunEvery: 4, stunRange: 4,
-        counter: '정전 유발범, 먼저 처치'
+        base: 'mage', name: '정예 뇌술사', sprite: 'stormcaller', hpMul: 4, stunEvery: 4, stunRange: 4, stunTime: 1.5,
+        stunArea: { warn: 0.5 },
+        counter: '범위 감전, 먼저 처치'
+    },
+    elite_rhapsodist: {
+        // 노래만 하고 정지 주문은 쓰지 않는다(stunEvery 0)
+        base: 'mage', name: '정예 음유시인', sprite: 'rhapsodist', hpMul: 4, stunEvery: 0,
+        song: { every: 5, radius: 3, speedMul: 1.25, duration: 3 },
+        counter: '주변 용사 가속, 먼저 처치'
     }
 };
 // Why: 세계 2배(scale 2)는 일반 용사보다 1.25배 정도라 구분이 안 됐다. 2 / WORLD_ZOOM이면 화면에서 원본 2배라 도트도 고르다.
 const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
 
-const FLOOR_BOSS = {
-    name: '용사단 부대장', hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0,
-    throneDamage: 5, chargeAt: 0.5, chargeTime: 3, chargeSpeed: 2.2,
-    stompAt: 0.25, stompWindup: 1.2, stompRange: 3, stompStun: 3
+// 층 보스. 웨이브 표의 boss 칸에 여기 열쇠를 적는다(예: boss: 'archmage').
+// 체력은 base 직업 체력 x hpMultiplier x 웨이브 배율이다. patterns는 체력 비율(at) 이하가 되면 한 번씩 쓴다.
+// - charge: time초 동안 speed칸/초로 돌진, 막힘 풀림
+// - stomp / shock: 멈춰서 windup초 동안 경고 원을 띄운 뒤 반경 range칸 안 방어 쪽 전부를 stun초 정지(stomp는 부대장, shock은 감전)
+// art가 없으면 부대장 전용 그림, 있으면 Asteria 직업 그림을 scale배로 그린다. starY는 정지 별 높이(발 기준 위쪽 세계 px)
+const BOSSES = {
+    fallen_knight: {
+        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지',
+        hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
+        starY: 165,
+        patterns: [
+            { at: 0.5, kind: 'charge', time: 3, speed: 2.2 },
+            { at: 0.25, kind: 'stomp', windup: 1.2, range: 3, stun: 3 }
+        ]
+    },
+    archmage: {
+        name: '용사단 대마도사', portrait: 'stormcaller_walk_down0', note: '체력 50%·25%에 범위 감전',
+        // 체력 체계는 부대장과 같다(전사 체력 x 15)
+        hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
+        art: { sprite: 'stormcaller', scale: 3 / WORLD_ZOOM, footPx: 59 }, starY: 225,
+        patterns: [
+            { at: 0.5, kind: 'shock', windup: 1.0, range: 3, stun: 2.5 },
+            { at: 0.25, kind: 'shock', windup: 1.6, range: 5, stun: 3 }
+        ]
+    }
 };
 
 const COMBAT_RULES = {
@@ -102,18 +137,18 @@ const CORRUPTED = {
     mage: { name: '타락 마법사', hp: 30, damage: 10, interval: 1.2, range: 2.5, ranged: true }
 };
 
-// elites는 일반 인원(members)에 더해 섞이는 정예 용사 수다
+// elites는 일반 인원(members)에 더해 섞이는 정예 용사 수다. boss는 BOSSES의 열쇠다
 const WAVES = [
     { party: '신참 원정대', members: { warrior: 9 } },
     { party: '마을 자경단', members: { warrior: 12 } },
     { party: '날쌘 도굴꾼', members: { rogue: 8 }, elites: { elite_tamer: 1 } },
     { party: '수상한 혼성대', members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
     { party: '견습 마법사와 친구들', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
-    { party: '보물 사냥단', members: { rogue: 20 }, elites: { elite_tamer: 2 } },
+    { party: '보물 사냥단', members: { rogue: 20 }, elites: { elite_tamer: 2, elite_rhapsodist: 1 } },
     { party: '왕국 정찰대', members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
-    { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2 } },
+    { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2, elite_rhapsodist: 1 } },
     { party: '최후의 선봉대', members: { warrior: 24, rogue: 15, mage: 9 }, elites: { elite_swordsman: 1, elite_tamer: 1, elite_stormcaller: 1 } },
-    { party: '용사단 본대', boss: true, members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } }
+    { party: '용사단 본대', boss: 'fallen_knight', members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_rhapsodist: 1, elite_stormcaller: 1 } }
 ];
 
 // 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.

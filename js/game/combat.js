@@ -166,3 +166,17 @@ function castRoar() {
     Sfx.play('roar');
     return true;
 }
+
+// 정지·감전의 대상 목록: (x, y)에서 반경 rangePx 안의 방어 쪽 전부(몬스터와 타락 유닛). 쓰러진 몬스터는 뺀다.
+// 돌려주는 대상은 x, y와 stun(남은 정지 초)을 가진다.
+function stunTargets(x, y, rangePx) {
+    const list = [];
+    for (const m of Game.monsters) if (!(m.down > 0) && distance(x, y, m.x, m.y) <= rangePx) list.push(m);
+    for (const u of Game.units) if (!u.removed && distance(x, y, u.x, u.y) <= rangePx) list.push(u);
+    return list;
+}
+
+// 더 긴 쪽 정지를 남긴다
+function applyStun(target, seconds) {
+    target.stun = Math.max(target.stun || 0, seconds);
+}

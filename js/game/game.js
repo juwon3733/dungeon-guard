@@ -114,9 +114,10 @@ const Game = {
         }
         queue.forEach((type, i) => this.heroes.push(createHero(type, this.waveIndex, i * COMBAT_RULES.spawnGap, false)));
         if (wave.boss) {
-            const boss = createHero('warrior', this.waveIndex, queue.length * COMBAT_RULES.spawnGap + 1, true);
+            const boss = createHero(null, this.waveIndex, queue.length * COMBAT_RULES.spawnGap + 1, wave.boss);
             this.heroes.push(boss);
-            Fx.banner = { name: FLOOR_BOSS.name, sub: '층 보스', age: 0, life: 3.2 };
+            const def = BOSSES[boss.bossKey];
+            Fx.banner = { name: def.name, sub: '층 보스', portrait: def.portrait, age: 0, life: 3.2 };
             Fx.dim = 0.9;
             Sfx.play('bossIntro');
         }

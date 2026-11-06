@@ -7,7 +7,7 @@ function createCorruptUnit(corpse) {
         kind: 'corrupt', heroType: corpse.type, female: corpse.female,
         x: corpse.x, y: corpse.y, d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
-        range: def.range, ranged: !!def.ranged, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
+        range: def.range, ranged: !!def.ranged, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
         // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.
         dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
     };
@@ -21,7 +21,7 @@ function holdHeroes(u, capacity, range) {
     if (u.target && u.target.blocker !== u) u.target = null;
     const held = Game.heroes.filter(h => h.blocker === u && !h.dead);
     if (held.length < capacity) {
-        const candidate = nearestHero(u.x, u.y, range * TILE, h => !h.blocker && h.chargeTime <= 0);
+        const candidate = nearestHero(u.x, u.y, range * TILE, h => canBlockHero(u, h));
         if (candidate) { candidate.blocker = u; held.push(candidate); }
     }
     if (!u.target && held.length) u.target = held[0];
@@ -52,6 +52,12 @@ function updateUnit(u, dt) {
     u.anim += dt * 5;
     if (u.rise > 0) {
         u.rise -= dt;
+        return;
+    }
+    // 감전·밀침으로 정지: 붙잡은 용사는 계속 붙잡고 있지만 때리지도 걷지도 않는다
+    if (u.stun > 0) {
+        u.stun -= dt;
+        u.moving = false;
         return;
     }
 
