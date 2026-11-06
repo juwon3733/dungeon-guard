@@ -48,7 +48,7 @@ function frame(now) {
     }
 
     UI.update(dt);
-    if (Game.state === 'title') {
+    if (Game.state === 'title' || Game.state === 'select') {
         Game.update(dt);
     } else if (!Game.paused) {
         // Why: 2배속도 한 번에 큰 시간을 넘기지 않아야 충돌과 조준이 어긋나지 않는다.

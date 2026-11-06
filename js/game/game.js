@@ -1,4 +1,10 @@
 // 게임 진행 상태와 프레임 순서. 화면 코드 없이도 돌아가서 tools/simulate.js로 밸런스를 시험할 수 있다.
+// 마왕 대사 한 줄: 공통 대사(SPEECH)에 이번 판 마왕의 대사를 더해 고른다(Math.random 한 번)
+function lordLine(kind) {
+    const own = Game.lordDef().speech || {};
+    return randItem([...(SPEECH[kind] || []), ...(own[kind] || [])]);
+}
+
 const Game = {
     state: 'title', // title | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
@@ -12,10 +18,24 @@ const Game = {
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0, throneBless: 0, // throneBless: 제물을 받은 마왕이 빛나는 남은 시간
     stats: { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 },
     time: 0,
+    lord: null, // 이번 판 마왕 id(DEMON_LORDS). null이면 효과 없이 기본 마왕 그림을 쓴다(시험 도구)
+    relics: [], // 이번 판 유물 id(RELICS). 판 중에는 바뀌지 않는다
+    mods: emptyMods(), // 마왕과 유물의 효과를 합친 값(LORD_EFFECTS). 각 계산 지점이 읽는다
 
-    reset() {
-        this.gold = COMBAT_RULES.startGold;
-        this.hp = COMBAT_RULES.maxHp;
+    // loadout: 선택 화면의 { lord, relics }. 없으면 효과 없이 시작한다(tools/simulate.js와 시험 도구)
+    reset(loadout) {
+        if (loadout) {
+            const clean = cleanLoadout(loadout);
+            this.lord = clean.lord;
+            this.relics = clean.relics;
+            this.mods = buildMods(clean.lord, clean.relics);
+        } else {
+            this.lord = null;
+            this.relics = [];
+            this.mods = emptyMods();
+        }
+        this.gold = COMBAT_RULES.startGold + this.mods.startGold;
+        this.hp = this.maxHp();
         this.waveIndex = 0;
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
@@ -39,6 +59,34 @@ const Game = {
         Fx.reset();
         this.state = 'prep';
     },
+
+    // 이번 판 마왕(그림, 초상, 대사). 고르지 않았으면 기본 마왕
+    lordDef() { return DEMON_LORDS[this.lord] || DEMON_LORDS[DEFAULT_LORD]; },
+
+    // 마왕 최대 체력: 기본값에 마왕과 유물의 maxHp를 더한다(1 아래로는 내려가지 않는다)
+    maxHp() { return Math.max(1, COMBAT_RULES.maxHp + this.mods.maxHp); },
+
+    // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
+    skillCooldown(key) { return COMBAT_RULES[key].cooldown * this.mods.skillCooldown; },
+
+    lightningDamage() { return COMBAT_RULES.lightning.damage * this.mods.lightningDamage; },
+
+    // 맵에 둘 수 있는 몬스터 수
+    maxField() { return SUMMON_RULES.maxField + this.mods.fieldMax; },
+
+    // 등급별 소환 확률: 희귀 확률(rareChance)을 일반에서 옮긴다
+    summonOdds() {
+        const odds = { ...SUMMON_RULES.odds };
+        const shift = clamp(this.mods.rareChance, -(odds.rare || 0), odds.common || 0);
+        if (shift) {
+            odds.common = (odds.common || 0) - shift;
+            odds.rare = (odds.rare || 0) + shift;
+        }
+        return odds;
+    },
+
+    // 제물 효과(마왕과 유물의 sacrifice 배율 포함, 최대치 제한 전)
+    sacrificeGain(m) { return sacrificeGain(m, this.mods.sacrifice); },
 
     currentWave() { return WAVES[Math.min(this.waveIndex, WAVES.length - 1)]; },
 
@@ -78,23 +126,24 @@ const Game = {
 
     inPlay() { return this.state === 'prep' || this.state === 'wave'; },
 
-    // 지금 소환 비용: 처음 cost, 소환할 때마다 costStep씩 올라 maxCost에서 멈춘다
+    // 지금 소환 비용: 처음 cost(마왕과 유물의 summonBase를 더한다), 소환할 때마다 costStep씩 올라 maxCost에서 멈춘다
     summonCost() {
         const r = SUMMON_RULES;
-        return Math.min(r.maxCost, r.cost + r.costStep * this.summonCount);
+        return Math.max(0, Math.min(r.maxCost, r.cost + this.mods.summonBase + r.costStep * this.summonCount));
     },
 
     // 맵에 더 둘 자리가 있는지(상한)
-    fieldFull() { return this.monsters.length >= SUMMON_RULES.maxField; },
+    fieldFull() { return this.monsters.length >= this.maxField(); },
 
-    // 등급을 SUMMON_RULES.odds로 고른 뒤 그 등급 몬스터 중 하나를 고른다. Math.random을 두 번 쓴다
+    // 등급을 summonOdds로 고른 뒤 그 등급 몬스터 중 하나를 고른다. Math.random을 두 번 쓴다
     rollSummon() {
-        const grades = GRADE_ORDER.filter(g => SUMMON_RULES.odds[g] > 0 && gradePool(g).length);
+        const odds = this.summonOdds();
+        const grades = GRADE_ORDER.filter(g => odds[g] > 0 && gradePool(g).length);
         let r = Math.random();
         let grade = grades[0];
         for (const g of grades) {
-            if (r < SUMMON_RULES.odds[g]) { grade = g; break; }
-            r -= SUMMON_RULES.odds[g];
+            if (r < odds[g]) { grade = g; break; }
+            r -= odds[g];
         }
         return randItem(gradePool(grade));
     },
@@ -256,10 +305,11 @@ const Game = {
         return { keep, back };
     },
 
-    // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop 확률로 장비(일반 또는 희귀)를 떨어뜨린다. Math.random을 세 번까지 쓴다
+    // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop(마왕과 유물의 eliteDrop을 더한다) 확률로 장비(일반 또는 희귀)를 떨어뜨린다.
+    // Math.random을 세 번까지 쓴다
     eliteDrop(x, y) {
         const R = EQUIP_RULES;
-        if (Math.random() >= R.eliteDrop) return null;
+        if (Math.random() >= R.eliteDrop + this.mods.eliteDrop) return null;
         const grade = Math.random() < R.eliteRareChance ? 'rare' : 'common';
         const id = randItem(equipPool(grade));
         const res = this.gainEquip(id, x, y);
@@ -404,7 +454,8 @@ const Game = {
         return { ok: true, type, kind: plan.kind, hidden, discovered, monster, equip: equip.keep, returned };
     },
 
-    sellValue(type) { return SUMMON_RULES.refund[MONSTERS[type].grade] || 0; },
+    // 판매 환불: 등급별 고정값에 마왕과 유물의 refund를 곱한다
+    sellValue(type) { return Math.round((SUMMON_RULES.refund[MONSTERS[type].grade] || 0) * this.mods.refund); },
 
     // 세계 좌표가 왕좌(마왕) 위인지: 왕좌 칸 둘레 3x3과 마왕 그림이 서 있는 위쪽 한 칸
     onThrone(wx, wy) {
@@ -418,8 +469,8 @@ const Game = {
     sacrifice(m) {
         if (!this.inPlay()) return { ok: false, reason: 'state' };
         if (!m || m.removed || !this.monsters.includes(m)) return { ok: false, reason: 'empty' };
-        const gain = sacrificeGain(m);
-        const heal = Math.min(gain.heal, Math.max(0, COMBAT_RULES.maxHp - this.hp));
+        const gain = this.sacrificeGain(m);
+        const heal = Math.min(gain.heal, Math.max(0, this.maxHp() - this.hp));
         this.hp += heal;
         this.skills.lightning = Math.max(0, this.skills.lightning - gain.lightning);
         const grade = MONSTERS[m.type].grade;
@@ -433,7 +484,7 @@ const Game = {
         Fx.pop({ kind: 'sacrifice', from: [from], fromTypes: [m.type], to: { x: tx, y: ty - 40 }, type: m.type, grade });
         Fx.pendingSacrifices.push({ t: MERGE_REVEAL, x: tx, y: ty, heal });
         this.throneBless = MERGE_REVEAL + 1.1;
-        Fx.say(tx, ty - 190, randItem(SPEECH.sacrifice), 2);
+        Fx.say(tx, ty - 190, lordLine('sacrifice'), 2);
         Sfx.play('merge', GRADE_ORDER.indexOf(grade));
         return { ok: true, heal, lightning: gain.lightning, gain, equip };
     },
@@ -493,7 +544,7 @@ const Game = {
             Sfx.play('bossIntro');
         }
         this.state = 'wave';
-        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, randItem(SPEECH.waveStart), 2);
+        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, lordLine('waveStart'), 2);
         Sfx.play('waveStart');
         return true;
     },
