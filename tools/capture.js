@@ -20,6 +20,22 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
+    // 칸 모양이 다른 몬스터를 큰 것부터 깐 맵(몬스터별 칸 크기와 Asteria 그림 확인)
+    monsterCells: {
+        setup: () => {
+            startRun();
+            const order = ['crystal_giant', 'hell_general', 'giant_king', 'phoenix_lord', 'earth_behemoth', 'orc_high_chief', 'death_lord', 'archlich', 'fallen_angel', 'element_sage',
+                'vampire', 'ancient_treant', 'hydra_warrior', 'flame_demon', 'executioner', 'bone_knight', 'storm_archer', 'chaos_mage', 'bone_priest', 'saber_warrior', 'moon_priestess',
+                'wraith_swordsman', 'fire_imp', 'zombie', 'frost_witch', 'orc_guard', 'skeleton_archer', 'minotaur', 'succubus', 'ogre_crusher', 'rock_spirit', 'eagle_hunter'];
+            for (const t of order) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            Fx.reset();
+            advance(0.5);
+        }
+    },
+
     // 고르기 화면(스테이지 5까지 깸, 6번 앞): 마왕 3장(황금 마왕을 고름), 유물 격자(잠긴 유물은 자물쇠와 풀리는 스테이지 도장),
     // 고른 유물 2칸(마녀의 눈)과 잠긴 3번째 칸, 이번 판 효과. 잠긴 금 간 거울에 마우스를 올려 "스테이지 6에서 해금"을 띄운다
     select: {

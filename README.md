@@ -16,3 +16,4 @@
 - 그림: 캐릭터, 마왕, 소품, 장비, 유물, UI 아이콘, 본부는 이 게임을 위해 PixelLab으로 만든 그림입니다(`docs/PIXELLAB_ASSETS.md`). 지역(섬, 우주 배경, 다리)과 UI 틀(창, 버튼, 칸)은 사용자가 만든 게임 Asteria의 그림을 다시 씁니다(사용자 결정, `NOTICE.md`). UI 재질과 화면 구성은 `docs/ART_BIBLE.md`. 도트 1칸은 화면 2픽셀입니다. 전투 효과는 모두 pixelfx 시트(`assets/fx/`, 만드는 법은 `tools/pfx_sheets.mjs`와 `docs/PIXELLAB_ASSETS.md`)입니다. 몬스터 표, 소환 확률, 조합식은 `js/data/monsters.js`, 설계는 `docs/MONSTER_DESIGN.md`.
 - 소리: Web Audio 합성음입니다. 3단계에서 음원으로 교체합니다.
 - 라운드: 6장을 각각 한 판으로 10~60라운드 진행, 라운드 30초 타이머, 5라운드마다 카드 3택, 소환 강화(U), 배속 3단계(F), 유물 최대 4개, 라운드 중간 저장. 자세한 규칙은 `docs/MONSTER_DESIGN.md`
+- 몬스터 55종(5종족), Asteria 몹·보스 그림, 몬스터별 칸 모양(1x1~3x3). 자세한 규칙은 `docs/MONSTER_DESIGN.md`

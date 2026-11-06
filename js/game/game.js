@@ -142,7 +142,7 @@ const Game = {
     },
 
     // 놓은 칸으로 찾는다. 길로 걸어 나간 몬스터도 놓은 칸을 차지한다
-    monsterAt(col, row) { return this.monsters.find(m => m.col === col && m.row === row) || null; },
+    monsterAt(col, row) { return this.monsters.find(m => monsterCovers(m, col, row)) || null; },
 
     // 세계 좌표 근처에 서 있는 몬스터(길로 나간 막는 몬스터를 누를 때)
     monsterNear(x, y) {
@@ -157,9 +157,30 @@ const Game = {
     },
 
     // 모든 몬스터는 길 옆 칸(BUILD_CELLS)에만 놓는다. 길 칸은 막는 몬스터도 안 된다. 칸 하나에 하나만
-    canPlace(type, col, row) {
-        if (!MONSTERS[type] || this.monsterAt(col, row)) return false;
-        return isBuildCell(col, row);
+    // 큰 몬스터는 (col, row)를 왼쪽 아래로 monsterCells만큼 모두 비어 있어야 한다. ignore는 비어 있다고 볼 몬스터들(옮기기, 합치기 재료)
+    canPlace(type, col, row, ignore) {
+        if (!MONSTERS[type]) return false;
+        const [w, h] = monsterCells(type);
+        for (let dx = 0; dx < w; dx++) {
+            for (let dy = 0; dy < h; dy++) {
+                if (!isBuildCell(col + dx, row - dy)) return false;
+                const m = this.monsterAt(col + dx, row - dy);
+                if (m && !(ignore && ignore.includes(m))) return false;
+            }
+        }
+        return true;
+    },
+
+    // (col, row)에서 가장 가까운 놓을 수 있는 칸. 없으면 그 자리(합치기 결과는 겹쳐도 사라지지 않게 둔다)
+    nearestFit(type, col, row, ignore) {
+        let best = null;
+        let bestDist = Infinity;
+        for (const key of BUILD_CELLS) {
+            const [c, r] = key.split(',').map(Number);
+            const d = (c - col) ** 2 + (r - row) ** 2;
+            if (d < bestDist && this.canPlace(type, c, r, ignore)) { bestDist = d; best = { col: c, row: r }; }
+        }
+        return best || { col, row };
     },
 
     // 몬스터를 칸에 바로 세운다(비용 없음). 시험 도구가 쓴다
@@ -228,18 +249,18 @@ const Game = {
         let cells = [];
         for (const key of BUILD_CELLS) {
             const [col, row] = key.split(',').map(Number);
-            if (this.monsterAt(col, row)) continue;
-            const x = tileX(col);
-            const y = tileY(row);
+            if (!this.canPlace(type, col, row)) continue;
+            const x = monsterHomeX(type, col);
+            const y = monsterHomeY(type, row);
             const gap = nearestPathPoint(x, y).gap; // 두 갈래 중 가까운 쪽 길까지
             if (!blocks && gap > range + 0.5) continue;
             cells.push({ col, row, gap });
         }
         if (blocks) {
             const spacing = SUMMON_RULES.blockerSpacing * TILE + 0.5;
-            const rallies = this.monsters.filter(m => m.blocks).map(m => rallyPoint(m.col, m.row));
+            const rallies = this.monsters.filter(m => m.blocks).map(m => nearestPathPoint(m.homeX, m.homeY));
             const apart = cells.filter(c => {
-                const r = rallyPoint(c.col, c.row);
+                const r = nearestPathPoint(monsterHomeX(type, c.col), monsterHomeY(type, c.row));
                 return rallies.every(o => distance(r.x, r.y, o.x, o.y) > spacing);
             });
             if (apart.length) cells = apart;
@@ -257,8 +278,13 @@ const Game = {
         if (this.fieldFull()) return { ok: false, reason: 'full' };
         const cost = this.summonCost();
         if (this.gold < cost) return { ok: false, reason: 'gold' };
-        const type = this.rollSummon();
-        const cell = this.pickSummonCell(type);
+        // 큰 몬스터가 나왔는데 자리가 없으면 다시 뽑는다(작은 몬스터가 들어갈 칸은 있을 수 있다)
+        let type = this.rollSummon();
+        let cell = this.pickSummonCell(type);
+        for (let i = 0; i < 8 && !cell && monsterCells(type).join() !== '1,1'; i++) {
+            type = this.rollSummon();
+            cell = this.pickSummonCell(type);
+        }
         if (!cell) return { ok: false, reason: 'full' };
         this.gold -= cost;
         this.summonCount++;
@@ -429,16 +455,16 @@ const Game = {
     // 맵의 몬스터를 다른 빈 길 옆 칸으로 옮긴다. 쓰러져 있으면 새 칸에서 마저 기다린다
     moveMonster(m, col, row) {
         if (m.col === col && m.row === row) return false;
-        if (!this.canPlace(m.type, col, row)) return false;
+        if (!this.canPlace(m.type, col, row, [m])) return false;
         this.releaseMonster(m);
         m.col = col;
         m.row = row;
-        m.homeX = m.x = tileX(col);
-        m.homeY = m.y = tileY(row);
+        m.homeX = m.x = monsterHomeX(m.type, col);
+        m.homeY = m.y = monsterHomeY(m.type, row);
         m.moving = false;
         m.shot = null;
         if (m.blocks) {
-            const r = rallyPoint(col, row);
+            const r = nearestPathPoint(m.homeX, m.homeY);
             m.rally = { route: r.route, d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
         }
         Fx.ring(m.x, m.y + MONSTER_FOOT, 100, '#c79bff', 0.3);
@@ -578,7 +604,9 @@ const Game = {
         const materials = [src.monster, old, ...(plan.extra || [])];
         const from = materials.map(m => this.fxPoint({ monster: m }));
         for (const m of materials) if (m !== old) this.removeMonster(m);
-        const monster = createMonster(type, old.col, old.row);
+        // 결과가 더 크면 재료가 비운 자리를 포함해 가장 가까운 빈 곳에 선다
+        const spot = this.nearestFit(type, old.col, old.row, materials);
+        const monster = createMonster(type, spot.col, spot.row);
         // 랭크는 재료 중 가장 낮은 값을 이어받는다(합치기로 랭크가 오르지는 않는다)
         setMonsterRank(monster, Math.min(...materials.map(m => m.rank || 0)));
         // 장비는 가장 좋은 것 1개를 이어받고, 나머지는 보관함으로(자리가 없으면 골드)
@@ -807,7 +835,7 @@ const Game = {
             if (d.skills) this.skills = d.skills;
             if (d.stats) this.stats = d.stats;
             for (const o of d.monsters) {
-                if (!MONSTERS[o.type] || !isBuildCell(o.col, o.row) || this.monsterAt(o.col, o.row)) continue;
+                if (!MONSTERS[o.type] || !this.canPlace(o.type, o.col, o.row)) continue;
                 const m = createMonster(o.type, o.col, o.row);
                 setMonsterRank(m, clamp(o.rank || 0, 0, MONSTER_RANKS.length - 1));
                 m.xp = o.xp || 0;

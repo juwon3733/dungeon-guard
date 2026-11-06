@@ -202,6 +202,37 @@ const ABILITY_KINDS = {
 function plClip(folder, frames, south, east, north) {
     return { folder, frames, dirs: PL_DIRS, footPx: { south, east, north } };
 }
+// Asteria 그림 하나(js/data/asteria_art.js): 그림 1px이 화면 1px(세계 배율 1.5)이다. breathe로 숨 쉬기와 내지르기를 코드가 그린다
+function astArt(id, opts) {
+    const a = ASTERIA_ART[id];
+    const scale = 1.5;
+    return Object.assign({ scale, barY: Math.round(a.height * scale) + 14, idleFps: 0, glow: '200,200,255', breathe: true, cells: a.cells,
+        hand: { x: Math.round(a.width * scale * 0.3), y: Math.round(a.height * scale * 0.6) }, anim: a.anim }, opts);
+}
+
+// 몬스터가 차지하는 칸(가로, 세로). 놓은 칸(col, row)이 왼쪽 아래 칸이다
+function monsterCells(type) { return MONSTERS[type].art.cells || [1, 1]; }
+
+// 차지하는 칸 전체의 가운데 x와 발끝 기준 y(맨 아래 줄 가운데)
+function monsterHomeX(type, col) { return tileX(col) + (monsterCells(type)[0] - 1) * TILE / 2; }
+function monsterHomeY(type, row) {
+    const [w, h] = monsterCells(type);
+    return tileY(row) + (w > 1 || h > 1 ? TILE * 0.3 : 0); // 큰 몬스터는 발을 맨 아래 칸 아래쪽에 두어 차지한 칸 안에 서게 한다
+}
+
+// 몬스터 m이 (col, row) 칸을 차지하는지
+function monsterCovers(m, col, row) {
+    const [w, h] = monsterCells(m.type);
+    return col >= m.col && col < m.col + w && row <= m.row && row > m.row - h;
+}
+
+// 맞는 Asteria 그림이 없어 PixelLab으로 만든 몬스터 4종의 그림
+const PL_NEW_ART = {
+    goblin_thrower: { scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,190,90', hand: { x: 60, y: 75 }, anim: { idle: plClip('idle', 5, 57, 57, 54), attack: plClip('throw', 6, 57, 57, 54) } },
+    war_drummer: { scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,120,70', shot: 'bolt', hand: { x: 45, y: 80 }, anim: { idle: plClip('idle', 5, 57, 57, 56), attack: plClip('drum', 6, 57, 57, 56) } },
+    ogre_crusher: { scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '255,170,90', anim: { idle: plClip('walking', 6, 63, 63, 62), attack: plClip('slash', 6, 56, 57, 56), walk: plClip('walking', 6, 63, 63, 62) } },
+    succubus: { scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,90,190', shot: 'bolt', hand: { x: 60, y: 80 }, anim: { idle: plClip('idle', 5, 57, 57, 56), attack: plClip('cast', 6, 57, 57, 56) } },
+};
 const MONSTERS = {
     orc_guard: {
         id: 'orc_guard', name: '오크 경비병', role: 'tank', family: 'orc', grade: 'common',
@@ -268,47 +299,27 @@ const MONSTERS = {
     },
     curse_shooter: {
         id: 'curse_shooter', name: '저주 사수', role: 'ranged', family: 'undead', grade: 'rare',
-        sprite: 'pl_mon_curse_shooter', cost: 120,
+        sprite: ASTERIA_ART.curse_shooter.sprite, cost: 120,
         stats: { hp: 50, damage: 22, interval: 1.0, range: 4 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
         desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏩니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '170,90,255', hand: { x: 51, y: 75 },
-            anim: {
-                idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 62, east: 64, north: 61 } },
-                attack: { folder: 'shoot', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 56, north: 55 } }
-            }
-        }
+        art: astArt('curse_shooter', { glow: '170,90,255' })
     },
     bone_knight: {
-        id: 'bone_knight', name: '해골 기사', role: 'tank', family: 'undead', grade: 'epic',
-        sprite: 'pl_mon_bone_knight', cost: 250,
+        id: 'bone_knight', name: '균열 기사', role: 'tank', family: 'undead', grade: 'epic',
+        sprite: ASTERIA_ART.bone_knight.sprite, cost: 250,
         stats: { hp: 500, damage: 30, interval: 1.0, range: 0.9, block: 5, respawn: 6 },
         abilities: [{ kind: 'deathStun', radius: 2, duration: 1.5 }], unlock: 'start',
         desc: '길로 걸어 나가 용사를 5명까지 붙잡고 오래 버팁니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '170,120,255',
-            anim: {
-                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
-                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
-                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 56, north: 54 } }
-            }
-        }
+        art: astArt('bone_knight', { glow: '170,120,255' })
     },
     death_lord: {
         id: 'death_lord', name: '죽음의 군주', role: 'tank', family: 'undead', grade: 'legendary',
-        sprite: 'pl_mon_death_lord', cost: 500, summon: false,
+        sprite: ASTERIA_ART.death_lord.sprite, cost: 500, summon: false,
         stats: { hp: 900, damage: 60, interval: 0.9, range: 0.9, block: 8, respawn: 5 },
         abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
         desc: '길로 걸어 나가 용사를 8명까지 붙잡고, 쓰러지면 주변을 기절시킵니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 204, idleFps: 0, glow: '255,200,90',
-            anim: {
-                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
-                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
-                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 74, east: 75, north: 74 } }
-            }
-        }
+        art: astArt('death_lord', { glow: '255,200,90' })
     },
 
     // ----- 몬스터 확장 16종(2026-11-06, 수치 초안) -----
@@ -324,26 +335,20 @@ const MONSTERS = {
         }
     },
     zombie: {
-        id: 'zombie', name: '좀비', role: 'tank', family: 'undead', grade: 'common',
-        sprite: 'pl_mon_zombie', cost: 60,
+        id: 'zombie', name: '수몰 좀비', role: 'tank', family: 'undead', grade: 'common',
+        sprite: ASTERIA_ART.zombie.sprite, cost: 60,
         stats: { hp: 170, damage: 6, interval: 1.2, range: 0.8, block: 3, respawn: 7 },
         abilities: [{ kind: 'regen', perSec: 3 }], unlock: 'start',
         desc: '느리게 때리지만 상처가 저절로 아물며 길을 오래 막습니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 141, idleFps: 0, glow: '150,220,120',
-            anim: { idle: plClip('walking', 6, 61, 54, 61), walk: plClip('walking', 6, 61, 54, 61), attack: plClip('slash', 6, 55, 54, 54) }
-        }
+        art: astArt('zombie', { glow: '150,220,120' })
     },
     fire_imp: {
         id: 'fire_imp', name: '불꽃 임프', role: 'ranged', family: 'demon', grade: 'common',
-        sprite: 'pl_mon_fire_imp', cost: 60,
+        sprite: ASTERIA_ART.fire_imp.sprite, cost: 60,
         stats: { hp: 30, damage: 7, interval: 1.0, range: 2.5 },
         abilities: [{ kind: 'burnShot', dps: 3, duration: 2 }], unlock: 'start',
         desc: '불덩이를 던져 맞은 용사를 잠시 태웁니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,110,40', hand: { x: 45, y: 48 }, shot: 'fx_shot_fire',
-            anim: { idle: plClip('idle', 4, 50, 51, 50), attack: plClip('cast', 6, 50, 51, 50) }
-        }
+        art: astArt('fire_imp', { glow: '255,110,40', shot: 'fx_shot_fire' })
     },
     gnoll_hunter: {
         id: 'gnoll_hunter', name: '그놀 사냥꾼', role: 'ranged', family: 'beast', grade: 'common',
@@ -357,15 +362,12 @@ const MONSTERS = {
         }
     },
     wisp_acolyte: {
-        id: 'wisp_acolyte', name: '도깨비불 수련사', role: 'support', family: 'spirit', grade: 'common',
-        sprite: 'pl_mon_wisp_acolyte', cost: 60,
+        id: 'wisp_acolyte', name: '서리 도깨비불', role: 'support', family: 'spirit', grade: 'common',
+        sprite: ASTERIA_ART.wisp_acolyte.sprite, cost: 60,
         stats: { hp: 30, damage: 3, interval: 1.5, range: 2 },
         abilities: [{ kind: 'aura', stat: 'heal', radius: 2, value: 3 }], unlock: 'start',
         desc: '등불을 들고 서서 둘레 몬스터의 상처를 천천히 낫게 합니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '90,240,255', hand: { x: 39, y: 84 }, shot: 'bolt',
-            anim: { idle: plClip('idle', 4, 54, 54, 53), attack: plClip('cast', 6, 54, 54, 53) }
-        }
+        art: astArt('wisp_acolyte', { glow: '90,240,255', shot: 'bolt' })
     },
     werewolf: {
         id: 'werewolf', name: '늑대인간', role: 'melee', family: 'beast', grade: 'rare',
@@ -390,15 +392,12 @@ const MONSTERS = {
         }
     },
     frost_witch: {
-        id: 'frost_witch', name: '서리 마녀', role: 'area', family: 'spirit', grade: 'rare',
-        sprite: 'pl_mon_frost_witch', cost: 120,
+        id: 'frost_witch', name: '눈의 주술사', role: 'area', family: 'spirit', grade: 'rare',
+        sprite: ASTERIA_ART.frost_witch.sprite, cost: 120,
         stats: { hp: 40, damage: 14, interval: 2.0, range: 3, splash: 1 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
         desc: '얼음 창을 던져 무리를 함께 얼리고 느리게 만듭니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '130,205,255', hand: { x: 60, y: 75 }, shot: 'fx_shot_ice', impact: 'fx_snowflake',
-            anim: { idle: plClip('idle', 4, 56, 56, 54), attack: plClip('cast', 6, 56, 56, 54) }
-        }
+        art: astArt('frost_witch', { glow: '130,205,255', shot: 'fx_shot_ice', impact: 'fx_snowflake' })
     },
     nightmare_jester: {
         id: 'nightmare_jester', name: '악몽 광대', role: 'ranged', family: 'demon', grade: 'rare',
@@ -435,58 +434,301 @@ const MONSTERS = {
     },
     vampire: {
         id: 'vampire', name: '뱀파이어', role: 'ranged', family: 'undead', grade: 'epic',
-        sprite: 'pl_mon_vampire', cost: 250,
+        sprite: ASTERIA_ART.vampire.sprite, cost: 250,
         stats: { hp: 70, damage: 40, interval: 1.0, range: 4 },
         abilities: [{ kind: 'goldOnKill', gold: 3 }], unlock: 'start',
         desc: '먼 곳의 용사에게 핏빛 구슬을 쏘고, 쓰러뜨리면 금화를 챙깁니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,50,80', hand: { x: 39, y: 54 }, shot: 'fx_shot_blood',
-            anim: { idle: plClip('idle', 4, 56, 57, 53), attack: plClip('cast', 6, 56, 57, 53) }
-        }
+        art: astArt('vampire', { glow: '255,50,80', shot: 'fx_shot_blood' })
     },
     flame_demon: {
         id: 'flame_demon', name: '용암 악마', role: 'area', family: 'demon', grade: 'epic',
-        sprite: 'pl_mon_flame_demon', cost: 250,
+        sprite: ASTERIA_ART.flame_demon.sprite, cost: 250,
         stats: { hp: 80, damage: 45, interval: 2.2, range: 3, splash: 1.5 },
         abilities: [{ kind: 'burnGround', radius: 1, dps: 10, duration: 3 }], unlock: 'start',
         desc: '용암 덩이를 던져 무리를 태우고 그 자리에 불 장판을 남깁니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,90,20', hand: { x: 33, y: 45 }, shot: 'fx_shot_fire', impact: 'fx_hit_fire',
-            anim: { idle: plClip('idle', 4, 56, 54, 54), attack: plClip('cast', 6, 56, 54, 54) }
-        }
+        art: astArt('flame_demon', { glow: '255,90,20', shot: 'fx_shot_fire', impact: 'fx_hit_fire' })
     },
     ancient_treant: {
         id: 'ancient_treant', name: '고대 나무 정령', role: 'tank', family: 'spirit', grade: 'epic',
-        sprite: 'pl_mon_ancient_treant', cost: 250,
+        sprite: ASTERIA_ART.ancient_treant.sprite, cost: 250,
         stats: { hp: 700, damage: 20, interval: 1.3, range: 0.9, block: 6, respawn: 6 },
         abilities: [{ kind: 'thorns', ratio: 0.3 }], unlock: 'start',
         desc: '용사 6명을 붙잡고, 때리는 용사는 가시에 찔립니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 153, idleFps: 0, glow: '140,255,100',
-            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
-        }
+        art: astArt('ancient_treant', { glow: '140,255,100' })
     },
     hell_general: {
         id: 'hell_general', name: '지옥 대장군', role: 'melee', family: 'demon', grade: 'legendary',
-        sprite: 'pl_mon_hell_general', cost: 500, summon: false,
+        sprite: ASTERIA_ART.hell_general.sprite, cost: 500, summon: false,
         stats: { hp: 800, damage: 110, interval: 0.8, range: 1, block: 4, respawn: 5 },
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
         desc: '불타는 대검으로 둘레를 쓸어 버리고, 다치면 더 빨라집니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 195, idleFps: 0, glow: '255,170,40',
-            anim: { idle: plClip('walking', 6, 79, 80, 77), walk: plClip('walking', 6, 79, 80, 77), attack: plClip('slash', 6, 75, 75, 73) }
-        }
+        art: astArt('hell_general', { glow: '255,170,40' })
     },
     archlich: {
         id: 'archlich', name: '대리치', role: 'area', family: 'undead', grade: 'legendary',
-        sprite: 'pl_mon_archlich', cost: 500, summon: false,
+        sprite: ASTERIA_ART.archlich.sprite, cost: 500, summon: false,
         stats: { hp: 120, damage: 100, interval: 1.8, range: 4.5, splash: 2 },
         abilities: [{ kind: 'chain', count: 3, ratio: 0.6, jump: 2.5 }, { kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
         desc: '죽음의 구체를 떨어뜨리고 번개로 잇습니다. 둘레 몬스터가 더 빨리 공격합니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 195, idleFps: 3, glow: '80,255,150', hand: { x: 54, y: 54 }, shot: 'bolt',
-            anim: { idle: plClip('idle', 4, 72, 72, 72), attack: plClip('cast', 6, 72, 72, 72) }
-        }
+        art: astArt('archlich', { glow: '80,255,150', shot: 'bolt' })
+    },
+
+    // ----- 55종 확장(2026-11-07): 그림은 Asteria(js/data/asteria_art.js), 맞는 그림이 없는 4종만 PixelLab. 수치 초안 -----
+    grave_keeper: {
+        id: 'grave_keeper', name: '묘지기', role: 'tank', family: 'undead', grade: 'common',
+        sprite: ASTERIA_ART.grave_keeper.sprite, cost: 60,
+        stats: { hp: 150, damage: 7, interval: 1.1, range: 0.8, block: 2, respawn: 7 },
+        abilities: [{ kind: 'thorns', ratio: 0.15 }], unlock: 'start',
+        desc: '등불을 들고 길을 막으며, 맞으면 받은 피해 일부를 돌려줍니다.',
+        art: astArt('grave_keeper', { glow: '150,190,255' })
+    },
+    wraith_swordsman: {
+        id: 'wraith_swordsman', name: '망령 검사', role: 'melee', family: 'undead', grade: 'rare',
+        sprite: ASTERIA_ART.wraith_swordsman.sprite, cost: 120,
+        stats: { hp: 190, damage: 20, interval: 0.7, range: 0.8, block: 2, respawn: 7 },
+        abilities: [{ kind: 'lifesteal', ratio: 0.2 }], unlock: 'start',
+        desc: '벤 만큼 체력을 빨아들이는 그림자 기사입니다.',
+        art: astArt('wraith_swordsman', { glow: '150,110,255' })
+    },
+    plague_ghoul: {
+        id: 'plague_ghoul', name: '역병 망령', role: 'area', family: 'undead', grade: 'rare',
+        sprite: ASTERIA_ART.plague_ghoul.sprite, cost: 120,
+        stats: { hp: 50, damage: 12, interval: 1.8, range: 3, splash: 1 },
+        abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
+        desc: '역병 안개를 던져 맞은 용사들이 더 큰 피해를 받게 합니다.',
+        art: astArt('plague_ghoul', { glow: '190,170,240', shot: 'bolt' })
+    },
+    bone_priest: {
+        id: 'bone_priest', name: '뼈의 사제', role: 'support', family: 'undead', grade: 'epic',
+        sprite: ASTERIA_ART.bone_priest.sprite, cost: 250,
+        stats: { hp: 90, damage: 12, interval: 1.5, range: 3 },
+        abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
+        desc: '둘레 몬스터의 공격 속도를 올리는 뼈 가면의 사제입니다.',
+        art: astArt('bone_priest', { glow: '140,230,120', shot: 'bolt' })
+    },
+    goblin_thrower: {
+        id: 'goblin_thrower', name: '고블린 투척병', role: 'ranged', family: 'orc', grade: 'common',
+        sprite: 'pl_mon_goblin_thrower', cost: 60,
+        stats: { hp: 35, damage: 10, interval: 1.0, range: 2.5 },
+        abilities: [{ kind: 'stunShot', chance: 0.1, duration: 0.6 }], unlock: 'start',
+        desc: '창을 던져 가끔 용사를 멈춰 세웁니다.',
+        art: PL_NEW_ART.goblin_thrower
+    },
+    orc_charger: {
+        id: 'orc_charger', name: '멧돼지 돌격대장', role: 'melee', family: 'orc', grade: 'epic',
+        sprite: ASTERIA_ART.orc_charger.sprite, cost: 250,
+        stats: { hp: 460, damage: 44, interval: 0.9, range: 1, block: 3, respawn: 6 },
+        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
+        desc: '다칠수록 사납게 휘두르는 멧돼지 전사입니다.',
+        art: astArt('orc_charger', { glow: '255,150,80' })
+    },
+    war_drummer: {
+        id: 'war_drummer', name: '전쟁 북꾼', role: 'support', family: 'orc', grade: 'epic',
+        sprite: 'pl_mon_war_drummer', cost: 250,
+        stats: { hp: 100, damage: 10, interval: 1.5, range: 3 },
+        abilities: [{ kind: 'aura', stat: 'damage', radius: 3, value: 0.3 }], unlock: 'start',
+        desc: '북소리로 둘레 몬스터의 피해를 올립니다.',
+        art: PL_NEW_ART.war_drummer
+    },
+    ogre_crusher: {
+        id: 'ogre_crusher', name: '오우거 파쇄자', role: 'melee', family: 'orc', grade: 'epic',
+        sprite: 'pl_mon_ogre_crusher', cost: 250,
+        stats: { hp: 560, damage: 60, interval: 1.4, range: 1, block: 4, respawn: 7 },
+        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.8 }], unlock: 'start',
+        desc: '느리지만 한 번에 여럿을 부수는 거한입니다.',
+        art: PL_NEW_ART.ogre_crusher
+    },
+    orc_high_chief: {
+        id: 'orc_high_chief', name: '대족장', role: 'melee', family: 'orc', grade: 'legendary',
+        sprite: ASTERIA_ART.orc_high_chief.sprite, cost: 500, summon: false,
+        stats: { hp: 1000, damage: 95, interval: 0.9, range: 1, block: 6, respawn: 5 },
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.5 }, { kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
+        desc: '철퇴를 휘두르며 둘레 몬스터를 함께 강하게 만듭니다.',
+        art: astArt('orc_high_chief', { glow: '255,160,70' })
+    },
+    giant_king: {
+        id: 'giant_king', name: '거인 왕', role: 'tank', family: 'orc', grade: 'legendary',
+        sprite: ASTERIA_ART.giant_king.sprite, cost: 500, summon: false,
+        stats: { hp: 1400, damage: 70, interval: 1.3, range: 1, block: 10, respawn: 6 },
+        abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }, { kind: 'thorns', ratio: 0.3 }], unlock: 'start',
+        desc: '용사 10명을 붙잡는 산 같은 거인입니다.',
+        art: astArt('giant_king', { glow: '255,140,60' })
+    },
+    hellhound_warrior: {
+        id: 'hellhound_warrior', name: '지옥견', role: 'melee', family: 'demon', grade: 'common',
+        sprite: ASTERIA_ART.hellhound_warrior.sprite, cost: 60,
+        stats: { hp: 90, damage: 13, interval: 0.7, range: 0.8, block: 1, respawn: 6 },
+        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.7 }], unlock: 'start',
+        desc: '불타는 사냥개입니다. 다치면 더 빨리 뭅니다.',
+        art: astArt('hellhound_warrior', { glow: '255,120,50' })
+    },
+    succubus: {
+        id: 'succubus', name: '서큐버스', role: 'ranged', family: 'demon', grade: 'rare',
+        sprite: 'pl_mon_succubus', cost: 120,
+        stats: { hp: 45, damage: 18, interval: 1.0, range: 3.5 },
+        abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
+        desc: '홀린 용사가 더 큰 피해를 받게 합니다.',
+        art: PL_NEW_ART.succubus
+    },
+    flame_archer: {
+        id: 'flame_archer', name: '화염 기사', role: 'tank', family: 'demon', grade: 'rare',
+        sprite: ASTERIA_ART.flame_archer.sprite, cost: 120,
+        stats: { hp: 240, damage: 18, interval: 1.0, range: 0.8, block: 3, respawn: 7 },
+        abilities: [{ kind: 'thorns', ratio: 0.2 }], unlock: 'start',
+        desc: '불타는 방패로 막으며 때린 용사를 태웁니다.',
+        art: astArt('flame_archer', { glow: '255,110,50' })
+    },
+    executioner: {
+        id: 'executioner', name: '심판의 처형자', role: 'melee', family: 'demon', grade: 'epic',
+        sprite: ASTERIA_ART.executioner.sprite, cost: 250,
+        stats: { hp: 420, damage: 70, interval: 1.3, range: 1.2, block: 2, respawn: 6 },
+        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.6 }, { kind: 'cleave', radius: 1.5, ratio: 0.5 }], unlock: 'start',
+        desc: '큰 낫으로 둘레를 함께 베는 사신입니다.',
+        art: astArt('executioner', { glow: '190,90,255' })
+    },
+    chaos_mage: {
+        id: 'chaos_mage', name: '혼돈 마도사', role: 'area', family: 'demon', grade: 'epic',
+        sprite: ASTERIA_ART.chaos_mage.sprite, cost: 250,
+        stats: { hp: 80, damage: 42, interval: 2.0, range: 3.5, splash: 1.5 },
+        abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
+        desc: '넓은 저주를 터뜨립니다.',
+        art: astArt('chaos_mage', { glow: '170,110,255', shot: 'bolt' })
+    },
+    fallen_angel: {
+        id: 'fallen_angel', name: '타락 천사', role: 'ranged', family: 'demon', grade: 'legendary',
+        sprite: ASTERIA_ART.fallen_angel.sprite, cost: 500, summon: false,
+        stats: { hp: 140, damage: 130, interval: 1.0, range: 5 },
+        abilities: [{ kind: 'chain', count: 4, ratio: 0.5, jump: 2.5 }, { kind: 'curseShot', duration: 4, takenMul: 1.3 }], unlock: 'start',
+        desc: '검은 빛이 용사들 사이를 이어 달립니다.',
+        art: astArt('fallen_angel', { glow: '255,210,120', shot: 'bolt' })
+    },
+    boar_warrior: {
+        id: 'boar_warrior', name: '멧돼지 전사', role: 'tank', family: 'beast', grade: 'common',
+        sprite: ASTERIA_ART.boar_warrior.sprite, cost: 60,
+        stats: { hp: 160, damage: 8, interval: 1.1, range: 0.8, block: 2, respawn: 7 },
+        abilities: [], unlock: 'start',
+        desc: '튼튼한 멧돼지가 길을 막습니다.',
+        art: astArt('boar_warrior', { glow: '255,160,80' })
+    },
+    spider_archer: {
+        id: 'spider_archer', name: '보석 딱정벌레', role: 'ranged', family: 'beast', grade: 'common',
+        sprite: ASTERIA_ART.spider_archer.sprite, cost: 60,
+        stats: { hp: 35, damage: 9, interval: 0.9, range: 2.5 },
+        abilities: [{ kind: 'slowShot', speedMul: 0.8, duration: 1.5 }], unlock: 'start',
+        desc: '보석 조각을 뱉어 용사를 느리게 합니다.',
+        art: astArt('spider_archer', { glow: '100,210,255', shot: 'bolt' })
+    },
+    bear_warrior: {
+        id: 'bear_warrior', name: '설원 예티', role: 'tank', family: 'beast', grade: 'rare',
+        sprite: ASTERIA_ART.bear_warrior.sprite, cost: 120,
+        stats: { hp: 360, damage: 16, interval: 1.2, range: 0.8, block: 4, respawn: 7 },
+        abilities: [{ kind: 'regen', perSec: 5 }], unlock: 'start',
+        desc: '두꺼운 털로 버티며 상처가 저절로 아뭅니다.',
+        art: astArt('bear_warrior', { glow: '190,225,255' })
+    },
+    eagle_hunter: {
+        id: 'eagle_hunter', name: '깃털 궁수', role: 'ranged', family: 'beast', grade: 'rare',
+        sprite: ASTERIA_ART.eagle_hunter.sprite, cost: 120,
+        stats: { hp: 45, damage: 24, interval: 0.9, range: 4.5 },
+        abilities: [{ kind: 'goldOnKill', gold: 1 }], unlock: 'start',
+        desc: '멀리서 쏘고 쓰러뜨린 용사의 금화를 챙깁니다.',
+        art: astArt('eagle_hunter', { glow: '255,190,200' })
+    },
+    saber_warrior: {
+        id: 'saber_warrior', name: '왕관 사자', role: 'melee', family: 'beast', grade: 'epic',
+        sprite: ASTERIA_ART.saber_warrior.sprite, cost: 250,
+        stats: { hp: 420, damage: 56, interval: 0.8, range: 1, block: 3, respawn: 6 },
+        abilities: [{ kind: 'lifesteal', ratio: 0.25 }], unlock: 'start',
+        desc: '물어뜯은 만큼 회복하는 사자 왕입니다.',
+        art: astArt('saber_warrior', { glow: '255,215,120' })
+    },
+    hydra_warrior: {
+        id: 'hydra_warrior', name: '늪 히드라', role: 'area', family: 'beast', grade: 'epic',
+        sprite: ASTERIA_ART.hydra_warrior.sprite, cost: 250,
+        stats: { hp: 110, damage: 38, interval: 1.6, range: 3.5, splash: 1.2 },
+        abilities: [{ kind: 'chain', count: 2, ratio: 0.5, jump: 2 }], unlock: 'start',
+        desc: '세 머리가 독을 뿜어 이어 맞힙니다.',
+        art: astArt('hydra_warrior', { glow: '160,220,90', shot: 'bolt' })
+    },
+    earth_behemoth: {
+        id: 'earth_behemoth', name: '가시 거수', role: 'tank', family: 'beast', grade: 'legendary',
+        sprite: ASTERIA_ART.earth_behemoth.sprite, cost: 500, summon: false,
+        stats: { hp: 1500, damage: 55, interval: 1.2, range: 1, block: 9, respawn: 6 },
+        abilities: [{ kind: 'thorns', ratio: 0.5 }, { kind: 'regen', perSec: 15 }], unlock: 'start',
+        desc: '때릴수록 가시에 찔리는 거대한 멧돼지입니다.',
+        art: astArt('earth_behemoth', { glow: '220,90,80' })
+    },
+    phoenix_lord: {
+        id: 'phoenix_lord', name: '불사조', role: 'area', family: 'beast', grade: 'legendary',
+        sprite: ASTERIA_ART.phoenix_lord.sprite, cost: 500, summon: false,
+        stats: { hp: 150, damage: 90, interval: 1.6, range: 4.5, splash: 2 },
+        abilities: [{ kind: 'burnGround', radius: 1.2, dps: 20, duration: 4 }], unlock: 'start',
+        desc: '지나간 자리를 불바다로 만듭니다.',
+        art: astArt('phoenix_lord', { glow: '255,150,50', shot: 'bolt' })
+    },
+    rock_spirit: {
+        id: 'rock_spirit', name: '바위 정령', role: 'tank', family: 'spirit', grade: 'common',
+        sprite: ASTERIA_ART.rock_spirit.sprite, cost: 60,
+        stats: { hp: 190, damage: 5, interval: 1.3, range: 0.8, block: 3, respawn: 8 },
+        abilities: [], unlock: 'start',
+        desc: '느리지만 잘 버티는 흙과 바위의 정령입니다.',
+        art: astArt('rock_spirit', { glow: '190,170,120' })
+    },
+    wind_sylph: {
+        id: 'wind_sylph', name: '바람 정령', role: 'ranged', family: 'spirit', grade: 'common',
+        sprite: ASTERIA_ART.wind_sylph.sprite, cost: 60,
+        stats: { hp: 30, damage: 8, interval: 0.7, range: 3 },
+        abilities: [{ kind: 'slowShot', speedMul: 0.85, duration: 1 }], unlock: 'start',
+        desc: '빠른 바람 칼날로 발을 묶습니다.',
+        art: astArt('wind_sylph', { glow: '170,220,255', shot: 'bolt' })
+    },
+    water_spirit: {
+        id: 'water_spirit', name: '물의 정령', role: 'support', family: 'spirit', grade: 'rare',
+        sprite: ASTERIA_ART.water_spirit.sprite, cost: 120,
+        stats: { hp: 60, damage: 6, interval: 1.5, range: 2.5 },
+        abilities: [{ kind: 'aura', stat: 'heal', radius: 3, value: 8 }], unlock: 'start',
+        desc: '둘레 몬스터의 체력을 채워 줍니다.',
+        art: astArt('water_spirit', { glow: '110,210,255', shot: 'bolt' })
+    },
+    lightning_spirit: {
+        id: 'lightning_spirit', name: '번개 정령', role: 'ranged', family: 'spirit', grade: 'rare',
+        sprite: ASTERIA_ART.lightning_spirit.sprite, cost: 120,
+        stats: { hp: 40, damage: 18, interval: 1.1, range: 3 },
+        abilities: [{ kind: 'chain', count: 2, ratio: 0.5, jump: 2 }], unlock: 'start',
+        desc: '번개가 다음 용사로 튑니다.',
+        art: astArt('lightning_spirit', { glow: '110,160,255', shot: 'bolt' })
+    },
+    moon_priestess: {
+        id: 'moon_priestess', name: '달의 사제', role: 'support', family: 'spirit', grade: 'epic',
+        sprite: ASTERIA_ART.moon_priestess.sprite, cost: 250,
+        stats: { hp: 90, damage: 14, interval: 1.4, range: 3 },
+        abilities: [{ kind: 'aura', stat: 'heal', radius: 3, value: 20 }], unlock: 'start',
+        desc: '달빛으로 둘레 몬스터를 크게 회복시킵니다.',
+        art: astArt('moon_priestess', { glow: '200,220,255', shot: 'bolt' })
+    },
+    storm_archer: {
+        id: 'storm_archer', name: '폭풍 그리핀', role: 'ranged', family: 'spirit', grade: 'epic',
+        sprite: ASTERIA_ART.storm_archer.sprite, cost: 250,
+        stats: { hp: 90, damage: 46, interval: 1.0, range: 4.5 },
+        abilities: [{ kind: 'chain', count: 2, ratio: 0.6, jump: 2.5 }], unlock: 'start',
+        desc: '하늘에서 폭풍을 내리꽂습니다.',
+        art: astArt('storm_archer', { glow: '140,190,255', shot: 'bolt' })
+    },
+    element_sage: {
+        id: 'element_sage', name: '운명의 현자', role: 'area', family: 'spirit', grade: 'legendary',
+        sprite: ASTERIA_ART.element_sage.sprite, cost: 500, summon: false,
+        stats: { hp: 130, damage: 95, interval: 1.7, range: 4.5, splash: 2 },
+        abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }, { kind: 'burnGround', radius: 1, dps: 15, duration: 3 }], unlock: 'start',
+        desc: '일곱 빛깔 실로 용사의 발을 묶고 태웁니다.',
+        art: astArt('element_sage', { glow: '255,210,240', shot: 'bolt' })
+    },
+    crystal_giant: {
+        id: 'crystal_giant', name: '수정 거인', role: 'tank', family: 'spirit', grade: 'legendary',
+        sprite: ASTERIA_ART.crystal_giant.sprite, cost: 500, summon: false,
+        stats: { hp: 1600, damage: 50, interval: 1.3, range: 1, block: 10, respawn: 6 },
+        abilities: [{ kind: 'thorns', ratio: 0.4 }, { kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
+        desc: '수정 몸으로 받아 내고 부서질 때 주변을 멈춥니다.',
+        art: astArt('crystal_giant', { glow: '150,180,255' })
     }
 };
 
@@ -510,7 +752,24 @@ const MONSTER_RECIPES = [
     { a: 'orc_shaman', b: 'troll', result: 'ancient_treant', hidden: false },
     { a: 'curse_shooter', b: 'nightmare_jester', result: 'vampire', hidden: true },
     { a: 'flame_demon', aRank: 'A', b: 'minotaur', bRank: 'A', result: 'hell_general', hidden: true },
-    { a: 'vampire', aRank: 'A', b: 'bone_knight', bRank: 'A', result: 'archlich', hidden: true }
+    { a: 'vampire', aRank: 'A', b: 'bone_knight', bRank: 'A', result: 'archlich', hidden: true },
+    // 55종 확장
+    { a: 'grave_keeper', b: 'skeleton_archer', result: 'wraith_swordsman', hidden: false },
+    { a: 'goblin_thrower', b: 'orc_guard', result: 'orc_berserker', hidden: false },
+    { a: 'hellhound_warrior', b: 'fire_imp', result: 'flame_archer', hidden: false },
+    { a: 'boar_warrior', b: 'spider_archer', result: 'bear_warrior', hidden: false },
+    { a: 'rock_spirit', b: 'wind_sylph', result: 'water_spirit', hidden: false },
+    { a: 'orc_shaman', b: 'orc_berserker', result: 'war_drummer', hidden: false },
+    { a: 'succubus', b: 'plague_ghoul', result: 'chaos_mage', hidden: false },
+    { a: 'bear_warrior', b: 'eagle_hunter', result: 'saber_warrior', hidden: false },
+    { a: 'water_spirit', b: 'lightning_spirit', result: 'moon_priestess', hidden: false },
+    { a: 'ogre_crusher', aRank: 'A', b: 'war_drummer', bRank: 'A', result: 'orc_high_chief', hidden: true },
+    { a: 'orc_charger', aRank: 'A', b: 'ogre_crusher', bRank: 'A', result: 'giant_king', hidden: true },
+    { a: 'executioner', aRank: 'A', b: 'chaos_mage', bRank: 'A', result: 'fallen_angel', hidden: true },
+    { a: 'saber_warrior', aRank: 'A', b: 'minotaur', bRank: 'A', result: 'earth_behemoth', hidden: true },
+    { a: 'hydra_warrior', aRank: 'A', b: 'flame_demon', bRank: 'A', result: 'phoenix_lord', hidden: true },
+    { a: 'moon_priestess', aRank: 'A', b: 'storm_archer', bRank: 'A', result: 'element_sage', hidden: true },
+    { a: 'ancient_treant', aRank: 'A', b: 'storm_archer', bRank: 'A', result: 'crystal_giant', hidden: true }
 ];
 
 // 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'

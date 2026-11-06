@@ -103,3 +103,12 @@
 - **유물:** 최대 4개를 들고 간다. 칸은 1, 4, 5, 6장을 처음 깰 때 풀린다.
 - **중간 저장:** 라운드가 넘어갈 때 저장하고 본부에서 이어한다(`Game.saveRun`, `loadRun`). 전투 중 용사는 저장하지 않는다.
 - 봇 측정: `node tools/simulate.js [판 수]`. 60라운드가 약 25분이고 합치는 봇은 체력 손실 없이 이긴다. 아직 쉬우니 나중에 맞춘다.
+
+## 몬스터 55종과 칸 모양 (2026-11-07 사용자 결정)
+
+- 5종족(언데드, 오크, 악마, 야수, 정령)에 일반 3, 희귀 3, 영웅 3, 전설 2씩 55종이다. 판마다 전부 등장한다. 수치는 초안이다.
+- 그림: 맞는 그림이 있으면 Asteria 몹·보스 그림을 쓴다(사용자 게임, `tools/import_asteria_monsters.py`가 `assets/sprites/ast_mon_<id>/`와 `js/data/asteria_art.js`를 만든다). 맞는 그림이 없는 오크 등은 PixelLab이다.
+- 그림 1px은 화면 1px이다(세계 배율 1.5). 프레임이 적어 숨 쉬기와 내지르기는 코드가 그린다(`art.breathe`, `Render.monsterMotion`).
+- 칸 모양: 몬스터마다 다르다(`art.cells`, 1x1, 2x1, 1x2, 2x2, 3x2, 2x3, 3x3). 놓은 칸(col, row)이 왼쪽 아래다. `monsterCells`, `monsterCovers`, `Game.canPlace(type, col, row, ignore)`.
+- 합치기 결과가 재료 자리에 안 맞으면 `Game.nearestFit`이 가까운 빈 곳에 세운다. 소환은 큰 몬스터 자리가 없으면 다시 뽑는다.
+- 남은 일: 신화 표(그림은 `abyss_dragon_king`, `time_witch`, `soul_devourer`를 가져와 두었다), 전설·신화 특수 스킬, 능력 없는 일반 몬스터의 몬스터 능력.
