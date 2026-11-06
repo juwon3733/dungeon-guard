@@ -104,11 +104,13 @@ const UI = {
         return null;
     },
 
-    // 화면에 보여 줄 합치기 결과. 히든 조합식은 드러내지 않는다(등급 합치기가 되면 그것으로, 아니면 '???')
+    // 화면에 보여 줄 합치기 결과. a, b는 맵의 몬스터 개체(랭크 조건을 함께 판단한다).
+    // 히든 조합식은 드러내지 않는다(등급 합치기가 되면 그것으로, 아니면 '???')
     shownPlan(a, b) {
-        const plan = mergePlan(a, b);
+        const plan = Game.mergePlanFor(a, b);
         if (plan.kind !== 'recipe' || !plan.recipe.hidden) return plan;
-        if (MONSTERS[a].grade === MONSTERS[b].grade && nextGrade(MONSTERS[a].grade)) return { kind: 'grade', grade: nextGrade(MONSTERS[a].grade) };
+        const ga = MONSTERS[a.type].grade;
+        if (ga === MONSTERS[b.type].grade && nextGrade(ga)) return { kind: 'grade', grade: nextGrade(ga) };
         return { kind: 'unknown' };
     },
 
@@ -230,8 +232,8 @@ const UI = {
         if (t.monster) {
             const loc = { monster: t.monster };
             if (Game.sameLoc(src, loc)) return { action: 'back' };
-            const plan = this.shownPlan(d.type, Game.typeAt(loc));
-            const real = mergePlan(d.type, Game.typeAt(loc));
+            const plan = this.shownPlan(src.monster, loc.monster);
+            const real = Game.mergePlanFor(src.monster, loc.monster);
             return real.kind === 'none' ? { action: 'invalid', loc, reason: real.reason, plan } : { action: 'merge', loc, plan };
         }
         const { col, row } = t.cell;
@@ -304,6 +306,7 @@ const UI = {
             const msg = {
                 top: '영웅은 최고 등급이라 더 합칠 수 없습니다.',
                 mismatch: '등급이 다르고 조합식도 없어 합칠 수 없습니다.',
+                unique: '전설 몬스터는 맵에 1마리만 둘 수 있습니다.',
                 path: '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.',
                 cell: '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.'
             }[act.reason] || '여기에는 놓을 수 없습니다.';
@@ -475,7 +478,7 @@ const UI = {
             const target = this.drag && this.dropTarget && this.dropTarget.monster;
             for (const m of Game.monsters) {
                 if (focus.loc.monster === m || m.reveal > 0) continue;
-                const plan = this.shownPlan(focus.type, m.type);
+                const plan = this.shownPlan(focus.loc.monster, m);
                 if (plan.kind === 'none' || plan.kind === 'unknown') continue;
                 Render.mergeRing(ctx, m.homeX, m.homeY + MONSTER_FOOT, plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan.grade].color, target === m);
                 // 길로 걸어 나간 몬스터도 서 있는 곳에 고리를 그린다
@@ -801,7 +804,8 @@ const UI = {
         for (const r of p.recipes) {
             const res = MONSTERS[r.result];
             this.drawMonsterIcon(ctx, r.partner, p.x + 18, y + 2, 44);
-            UIKit.plain(ctx, MONSTERS[r.partner].name, p.x + 72, y + 24, 19, '#ffffff');
+            // 랭크 조건이 있으면 이름 뒤에 적는다(예: 해골 기사 A+)
+            UIKit.plain(ctx, MONSTERS[r.partner].name + (r.partnerRank ? ` ${r.partnerRank}+` : ''), p.x + 72, y + 24, 19, '#ffffff');
             UIKit.text(ctx, '→', p.x + 222, y + 24, 22, '#ffd76a', 'center');
             this.drawMonsterIcon(ctx, r.result, p.x + 246, y + 2, 44);
             UIKit.plain(ctx, res.name, p.x + 300, y + 24, 19, MONSTER_GRADES[res.grade].light);
@@ -965,7 +969,7 @@ const UI = {
         const hotMonster = this.drag && this.dropTarget && this.dropTarget.monster;
         for (const m of Game.monsters) {
             if (focus.loc.monster === m || m.reveal > 0) continue;
-            const plan = this.shownPlan(focus.type, m.type);
+            const plan = this.shownPlan(focus.loc.monster, m);
             if (plan.kind !== 'recipe' && plan.kind !== 'grade') continue;
             const p = this.monsterTopScreen(m.down > 0 ? { ...m, x: m.homeX, y: m.homeY } : m);
             badge(p.x, p.y, plan, hotMonster === m);
@@ -979,8 +983,8 @@ const UI = {
             text = act.plan.kind === 'recipe' ? `합치기 → ${MONSTERS[act.plan.result].name}`
                 : (act.plan.kind === 'grade' ? `합치기 → ${MONSTER_GRADES[act.plan.grade].name} 무작위` : '합치기 → ???');
             color = act.plan.kind === 'recipe' ? '#ffd76a' : (act.plan.kind === 'grade' ? MONSTER_GRADES[act.plan.grade].color : '#ffffff');
-        } else if (act.action === 'invalid' && (act.reason === 'top' || act.reason === 'mismatch')) {
-            text = act.reason === 'top' ? '합칠 수 없음 · 최고 등급' : '합칠 수 없음';
+        } else if (act.action === 'invalid' && (act.reason === 'top' || act.reason === 'mismatch' || act.reason === 'unique')) {
+            text = { top: '합칠 수 없음 · 최고 등급', mismatch: '합칠 수 없음', unique: '합칠 수 없음 · 전설은 맵에 1마리' }[act.reason];
             color = '#ff8f8f';
         }
         if (text) {
@@ -1027,54 +1031,73 @@ const UI = {
         ctx.restore();
     },
 
-    // "히든 조합 발견!": 화면 가운데 띠, 재료 두 마리와 결과
+    // "히든 조합 발견!": 화면 가운데 띠, 재료 두 마리(랭크 조건이 있으면 이름 뒤에)와 결과.
+    // 전설 결과는 띠와 결과 그림이 더 크고, 빛줄기가 많고 금색이며 "전설" 글자가 붙는다
     drawDiscovery(ctx) {
         const d = Fx.discovery;
         if (!d || d.age < 0) return;
+        const legend = d.grade === 'legendary';
         const a = clamp(Math.min(d.age / 0.2, (d.life - d.age) / 0.4), 0, 1);
         const cx = GAME_WIDTH / 2;
         const cy = 520;
+        const half = legend ? 280 : 220;
         ctx.save();
         ctx.globalAlpha = a;
-        ctx.fillStyle = 'rgba(4,2,14,0.55)';
+        ctx.fillStyle = legend ? 'rgba(8,4,0,0.55)' : 'rgba(4,2,14,0.55)';
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        const band = ctx.createLinearGradient(0, cy - 220, 0, cy + 220);
-        band.addColorStop(0, 'rgba(60,20,90,0)');
-        band.addColorStop(0.2, 'rgba(60,20,90,0.92)');
-        band.addColorStop(0.8, 'rgba(40,12,60,0.92)');
-        band.addColorStop(1, 'rgba(40,12,60,0)');
+        const band = ctx.createLinearGradient(0, cy - half, 0, cy + half);
+        const c0 = legend ? '90,52,8' : '60,20,90';
+        const c1 = legend ? '60,30,4' : '40,12,60';
+        band.addColorStop(0, `rgba(${c0},0)`);
+        band.addColorStop(0.2, `rgba(${c0},0.94)`);
+        band.addColorStop(0.8, `rgba(${c1},0.94)`);
+        band.addColorStop(1, `rgba(${c1},0)`);
         ctx.fillStyle = band;
-        ctx.fillRect(0, cy - 220, GAME_WIDTH, 440);
+        ctx.fillRect(0, cy - half, GAME_WIDTH, half * 2);
         ctx.fillStyle = '#ffd76a';
-        ctx.fillRect(0, cy - 176, GAME_WIDTH, 4);
-        ctx.fillRect(0, cy + 172, GAME_WIDTH, 4);
+        const line = legend ? 8 : 4;
+        ctx.fillRect(0, cy - half + 44, GAME_WIDTH, line);
+        ctx.fillRect(0, cy + half - 48, GAME_WIDTH, line);
         // 결과 뒤에서 도는 빛줄기
         const rx = cx + 250;
         const ry = cy + 40;
+        const rays = legend ? 24 : 14;
+        const len = legend ? 420 : 260;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        for (let i = 0; i < 14; i++) {
-            const ang = d.age * 0.7 + i / 14 * Math.PI * 2;
-            ctx.fillStyle = i % 2 ? 'rgba(255,215,106,0.16)' : 'rgba(200,120,255,0.16)';
+        for (let i = 0; i < rays; i++) {
+            const ang = d.age * (legend ? 0.9 : 0.7) + i / rays * Math.PI * 2;
+            ctx.fillStyle = i % 2 ? 'rgba(255,215,106,0.16)' : (legend ? 'rgba(255,170,60,0.18)' : 'rgba(200,120,255,0.16)');
             ctx.beginPath();
             ctx.moveTo(rx, ry);
-            ctx.lineTo(rx + Math.cos(ang - 0.09) * 260, ry + Math.sin(ang - 0.09) * 260);
-            ctx.lineTo(rx + Math.cos(ang + 0.09) * 260, ry + Math.sin(ang + 0.09) * 260);
+            ctx.lineTo(rx + Math.cos(ang - 0.09) * len, ry + Math.sin(ang - 0.09) * len);
+            ctx.lineTo(rx + Math.cos(ang + 0.09) * len, ry + Math.sin(ang + 0.09) * len);
             ctx.closePath();
             ctx.fill();
         }
+        if (legend) {
+            const glow = ctx.createRadialGradient(rx, ry, 0, rx, ry, 170);
+            glow.addColorStop(0, `rgba(255,220,120,${0.45 + Math.sin(d.age * 6) * 0.1})`);
+            glow.addColorStop(1, 'rgba(255,200,70,0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(rx - 170, ry - 170, 340, 340);
+        }
         ctx.restore();
         const pop = d.age < 0.25 ? 1.4 - d.age / 0.25 * 0.4 : 1;
-        UIKit.text(ctx, '히든 조합 발견!', cx, cy - 112, Math.round(88 * pop), '#ffd76a', 'center');
-        const icon = (type, x, size) => {
+        const titleY = cy - (legend ? 150 : 112);
+        UIKit.text(ctx, '히든 조합 발견!', cx, titleY, Math.round((legend ? 104 : 88) * pop), '#ffd76a', 'center');
+        if (legend) UIKit.text(ctx, `${MONSTER_GRADES.legendary.name} 등급`, cx, titleY + 76, 40, MONSTER_GRADES.legendary.light, 'center');
+        const icon = (type, rank, x, size) => {
             this.drawMonsterIcon(ctx, type, x - size / 2, ry - size / 2, size);
-            UIKit.text(ctx, MONSTERS[type].name, x, ry + size / 2 + 24, size > 100 ? 30 : 24, size > 100 ? MONSTER_GRADES[MONSTERS[type].grade].light : '#ffffff', 'center');
+            const big = size > 100;
+            const label = MONSTERS[type].name + (rank ? ` ${rank}` : '');
+            UIKit.text(ctx, label, x, ry + size / 2 + 24, big ? 30 : 24, big ? MONSTER_GRADES[MONSTERS[type].grade].light : '#ffffff', 'center');
         };
-        icon(d.a, cx - 400, 96);
+        icon(d.a, d.aRank, cx - 400, 96);
         UIKit.text(ctx, '+', cx - 275, ry, 52, '#ffffff', 'center');
-        icon(d.b, cx - 150, 96);
+        icon(d.b, d.bRank, cx - 150, 96);
         UIKit.text(ctx, '=', cx + 40, ry, 52, '#ffd76a', 'center');
-        icon(d.type, rx, 144);
+        icon(d.type, null, rx, legend ? 192 : 144);
         ctx.restore();
     },
 

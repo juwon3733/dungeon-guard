@@ -69,12 +69,15 @@ cellClick(3, 4);
 assert.strictEqual(Game.monsters.length, 0);
 assert(UI.toast && UI.toast.text.includes('소환'), 'empty cell hint');
 
-// 몬스터 표와 확률 데이터: 6종, 일반 70% 희귀 25% 영웅 5%, 전설은 비어 있다
-assert.strictEqual(Object.keys(MONSTERS).join(), 'orc_guard,skeleton_archer,dark_mage,orc_berserker,curse_shooter,bone_knight');
+// 몬스터 표와 확률 데이터: 7종, 일반 70% 희귀 25% 영웅 5%. 전설(죽음의 군주)은 조합식으로만 나와 소환 후보가 비어 있다
+assert.strictEqual(Object.keys(MONSTERS).join(), 'orc_guard,skeleton_archer,dark_mage,orc_berserker,curse_shooter,bone_knight,death_lord');
 assert.strictEqual(SUMMON_RULES.odds.common, 0.70);
 assert.strictEqual(SUMMON_RULES.odds.rare, 0.25);
 assert.strictEqual(SUMMON_RULES.odds.epic, 0.05);
-assert(!SUMMON_RULES.odds.legendary && gradePool('legendary').length === 0, 'no legendary yet');
+assert(!SUMMON_RULES.odds.legendary && gradePool('legendary').length === 0, 'legendary not summoned');
+assert(MONSTERS.death_lord.summon === false && MONSTERS.death_lord.grade === 'legendary');
+assert.strictEqual(nextGrade('epic'), null, 'epic stays top grade for grade merge');
+for (let i = 0; i < 200; i++) assert.notStrictEqual(Game.rollSummon(), 'death_lord', 'death lord never summoned');
 assert.strictEqual(gradePool('common').join(), 'orc_guard,skeleton_archer,dark_mage');
 assert.strictEqual(gradePool('rare').join(), 'orc_berserker,curse_shooter');
 assert.strictEqual(gradePool('epic').join(), 'bone_knight');
@@ -250,11 +253,11 @@ assert.strictEqual(UI.popup.recipes.map(r => r.partner + '>' + r.result).join(),
 assert(hasBtn('sell') && !hasBtn('up2') && !hasBtn('up3A'), 'sell only, upgrade hidden');
 assert.strictEqual(MONSTER_UPGRADE_ENABLED, false);
 // 고른 몬스터와 합칠 수 있는 대상: 조합식이면 결과, 같은 등급이면 다음 등급
-assert.strictEqual(UI.shownPlan('dark_mage', 'skeleton_archer').result, 'curse_shooter');
-assert.strictEqual(UI.shownPlan('dark_mage', 'dark_mage').grade, 'rare');
+assert.strictEqual(UI.shownPlan({ type: 'dark_mage' }, { type: 'skeleton_archer' }).result, 'curse_shooter');
+assert.strictEqual(UI.shownPlan({ type: 'dark_mage' }, { type: 'dark_mage' }).grade, 'rare');
 // 히든 조합식은 미리 보이지 않는다: 공개 목록에 없고, 화면에는 합칠 수 없는 쌍으로 보인다
 assert(!publicRecipesFor('orc_berserker').some(r => r.partner === 'skeleton_archer'), 'hidden recipe not listed');
-assert.notStrictEqual(UI.shownPlan('orc_berserker', 'skeleton_archer').kind, 'recipe');
+assert.notStrictEqual(UI.shownPlan({ type: 'orc_berserker' }, { type: 'skeleton_archer' }).kind, 'recipe');
 assert.strictEqual(mergePlan('orc_berserker', 'skeleton_archer').kind, 'recipe');
 // 서로 다른 일반 몬스터 중 조합식이 없는 쌍은 등급 합치기다
 assert.strictEqual(mergePlan('orc_guard', 'skeleton_archer').kind, 'grade');
@@ -408,6 +411,87 @@ assert.strictEqual(monsterStats(knight).hp, 500);
 assert.strictEqual(mergePlan('curse_shooter', 'curse_shooter').kind, 'grade');
 assert.strictEqual(mergePlan('curse_shooter', 'curse_shooter').grade, 'epic');
 tick(0.5);
+
+// 랭크 조건 조합식(히든, 전설): 해골 기사 A 이상 + 저주 사수 A 이상 → 죽음의 군주
+{
+    const freeCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r));
+    const put = (type, rank) => {
+        const [c, r] = freeCell();
+        const m = Game.place(type, c, r);
+        setMonsterRank(m, rankIndex(rank));
+        return m;
+    };
+    const kA = { type: 'bone_knight', rank: rankIndex('A') }, kB = { type: 'bone_knight', rank: rankIndex('B') }, kS = { type: 'bone_knight', rank: rankIndex('S') };
+    const sA = { type: 'curse_shooter', rank: rankIndex('A') }, sB = { type: 'curse_shooter', rank: rankIndex('B') };
+    // 충족: 재료 순서를 바꿔도 같다. 더 높은 랭크도 된다
+    assert.strictEqual(mergePlan(kA, sA).result, 'death_lord', 'rank condition met');
+    assert.strictEqual(mergePlan(sA, kA).result, 'death_lord', 'reverse order');
+    assert.strictEqual(mergePlan(kS, sA).result, 'death_lord', 'higher rank ok');
+    // 미달: 조합식이 없는 것처럼 평소 규칙(영웅 + 희귀는 등급이 달라 합칠 수 없다). 랭크 없는 문자열은 D로 본다
+    assert.strictEqual(mergePlan(kB, sA).reason, 'mismatch', 'a side below rank');
+    assert.strictEqual(mergePlan(kS, sB).reason, 'mismatch', 'b side below rank');
+    assert.strictEqual(mergePlan(sB, kS).reason, 'mismatch', 'reverse order below rank');
+    assert.strictEqual(mergePlan('bone_knight', 'curse_shooter').reason, 'mismatch');
+    // 조건 없는 조합식은 랭크와 관계없이 그대로
+    assert.strictEqual(mergePlan({ type: 'skeleton_archer', rank: 4 }, { type: 'dark_mage', rank: 0 }).result, 'curse_shooter');
+    assert.strictEqual(mergePlan({ type: 'orc_berserker', rank: 2 }, 'skeleton_archer').result, 'bone_knight');
+    assert.strictEqual(mergePlan('orc_berserker', 'curse_shooter').result, 'bone_knight');
+    // 히든은 미리 보여 주지 않는다: 공개 목록에 없고 화면에는 '???'(등급이 달라 등급 합치기도 아님)
+    assert(!publicRecipesFor('bone_knight').some(r => r.result === 'death_lord') && !publicRecipesFor('curse_shooter').some(r => r.result === 'death_lord'));
+    assert.strictEqual(UI.shownPlan(kA, sA).kind, 'unknown', 'hidden legend not shown');
+    assert.strictEqual(UI.shownPlan(kB, sA).kind, 'none', 'below rank: cannot merge');
+
+    // 끌어 합치기(맵): 저주 사수 A를 해골 기사 S 위에 → 죽음의 군주가 기사 자리에, 랭크는 낮은 쪽 A
+    Fx.pops = [];
+    const knight = put('bone_knight', 'S');
+    const shooter = put('curse_shooter', 'A');
+    // 끌기 미리보기도 같은 판단을 쓴다(합칠 수 있지만 히든이라 '???')
+    UI.onMove(...monXY(shooter));
+    UI.onDown(...monXY(shooter));
+    UI.onMove(...monXY(knight));
+    const act = UI.dropAction(UI.dropTarget);
+    assert(act.action === 'merge' && act.plan.kind === 'unknown', 'drag preview hides legend');
+    UI.cancel();
+    UI.onUp(...monXY(knight));
+    dragTo(monXY(shooter), monXY(knight));
+    const lord = Game.monsterAt(knight.col, knight.row);
+    assert(lord && lord.type === 'death_lord', 'legend merged');
+    assert(shooter.removed && Game.monsterAt(shooter.col, shooter.row) === null);
+    assert.strictEqual(lord.rank, rankIndex('A'), 'result inherits lower rank');
+    assert.strictEqual(monsterStats(lord).hp, 900 * MONSTER_RANKS[rankIndex('A')].mul);
+    assert.strictEqual(monsterStats(lord).block, 8);
+    assert(lord.blocks, 'tank walks out');
+    assert.strictEqual(monsterAbility('death_lord', 'deathStun').radius, 3);
+    assert.strictEqual(monsterAbility('death_lord', 'deathStun').duration, 2);
+    // 처음 발견: 히든 연출, 재료 줄에 랭크 조건, 전설은 더 길게
+    const d = Fx.discovery;
+    assert(d && d.type === 'death_lord' && d.grade === 'legendary', 'legend discovered');
+    assert(d.a === 'bone_knight' && d.aRank === 'A' && d.b === 'curse_shooter' && d.bRank === 'A', 'discovery shows ranks');
+    assert(d.life > 3.6, 'legend discovery is longer');
+    assert(Game.discovered.has('bone_knight+curse_shooter'));
+    assert(Fx.pops.some(p => p.kind === 'merge' && p.hidden && p.grade === 'legendary'));
+    tick(5.5);
+    assert.strictEqual(Fx.discovery, null);
+
+    // 전설은 맵에 1마리: 또 만들려 하면 막고 안내한다. 재료는 그대로
+    const k2 = put('bone_knight', 'A');
+    const s2 = put('curse_shooter', 'A');
+    assert.strictEqual(Game.mergePlanFor(s2, k2).reason, 'unique');
+    assert.strictEqual(mergePlan(s2, k2).result, 'death_lord', 'pure plan still matches');
+    UI.toast = null;
+    dragTo(monXY(s2), monXY(k2));
+    assert(Game.monsterAt(k2.col, k2.row) === k2 && Game.monsterAt(s2.col, s2.row) === s2, 'second legend refused');
+    assert(UI.toast && UI.toast.text.includes('1마리'), 'unique toast');
+    assert.strictEqual(Game.merge({ monster: k2 }, { monster: s2 }).reason, 'unique');
+    assert.strictEqual(Game.monsters.filter(m => m.type === 'death_lord').length, 1);
+    // 군주가 사라지면 다시 만들 수 있다. 두 번째부터는 발견 연출이 없다
+    Game.removeMonster(lord);
+    dragTo(monXY(k2), monXY(s2));
+    assert.strictEqual(Game.monsterAt(s2.col, s2.row).type, 'death_lord');
+    assert.strictEqual(Fx.discovery, null, 'legend discovered only once');
+    tick(0.5);
+    Game.removeMonster(Game.monsterAt(s2.col, s2.row));
+}
 
 // 판매: 등급별 고정 환불(일반 20, 희귀 60, 영웅 150)
 assert.strictEqual(SUMMON_RULES.refund.common, 20);

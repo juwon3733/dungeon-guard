@@ -379,6 +379,39 @@ const SCENES = {
         }
     },
 
+    // 전설: 랭크 A 저주 사수를 랭크 A 해골 기사 위에 놓아 죽음의 군주가 나온 직후. 군주가 길로 나가 용사를 붙잡아 베고,
+    // 화면에는 전설용 "히든 조합 발견!"(재료 줄에 랭크 A)이 떠 있다. 발밑에는 금색 전설 표식과 랭크 A
+    legend: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 2000;
+            const knight = Game.place('bone_knight', 10, 2);
+            const shooter = Game.place('curse_shooter', 14, 2);
+            if (!knight || !shooter) throw new Error('재료를 놓지 못했습니다');
+            setMonsterRank(knight, 3);
+            setMonsterRank(shooter, 3);
+            advance(1.6);
+            Game.waveIndex = 6;
+            Game.startWave();
+            Fx.reset();
+            dragDrop([shooter.x * WORLD_ZOOM, (shooter.y - 10) * WORLD_ZOOM], [knight.x * WORLD_ZOOM, (knight.y - 10) * WORLD_ZOOM]);
+            const lord = Game.monsterAt(10, 2);
+            if (!lord || lord.type !== 'death_lord') throw new Error('죽음의 군주가 나오지 않았습니다');
+            const put = (type, d, lane) => {
+                const h = createHero(type, Game.waveIndex, 0, false);
+                Object.assign(h, { waiting: false, d, lane, cast: 99, song: 99, speed: 0 });
+                h.hp = h.maxHp = 99999; // 장면 동안 쓰러지지 않게 한다
+                return h;
+            };
+            const d = lord.rally.d;
+            Game.heroes = [put('warrior', d - 0.7 * TILE, -25), put('rogue', d + 0.7 * TILE, -20), put('mage', d - 1.5 * TILE, 5), put('warrior', d + 1.3 * TILE, -10)];
+            advance(2.7); // 군주가 나타나 길로 걸어 나가 벤다. 합치기 글자는 사라지고 발견 연출은 아직 떠 있다
+            Fx.numbers = [];
+            Fx.shake = 0;
+            freezeScene();
+        }
+    },
+
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
     archmageIntro: {
         setup: () => {
