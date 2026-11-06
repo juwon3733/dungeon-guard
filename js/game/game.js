@@ -2,7 +2,7 @@
 const Game = {
     state: 'title', // title | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
-    bench: [], // 하단 대기 칸. 칸마다 몬스터 id 또는 null
+    summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
     discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
@@ -16,7 +16,7 @@ const Game = {
         this.waveIndex = 0;
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
-        this.bench = new Array(SUMMON_RULES.benchSize).fill(null);
+        this.summonCount = 0;
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -56,7 +56,7 @@ const Game = {
         return isBuildCell(col, row);
     },
 
-    // 몬스터를 칸에 바로 세운다(비용 없음). 대기 칸에서 놓기(deploy)와 시험 도구가 쓴다
+    // 몬스터를 칸에 바로 세운다(비용 없음). 시험 도구가 쓴다
     place(type, col, row) {
         if (!this.canPlace(type, col, row)) return false;
         const m = createMonster(type, col, row);
@@ -71,7 +71,14 @@ const Game = {
 
     inPlay() { return this.state === 'prep' || this.state === 'wave'; },
 
-    freeBenchSlot() { return this.bench.indexOf(null); },
+    // 지금 소환 비용: 처음 cost, 소환할 때마다 costStep씩 올라 maxCost에서 멈춘다
+    summonCost() {
+        const r = SUMMON_RULES;
+        return Math.min(r.maxCost, r.cost + r.costStep * this.summonCount);
+    },
+
+    // 맵에 더 둘 자리가 있는지(상한)
+    fieldFull() { return this.monsters.length >= SUMMON_RULES.maxField; },
 
     // 등급을 SUMMON_RULES.odds로 고른 뒤 그 등급 몬스터 중 하나를 고른다. Math.random을 두 번 쓴다
     rollSummon() {
@@ -85,36 +92,58 @@ const Game = {
         return randItem(gradePool(grade));
     },
 
-    // 골드를 내고 무작위 몬스터 1마리를 빈 대기 칸에 넣는다. 실패하면 reason: 'full' | 'gold' | 'state'
+    // 소환한 몬스터를 세울 칸. 없으면 null
+    //   원거리: 칸에서 길까지 거리가 사거리 안인 칸만
+    //   막는 몬스터: 길 지점(rally)이 이미 있는 막는 몬스터의 길 지점과 blockerSpacing칸 안으로 겹치지 않는 칸을 먼저. 없으면 아무 빈 칸
+    //   그중 길에 가장 가까운 칸들에서 무작위로 하나(Math.random 한 번)
+    pickSummonCell(type) {
+        const blocks = monsterBlocks(type);
+        const range = MONSTERS[type].stats.range * TILE;
+        let cells = [];
+        for (const key of BUILD_CELLS) {
+            const [col, row] = key.split(',').map(Number);
+            if (this.monsterAt(col, row)) continue;
+            const x = tileX(col);
+            const y = tileY(row);
+            const p = pathAt(nearestPathDistance(x, y));
+            const gap = distance(x, y, p.x, p.y);
+            if (!blocks && gap > range + 0.5) continue;
+            cells.push({ col, row, gap });
+        }
+        if (blocks) {
+            const spacing = SUMMON_RULES.blockerSpacing * TILE + 0.5;
+            const rallies = this.monsters.filter(m => m.blocks).map(m => rallyPoint(m.col, m.row));
+            const apart = cells.filter(c => {
+                const r = rallyPoint(c.col, c.row);
+                return rallies.every(o => distance(r.x, r.y, o.x, o.y) > spacing);
+            });
+            if (apart.length) cells = apart;
+        }
+        if (!cells.length) return null;
+        const best = Math.min(...cells.map(c => c.gap));
+        const pick = randItem(cells.filter(c => c.gap <= best + 0.5));
+        return { col: pick.col, row: pick.row };
+    },
+
+    // 골드를 내고 무작위 몬스터 1마리를 맵의 빈 길 옆 칸에 바로 세운다. 실패하면 골드를 쓰지 않고
+    // reason: 'full'(상한이나 빈 칸 없음) | 'gold' | 'state'
     summon() {
         if (!this.inPlay()) return { ok: false, reason: 'state' };
-        const slot = this.freeBenchSlot();
-        if (slot < 0) return { ok: false, reason: 'full' };
-        if (this.gold < SUMMON_RULES.cost) return { ok: false, reason: 'gold' };
-        this.gold -= SUMMON_RULES.cost;
+        if (this.fieldFull()) return { ok: false, reason: 'full' };
+        const cost = this.summonCost();
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
         const type = this.rollSummon();
-        this.bench[slot] = type;
+        const cell = this.pickSummonCell(type);
+        if (!cell) return { ok: false, reason: 'full' };
+        this.gold -= cost;
+        this.summonCount++;
+        const m = createMonster(type, cell.col, cell.row);
+        this.monsters.push(m);
         this.stats.summoned++;
         const grade = MONSTERS[type].grade;
-        Fx.pop({ kind: 'summon', to: { bench: slot }, type, grade });
+        Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type, grade });
         Sfx.play('summon', GRADE_ORDER.indexOf(grade));
-        return { ok: true, slot, type };
-    },
-
-    // 대기 칸의 몬스터를 길 옆 칸에 놓는다. 비용은 없다
-    deploy(slot, col, row) {
-        const type = this.bench[slot];
-        if (!type || !this.canPlace(type, col, row)) return false;
-        this.bench[slot] = null;
-        return this.place(type, col, row);
-    },
-
-    // 대기 칸끼리 옮긴다(빈 칸으로)
-    moveBench(from, to) {
-        if (from === to || !this.bench[from] || this.bench[to]) return false;
-        this.bench[to] = this.bench[from];
-        this.bench[from] = null;
-        return true;
+        return { ok: true, type, monster: m, cost };
     },
 
     // 맵의 몬스터를 다른 빈 길 옆 칸으로 옮긴다. 쓰러져 있으면 새 칸에서 마저 기다린다
@@ -150,17 +179,16 @@ const Game = {
         this.releaseMonster(m);
     },
 
-    // 자리: { bench: 칸 번호 } 또는 { monster: 맵의 몬스터 }
+    // 자리: { monster: 맵의 몬스터 }
     typeAt(loc) {
-        if (!loc) return null;
-        if (loc.monster) return loc.monster.removed ? null : loc.monster.type;
-        return this.bench[loc.bench] || null;
+        if (!loc || !loc.monster) return null;
+        return loc.monster.removed ? null : loc.monster.type;
     },
 
-    sameLoc(a, b) { return a.monster || b.monster ? a.monster === b.monster : a.bench === b.bench; },
+    sameLoc(a, b) { return a.monster === b.monster; },
 
-    // 연출 좌표: 대기 칸은 칸 번호, 맵은 세계 좌표(서 있는 곳)
-    fxPoint(loc) { return loc.monster ? { x: loc.monster.x, y: loc.monster.y } : { bench: loc.bench }; },
+    // 연출 좌표: 세계 좌표(서 있는 곳)
+    fxPoint(loc) { return { x: loc.monster.x, y: loc.monster.y }; },
 
     // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 src 자리는 빈다.
     // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' }
@@ -180,22 +208,14 @@ const Game = {
             this.discovered.add(key);
         }
         const from = [this.fxPoint(src), this.fxPoint(dst)];
-        if (src.monster) this.removeMonster(src.monster);
-        else this.bench[src.bench] = null;
-        let monster = null;
-        let to;
-        if (dst.monster) {
-            const old = dst.monster;
-            monster = createMonster(type, old.col, old.row);
-            monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
-            this.monsters[this.monsters.indexOf(old)] = monster;
-            old.removed = true;
-            this.releaseMonster(old);
-            to = { x: monster.x, y: monster.y };
-        } else {
-            this.bench[dst.bench] = type;
-            to = { bench: dst.bench };
-        }
+        this.removeMonster(src.monster);
+        const old = dst.monster;
+        const monster = createMonster(type, old.col, old.row);
+        monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
+        this.monsters[this.monsters.indexOf(old)] = monster;
+        old.removed = true;
+        this.releaseMonster(old);
+        const to = { x: monster.x, y: monster.y };
         this.stats.merged++;
         const grade = MONSTERS[type].grade;
         Fx.pop({ kind: 'merge', from, fromTypes: [a, b], to, type, grade, hidden });
@@ -234,16 +254,6 @@ const Game = {
         Fx.burst(m.x, m.y, '#a9a2c4', 16, 280, 0.4, 6);
         Fx.goldPulse = 1;
         Sfx.play('sell');
-    },
-
-    sellBench(slot) {
-        const type = this.bench[slot];
-        if (!type) return false;
-        this.gold += this.sellValue(type);
-        this.bench[slot] = null;
-        Fx.goldPulse = 1;
-        Sfx.play('sell');
-        return true;
     },
 
     startWave() {

@@ -12,10 +12,14 @@ const MONSTER_GRADES = {
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 
-// 소환과 판매. odds는 등급별 소환 확률이다(합이 1). 전설은 몬스터가 생기면 확률을 넣는다
+// 소환과 판매. 소환하면 맵의 빈 길 옆 칸에 바로 나온다(대기 칸은 없다).
+// odds는 등급별 소환 확률이다(합이 1). 전설은 몬스터가 생기면 확률을 넣는다
 const SUMMON_RULES = {
-    cost: 40,       // 소환 1회 골드
-    benchSize: 5,   // 하단 대기 칸 수
+    cost: 25,       // 첫 소환 골드
+    costStep: 1,    // 소환할 때마다 오르는 골드(다시 시작하면 처음으로)
+    maxCost: 60,    // 소환 비용 상한
+    maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
+    blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     odds: { common: 0.70, rare: 0.25, epic: 0.05 },
     refund: { common: 20, rare: 60, epic: 150, legendary: 300 } // 판매 환불(등급별 고정)
 };
@@ -46,7 +50,7 @@ const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', 
 //   anim.walk가 있으면 길로 걸어 나갈 때 반복한다
 //   hand는 투사체가 나가는 손 위치(발끝 기준 위쪽 y, 동서 방향일 때 앞쪽 x, 세계 px), barY는 체력바 높이, glow는 뒤쪽 빛 색
 // 원거리 몬스터는 아직 공격받지 않아 hp를 쓰지 않는다
-// cost는 강화 비용 계산(upgradeCost)에만 쓴다. 소환은 SUMMON_RULES.cost로 등급과 관계없이 같다
+// cost는 강화 비용 계산(upgradeCost)에만 쓴다. 소환 비용은 SUMMON_RULES로 등급과 관계없이 같다
 // summon이 false면 소환에서 나오지 않고 조합으로만 얻는다(히든 등급용)
 const MONSTERS = {
     orc_guard: {

@@ -547,7 +547,7 @@ const Render = {
         ctx.restore();
     },
 
-    // 소환·합치기 연출 한 개. pt(점)는 { bench } 또는 세계 좌표를 연출 중심(세계 좌표)으로 바꾼다
+    // 소환·합치기 연출 한 개. pt(점)는 몬스터가 선 세계 좌표를 연출 중심(세계 좌표)으로 바꾼다
     //   합치기: delay 동안 두 몬스터가 하얗게 달아오르며 결과 자리로 빨려 들어가고, 그 뒤 빛이 터진다
     //   터진 뒤: 등급 색 빛, 빛줄기(희귀 이상), 퍼지는 고리, 불꽃, 결과 이름. 등급이 높을수록 크고 길다
     drawPop(ctx, p, pt) {
@@ -667,8 +667,7 @@ const Render = {
             const popK = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
             const label = p.kind === 'summon' ? `${MONSTER_GRADES[p.grade].name} 등장!` : MONSTERS[p.type].name;
             const size = Math.round((big ? 44 : 32) * popK / WORLD_ZOOM);
-            // 대기 칸 연출 글자는 단축키 안내 줄(화면 y 934)보다 위에 띄운다
-            const ly = (p.to.bench !== undefined ? to.y - 250 : to.y - 130) - t * 30;
+            const ly = to.y - 130 - t * 30;
             const lx = clamp(to.x, 220, WORLD_WIDTH - 220);
             ctx.save();
             ctx.globalAlpha = a;
