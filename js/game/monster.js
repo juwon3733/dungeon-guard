@@ -3,7 +3,7 @@
 //   막는 몬스터: 가장 가까운 길 지점(rally)으로 걸어 나가 용사를 붙잡고 싸운다. 쓰러지면 respawn초 뒤 놓은 칸에서 다시 나온다.
 //   그 밖: 놓은 칸에서 사거리 안의 가장 앞선 용사를 공격한다. 공격받지 않는다.
 
-const MONSTER_FOOT = 14; // 칸 가운데에서 발끝까지 아래로 내린 거리(세계 px)
+const MONSTER_FOOT = 0; // 칸 가운데에서 발끝까지 아래로 내린 거리(세계 px). 발이 칸 가운데에 온다
 const MONSTER_RELEASE = 0.5; // 공격 동작의 이 비율 지점에서 화살과 구체가 손을 떠난다
 const MONSTER_WALK_SPEED = 170; // 길로 걸어 나가는 속도(세계 px/초). 예전 오크 초소의 오크와 같다
 const MONSTER_WALK_FPS = 8;
@@ -97,7 +97,7 @@ function monsterDealt(m, dealt) {
     if (!a) return;
     if (healMonster(m, dealt * a.ratio) > 0 && (m.healFx || 0) <= 0) {
         m.healFx = 0.5;
-        Fx.anim('fx_lifesteal', m.x, m.y - 30, 80);
+        Fx.anim('fx_lifesteal', m.x, m.y - 66, 120);
     }
 }
 
@@ -128,7 +128,7 @@ function monsterChain(m, first, damage) {
         const p = heroWorld(next);
         Fx.beam(from.x, from.y - 40, p.x, p.y - 40, '#7dffb4', 10, 0.22);
         Fx.beam(from.x, from.y - 40, p.x, p.y - 40, '#ffffff', 3, 0.16);
-        Fx.anim('fx_hit_lightning', p.x, p.y - 40, 130);
+        Fx.anim('fx_hit_lightning', p.x, p.y - 60, 195);
         damageHero(next, damage * a.ratio, from.x, from.y, '#9dffc8', m);
         monsterHitHero(m.type, next, m);
         from = p;
@@ -142,7 +142,7 @@ function monsterThorns(m, taken, attacker) {
     damageHero(attacker, taken * a.ratio, m.x, m.y, '#b8ff8a', m);
     if (m.thornsFx <= 0) {
         m.thornsFx = 0.8; // 자주 맞으므로 효과는 0.8초에 한 번
-        Fx.anim('fx_thorns', m.x, m.y + MONSTER_FOOT, 160);
+        Fx.anim('fx_thorns', m.x, m.y + MONSTER_FOOT, 240);
     }
 }
 
@@ -189,7 +189,7 @@ function monsterHitHero(type, hero, owner) {
     if (stun && !hero.boss && Math.random() < stun.chance) {
         applyStun(hero, stun.duration);
         const p = heroWorld(hero);
-        Fx.ring(p.x, p.y - 20, 60, '#ff9cf2', 0.35);
+        Fx.ring(p.x, p.y - 30, 90, '#ff9cf2', 0.35);
     }
 }
 
@@ -202,11 +202,11 @@ function monsterDeathAbilities(m) {
         const p = heroWorld(h);
         if (distance(m.x, m.y + MONSTER_FOOT, p.x, p.y) > a.radius * TILE) continue;
         applyStun(h, a.duration);
-        Fx.burst(p.x, p.y - 40, '#d9c8ff', 6, 200, 0.4, 5);
+        Fx.burst(p.x, p.y - 60, '#d9c8ff', 6, 200, 0.4, 5);
     }
     Fx.ring(m.x, m.y + MONSTER_FOOT, a.radius * TILE, '#d9c8ff', 0.45);
     Fx.ring(m.x, m.y + MONSTER_FOOT, a.radius * TILE * 0.6, '#9a6bff', 0.35);
-    Fx.burst(m.x, m.y - 20, '#cdb8ff', 26, 520, 0.5, 6);
+    Fx.burst(m.x, m.y - 50, '#cdb8ff', 26, 520, 0.5, 6);
     Fx.addShake(8);
 }
 
@@ -266,8 +266,8 @@ function monsterKilledHero(m, hero) {
     if (loot) {
         Game.gold += loot.gold;
         const p = heroWorld(hero);
-        Fx.anim('fx_gold', p.x, p.y - 50, 80);
-        Fx.number(hero, p.x, p.y - 110, `+${loot.gold}G`, '#ffd76a', false);
+        Fx.anim('fx_gold', p.x, p.y - 75, 120);
+        Fx.number(hero, p.x, p.y - 165, `+${loot.gold}G`, '#ffd76a', false);
     }
     const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
     m.xp += gain * (1 + equipEffect(m.equip, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
@@ -279,9 +279,9 @@ function monsterKilledHero(m, hero) {
     const top = m.rank === MONSTER_RANKS.length - 1;
     const color = MONSTER_RANKS[m.rank].color;
     const footY = m.y + MONSTER_FOOT;
-    Fx.ring(m.x, footY, top ? 120 : 80, color, 0.45);
+    Fx.ring(m.x, footY, top ? 160 : 110, color, 0.45);
     Fx.rise(m.x, footY, color, top ? 30 : 16, 34, 0.7);
-    if (top) Fx.glow(m.x, footY - 40, 140, 'rgba(255,210,70,1)', 0.4);
+    if (top) Fx.glow(m.x, footY - 60, 200, 'rgba(255,210,70,1)', 0.4);
     Sfx.play('rankUp', m.rank);
 }
 
@@ -311,7 +311,7 @@ function updateMonster(m, dt) {
     const perSec = (regen ? regen.perSec : 0) + (m.aura ? m.aura.heal : 0);
     if (healMonster(m, perSec * dt) > 0 && m.healFx <= 0) {
         m.healFx = 1.5;
-        Fx.anim('fx_heal', m.x, m.y - 30, 80);
+        Fx.anim('fx_heal', m.x, m.y - 66, 120);
     }
     // 회복 오라를 내는 지원 몬스터: 다친 몬스터가 반경 안에 있으면 3초마다 바닥에 회복 물결
     m.auraFx = Math.max(0, (m.auraFx || 0) - dt);
@@ -395,7 +395,7 @@ function fireMonsterShot(m, stats, target) {
             damage: stats.damage, splash: stats.splash * TILE, src: m.type, owner: m,
             shot: art.shot || null, impact: art.impact || null, glow: art.glow
         });
-        Fx.glow(hand.x, hand.y, 50, `rgba(${art.shot ? art.glow : '190,110,255'},1)`, 0.18);
+        Fx.glow(hand.x, hand.y, 75, `rgba(${art.shot ? art.glow : '190,110,255'},1)`, 0.18);
         Sfx.play('orb');
     } else {
         const art = MONSTERS[m.type].art;
@@ -416,7 +416,7 @@ function fireBeam(ox, oy, stats, tp, owner) {
     const dy = (tp.y - 30 - oy) / len;
     const reach = stats.range * TILE + 80;
     Fx.beam(ox, oy, ox + dx * reach, oy + dy * reach, '#c28bff', 30, 0.2);
-    Fx.anim('fx_blastViolet', ox, oy, 170, 0.28);
+    Fx.anim('fx_blastViolet', ox, oy, 255, 0.28);
     Fx.beam(ox, oy, ox + dx * reach, oy + dy * reach, '#ffffff', 8, 0.14);
     Fx.addShake(4);
     for (const h of Game.heroes.slice()) {
@@ -442,8 +442,8 @@ function knockDownMonster(m) {
     m.target = null;
     for (const h of Game.heroes) if (h.blocker === m) h.blocker = null;
     monsterDeathAbilities(m); // 집으로 돌아가기 전, 쓰러진 자리에서 터진다
-    Fx.anim('fx_explosion', m.x, m.y - 30, 150, 0.4);
-    Fx.burst(m.x, m.y - 40, '#d59560', 14, 320, 0.45, 7);
+    Fx.anim('fx_explosion', m.x, m.y - 66, 225, 0.4);
+    Fx.burst(m.x, m.y - 80, '#d59560', 14, 320, 0.45, 7);
     Sfx.play('unitDown');
     m.x = m.homeX;
     m.y = m.homeY;
@@ -456,7 +456,7 @@ function reviveMonster(m) {
     m.atk = 0.3;
     m.x = m.homeX;
     m.y = m.homeY;
-    Fx.ring(m.x, m.y + MONSTER_FOOT, 70, '#ffb76b', 0.35);
+    Fx.ring(m.x, m.y + MONSTER_FOOT, 100, '#ffb76b', 0.35);
     Fx.rise(m.x, m.y + MONSTER_FOOT, '#ffb76b', 14, 30, 0.5);
 }
 

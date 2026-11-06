@@ -146,9 +146,9 @@ const Game = {
         const m = createMonster(type, col, row);
         this.monsters.push(m);
         this.stats.placed++;
-        Fx.ring(m.x, m.y + MONSTER_FOOT, 76, '#c79bff', 0.35);
-        Fx.anim('fx_blastCyan', m.x, m.y - 20, 260, 0.45);
-        Fx.burst(m.x, m.y, '#c79bff', 18, 300, 0.4, 6);
+        Fx.ring(m.x, m.y + MONSTER_FOOT, 100, '#c79bff', 0.35);
+        Fx.anim('fx_blastCyan', m.x, m.y - 50, 390, 0.45);
+        Fx.burst(m.x, m.y - 40, '#c79bff', 18, 300, 0.4, 6);
         Sfx.play('build');
         return m;
     },
@@ -300,7 +300,7 @@ const Game = {
         const color = MONSTER_GRADES[EQUIPMENT[id].grade].color;
         const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
         const x = m.down > 0 ? m.homeX : m.x;
-        Fx.ring(x, footY, 70, color, 0.35);
+        Fx.ring(x, footY, 100, color, 0.35);
         Fx.rise(x, footY, color, 14, 30, 0.5);
         Sfx.play('upgrade');
         return { ok: true, id, swapped: old || null };
@@ -395,7 +395,7 @@ const Game = {
             const r = rallyPoint(col, row);
             m.rally = { route: r.route, d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
         }
-        Fx.ring(m.x, m.y + MONSTER_FOOT, 70, '#c79bff', 0.3);
+        Fx.ring(m.x, m.y + MONSTER_FOOT, 100, '#c79bff', 0.3);
         Fx.burst(m.x, m.y, '#c79bff', 10, 240, 0.35, 6);
         Sfx.play('build');
         return true;
@@ -489,7 +489,7 @@ const Game = {
     onThrone(wx, wy) {
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
-        return Math.abs(col - THRONE_TILE.col) <= 1 && row >= THRONE_TILE.row - 2 && row <= THRONE_TILE.row + 1;
+        return isThroneArea(col, row);
     },
 
     // 제물: 맵의 몬스터를 왕좌에 바친다. 몬스터는 사라지고(칸이 비고 붙잡던 용사가 풀린다) 마왕 체력과 번개 대기가 좋아진다.
@@ -512,7 +512,7 @@ const Game = {
         Fx.pop({ kind: 'sacrifice', from: [from], fromTypes: [m.type], to: { x: tx, y: ty - 40 }, type: m.type, grade });
         Fx.pendingSacrifices.push({ t: MERGE_REVEAL, x: tx, y: ty, heal });
         this.throneBless = MERGE_REVEAL + 1.1;
-        Fx.say(tx, ty - 190, lordLine('sacrifice'), 2);
+        Fx.say(tx, ty - LORD_SAY_Y, lordLine('sacrifice'), 2);
         Sfx.play('merge', GRADE_ORDER.indexOf(grade));
         return { ok: true, heal, lightning: gain.lightning, gain, equip };
     },
@@ -528,8 +528,8 @@ const Game = {
         m.invested += cost;
         if (branch) m.branch = branch;
         applyMonsterStats(m);
-        Fx.ring(m.x, m.y, 110, '#ffe08a', 0.4);
-        Fx.anim('fx_blastGold', m.x, m.y - 30, 320, 0.5);
+        Fx.ring(m.x, m.y, 150, '#ffe08a', 0.4);
+        Fx.anim('fx_blastGold', m.x, m.y - 66, 480, 0.5);
         Fx.rise(m.x, m.y, '#ffe08a', 26, 34, 0.7);
         Sfx.play('upgrade');
         return true;
@@ -584,7 +584,7 @@ const Game = {
             Sfx.play('bossIntro');
         }
         this.state = 'wave';
-        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, lordLine('waveStart'), 2);
+        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, lordLine('waveStart'), 2);
         Sfx.play('waveStart');
         return true;
     },

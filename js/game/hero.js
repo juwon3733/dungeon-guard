@@ -20,7 +20,6 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         elite: !bossDef && !!def.elite,
         throneDamage: src.throneDamage || 1,
         name: src.name,
-        female: Math.random() < 0.5,
         route: route || 'north',
         d: 0, // route 길 위에서 입구로부터 이동한 거리
         lane: bossDef ? 0 : randRange(-34, 34), // 넓게 퍼져 무리로 보이게 한다
@@ -83,7 +82,7 @@ function updateHero(h, dt) {
             Sfx.play('spawn');
             if (h.elite && Math.random() < 0.5) {
                 const w = heroWorld(h);
-                Fx.say(w.x, w.y - 150, randItem(SPEECH.elite), 1.4);
+                Fx.say(w.x, w.y - 240, randItem(SPEECH.elite), 1.4);
             }
         }
         return;
@@ -157,7 +156,7 @@ function updateHero(h, dt) {
         h.dead = true;
         h.arrived = true;
         const w = heroWorld(h);
-        if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 100, randItem(SPEECH.arrive), 1.5);
+        if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 150, randItem(SPEECH.arrive), 1.5);
         if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
         else damageThrone(h.throneDamage);
     }
@@ -174,7 +173,7 @@ function updateMageCast(h, dt) {
         if (!targets.length) { h.cast = 0.4; return; }
         h.cast = def.stunEvery;
         startBlast(h, { kind: 'shock', x: w.x, y: w.y, range: def.stunRange, stun: def.stunTime, windup: def.stunArea.warn });
-        if (Math.random() < 0.3) Fx.say(w.x, w.y - 170, '전부 멈춰라!', 0.9);
+        if (Math.random() < 0.3) Fx.say(w.x, w.y - 250, '전부 멈춰라!', 0.9);
         return;
     }
     let target = null;
@@ -188,8 +187,8 @@ function updateMageCast(h, dt) {
     h.atkPose = h.atkPoseMax = def.atkTime || ATTACK_POSE_TIME; // 정예 그림에는 atkTime이 없다
     applyStun(target, def.stunTime);
     Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 8, 0.3);
-    Fx.ring(target.x, target.y - 20, 74, '#7fd8ff', 0.4);
-    if (Math.random() < 0.3) Fx.say(w.x, w.y - 90, '멈춰라!', 0.9);
+    Fx.ring(target.x, target.y - 30, 100, '#7fd8ff', 0.4);
+    if (Math.random() < 0.3) Fx.say(w.x, w.y - 150, '멈춰라!', 0.9);
     Sfx.play('stun');
 }
 
@@ -212,8 +211,8 @@ function updateSong(h, dt) {
         o.hasteMul = rule.speedMul;
     }
     Fx.ring(w.x, w.y, rule.radius * TILE, '#8dffb4', 0.5);
-    Fx.rise(w.x, w.y - 60, '#b8ffcf', 14, 40, 0.8);
-    if (Math.random() < 0.3) Fx.say(w.x, w.y - 170, '달려라, 친구들!', 0.9);
+    Fx.rise(w.x, w.y - 90, '#b8ffcf', 14, 40, 0.8);
+    if (Math.random() < 0.3) Fx.say(w.x, w.y - 250, '달려라, 친구들!', 0.9);
     Sfx.play('spawn');
 }
 
@@ -232,10 +231,10 @@ function breakThrough(h, unit, rule) {
     h.blockTime = 0;
     h.slip = rule.free;
     h.atkPose = h.atkPoseMax = ATTACK_POSE_TIME;
-    Fx.burst(unit.x, unit.y - 40, '#ffe9b0', 12, 340, 0.4, 6);
-    Fx.ring(w.x, w.y - 20, 70, '#ffe9b0', 0.3);
+    Fx.burst(unit.x, unit.y - 60, '#ffe9b0', 12, 340, 0.4, 6);
+    Fx.ring(w.x, w.y - 30, 100, '#ffe9b0', 0.3);
     Fx.addShake(4);
-    if (Math.random() < 0.4) Fx.say(w.x, w.y - 170, '비켜!', 0.9);
+    if (Math.random() < 0.4) Fx.say(w.x, w.y - 250, '비켜!', 0.9);
     Sfx.play('slash');
 }
 
@@ -264,7 +263,7 @@ function updateWindup(h, dt) {
         const big = h.boss;
         for (const t of targets) {
             Fx.bolt(t.x, t.y - 30, '#bfe9ff');
-            Fx.anim('fx_hit_lightning', t.x, t.y - 40, big ? 260 : 200, 0.4);
+            Fx.anim('fx_hit_lightning', t.x, t.y - 60, big ? 390 : 300, 0.4);
         }
         Fx.ring(b.x, b.y, b.range * TILE, '#7fd8ff', 0.5);
         Fx.burst(b.x, b.y, '#bfe9ff', big ? 44 : 22, big ? 680 : 420, 0.5, 7);
@@ -290,11 +289,11 @@ function updateBossPatterns(h, dt) {
             h.chargeSpeed = rule.speed * TILE;
             h.blocker = null;
             Fx.addShake(10);
-            Fx.say(w.x, w.y - 190, '돌격!', 1.2, true);
+            Fx.say(w.x, w.y - 340, '돌격!', 1.2, true);
             Sfx.play('charge');
         } else {
             startBlast(h, { kind: rule.kind, x: w.x, y: w.y, range: rule.range, stun: rule.stun, windup: rule.windup });
-            if (rule.kind === 'shock') Fx.say(w.x, w.y - 280, rule.range >= 5 ? '천둥이여, 전부 쓸어라!' : '감전이다!', 1.4, true);
+            if (rule.kind === 'shock') Fx.say(w.x, w.y - 360, rule.range >= 5 ? '천둥이여, 전부 쓸어라!' : '감전이다!', 1.4, true);
         }
     });
 }

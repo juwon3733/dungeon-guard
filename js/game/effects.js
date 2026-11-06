@@ -4,10 +4,10 @@
 const MERGE_REVEAL = 0.42;
 // 등급별 연출 세기. pop은 소환·합치기 뒤 결과가 커졌다 돌아오는 시간, rays는 빛줄기 수, shake는 화면 흔들림
 const GRADE_FX = {
-    common: { pop: 0.55, rays: 0, sparks: 10, shake: 0, sheet: 'fx_explosion', size: 150 },
-    rare: { pop: 0.85, rays: 8, sparks: 22, shake: 4, sheet: 'fx_blastViolet', size: 220 },
-    epic: { pop: 1.35, rays: 16, sparks: 40, shake: 10, sheet: 'fx_hit_crit', size: 300 },
-    legendary: { pop: 1.8, rays: 24, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 360 }
+    common: { pop: 0.55, rays: 0, sparks: 10, shake: 0, sheet: 'fx_explosion', size: 225 },
+    rare: { pop: 0.85, rays: 8, sparks: 22, shake: 4, sheet: 'fx_blastViolet', size: 330 },
+    epic: { pop: 1.35, rays: 16, sparks: 40, shake: 10, sheet: 'fx_hit_crit', size: 450 },
+    legendary: { pop: 1.8, rays: 24, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 540 }
 };
 
 const Fx = {
@@ -53,8 +53,8 @@ const Fx = {
     pendingShakes: [],
     pendingSacrifices: [], // 제물이 왕좌에 닿는 순간: 마왕이 빛나고 회복 숫자가 뜨고 체력 구슬이 빛난다
 
-    // Asteria의 8프레임 효과 스트립을 재생한다. size는 화면에 그릴 한 변의 길이(px)
-    // pixelfx 시트로 바꾼 효과(FX_SHEETS)는 시트에 정한 길이만큼 재생한다. 그림만 바뀌고 전투 계산과는 무관하다
+    // 효과 시트(FX_SHEETS)를 재생한다. size는 세계 px 기준 크기다
+    // 시트에 정한 길이만큼 재생한다. 그림만 바뀌고 전투 계산과는 무관하다
     anim(name, x, y, size, life, angle) {
         if (this.reduce && this.anims.length > 24) return;
         if (this.anims.length > 90) this.anims.shift();
@@ -202,7 +202,7 @@ const Fx = {
             s.t -= dt;
             if (s.t > 0) continue;
             this.glow(s.x, s.y - 60, 260, 'rgba(255,215,120,1)', 0.8);
-            this.anim('fx_blastGold', s.x, s.y - 60, 340, 0.55);
+            this.anim('fx_blastGold', s.x, s.y - 90, 510, 0.55);
             this.rise(s.x, s.y + 20, '#ffe08a', 30, 70, 1);
             this.rise(s.x, s.y + 20, '#ff7a9a', 14, 50, 0.9);
             if (s.heal > 0) this.number('throneHeal', s.x, s.y - 220, `+${s.heal}`, '#7dffa0', true);

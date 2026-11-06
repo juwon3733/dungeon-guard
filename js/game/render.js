@@ -1,161 +1,81 @@
 // 게임 세계 그리기. 상태를 읽기만 하고 바꾸지 않는다(UI 버튼 제외).
+const HP_BAR_W = 60; // 머리 위 체력바 너비(세계 px, 화면 40px)
+const HP_BAR_H = 9; // 체력바 높이(세계 px, 화면 6px)
+const THRONE_BACK = 180; // 왕좌 의자의 발끝을 왕좌 칸 가운데에서 위로 올린 거리(세계 px). 왕좌 둘레 뒷줄에 서서 등받이가 마왕 머리 위로 보인다
+
 const Render = {
     mapLayer: null,
 
+    // 바닥 층: 이끼 바닥, 벽돌 길, 물가를 Wang 타일로 깔고 아주 약한 비네트를 덮는다. 소품은 y 순서로 world에서 그린다
     buildMap() {
         const c = document.createElement('canvas');
-        c.width = WORLD_WIDTH;
-        c.height = WORLD_HEIGHT;
+        c.width = Math.round(WORLD_WIDTH);
+        c.height = Math.round(WORLD_HEIGHT);
         const g = c.getContext('2d');
         g.imageSmoothingEnabled = false;
-
-        // 우주 배경 위에 떠 있는 섬: Asteria의 지역 구성과 같다
-        const space = Assets.get('void_shadow');
-        if (space) g.drawImage(space, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-        // Why: 섬 원본은 정사각형이라 윗면이 화면 전체를 덮도록 가로로 더 늘린다. 절벽은 하단 HUD 뒤로 이어진다.
-        const island = Assets.get('island_shadow');
-        if (island) g.drawImage(island, -24 / WORLD_ZOOM, -26 / WORLD_ZOOM, 1968 / WORLD_ZOOM, 1400 / WORLD_ZOOM);
-
-        // 지면이 어두우면 전투가 묻히므로 은은하게 밝힌다
-        g.save();
-        g.globalCompositeOperation = 'lighter';
-        const lift = g.createRadialGradient(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46, 120, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46, 1000 / WORLD_ZOOM);
-        lift.addColorStop(0, 'rgba(70,45,110,0.28)');
-        lift.addColorStop(1, 'rgba(70,45,110,0)');
-        g.fillStyle = lift;
-        g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-        g.restore();
-
-        this.drawThroneDais(g);
-        this.drawDeck(g);
-
-        // 입구마다 같은 문 그림을 쓴다(길의 첫 칸 줄)
-        const portal = Assets.get('prop_fieldPortal');
-        if (portal) for (const g0 of this.gates()) g.drawImage(portal, g0.x - 76, g0.y - 112, 192, 192);
-
-        const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 560 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 1180 / WORLD_ZOOM);
-        v.addColorStop(0, 'rgba(0,0,10,0)');
-        v.addColorStop(1, 'rgba(0,0,10,0.42)');
+        this.drawGround(g);
+        const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 700 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 1250 / WORLD_ZOOM);
+        v.addColorStop(0, 'rgba(0,12,8,0)');
+        v.addColorStop(1, 'rgba(0,12,8,0.12)');
         g.fillStyle = v;
         g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         this.mapLayer = c;
     },
 
-    // 입구 문 위치(세계 좌표): 길마다 첫 꺾은 점의 줄, 섬 왼쪽 가장자리. 북쪽은 예전 자리(x 48) 그대로
+    // 꼭짓점 (col, row)의 땅: 길 칸과 왕좌 둘레는 'path', 물가는 'water', 나머지는 'floor'. 맵 밖은 가장 가까운 칸을 따른다
+    terrainAt(col, row) {
+        const c = clamp(col, 0, MAP_COLS - 1);
+        const r = clamp(row, 0, MAP_ROWS - 1);
+        if (isPathCell(c, r) || isThroneArea(c, r)) return 'path';
+        return isWaterCell(c, r) ? 'water' : 'floor';
+    },
+
+    // Why: 타일 층을 반 칸 어긋나게 깔아 꼭짓점이 게임 칸의 가운데에 오게 한다. 그러면 길 칸을 이은 벽돌 띠가
+    // 약 한 칸 폭으로 경로 중심선을 따라가고(용사 lane ±34px 안), 칸마다 땅 종류가 하나로 정해진다.
+    // 타일 32px을 세계 96px(화면 64px, 2배)로 그린다
+    drawGround(g) {
+        const sets = { path: Assets.get('tileset_path'), water: Assets.get('tileset_water') };
+        const rows = Math.ceil(WORLD_HEIGHT / TILE);
+        for (let r = -1; r <= rows; r++) {
+            for (let c = -1; c < MAP_COLS; c++) {
+                const corners = [this.terrainAt(c, r), this.terrainAt(c + 1, r), this.terrainAt(c, r + 1), this.terrainAt(c + 1, r + 1)];
+                const kind = corners.includes('water') && !corners.includes('path') ? 'water' : 'path';
+                const img = sets[kind];
+                if (!img) continue;
+                const [bx, by, bw, bh] = WANG_TILES[corners.map(t => (t === kind ? '1' : '0')).join('')];
+                g.drawImage(img, bx, by, bw, bh, tileX(c), tileY(r), TILE, TILE);
+            }
+        }
+    },
+
+    // 입구 문 위치(세계 좌표): 길마다 첫 칸(맵 왼쪽 끝)
     gates() {
         return ROUTE_IDS.map(route => ({ route, x: tileX(0), y: tileY(ROUTES[route].tiles[0][1]) }));
     },
 
-    // 원본 다리 그림에서 난간과 돌바닥을 잘라 길로 잇는다
-    drawDeck(g) {
-        const deck = Assets.get('bridgedeck_shadow');
-        if (!deck) return;
-        const DECK = { top: 230, bottom: 770, width: 120 }; // 원본의 난간 포함 세로 범위와 세계 좌표 폭
-        const srcH = DECK.bottom - DECK.top;
-        const unit = deck.width * DECK.width / srcH;
-        const half = DECK.width / 2;
-        // 길마다 구간을 모으되 합류 뒤처럼 두 길이 같이 지나는 구간은 한 번만 그린다(두 번 그리면 난간이 진해진다).
-        // 합류 전 구간을 먼저, 같이 쓰는 구간을 나중에 그려 합류점에서 뒤에 오는 길이 앞 길의 난간 끝을 덮게 한다
-        const seen = new Map();
-        for (const id of ROUTE_IDS) {
-            for (const s of ROUTES[id].segments) {
-                const key = [s.ax, s.ay, s.dx, s.dy, s.len].map(v => Math.round(v * 100)).join(',');
-                const e = seen.get(key);
-                if (e) e.shared = true;
-                else seen.set(key, { s, shared: false });
-            }
-        }
-        const list = [...seen.values()];
-        for (const e of [...list.filter(x => !x.shared), ...list.filter(x => x.shared)]) {
-            const s = e.s;
-            g.save();
-            g.translate(s.ax, s.ay);
-            g.rotate(Math.atan2(s.dy, s.dx));
-            for (let x = 0; x < s.len; x += unit - 1) {
-                const w = Math.min(unit, s.len - x);
-                g.drawImage(deck, 0, DECK.top, deck.width * (w / unit), srcH, x, -half, w, DECK.width);
-            }
-            g.restore();
-        }
-        // 꺾이는 곳(모든 길의 중간 꺾은 점, 겹치면 한 번)은 난간 없는 돌바닥으로 덮고 네 귀퉁이에 기둥을 세운다
-        const corners = new Map();
-        for (const id of ROUTE_IDS) {
-            const tiles = ROUTES[id].tiles;
-            for (let i = 1; i < tiles.length - 1; i++) corners.set(tiles[i].join(','), tiles[i]);
-        }
-        for (const [c, r] of corners.values()) {
-            const x = tileX(c);
-            const y = tileY(r);
-            g.drawImage(deck, 300, 400, 200, 200, x - half + 12, y - half + 12, DECK.width - 24, DECK.width - 24);
-            if (c === MERGE_TILE.col && r === MERGE_TILE.row) this.drawJunction(g, deck, x, y, half);
-            for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-                g.fillStyle = '#1a1626';
-                g.fillRect(x + sx * (half - 8) - 13, y + sy * (half - 8) - 13, 26, 26);
-                g.fillStyle = '#5a4f73';
-                g.fillRect(x + sx * (half - 8) - 9, y + sy * (half - 8) - 11, 18, 18);
-                g.fillStyle = '#c56bff';
-                g.fillRect(x + sx * (half - 8) - 3, y + sy * (half - 8) - 5, 6, 6);
-            }
-        }
-    },
-
-    // 합류점의 T자: 길이 들어오고 나가는 쪽마다 돌바닥을 그쪽으로 조금 밀어 한 번 더 깐다.
-    // 다른 갈래 구간의 난간 끝이 열린 쪽을 가로질러 길을 막는 것처럼 보이지 않게 덮는다. 막힌 쪽 난간은 남긴다
-    drawJunction(g, deck, x, y, half) {
-        const open = new Set();
-        for (const id of ROUTE_IDS) {
-            for (const s of ROUTES[id].segments) {
-                const ex = s.ax + s.dx * s.len;
-                const ey = s.ay + s.dy * s.len;
-                if (Math.abs(s.ax - x) < 1 && Math.abs(s.ay - y) < 1) open.add(Math.round(s.dx) + ',' + Math.round(s.dy));
-                if (Math.abs(ex - x) < 1 && Math.abs(ey - y) < 1) open.add(-Math.round(s.dx) + ',' + -Math.round(s.dy));
-            }
-        }
-        const size = half * 2 - 24; // 꺾이는 곳 돌바닥과 같은 크기
-        for (const key of open) {
-            const [ox, oy] = key.split(',').map(Number);
-            g.drawImage(deck, 300, 400, 200, 200, x - size / 2 + ox * 13, y - size / 2 + oy * 13, size, size);
-        }
-    },
-
-    drawThroneDais(g) {
-        const size = TILE * 3;
-        const x = THRONE_TILE.col * TILE - TILE;
-        const y = MAP_TOP + THRONE_TILE.row * TILE - TILE;
-        for (let dr = 0; dr < 3; dr++) {
-            for (let dc = 0; dc < 3; dc++) {
-                const img = Assets.get(dc === 1 && dr === 1 ? 'tile_shadow_rare' : 'tile_shadow_detailB');
-                if (img) g.drawImage(img, x + dc * TILE, y + dr * TILE, TILE, TILE);
-            }
-        }
-        g.lineWidth = 6;
-        g.strokeStyle = '#1a1626';
-        g.strokeRect(x, y, size, size);
-        g.lineWidth = 2;
-        g.strokeStyle = '#a36bff';
-        g.strokeRect(x + 5, y + 5, size - 10, size - 10);
-    },
-
+    // 그림 한 장: 발끝(footPx, 캔버스 안 높이)을 footY에 맞춘다. 왼쪽 위 모서리를 화면 정수 픽셀에 맞춰 도트가 고르게 보인다
     sprite(ctx, img, x, footY, scale, footPx, flip) {
         if (!img) return;
-        const s = scale || 2;
+        const s = scale || PIXEL_SCALE;
         const w = img.width * s;
         const h = img.height * s;
         const foot = (footPx === undefined ? img.height * 0.89 : footPx) * s;
+        const left = snapWorld(x - w / 2);
+        const top = snapWorld(footY - foot);
         ctx.imageSmoothingEnabled = false;
         if (flip) {
             ctx.save();
-            ctx.translate(x, 0);
+            ctx.translate(left + w, top);
             ctx.scale(-1, 1);
-            ctx.drawImage(img, -w / 2, footY - foot, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
             ctx.restore();
         } else {
-            ctx.drawImage(img, x - w / 2, footY - foot, w, h);
+            ctx.drawImage(img, left, top, w, h);
         }
     },
 
     shadow(ctx, x, y, rx, ry, alpha) {
-        ctx.fillStyle = `rgba(2,0,10,${alpha === undefined ? 0.42 : alpha})`;
+        ctx.fillStyle = `rgba(0,14,8,${alpha === undefined ? 0.38 : alpha})`;
         ctx.beginPath();
         ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -166,21 +86,13 @@ const Render = {
         return clamp(Math.floor((1 - atkPose / (atkPoseMax || atkPose)) * frames), 0, frames - 1);
     },
 
-    heroSpriteName(type, female, dir, anim, atkPose, casting, atkPoseMax) {
+    heroSpriteName(type, dir, anim, atkPose, atkPoseMax) {
         const def = HEROES[type];
-        if (def.anim) {
-            if (atkPose > 0) {
-                const clip = def.anim.attack;
-                return this.plFrame(def, clip, dir, this.attackFrame(atkPose, atkPoseMax, clip.frames));
-            }
-            return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
-        }
-        const base = def.sprite + (female ? '_female' : '');
         if (atkPose > 0) {
-            const frame = this.attackFrame(atkPose, atkPoseMax, 2);
-            return `${base}_act_${dir}_${casting ? 'cast' : 'atk'}${frame}`;
+            const clip = def.anim.attack;
+            return this.plFrame(def, clip, dir, this.attackFrame(atkPose, atkPoseMax, clip.frames));
         }
-        return `${base}_walk_${dir}${Math.floor(anim) % 4}`;
+        return this.plFrame(def, def.anim.walk, dir, Math.floor(anim) % def.anim.walk.frames);
     },
 
     plFacing(dir) {
@@ -206,10 +118,9 @@ const Render = {
         this.sprite(ctx, img, x, footY, def.scale, foot, pick.flip);
     },
 
-    // 용사 그림 한 장을 그린다. PixelLab 그림은 동작별 발 위치와 반전을 쓰고, Asteria 그림은 방향별 그림을 그대로 쓴다
+    // 용사 그림 한 장을 그린다: 동작별 발 위치와 반전
     heroSprite(ctx, img, def, atkPose, dir, x, footY) {
-        if (def.anim) this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
-        else this.sprite(ctx, img, x, footY, def.scale, def.footPx);
+        this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
     },
 
     // 정예 표시: 발밑의 금색 빛 고리
@@ -219,68 +130,46 @@ const Render = {
         const pulse = 0.55 + Math.sin(Game.time * 5) * 0.15;
         ctx.fillStyle = `rgba(255,190,60,${pulse * 0.35})`;
         ctx.beginPath();
-        ctx.ellipse(x, y, 46, 16, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, 62, 21, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 5;
         ctx.strokeStyle = `rgba(255,215,100,${pulse})`;
         ctx.stroke();
         ctx.restore();
     },
 
-    // 서 있는 그림: 다음 파티 목록과 Asteria 그림의 시체에 쓴다
-    heroStandName(type, female, dir) {
-        const def = HEROES[type];
-        if (def.anim) return `${def.sprite}/rotations/south`;
-        return `${def.sprite}${female ? '_female' : ''}_walk_${dir || 'down'}0`;
+    // 서 있는 그림: 다음 파티 목록에 쓴다
+    heroStandName(type) {
+        return `${HEROES[type].sprite}/rotations/south`;
     },
 
     drawHero(ctx, h) {
         const p = heroWorld(h);
         if (h.waiting) return;
-        if (h.boss && BOSSES[h.bossKey].art) {
+        if (h.boss) {
             this.drawArtBoss(ctx, h, p, BOSSES[h.bossKey].art);
-        } else if (h.boss) {
-            const bob = h.windup > 0 ? 0 : Math.sin(h.anim * 0.9) * 4;
-            let name = 'boss_fallen_knight_down';
-            let flip = false;
-            if (h.windup > 0) name = 'boss_fallen_knight_windup';
-            else if (h.atkPose > 0) name = 'boss_fallen_knight_slam';
-            else if (h.dir === 'left') name = 'boss_fallen_knight_left';
-            else if (h.dir === 'right') { name = 'boss_fallen_knight_left'; flip = true; }
-            this.shadow(ctx, p.x, p.y + 10, 50, 15);
-            if (h.chargeTime > 0) {
-                ctx.save();
-                ctx.globalCompositeOperation = 'lighter';
-                ctx.globalAlpha = 0.4;
-                const back = pathAt(h.d - 36, h.route);
-                this.sprite(ctx, Assets.tinted(name, '#a56bff', 0.9), back.x, back.y + bob + 12, BOSS_SCALE, 118, flip);
-                ctx.restore();
-            }
-            const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
             const def = HEROES[h.type];
-            const casting = !!(def.stunEvery || def.song);
             // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
             const anim = h.blocker ? 0 : h.anim;
-            const name = this.heroSpriteName(h.type, h.female, h.dir, anim, h.atkPose, casting, h.atkPoseMax);
+            const name = this.heroSpriteName(h.type, h.dir, anim, h.atkPose, h.atkPoseMax);
             if (h.elite) {
-                this.shadow(ctx, p.x, p.y + 9, 34, 11);
+                this.shadow(ctx, p.x, p.y + 9, 46, 15);
                 this.eliteRing(ctx, p.x, p.y + 9);
             } else {
-                this.shadow(ctx, p.x, p.y + 9, 19, 6);
+                this.shadow(ctx, p.x, p.y + 9, 28, 9);
             }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
-            this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
+            this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
         }
-        if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 1.4 : 1);
-        const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : (HEROES[h.type].barY || 64) + 8);
+        if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
+        const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
-        if (h.stun > 0) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 100 : 60, h.lane * 0.1);
-        if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 130 : 70, h.lane * 0.07, Math.min(1, h.burn * 2));
+        if (h.stun > 0) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1);
+        if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 195 : 105, h.lane * 0.07, Math.min(1, h.burn * 2));
         if (h.slow > 0) this.frostAura(ctx, p.x, p.y + 9, headY, Math.min(1, h.slow * 2));
-        if (h.curse > 0) this.curseMark(ctx, p.x, headY - 30, h.curse);
+        if (h.curse > 0) this.curseMark(ctx, p.x, headY - 45, h.curse);
     },
 
     // 빙결된 용사: 발밑 서리 고리와 몸을 덮는 푸른 빛, 떨어지는 얼음 조각
@@ -289,45 +178,60 @@ const Render = {
         ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = `rgba(120,200,255,${0.35 * a})`;
         ctx.beginPath();
-        ctx.ellipse(x, footY, 34, 11, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, footY, 50, 16, 0, 0, Math.PI * 2);
         ctx.fill();
         const g = ctx.createLinearGradient(0, headY, 0, footY);
         g.addColorStop(0, 'rgba(140,210,255,0)');
         g.addColorStop(1, `rgba(140,210,255,${0.3 * a})`);
         ctx.fillStyle = g;
-        ctx.fillRect(x - 26, headY, 52, footY - headY);
+        ctx.fillRect(x - 39, headY, 78, footY - headY);
         for (let i = 0; i < 4; i++) {
             const k = (Game.time * 0.8 + i / 4 + x * 0.003) % 1;
             ctx.fillStyle = `rgba(220,245,255,${(1 - k) * a})`;
-            ctx.fillRect(Math.round(x + Math.sin(i * 2.3 + x) * 22) - 3, Math.round(headY + k * (footY - headY)) - 3, 6, 6);
+            ctx.fillRect(Math.round(x + Math.sin(i * 2.3 + x) * 33) - 3, Math.round(headY + k * (footY - headY)) - 3, 6, 6);
         }
         ctx.restore();
     },
 
-    // 직업 그림 보스(대마도사): Asteria 직업 그림을 크게 그린다. 경고(windup) 동안은 주문 동작, 공격은 공격 동작이다
+    // 보스(부대장, 대마도사): PixelLab 동작 그림. 경고(windup) 동안은 공격 동작(windupLoop면 반복, 아니면 첫 프레임에 멈춤),
+    // 공격은 공격 동작을 한 번 재생한다. 돌진 중에는 뒤에 보라 잔상을 남긴다
     drawArtBoss(ctx, h, p, art) {
-        let name;
-        let pose = 'walk';
-        if (h.windup > 0) { pose = 'cast'; name = `${art.sprite}_act_${h.dir}_cast${Math.floor(Game.time * 6) % 2}`; }
-        else if (h.atkPose > 0) { pose = 'atk'; name = `${art.sprite}_act_${h.dir}_atk${this.attackFrame(h.atkPose, h.atkPoseMax, 2)}`; }
-        else name = `${art.sprite}_walk_${h.dir}${Math.floor(h.blocker ? 0 : h.anim) % 4}`;
-        const foot = typeof art.footPx === 'number' ? art.footPx : art.footPx[pose][h.dir];
-        this.shadow(ctx, p.x, p.y + 10, 62, 19);
-        // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const hot = h.windup > 0 ? 1 : 0;
-        const pulse = 0.45 + Math.sin(Game.time * (hot ? 30 : 5)) * 0.15 + hot * 0.3;
-        ctx.fillStyle = `rgba(90,180,255,${pulse * 0.35})`;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y + 10, 70, 22, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = `rgba(150,220,255,${pulse})`;
-        ctx.stroke();
-        ctx.restore();
+        let clip = art.anim.walk;
+        let i = Math.floor(h.blocker ? 0 : h.anim) % clip.frames;
+        if (h.windup > 0) {
+            clip = art.anim.attack;
+            i = art.windupLoop ? Math.floor(Game.time * 10) % clip.frames : 0;
+        } else if (h.atkPose > 0) {
+            clip = art.anim.attack;
+            i = this.attackFrame(h.atkPose, h.atkPoseMax, clip.frames);
+        }
+        const name = this.plFrame(art, clip, h.dir, i);
+        this.shadow(ctx, p.x, p.y + 10, 84, 26);
+        if (art.windupLoop) {
+            // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const hot = h.windup > 0 ? 1 : 0;
+            const pulse = 0.45 + Math.sin(Game.time * (hot ? 30 : 5)) * 0.15 + hot * 0.3;
+            ctx.fillStyle = `rgba(90,180,255,${pulse * 0.35})`;
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y + 10, 96, 30, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = `rgba(150,220,255,${pulse})`;
+            ctx.stroke();
+            ctx.restore();
+        }
+        if (h.chargeTime > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.4;
+            const back = pathAt(h.d - 54, h.route);
+            this.plSprite(ctx, Assets.tinted(name, '#a56bff', 0.9), art, clip, h.dir, back.x, back.y + 10);
+            ctx.restore();
+        }
         const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-        this.sprite(ctx, img, p.x, p.y + 12, art.scale, foot);
+        this.plSprite(ctx, img, art, clip, h.dir, p.x, p.y + 10);
     },
 
     // 음유시인 가속 표시: 발밑에서 떠오르는 초록 음표. 상태 없이 시간만으로 계산한다
@@ -364,10 +268,13 @@ const Render = {
 
     healthBar(ctx, x, y, ratio, w, color) {
         if (ratio >= 0.999) return;
+        // 테두리 1.5(화면 1px)를 두르고 화면 정수 픽셀에 맞춘다
+        const left = snapWorld(x - w / 2);
+        const top = snapWorld(y);
         ctx.fillStyle = '#0a0812';
-        ctx.fillRect(x - w / 2 - 2, y - 2, w + 4, 10);
+        ctx.fillRect(left - 3, top - 3, w + 6, HP_BAR_H + 6);
         ctx.fillStyle = color;
-        ctx.fillRect(x - w / 2, y, w * clamp(ratio, 0, 1), 6);
+        ctx.fillRect(left, top, snapWorld(w * clamp(ratio, 0, 1)), HP_BAR_H);
     },
 
     stunStars(ctx, x, y) {
@@ -375,21 +282,20 @@ const Render = {
         ctx.fillStyle = '#ffe36b';
         for (let i = 0; i < 3; i++) {
             const a = t + i * 2.1;
-            ctx.fillRect(Math.round(x + Math.cos(a) * 28) - 4, Math.round(y + Math.sin(a) * 9) - 4, 8, 8);
+            ctx.fillRect(Math.round(x + Math.cos(a) * 40) - 4, Math.round(y + Math.sin(a) * 13) - 4, 8, 8);
         }
     },
 
     // 타락 유닛
     drawUnit(ctx, u) {
         const def = HEROES[u.heroType];
-        const casting = !!(def.stunEvery || def.song);
         // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
-        const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting, u.atkPoseMax);
+        const name = this.heroSpriteName(u.heroType, u.dir || 'down', 0, u.atkPose, u.atkPoseMax);
         const risen = u.rise > 0 ? clamp(1 - u.rise / 0.5, 0, 1) : 1;
-        this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
+        this.shadow(ctx, u.x, u.y + 9, 30, 10, 0.6);
         this.drawCorruptAura(ctx, u.x, u.y + 9, risen, u.x * 0.013);
         this.drawCorruptSprite(ctx, name, def, u.atkPose, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
-        this.healthBar(ctx, u.x, u.y - def.barY - 2, u.hp / u.maxHp, 40, '#c56bff');
+        this.healthBar(ctx, u.x, u.y - def.barY - 2, u.hp / u.maxHp, HP_BAR_W, '#c56bff');
         if (u.stun > 0) this.stunStars(ctx, u.x, u.y - def.barY - 16);
     },
 
@@ -465,7 +371,7 @@ const Render = {
             ctx.clip();
         }
         const draw = (img, ox, oy) => this.heroSprite(ctx, img, def, atkPose, dir, x + ox, footY + sink + oy);
-        this.corruptOutline(ctx, name, def.scale || 2, draw, risen < 1 ? '#ffe6ff' : '#ff6be6', 1);
+        this.corruptOutline(ctx, name, def.scale, draw, risen < 1 ? '#ffe6ff' : '#ff6be6', 1);
         draw(flash ? Assets.tinted(name, '#ffffff', 0.85) : Assets.tinted(name, '#7c2bd6', 0.22), 0, 0);
         ctx.restore();
     },
@@ -505,7 +411,7 @@ const Render = {
     // 서 있는 몬스터 한 마리: 그림자와 그림. 건설 모드의 반투명 그림에도 쓴다
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
-        this.shadow(ctx, m.x, footY - 2, 22, 8);
+        this.shadow(ctx, m.x, footY - 2, 33, 12);
         this.plSprite(ctx, img, def.art, clip, m.dir, m.x, footY);
     },
 
@@ -533,11 +439,11 @@ const Render = {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const glowAlpha = 0.22 + Math.sin(Game.time * 2.4 + m.x) * 0.04 + (m.tier - 1) * 0.06;
-        const back = ctx.createRadialGradient(m.x, footY - 44, 8, m.x, footY - 44, 80);
+        const back = ctx.createRadialGradient(m.x, footY - 66, 8, m.x, footY - 66, 110);
         back.addColorStop(0, `rgba(${def.art.glow},${glowAlpha})`);
         back.addColorStop(1, `rgba(${def.art.glow},0)`);
         ctx.fillStyle = back;
-        ctx.fillRect(m.x - 80, footY - 124, 160, 160);
+        ctx.fillRect(m.x - 110, footY - 176, 220, 220);
         ctx.restore();
         if (m.tier >= 2) {
             ctx.save();
@@ -545,7 +451,7 @@ const Render = {
             const color = m.tier >= 3 ? '255,190,90' : '160,110,255';
             ctx.fillStyle = `rgba(${color},${0.2 + Math.sin(Game.time * 3 + m.x) * 0.05})`;
             ctx.beginPath();
-            ctx.ellipse(m.x, footY, 40, 14, 0, 0, Math.PI * 2);
+            ctx.ellipse(m.x, footY, 56, 19, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
         }
@@ -567,21 +473,21 @@ const Render = {
         }
 
         // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
-        this.gradeMark(ctx, m.x, footY + 20, def.grade);
+        this.gradeMark(ctx, m.x, footY + 24, def.grade);
         this.rankMark(ctx, m, footY);
-        if (m.equip) this.equipMark(ctx, m.equip, m.x - 30, footY + 18);
+        if (m.equip) this.equipMark(ctx, m.equip, m.x - 38, footY + 22);
         for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
             const sx = m.x - (m.tier - 1) * 11 + i * 22;
-            const sy = footY + 40;
+            const sy = footY + 44;
             ctx.fillStyle = '#120c20';
             ctx.fillRect(sx - 8, sy - 8, 16, 16);
             ctx.fillStyle = m.tier >= 3 ? '#ffd76a' : '#c8a6ff';
             ctx.fillRect(sx - 5, sy - 5, 10, 10);
         }
-        if (m.blocks) this.healthBar(ctx, m.x, footY - def.art.barY, m.hp / m.maxHp, 40, '#74d65a');
+        if (m.blocks) this.healthBar(ctx, m.x, footY - def.art.barY, m.hp / m.maxHp, HP_BAR_W, '#74d65a');
         if (stunned) {
-            this.stunStars(ctx, m.x, footY - def.art.barY - 14);
-            UIKit.text(ctx, '정지', m.x, footY - def.art.barY - 40, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
+            this.stunStars(ctx, m.x, footY - def.art.barY - 18);
+            UIKit.text(ctx, '정지', m.x, footY - def.art.barY - 48, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
         }
     },
 
@@ -591,19 +497,19 @@ const Render = {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const pulse = 0.5 + Math.sin(t * 9) * 0.12;
-        const back = ctx.createRadialGradient(x, footY - 44, 6, x, footY - 44, 86);
+        const back = ctx.createRadialGradient(x, footY - 66, 6, x, footY - 66, 120);
         back.addColorStop(0, `rgba(255,60,30,${pulse * 0.7})`);
         back.addColorStop(1, 'rgba(255,40,20,0)');
         ctx.fillStyle = back;
-        ctx.fillRect(x - 86, footY - 130, 172, 172);
+        ctx.fillRect(x - 120, footY - 186, 240, 240);
         ctx.fillStyle = `rgba(255,70,40,${pulse * 0.5})`;
         ctx.beginPath();
-        ctx.ellipse(x, footY, 42, 14, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, footY, 58, 19, 0, 0, Math.PI * 2);
         ctx.fill();
         for (let i = 0; i < 5; i++) {
             const k = (t * 1.3 + i / 5) % 1;
-            const ex = Math.round(x + Math.sin(i * 2.7 + seed * 3) * 26);
-            const ey = Math.round(footY - 10 - k * 90);
+            const ex = Math.round(x + Math.sin(i * 2.7 + seed * 3) * 38);
+            const ey = Math.round(footY - 10 - k * 135);
             ctx.fillStyle = `rgba(255,${120 + i * 20},60,${(1 - k) * 0.9})`;
             ctx.fillRect(ex - 3, ey - 3, 6, 6);
         }
@@ -681,8 +587,8 @@ const Render = {
         const top = rank === MONSTER_RANKS.length - 1;
         const up = m.rankUp > 0 ? m.rankUp / 1.2 : 0;
         if (rank > 0) {
-            const x = m.x + 26;
-            const y = footY + 20;
+            const x = m.x + 34;
+            const y = footY + 24;
             const size = Math.round((top ? 30 : 24) * (1 + up * 0.6));
             if (top) {
                 ctx.save();
@@ -813,7 +719,7 @@ const Render = {
                 const name = `${MONSTERS[p.fromTypes[i]].sprite}/rotations/south`;
                 const white = Math.round(Math.min(1, k * 1.6) * 4) / 4; // 색 입힌 사본 캐시가 늘지 않게 4단계로 끊는다
                 const img = white > 0 ? Assets.tinted(name, '#ffffff', white) : Assets.get(name);
-                this.sprite(ctx, img, x, y + 40 * (1 - 0.6 * e), 2 * (1 - 0.6 * e));
+                this.sprite(ctx, img, x, y + 60 * (1 - 0.6 * e), PIXEL_SCALE * (1 - 0.6 * e));
             });
             return;
         }
@@ -884,7 +790,7 @@ const Render = {
             const name = `${MONSTERS[p.type].sprite}/rotations/south`;
             ctx.save();
             ctx.globalAlpha = 1 - t / 0.3;
-            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 40, 2 + (1 - t / 0.3) * 1.2);
+            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 60, PIXEL_SCALE + (1 - t / 0.3) * 1.8);
             ctx.restore();
         }
         // 결과 이름과 등급: 합치기는 언제나, 소환은 희귀 이상만
@@ -894,7 +800,7 @@ const Render = {
             const popK = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
             const label = p.kind === 'summon' ? `${MONSTER_GRADES[p.grade].name} 등장!` : MONSTERS[p.type].name;
             const size = Math.round((big ? 44 : 32) * popK / WORLD_ZOOM);
-            const ly = to.y - 130 - t * 30;
+            const ly = to.y - 200 - t * 30;
             const lx = clamp(to.x, 220, WORLD_WIDTH - 220);
             ctx.save();
             ctx.globalAlpha = a;
@@ -917,7 +823,7 @@ const Render = {
         ctx.strokeStyle = `rgba(255,183,107,${0.35 + Math.sin(Game.time * 2 + x) * 0.08})`;
         ctx.setLineDash([8, 6]);
         ctx.beginPath();
-        ctx.ellipse(x, y, 30, 11, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, 40, 14, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     },
@@ -932,81 +838,81 @@ const Render = {
         const name = this.plFrame(def, def.art.anim.idle, 'down', 0);
         this.plSprite(ctx, Assets.tinted(name, '#1b1030', 0.6), def.art, def.art.anim.idle, 'down', x, footY);
         ctx.restore();
-        const cy = footY - 40;
+        const cy = footY - 60;
         ctx.save();
         ctx.fillStyle = 'rgba(10,6,20,0.7)';
         ctx.beginPath();
-        ctx.arc(x, cy, 22, 0, Math.PI * 2);
+        ctx.arc(x, cy, 30, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 7;
         ctx.strokeStyle = '#3a2f4c';
         ctx.beginPath();
-        ctx.arc(x, cy, 20, 0, Math.PI * 2);
+        ctx.arc(x, cy, 27, 0, Math.PI * 2);
         ctx.stroke();
         ctx.strokeStyle = '#ffb76b';
         ctx.beginPath();
-        ctx.arc(x, cy, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
+        ctx.arc(x, cy, 27, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
         ctx.stroke();
         ctx.restore();
         UIKit.text(ctx, String(Math.ceil(m.down)), x, cy, Math.round(22 / WORLD_ZOOM), '#ffe0c0', 'center');
     },
 
+    // 왕좌: 벽돌 바닥 위의 왕좌 의자(prop2_throne)와 그 앞에 선 마왕. 마왕의 발은 왕좌 칸 가운데 아래쪽이다
     drawThrone(ctx) {
         const x = tileX(THRONE_TILE.col);
         const y = tileY(THRONE_TILE.row);
         const hurt = Game.throneFlash > 0;
-        const casting = Fx.dim > 0.3;
-        // 고른 마왕의 그림. 주문 그림이 없는 마왕은 같은 그림에 주문 빛(아래)을 더해 구분한다
         const lord = Game.lordDef();
-        const name = casting && lord.cast ? lord.cast : lord.sprite;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const pulse = 0.2 + Math.sin(Game.time * 2) * 0.06;
-        const g = ctx.createRadialGradient(x, y - 20, 10, x, y - 20, 200);
-        g.addColorStop(0, `rgba(170,70,255,${pulse})`);
-        g.addColorStop(1, 'rgba(170,70,255,0)');
+        const pulse = 0.14 + Math.sin(Game.time * 2) * 0.04;
+        const g = ctx.createRadialGradient(x, y - 90, 10, x, y - 90, 260);
+        g.addColorStop(0, `rgba(255,200,120,${pulse})`);
+        g.addColorStop(1, 'rgba(255,200,120,0)');
         ctx.fillStyle = g;
-        ctx.fillRect(x - 200, y - 220, 400, 400);
+        ctx.fillRect(x - 260, y - 350, 520, 520);
         ctx.restore();
-        this.shadow(ctx, x, y + 26, 84, 24, 0.55);
-        const bob = Math.sin(Game.time * 1.6) * 3;
+        // 왕좌 의자는 마왕 바로 뒤(한 칸 위)에 세워 등받이가 마왕 어깨 뒤로 보이게 한다
+        this.sprite(ctx, Assets.get('prop2_throne'), x, y - THRONE_BACK, PIXEL_SCALE, propFootPx('prop2_throne'));
+        this.shadow(ctx, x, y + 30, 110, 30, 0.45);
         // 제물을 받으면 금빛으로 빛난다(빨려 든 몬스터가 닿은 뒤부터)
         const bless = Game.throneBless > 0 && Game.throneBless < 1.1 ? Game.throneBless / 1.1 : 0;
         if (bless > 0) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const b = ctx.createRadialGradient(x, y - 60, 10, x, y - 60, 240);
+            const b = ctx.createRadialGradient(x, y - 90, 10, x, y - 90, 330);
             b.addColorStop(0, `rgba(255,225,140,${0.7 * bless})`);
             b.addColorStop(1, 'rgba(255,200,90,0)');
             ctx.fillStyle = b;
-            ctx.fillRect(x - 240, y - 300, 480, 480);
+            ctx.fillRect(x - 330, y - 420, 660, 660);
             ctx.restore();
         }
-        const img = hurt ? Assets.tinted(name, '#ff4466', 0.7)
-            : bless > 0 ? Assets.tinted(name, '#ffe08a', Math.round(bless * 4) / 4 * 0.6) : Assets.get(name);
-        this.sprite(ctx, img, x, y + 30 + bob, 2, lord.footPx);
+        const img = hurt ? Assets.tinted(lord.sprite, '#ff4466', 0.7)
+            : bless > 0 ? Assets.tinted(lord.sprite, '#ffe08a', Math.round(bless * 4) / 4 * 0.6) : Assets.get(lord.sprite);
+        const bob = Math.round(Math.sin(Game.time * 1.6) * 2) * 1.5; // 화면 1~3px씩 움직인다
         this.throneFoot = y + 30 + bob; // 주문 빛(drawLordCast)이 같은 자리에 다시 그린다
+        this.sprite(ctx, img, x, this.throneFoot, BOSS_SCALE, lord.footPx);
     },
 
-    // 주문 그림이 없는 마왕의 주문 자세: 화면이 어두워진 위로 마왕을 빛과 함께 다시 그려 떠오르게 한다(번개를 쓰는 동안)
+    // 마왕의 주문 자세: 화면이 어두워진 위로 마왕을 빛과 함께 다시 그려 떠오르게 한다(번개를 쓰는 동안). 모든 마왕이 같다
     drawLordCast(ctx) {
         const lord = Game.lordDef();
-        if (lord.cast || Fx.dim <= 0.3 || this.throneFoot === undefined) return;
+        if (Fx.dim <= 0.3 || this.throneFoot === undefined) return;
         const x = tileX(THRONE_TILE.col);
         const y = this.throneFoot;
         const k = Math.min(1, Fx.dim / 0.75);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const c = ctx.createRadialGradient(x, y - 130, 10, x, y - 130, 240);
+        const c = ctx.createRadialGradient(x, y - 190, 10, x, y - 190, 330);
         c.addColorStop(0, `rgba(170,210,255,${0.55 * k})`);
         c.addColorStop(0.5, `rgba(150,110,255,${0.28 * k})`);
         c.addColorStop(1, 'rgba(150,110,255,0)');
         ctx.fillStyle = c;
-        ctx.fillRect(x - 240, y - 370, 480, 480);
+        ctx.fillRect(x - 330, y - 520, 660, 660);
         ctx.restore();
         ctx.save();
         ctx.globalAlpha = k;
-        this.sprite(ctx, Assets.tinted(lord.sprite, '#d8f3ff', 0.3), x, y, 2, lord.footPx);
+        this.sprite(ctx, Assets.tinted(lord.sprite, '#d8f3ff', 0.3), x, y, BOSS_SCALE, lord.footPx);
         ctx.restore();
     },
 
@@ -1037,8 +943,8 @@ const Render = {
 
     drawCorpse(ctx, c) {
         const def = HEROES[c.type];
-        const fall = def.anim && def.anim.death; // 쓰러지는 동작을 재생한 뒤 마지막 프레임을 유지한다
-        const name = fall ? this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * CORPSE_FALL_FPS))) : this.heroStandName(c.type, c.female, 'down');
+        const fall = def.anim.death; // 쓰러지는 동작을 재생한 뒤 마지막 프레임을 유지한다
+        const name = this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * CORPSE_FALL_FPS)));
         const left = 1 - c.age / c.life;
         // 타락이 꺼져 있으면 깜빡임 대신 마지막 CORPSE_FADE_TIME초 동안 서서히 사라진다
         const blink = !CORRUPTION_ENABLED ? 0.9 * Math.min(1, (c.life - c.age) / CORPSE_FADE_TIME)
@@ -1048,19 +954,11 @@ const Render = {
         const ready = CORRUPTION_ENABLED && Game.gold >= c.cost && Game.units.filter(u => u.kind === 'corrupt').length < COMBAT_RULES.corruptMax;
         if (ready) this.drawCorruptAura(ctx, c.x, c.y + 10, hovered ? 1 : 0.8, c.x * 0.013, true);
         ctx.save();
-        ctx.translate(c.x, c.y + 8);
-        if (!fall) ctx.rotate(Math.PI / 2 * 0.92);
         ctx.globalAlpha = blink;
         const img = hovered ? Assets.tinted(name, '#b56bff', 0.3) : Assets.tinted(name, '#1b1030', ready ? 0.2 : 0.4);
-        if (img && fall) {
-            const draw = (im, ox, oy) => this.plSprite(ctx, im, def, fall, c.dir, ox, 2 + oy);
-            if (ready) this.corruptOutline(ctx, name, def.scale || 2, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
-            draw(img, 0, 0);
-        } else if (img) {
-            ctx.imageSmoothingEnabled = false;
-            const size = img.width * (def.scale || HERO_SCALE);
-            const draw = (im, ox, oy) => ctx.drawImage(im, -size / 2 + ox, -size * 0.725 + oy, size, size);
-            if (ready) this.corruptOutline(ctx, name, def.scale || HERO_SCALE, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
+        if (img) {
+            const draw = (im, ox, oy) => this.plSprite(ctx, im, def, fall, c.dir, c.x + ox, c.y + 10 + oy);
+            if (ready) this.corruptOutline(ctx, name, def.scale, draw, hovered ? '#ffe6ff' : '#ff6be6', hovered ? 1 : 0.55 + Math.sin(Game.time * 6) * 0.25);
             draw(img, 0, 0);
         }
         ctx.restore();
@@ -1071,14 +969,14 @@ const Render = {
         ctx.lineWidth = 6;
         ctx.strokeStyle = '#120a22';
         ctx.beginPath();
-        ctx.arc(c.x, c.y - 46, 12, 0, Math.PI * 2);
+        ctx.arc(c.x, c.y - 69, 12, 0, Math.PI * 2);
         ctx.stroke();
         ctx.strokeStyle = ready ? '#ff6be6' : '#6a5f7c';
         ctx.beginPath();
-        ctx.arc(c.x, c.y - 46, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+        ctx.arc(c.x, c.y - 69, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
         ctx.stroke();
         ctx.restore();
-        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 70, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), ready ? '#ffd6fb' : '#8f8599', 'center');
+        UIKit.text(ctx, `${c.cost}`, c.x, c.y - 100, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), ready ? '#ffd6fb' : '#8f8599', 'center');
     },
 
     drawProjectile(ctx, p) {
@@ -1087,7 +985,7 @@ const Render = {
         if (shot && FX_SHEETS[shot]) {
             const sheet = FX_SHEETS[shot];
             const frame = Math.floor(Game.time / sheet.life * sheet.frames) % sheet.frames;
-            this.drawSheetFrame(ctx, shot, frame, p.x, p.y, p.big ? sheet.fit * 2.67 : sheet.fit * 1.33, p.angle || 0);
+            this.drawSheetFrame(ctx, shot, frame, p.x, p.y, (p.big ? 2 : 1) * sheet.fit / WORLD_ZOOM, p.angle || 0); // 화면 1배, 무거운 화살 2배
         } else {
             // 'bolt'은 몬스터 빛 색(glow)으로, 마력 구체는 보라로
             const rgb = shot === 'bolt' && p.glow ? p.glow : '180,100,255';
@@ -1109,7 +1007,7 @@ const Render = {
         const placing = !!UI.drag;
         if (!placing && Game.state !== 'prep') return;
         const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
-        const color = '190,150,255';
+        const color = '255,238,180'; // 이끼 바닥 위에서 잘 보이는 연한 금색
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
@@ -1154,35 +1052,25 @@ const Render = {
         ctx.restore();
     },
 
+    // 화로 소품(prop2_brazier) 둘레의 따뜻한 빛. 불꽃은 그림에 있다
     drawTorches(ctx) {
         const t = Game.time;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        for (const [c, r] of TORCHES) {
-            const x = tileX(c);
-            const y = tileY(r) - 10;
-            const flick = 0.82 + Math.sin(t * 9 + c) * 0.09 + Math.sin(t * 23 + r * 5) * 0.05;
-            const radius = 200 * flick;
+        for (const p of DECOR) {
+            if (p.sprite !== 'prop2_brazier') continue;
+            const x = tileX(p.col);
+            const y = tileY(p.row) + PROP_FOOT_Y - 120;
+            const flick = 0.82 + Math.sin(t * 9 + p.col) * 0.09 + Math.sin(t * 23 + p.row * 5) * 0.05;
+            const radius = 220 * flick;
             const g = ctx.createRadialGradient(x, y, 8, x, y, radius);
-            g.addColorStop(0, `rgba(255,150,70,${0.34 * flick})`);
-            g.addColorStop(0.45, `rgba(190,70,40,${0.1 * flick})`);
+            g.addColorStop(0, `rgba(255,170,80,${0.3 * flick})`);
+            g.addColorStop(0.45, `rgba(200,100,40,${0.08 * flick})`);
             g.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = g;
             ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
         }
         ctx.restore();
-        // 불꽃 도트
-        for (const [c, r] of TORCHES) {
-            const x = tileX(c);
-            const y = tileY(r) - 10;
-            ctx.fillStyle = '#2a1a2c';
-            ctx.fillRect(x - 4, y + 2, 8, 18);
-            const f = Math.floor(t * 12 + c) % 3;
-            ctx.fillStyle = '#ff6b2c';
-            ctx.fillRect(x - 8, y - 12 - f * 2, 16, 16 + f * 2);
-            ctx.fillStyle = '#ffc94d';
-            ctx.fillRect(x - 4, y - 8 - f, 8, 10 + f);
-        }
     },
 
     // pixelfx 시트 한 칸을 그린다: (x, y)에 기준점을 맞추고 angle만큼 돌린다. 배율은 drawSheetEffects와 같은 정수 배율
@@ -1263,15 +1151,6 @@ const Render = {
         ctx.save();
         this.drawSheetEffects(ctx);
         ctx.globalCompositeOperation = 'lighter';
-        ctx.imageSmoothingEnabled = false;
-        for (const a of Fx.anims) {
-            if (FX_SHEETS[a.name]) continue;
-            const img = Assets.get(a.name);
-            if (!img) continue;
-            const frame = Math.min(7, Math.floor(a.age / a.life * 8));
-            const half = a.size / 2;
-            ctx.drawImage(img, frame * 128, 0, 128, 128, a.x - half, a.y - half, a.size, a.size);
-        }
         for (const g of Fx.glows) {
             const a = 1 - g.age / g.life;
             const grad = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, g.radius);
@@ -1325,7 +1204,7 @@ const Render = {
 
     drawNumbers(ctx) {
         for (const n of Fx.numbers) {
-            // 처음 120ms는 크게 튀어나온다 (Asteria와 같은 기준)
+            // 처음 120ms는 크게 튀어나온다
             const pop = n.age < 0.12 ? 1.55 - (n.age / 0.12) * 0.55 : 1;
             const size = Math.round((n.big ? 50 : 26) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
             ctx.save();
@@ -1376,8 +1255,8 @@ const Render = {
         for (const d of Fx.decals) {
             const a = clamp((d.life - d.age) / 2, 0, 1) * 0.7;
             const g = ctx.createRadialGradient(d.x, d.y, 8, d.x, d.y, d.radius);
-            g.addColorStop(0, `rgba(10,6,16,${a})`);
-            g.addColorStop(0.7, `rgba(40,20,50,${a * 0.5})`);
+            g.addColorStop(0, `rgba(16,12,6,${a})`);
+            g.addColorStop(0.7, `rgba(46,34,18,${a * 0.5})`);
             g.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = g;
             ctx.fillRect(d.x - d.radius, d.y - d.radius, d.radius * 2, d.radius * 2);
@@ -1415,7 +1294,10 @@ const Render = {
 
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다
         const entities = [];
-        for (const p of DECOR) entities.push({ y: tileY(p.row) + 30, draw: () => this.sprite(ctx, Assets.get(p.sprite), tileX(p.col), tileY(p.row) + 30, 2, 74) });
+        for (const p of DECOR) {
+            const footY = tileY(p.row) + PROP_FOOT_Y;
+            entities.push({ y: footY, draw: () => this.sprite(ctx, Assets.get(p.sprite), tileX(p.col), footY, PIXEL_SCALE, propFootPx(p.sprite)) });
+        }
         for (const m of Game.monsters) {
             if (m.blocks) entities.push({ y: m.homeY - TILE / 2, draw: () => this.drawMonsterHome(ctx, m) });
             const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
@@ -1434,7 +1316,7 @@ const Render = {
         this.drawTorches(ctx);
 
         if (Fx.dim > 0) {
-            ctx.fillStyle = `rgba(4,2,16,${Fx.dim * 0.72})`;
+            ctx.fillStyle = `rgba(0,0,0,${Fx.dim * 0.7})`;
             ctx.fillRect(-40, -40, WORLD_WIDTH + 80, WORLD_HEIGHT + 80);
             this.drawLordCast(ctx);
         }

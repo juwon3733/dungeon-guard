@@ -4,7 +4,7 @@ const BLOCK_CAPACITY = 3; // 타락 유닛 하나가 붙잡는 용사 수
 function createCorruptUnit(corpse) {
     const def = CORRUPTED[corpse.type];
     return {
-        kind: 'corrupt', heroType: corpse.type, female: corpse.female,
+        kind: 'corrupt', heroType: corpse.type,
         x: corpse.x, y: corpse.y, route: corpse.route || 'north', d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
         range: def.range, ranged: !!def.ranged, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
@@ -34,8 +34,8 @@ function damageUnit(u, amount, attacker) {
     const dealt = amount * (1 - (u.armor || 0));
     u.hp -= dealt;
     u.flash = 0.09;
-    Fx.number(u, u.x, u.y - 74, Math.round(dealt), '#ff8f8f', false);
-    Fx.burst(u.x, u.y - 30, '#ff8f8f', 2, 150, 0.24, 5);
+    Fx.number(u, u.x, u.y - 110, Math.round(dealt), '#ff8f8f', false);
+    Fx.burst(u.x, u.y - 45, '#ff8f8f', 2, 150, 0.24, 5);
     if (u.kind === 'monster') monsterThorns(u, dealt, attacker);
     if (u.hp > 0) return;
     if (u.kind === 'monster') {
@@ -43,7 +43,7 @@ function damageUnit(u, amount, attacker) {
         return;
     }
     u.removed = true;
-    Fx.burst(u.x, u.y - 44, '#c56bff', 14, 320, 0.45, 7);
+    Fx.burst(u.x, u.y - 66, '#c56bff', 14, 320, 0.45, 7);
     Sfx.play('unitDown');
     for (const h of Game.heroes) if (h.blocker === u) h.blocker = null;
 }

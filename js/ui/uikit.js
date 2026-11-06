@@ -1,4 +1,4 @@
-// 도트풍 UI 틀과 글자. 틀의 형태는 Asteria의 pixelFrame.js를 옮겨 와 마왕군 색으로 바꿨다.
+// 도트풍 UI 틀과 글자. 틀은 코드로 그린다(마왕군 색).
 const FRAME_THEMES = {
     panel: { top: '#251b3a', bottom: '#120d20', border: '#07040e', light: '#5d4a86', shade: '#0b0714' },
     dark: { top: '#191328', bottom: '#0d0918', border: '#05030a', light: '#3f3358', shade: '#07050e' },
