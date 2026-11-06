@@ -33,7 +33,7 @@ const SUMMON_RULES = {
     maxCost: 60,    // 소환 비용 상한
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
-    odds: { common: 0.70, rare: 0.25, epic: 0.05 },
+    // 등급별 확률은 SUMMON_LEVELS(소환 강화 레벨)에 있다
     refund: { common: 20, rare: 60, epic: 150, legendary: 300, mythic: 800 } // 판매 환불(등급별 고정)
 };
 
@@ -43,12 +43,27 @@ const MERGE_RULES = {
     gradeCount: 3
 };
 
+// 소환 강화: 판 안에서만 유지되는 레벨. 골드를 내고 올리면 좋은 등급이 나올 확률이 오른다(다시 시작하면 1).
+//   cost: 이 레벨로 올리는 골드, odds: 등급별 소환 확률(합이 1). 신화는 소환되지 않는다
+const SUMMON_LEVELS = [
+    { cost: 0, odds: { common: 0.70, rare: 0.25, epic: 0.05, legendary: 0 } },
+    { cost: 100, odds: { common: 0.62, rare: 0.30, epic: 0.08, legendary: 0 } },
+    { cost: 200, odds: { common: 0.54, rare: 0.33, epic: 0.12, legendary: 0.01 } },
+    { cost: 350, odds: { common: 0.46, rare: 0.36, epic: 0.16, legendary: 0.02 } },
+    { cost: 550, odds: { common: 0.38, rare: 0.38, epic: 0.20, legendary: 0.04 } },
+    { cost: 800, odds: { common: 0.30, rare: 0.40, epic: 0.24, legendary: 0.06 } },
+    { cost: 1100, odds: { common: 0.22, rare: 0.40, epic: 0.30, legendary: 0.08 } }
+];
+
+SUMMON_RULES.odds = SUMMON_LEVELS[0].odds; // 레벨 1의 확률(시험과 이전 코드용)
+
 // 보스 보상 3택: 마지막 웨이브가 아닌 보스를 처치하면 그 웨이브가 끝나고 준비 단계에서 카드를 띄운다.
 //   monsterCards: 몬스터 카드 수(서로 다른 몬스터). 등급은 epicChance 확률로 영웅, 아니면 희귀.
 //   후보는 그 등급의 소환 후보(gradePool)라 전설, 신화와 summon: false 몬스터는 나오지 않는다.
 //   gold: 골드 카드의 골드(카드는 몬스터 카드 뒤에 하나)
 //   장비 카드는 몬스터 카드와 골드 카드 사이에 한 장(등급은 EQUIP_RULES.rewardEpicChance)
 const BOSS_REWARD_RULES = {
+    roundEvery: 5,  // 이 라운드 수마다 카드 3택(보스를 잡지 못했어도)
     monsterCards: 1,
     epicChance: 0.4,
     gold: 300
@@ -504,6 +519,11 @@ function recipeKey(r) {
 }
 
 // 등급별 소환 후보(소환, 보스 보상). 등급 표의 summon과 몬스터의 summon이 false가 아닌 것. 표 순서를 따른다
+// 소환 강화 레벨로 소환될 때의 후보. 전설은 summon: false여도 나온다(소환 강화 높은 단계)
+function summonPool(grade) {
+    return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && (grade === 'legendary' || MONSTERS[id].summon !== false));
+}
+
 function gradePool(grade) {
     if (!MONSTER_GRADES[grade] || MONSTER_GRADES[grade].summon === false) return [];
     return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].summon !== false);

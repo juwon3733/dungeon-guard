@@ -631,7 +631,7 @@ const SCENES = {
             Game.place('skeleton_archer', 7, 4);
             Game.place('dark_mage', 12, 5);
             advance(1.6);
-            Game.waveIndex = 4;
+            Game.waveIndex = 9;
             Game.startWave();
             const boss = Game.heroes.find(h => h.boss);
             Game.heroes = [boss];
@@ -654,7 +654,7 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.waveIndex = 4;
+            Game.waveIndex = 9;
             Game.place('orc_guard', 3, 10);
             Game.place('skeleton_archer', 9, 9);
             Game.place('orc_guard', 11, 8);

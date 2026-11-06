@@ -1,4 +1,5 @@
-// 화면 없이 게임 로직을 돌려 규칙과 밸런스를 확인한다. 실행: node tools/simulate.js
+// 화면 없이 지금 규칙을 봇으로 돌려 판 길이와 난이도를 잰다. 실행: node tools/simulate.js [판 수, 기본 5] [봇 이름 일부]
+// 사람보다 칸 배치와 조작이 단순하므로 대략적인 값으로 본다.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -6,85 +7,82 @@ const vm = require('vm');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js'];
-const context = vm.createContext({ console, Math, Set, Object, Array, Infinity, Sfx: { play() {} } });
+const context = vm.createContext({ console, Math, Set, Map, Object, Array, Infinity, JSON, Sfx: { play() {} } });
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), context, { filename: f });
 
-const scenario = `
-function run(plan, options) {
-    options = options || {};
-    Game.reset();
-    const DT = 1 / 30;
-    let guard = 0;
-    while ((Game.state === 'prep' || Game.state === 'wave') && guard++ < 200000) {
-        plan(Game, options);
-        if (Game.bossReward) Game.pickBossReward(Game.bossReward.cards.length - 1); // 보스 보상은 골드를 고른다
-        if (Game.state === 'prep' && options.skipPrep) Game.startWave();
-        Game.update(DT);
+vm.runInContext(`
+// 합칠 수 있는 짝: 조합식을 먼저, 그다음 낮은 등급부터
+function mergePair(G) {
+    const ms = G.monsters.filter(m => !m.removed);
+    let best = null;
+    for (const a of ms) for (const b of ms) {
+        if (a === b) continue;
+        const p = G.mergePlanFor(a, b);
+        if (p.kind === 'none') continue;
+        const score = (p.kind === 'recipe' ? 100 : 0) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade);
+        if (!best || score > best.score) best = { a, b, score };
     }
-    return { state: Game.state, wave: Game.waveIndex + 1, hp: Game.hp, gold: Game.gold, kills: Game.stats.kills,
-        built: Game.monsters.length, corrupted: Game.stats.corrupted, time: Math.round(Game.stats.time) };
+    return best;
 }
-
-// 경로 순서대로 배치 후보를 정렬한다
-const CANDIDATES = [[3,4],[4,5],[3,2],[6,4],[7,6],[9,4],[9,6],[7,2],[11,4],[13,5],[11,6],[14,7],[16,7],[17,6],[16,5],[12,8],[13,4],[3,12],[6,10],[9,2]];
-
-// Why: 게임은 이제 무작위 소환과 합치기로 몬스터를 얻는다. 이 시험은 그 전처럼 원하는 몬스터를 고정 가격(cost)에 사서 놓는
-// 전략만 비교한다. 소환·합치기 판의 밸런스는 아직 재지 않는다(수치가 초안이다).
-function buy(G, type, c, r) {
-    if (G.gold < MONSTERS[type].cost) return false;
-    if (!G.place(type, c, r)) return false;
-    G.gold -= MONSTERS[type].cost;
-    return true;
-}
-
-function nextCell(G, offset) {
-    for (const [c, r] of CANDIDATES.slice(offset || 0)) if (isBuildCell(c, r) && !G.monsterAt(c, r)) return [c, r];
-    return null;
-}
-
-const plans = {
-    nothing() {},
-    archersOnly(G) {
-        const cell = nextCell(G);
-        if (cell) buy(G, 'skeleton_archer', cell[0], cell[1]);
-    },
-    balanced(G) {
-        const n = G.monsters.length;
-        const want = n === 0 ? 'skeleton_archer' : (n % 4 === 1 ? 'orc_guard' : (n % 4 === 3 ? 'dark_mage' : 'skeleton_archer'));
-        const upgradable = G.monsters.find(f => f.tier < 2);
-        if (n >= 5 && upgradable && G.gold >= upgradeCost(upgradable.type, 2)) {
-            G.upgrade(upgradable);
-            return;
+function play(bot, stageId) {
+    Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
+    const G = Game, DT = 1 / 30;
+    const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
+    let guard = 0, thinkMerge = 0;
+    while ((G.state === 'prep' || G.state === 'wave') && guard++ < 400000) {
+        if (G.bossReward) {
+            const c = G.bossReward.cards;
+            let i = bot.equip ? c.findIndex(x => x.kind === 'equip' && G.canTakeReward(x)) : -1;
+            if (i < 0) i = c.findIndex(x => G.canTakeReward(x));
+            G.pickBossReward(i);
         }
-        const t3 = G.monsters.find(f => f.tier === 2);
-        if (n >= 7 && t3 && G.gold >= upgradeCost(t3.type, 3)) {
-            G.upgrade(t3, 'A');
-            return;
+        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= 18)) {
+            thinkMerge = 15; // 사람처럼 0.5초에 한 번만
+            const p = mergePair(G);
+            if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
         }
-        const cell = nextCell(G);
-        if (cell) buy(G, want, cell[0], cell[1]);
-    },
-    skilled(G, o) {
-        plans.balanced(G, o);
-        // 번개는 가장 앞선 무리에, 쓰러진 용사는 여유 있으면 타락
-        if (G.skills.lightning === 0 && G.state === 'wave') {
-            // 길이 둘이라 d가 아니라 왕좌까지 남은 거리로 가장 앞선 용사를 고른다
+        if (bot.upgrade) {
+            const cost = G.summonUpgradeCost();
+            if (cost !== null && G.gold >= cost && G.monsters.length >= 6 && G.upgradeSummon().ok) s.ups++;
+        }
+        if (bot.summon && !G.fieldFull() && G.gold >= G.summonCost() && G.summon().ok) s.summons++;
+        if (bot.equip && G.equipBag.length) {
+            const m = G.monsters.filter(x => !x.equip && !x.removed).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
+            if (m) G.equipMonster(m, 0);
+        }
+        if (bot.skill && G.skills.lightning === 0 && G.state === 'wave') {
             const h = G.heroes.filter(x => !x.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
-            if (h && remainingDistance(h) < ROUTES.north.length * 0.55) { const p = heroWorld(h); castLightning(p.x, p.y); }
+            if (h && remainingDistance(h) < ROUTES.north.length * 0.6) { const p = heroWorld(h); castLightning(p.x, p.y); }
         }
-        if (G.corpses.length && G.gold > 90) corruptCorpse(G.corpses[0]);
+        for (const m of G.monsters) {
+            const g = GRADE_ORDER.indexOf(MONSTERS[m.type].grade);
+            if (g > s.top) s.top = g;
+            if (g >= 3 && !s.legendWave) s.legendWave = G.waveIndex + 1;
+        }
+        G.update(DT);
     }
-};
-
-const out = {};
-for (const name of Object.keys(plans)) {
-    const results = [];
-    for (let i = 0; i < 12; i++) results.push(run(plans[name]));
-    const wins = results.filter(r => r.state === 'victory').length;
-    const avg = key => Math.round(results.reduce((s, r) => s + r[key], 0) / results.length * 10) / 10;
-    out[name] = { wins: wins + '/12', wave: avg('wave'), hp: avg('hp'), built: avg('built'), corrupted: avg('corrupted'), time: avg('time') };
+    return { win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
+        n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
 }
-console.log(JSON.stringify(out, null, 1));
-console.log('build cells', BUILD_CELLS.size, 'path px', ROUTE_IDS.map(id => id + ' ' + Math.round(ROUTES[id].length)).join(', '));
-`;
-vm.runInContext(scenario, context, { filename: 'scenario' });
+`, context);
+
+const BOTS = {
+    '아무것도 안 함': '{}',
+    '소환만': '{summon:true}',
+    '소환+합치기': '{summon:true,merge:true}',
+    '합치기+강화+장비+번개': '{summon:true,merge:true,upgrade:true,equip:true,skill:true}'
+};
+const avg = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+const R = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
+const N = +process.argv[2] || 5;
+const only = process.argv[3];
+const GRADES = vm.runInContext('GRADE_ORDER', context);
+function batch(name, bot, stage) {
+    const rs = [];
+    for (let i = 0; i < N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play(${bot}, ${stage ? `'${stage}'` : 'null'}))`, context)));
+    const count = {};
+    for (const r of rs) count[GRADES[r.top]] = (count[GRADES[r.top]] || 0) + 1;
+    console.log(`${name}${stage ? ' ' + stage : ''} | 승 ${rs.filter(r => r.win).length}/${N} | 라운드 ${R(avg(rs.map(r => r.wave)))}/${rs[0].total} (최소 ${Math.min(...rs.map(r => r.wave))}) | 체력 ${R(avg(rs.map(r => r.hp)))} | ${R(avg(rs.map(r => r.time)) / 60)}분 | 소환 ${R(avg(rs.map(r => r.summons)), 0)} 합치기 ${R(avg(rs.map(r => r.merges)), 0)} 강화 ${R(avg(rs.map(r => r.ups)))} | 최고 ${JSON.stringify(count)} 전설첫 ${R(avg(rs.filter(r => r.legendWave).map(r => r.legendWave)))} | 남은골드 ${R(avg(rs.map(r => r.gold)), 0)} 맵 ${R(avg(rs.map(r => r.n)), 0)}`);
+}
+for (const k of Object.keys(BOTS)) if (!only || k.includes(only)) batch(k, BOTS[k]);
+if (!only) for (const st of ['s1', 's3', 's6']) batch('합치기+강화+장비+번개', BOTS['합치기+강화+장비+번개'], st);

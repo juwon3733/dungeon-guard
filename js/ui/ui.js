@@ -8,9 +8,10 @@ const BAR_FRAME = { x: 470, w: 966, top: GAME_HEIGHT - BAR_H - 6 }; // 가운데
 const BAR_TAB_X = 486; // 틀 왼쪽의 탭 둘(위아래)
 const BAR_TAB_W = 138;
 const BAR_SLOT_X = 640; // 소환 칸과 스킬 칸이 시작하는 곳
-const SUMMON_BTN_W = 300; // 몬스터 탭의 소환 칸(금테, 틀에서 가장 크다)
-const FIELD_COUNT_X = BAR_SLOT_X + SUMMON_BTN_W + 22; // 맵 몬스터 수 표시(현재 수/상한)
-const NEXT_BTN_X = 1560; // 다음 웨이브 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
+const SUMMON_BTN_W = 240; // 몬스터 탭의 소환 칸(금테, 틀에서 가장 크다)
+const UPGRADE_BTN_W = 150; // 소환 강화 칸
+const FIELD_COUNT_X = BAR_SLOT_X + SUMMON_BTN_W + 10 + UPGRADE_BTN_W + 12; // 맵 몬스터 수 표시(현재 수/상한)
+const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
 const TOP_BTN = 60; // 오른쪽 위 아이콘 버튼
@@ -26,7 +27,7 @@ const REWARD_CARD_W = 380; // 보스 보상 카드
 const REWARD_CARD_H = 540;
 const REWARD_CARD_GAP = 44;
 const REWARD_CARD_Y = 290;
-// 하단 바의 장비 보관함(3칸 x 2줄). 마왕 탭(DEMON_TAB_END까지)과 다음 웨이브 버튼(NEXT_BTN_X) 사이라 탭과 관계없이 늘 보인다
+// 하단 바의 장비 보관함(3칸 x 2줄). 마왕 탭(DEMON_TAB_END까지)과 다음 라운드 버튼(NEXT_BTN_X) 사이라 탭과 관계없이 늘 보인다
 const BAG_X = 1250; // 첫 칸. 왼쪽에 가방 아이콘(48px)과 칸 수
 const DEMON_TAB_END = BAG_X - 74; // 마왕 탭의 스킬 칸과 유물 칸이 들어가는 오른쪽 끝(가방 아이콘 왼쪽)
 const BAG_COLS = 3;
@@ -37,7 +38,7 @@ const EQUIP_MAP_ICON = 24;
 const PARTY_X = 1290; // 다음 파티 창 왼쪽(너비 PARTY_W). 오른쪽 위 아이콘 버튼(x 1650부터) 왼쪽
 const PARTY_W = 350;
 const PARTY_ROW = 34; // 파티 목록 한 줄 높이
-const PLATE = { w: 620, h: 58, y: 12 }; // 위쪽 가운데 이름판(지역 이름, 스테이지, 웨이브)
+const PLATE = { w: 620, h: 58, y: 12 }; // 위쪽 가운데 이름판(지역 이름, 스테이지, 라운드)
 // 선택 화면: 위쪽 마왕 카드, 아래쪽 유물 격자(48px 원래 크기)와 고른 유물 칸, 오른쪽 아래 시작 버튼
 const LORD_CARD_W = 500;
 const LORD_CARD_H = 470;
@@ -164,15 +165,15 @@ const UI = {
         small('mute', 'sound', Sfx.muted, () => { Sfx.setMuted(!Sfx.muted); saveSettings(); }, { slash: Sfx.muted, tip: Sfx.muted ? '소리 켜기 (M)' : '소리 끄기 (M)' });
         small('fx', 'gear', Fx.reduce, () => { Fx.reduce = !Fx.reduce; saveSettings(); }, { tip: Fx.reduce ? '효과 줄임 켜짐' : '효과 줄이기' });
         small('pause', 'pause', G.paused, () => { G.paused = !G.paused; }, { tip: G.paused ? '계속 (P)' : '일시정지 (P)' });
-        small('speed', 'fast', G.speed > 1, () => { G.speed = G.speed === 1 ? 2 : 1; }, { corner: `${G.speed}x`, tip: `배속 ${G.speed}x (F)` });
+        small('speed', 'fast', G.speed > 1, () => { G.speed = G.speed % 3 + 1; }, { corner: `${G.speed}x`, tip: `배속 ${G.speed}x (F)` });
 
-        // 보스 보상 3택: 카드만 누를 수 있다(소환, 끌기, 탭, 다음 웨이브는 고른 뒤에)
+        // 보스 보상 3택: 카드만 누를 수 있다(소환, 끌기, 탭, 다음 라운드는 고른 뒤에)
         if (G.bossReward) {
             this.layoutBossReward();
             return;
         }
 
-        // 하단 바: 탭 두 개, 탭에 따라 소환 버튼과 맵 몬스터 수나 마왕 스킬 슬롯, 다음 웨이브
+        // 하단 바: 탭 두 개, 탭에 따라 소환 버튼과 맵 몬스터 수나 마왕 스킬 슬롯, 다음 라운드
         const barY = GAME_HEIGHT - BAR_H;
         this.button('tab_monster', BAR_TAB_X, barY + 8, BAR_TAB_W, 52, { tab: 'monster', label: '몬스터', icon: 'summon', onClick: () => this.setTab('monster') });
         this.button('tab_demon', BAR_TAB_X, barY + 64, BAR_TAB_W, 52, { tab: 'demon', label: '마왕', icon: 'lord', onClick: () => this.setTab('demon') });
@@ -182,6 +183,11 @@ const UI = {
             this.button('summon', BAR_SLOT_X, slotY, SUMMON_BTN_W, 104, {
                 summonBtn: true, disabled: full || G.gold < G.summonCost(), full,
                 onClick: () => this.doSummon()
+            });
+            const upCost = G.summonUpgradeCost();
+            this.button('summonUp', BAR_SLOT_X + SUMMON_BTN_W + 10, slotY, UPGRADE_BTN_W, 104, {
+                upgradeBtn: true, disabled: upCost === null || G.gold < upCost,
+                onClick: () => this.doSummonUpgrade()
             });
         } else {
             // 스킬 칸 둘과 오른쪽의 유물 칸(2줄). 유물 칸이 늘면 스킬 칸이 좁아진다
@@ -202,9 +208,16 @@ const UI = {
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
-                label: G.waveIndex === 0 ? '첫 웨이브' : '다음 웨이브', icon: 'wave', theme: 'gold', size: 30,
+                label: G.waveIndex === 0 ? '첫 라운드' : '다음 라운드', icon: 'wave', theme: 'gold', size: 30,
                 sub: `${bonus > 0 ? `+${bonus}G · ` : ''}${Math.ceil(Math.max(0, G.prepTimer))}초 뒤 자동`,
                 onClick: () => { G.startWave(); this.clearSelection(); }
+            });
+        } else if (G.state === 'wave' && G.waveIndex + 1 < G.waves.length) {
+            // 라운드 중에도 다음 라운드를 불러 남은 시간만큼 골드를 받는다
+            this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
+                label: '다음 라운드', icon: 'wave', size: 30,
+                sub: `+${Math.floor(G.roundTimer * COMBAT_RULES.earlyGoldPerSecond)}G · ${Math.ceil(G.roundTimer)}초 뒤 자동`,
+                onClick: () => { G.nextRound(); }
             });
         }
 
@@ -407,7 +420,7 @@ const UI = {
         const win = G.state === 'victory';
         if (!G.stage) {
             this.button('retry', cx - 210, 770, 420, 90, {
-                label: win ? '다시 도전' : '첫 웨이브부터 다시', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.openSelect(null)
+                label: win ? '다시 도전' : '첫 라운드부터 다시', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.openSelect(null)
             });
             return;
         }
@@ -787,7 +800,18 @@ const UI = {
         this.hoverCell = null;
     },
 
-    startGame() {
+    // 저장한 판 이어하기(본부 버튼)
+    resumeRun() {
+        const d = Game.readRunSave();
+        if (!d) return false;
+        this.stageId = d.stage || null;
+        this.loadout = { lord: d.lord, relics: d.relics || [] };
+        this.startGame(true);
+        return Game.loadRun(d);
+    },
+
+    startGame(keepSave) {
+        if (!keepSave) Game.clearRunSave();
         Game.reset(this.loadout || cleanLoadout(null), this.stageId);
         this.afterRun = Game.stage ? 'pending' : null; // 스테이지를 이기면 승리 대화와 해금 카드
         this.dialogue = null;
@@ -808,6 +832,16 @@ const UI = {
     },
 
     // 소환 버튼과 S 키
+    doSummonUpgrade() {
+        const res = Game.act({ kind: 'upgradeSummon' });
+        if (!res.ok) {
+            if (res.reason === 'gold') this.showToast(`소환 강화에 ${Game.summonUpgradeCost()}G가 필요합니다.`);
+            else if (res.reason === 'max') this.showToast('소환 강화가 최고 단계입니다.');
+            Sfx.play('mergeFail');
+        }
+        return res;
+    },
+
     doSummon() {
         this.setTab('monster');
         const res = Game.summon();
@@ -1146,16 +1180,17 @@ const UI = {
             // 보상을 고르는 동안은 1, 2, 3(숫자 패드 포함)과 배속, 일시정지만 받는다
             const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
             if (m) this.pickReward(Number(m[1]) - 1);
-            else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
+            else if (code === 'KeyF') G.speed = G.speed % 3 + 1;
             else if (code === 'KeyP') G.paused = !G.paused;
             return;
         }
-        if (code === 'Space') { G.startWave(); this.clearSelection(); }
+        if (code === 'Space') { if (G.state === 'wave') G.nextRound(); else G.startWave(); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
+        else if (code === 'KeyU') this.doSummonUpgrade();
         else if (code === 'KeyQ') this.toggleLightning();
         else if (code === 'KeyW') this.useRoar();
         else if (code === 'Tab') this.setTab(this.tab === 'monster' ? 'demon' : 'monster');
-        else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
+        else if (code === 'KeyF') G.speed = G.speed % 3 + 1;
         else if (code === 'KeyP') G.paused = !G.paused;
         else if (code === 'Escape') this.cancel();
     },
@@ -1451,7 +1486,7 @@ const UI = {
         UIKit.icon(ctx, 'pause', cx - 150, y + 36);
         UIKit.text(ctx, '일시정지', cx + 24, y + 62, 52, T.gold, 'center', 'bold');
         UIKit.ink(ctx, `멈춘 채로도 소환, 배치, 합치기${CORRUPTION_ENABLED ? ', 타락' : ''}를 할 수 있습니다.`, cx, y + 114, 21, T.inkSoft, 'center');
-        const keys = [['S', '소환'], ['Tab', '탭 바꾸기'], ['Space', '다음 웨이브'], ['Q', '번개'], ['W', '호통'], ['F', '배속'],
+        const keys = [['S', '소환'], ['Tab', '탭 바꾸기'], ['Space', '다음 라운드'], ['Q', '번개'], ['W', '호통'], ['F', '배속'],
             ['P', '일시정지'], ['M', '소리'], ['Esc', '취소']];
         keys.forEach(([key, label], i) => {
             const kx = x + 60 + (i % 3) * 246;
@@ -1762,7 +1797,7 @@ const UI = {
         }
     },
 
-    // 위쪽 이름판: 금테 육각 판에 지역 이름, 스테이지, 웨이브(Asteria 던전 이름판처럼)
+    // 위쪽 이름판: 금테 육각 판에 지역 이름, 스테이지, 라운드(Asteria 던전 이름판처럼)
     drawTopBar(ctx) {
         const G = Game;
         const T = UI_THEME;
@@ -1775,6 +1810,15 @@ const UI = {
         UIKit.text(ctx, zone.name, x + 46, cy, 19, T.creamSoft);
         const st = stageDef(G.stage);
         UIKit.text(ctx, st ? `${st.no}. ${st.name}` : '시험 판', x + PLATE.w / 2 - 6, cy, 27, T.cream, 'center', 'bold');
+        // 라운드 남은 시간 막대(이름판 아래)
+        if (G.state === 'wave') {
+            const full = G.currentWave().boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime;
+            const w = PLATE.w - 120, bx = x + 60, by = y + h + 2;
+            ctx.fillStyle = 'rgba(8,12,28,0.85)';
+            ctx.fillRect(bx, by, w, 10);
+            ctx.fillStyle = G.roundTimer < 6 ? T.bad : T.gold;
+            ctx.fillRect(bx + 2, by + 2, Math.round((w - 4) * clamp(G.roundTimer / full, 0, 1)), 6);
+        }
         const n = String(Math.min(G.waveIndex + 1, G.waves.length));
         const total = ` / ${G.waves.length}`;
         ctx.font = `20px ${UI_FONT}`;
@@ -1783,7 +1827,7 @@ const UI = {
         UIKit.text(ctx, n, x + PLATE.w - 46 - tw, cy, 32, T.gold, 'right', 'bold');
         ctx.font = `bold 32px ${UI_FONT}`;
         const nw = ctx.measureText(n).width;
-        UIKit.text(ctx, '웨이브', x + PLATE.w - 54 - tw - nw, cy + 1, 19, T.creamSoft, 'right');
+        UIKit.text(ctx, '라운드', x + PLATE.w - 54 - tw - nw, cy + 1, 19, T.creamSoft, 'right');
         if (CORRUPTION_ENABLED) {
             const corrupt = G.units.filter(u => u.kind === 'corrupt').length;
             UIKit.text(ctx, `타락 ${corrupt}/${COMBAT_RULES.corruptMax}`, 22, 40, 26, '#d7a8ff');
@@ -1820,7 +1864,7 @@ const UI = {
         UIKit.text(ctx, `소환 ${G.summonCost()}G`, HUD_GOLD.x + 36, HUD_GOLD.y + 46, 18, T.creamSoft);
         this.drawBag(ctx);
         this.drawBarRelics(ctx);
-        // 웨이브 중에는 바 위 오른쪽에 단축키 안내(준비 중에는 그 자리에 다음 웨이브 버튼)
+        // 라운드 중에는 바 위 오른쪽에 단축키 안내(준비 중에는 그 자리에 다음 라운드 버튼)
         if (G.state === 'wave') UIKit.text(ctx, 'S 소환 · Tab 탭 · Q 번개 · F 배속 · P 일시정지', GAME_WIDTH - 24, y - 30, 18, T.creamSoft, 'right');
     },
 
@@ -2279,6 +2323,7 @@ const UI = {
             const st = this.btnState(b);
             if (b.skill) this.drawSkillButton(ctx, b, st);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, st);
+            else if (b.upgradeBtn) this.drawSummonUpgrade(ctx, b, st);
             else if (b.tab) this.drawTabButton(ctx, b, st);
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, st);
             else if (b.arrow) this.drawArrowButton(ctx, b, st);
@@ -2525,7 +2570,6 @@ const UI = {
             UIKit.text(ctx, '자리 없음', tx, b.y + 76 + dy, 24, T.bad, 'left', 'bold');
         } else {
             UIKit.bigText(ctx, `${cost}G`, tx, b.y + 76 + dy, 32, G.gold < cost ? T.bad : T.gold, 'left', G.gold < cost ? null : '#fff4c0');
-            if (cost < SUMMON_RULES.maxCost) UIKit.text(ctx, `다음 +${SUMMON_RULES.costStep}`, b.x + b.w - 16, b.y + 80 + dy, 16, T.creamSoft, 'right');
         }
         // 맵 몬스터 수: 상한에 닿으면 빨갛게
         const n = G.monsters.length;
@@ -2535,6 +2579,25 @@ const UI = {
             const o = G.summonOdds();
             const odds = GRADE_ORDER.filter(g => o[g] > 0).map(g => `${MONSTER_GRADES[g].name} ${Math.round(o[g] * 100)}%`).join(' · ');
             this.drawTooltip(ctx, b.x, b.y - 100, `몬스터 소환 · ${cost}G`, odds);
+        }
+    },
+
+    // 소환 강화 칸: 지금 단계, 다음 비용. 마우스를 올리면 지금과 다음 확률
+    drawSummonUpgrade(ctx, b, st) {
+        const G = Game;
+        const T = UI_THEME;
+        const dy = st.pressed ? 2 : 0;
+        const cost = G.summonUpgradeCost();
+        UIKit.slot(ctx, b.x, b.y + dy, b.w, b.h, 'iron', st.hover && !st.pressed ? 'hover' : null);
+        this.drawKeyCap(ctx, 'U', b.x + 6, b.y + 6 + dy, 16);
+        UIKit.text(ctx, '소환 강화', b.x + b.w / 2 + 8, b.y + 24 + dy, 19, T.creamSoft, 'center', 'bold');
+        UIKit.bigText(ctx, `${G.summonLevel + 1}단계`, b.x + b.w / 2, b.y + 56 + dy, 30, T.cream, 'center');
+        if (cost === null) UIKit.text(ctx, '최고 단계', b.x + b.w / 2, b.y + 86 + dy, 20, T.gold, 'center', 'bold');
+        else UIKit.text(ctx, `${cost}G`, b.x + b.w / 2, b.y + 86 + dy, 24, G.gold < cost ? T.bad : T.gold, 'center', 'bold');
+        if (st.hover) {
+            const line = odds => GRADE_ORDER.filter(g => odds[g] > 0).map(g => `${MONSTER_GRADES[g].name} ${Math.round(odds[g] * 100)}%`).join(' · ');
+            const next = SUMMON_LEVELS[G.summonLevel + 1];
+            this.drawTooltip(ctx, b.x, b.y - 100, `지금: ${line(SUMMON_LEVELS[G.summonLevel].odds)}`, next ? `다음: ${line(next.odds)}` : '최고 단계입니다');
         }
     },
 
@@ -2861,7 +2924,7 @@ const UI = {
         ctx.restore();
     },
 
-    // 웨이브 완료(남색 창)와 보스 등장(남색 띠에 금테 초상, 빨간 경고와 큰 이름)
+    // 라운드 완료(남색 창)와 보스 등장(남색 띠에 금테 초상, 빨간 경고와 큰 이름)
     drawBanner(ctx) {
         const b = Fx.banner;
         if (!b) return;
@@ -2947,7 +3010,7 @@ const UI = {
             ['소환 / 합치기', `${G.stats.summoned} / ${G.stats.merged}`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ].filter(Boolean);
-        if (!win) rows.splice(0, 1, ['막아 낸 웨이브', `${G.waveIndex} / ${G.waves.length}`]);
+        if (!win) rows.splice(0, 1, ['막아 낸 라운드', `${G.waveIndex} / ${G.waves.length}`]);
         rows.forEach(([k, v], i) => {
             UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
             UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');
@@ -3093,7 +3156,7 @@ const UI = {
         this.drawStoryInfo(ctx);
     },
 
-    // 지도 아래 창: 고른 스테이지의 번호, 이름, 지역, 웨이브 수, 보스, 처음 깰 때의 보상 아이콘
+    // 지도 아래 창: 고른 스테이지의 번호, 이름, 지역, 라운드 수, 보스, 처음 깰 때의 보상 아이콘
     drawStoryInfo(ctx) {
         const T = UI_THEME;
         const I = STORY_INFO;
@@ -3105,7 +3168,7 @@ const UI = {
         UIKit.text(ctx, `${STORY_TITLE.name} · 스테이지 ${st.no} / ${STAGES.length}${zone ? ` · ${zone.name}` : ''}`, I.x + 50, I.y + 50, 24, T.creamSoft);
         UIKit.text(ctx, st.name, I.x + 50, I.y + 110, 56, T.cream, 'left', 'bold');
         UIKit.icon(ctx, 'wave', I.x + 46, I.y + 154);
-        UIKit.text(ctx, `웨이브 ${st.waves.length}`, I.x + 102, I.y + 180, 28, T.gold, 'left', 'bold');
+        UIKit.text(ctx, `라운드 ${st.waves.length}`, I.x + 102, I.y + 180, 28, T.gold, 'left', 'bold');
         if (st.boss) UIKit.text(ctx, `보스 ${BOSSES[st.boss].name}`, I.x + 280, I.y + 180, 26, T.bad, 'left', 'bold');
         if (cleared) UIKit.text(ctx, '깬 스테이지', I.x + 50, I.y + 222, 20, T.good);
         // 처음 깰 때 보상

@@ -153,13 +153,16 @@ const BOSSES = {
 const COMBAT_RULES = {
     startGold: 130,
     maxHp: 20,
-    waveBaseReward: 20,
-    waveStepReward: 5,
+    waveBaseReward: 15,
+    waveStepReward: 1,
     spawnGap: 0.34,
-    prepTime: 20,
-    firstPrepTime: 35,
+    prepTime: 3,        // 라운드를 다 잡은 뒤 다음 라운드까지
+    firstPrepTime: 15,
+    roundTime: 30,      // 라운드 시간. 다 지나면 남은 용사가 있어도 다음 라운드가 시작된다
+    bossRoundTime: 45,
+    spawnWindow: 14,    // 한 라운드의 용사가 이 시간 안에 다 나온다
     earlyGoldPerSecond: 1,
-    hpPerWave: 0.14,
+    hpPerWave: 0.2,
     corpseTime: 5,
     corruptCostMul: 8,
     corruptMax: 3,
@@ -180,18 +183,37 @@ const CORRUPTED = {
 const ENTRY_70_30 = { north: 0.7, south: 0.3 };
 const ENTRY_60_40 = { north: 0.6, south: 0.4 };
 const ENTRY_50_50 = { north: 0.5, south: 0.5 };
-const WAVES = [
-    { party: '신참 원정대', members: { warrior: 9 } },
-    { party: '마을 자경단', members: { warrior: 12 } },
-    { party: '날쌘 도굴꾼', entry: ENTRY_70_30, members: { rogue: 8 }, elites: { elite_tamer: 1 } },
-    { party: '수상한 혼성대', entry: ENTRY_70_30, members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
-    { party: '견습 마법사와 친구들', entry: ENTRY_60_40, boss: 'archmage', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
-    { party: '보물 사냥단', entry: ENTRY_60_40, members: { rogue: 20 }, elites: { elite_tamer: 2, elite_rhapsodist: 1 } },
-    { party: '왕국 정찰대', entry: ENTRY_60_40, members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
-    { party: '은빛 검 기사단', entry: ENTRY_50_50, members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2, elite_rhapsodist: 1 } },
-    { party: '최후의 선봉대', entry: ENTRY_50_50, members: { warrior: 24, rogue: 15, mage: 9 }, elites: { elite_swordsman: 1, elite_tamer: 1, elite_stormcaller: 1 } },
-    { party: '용사단 본대', entry: ENTRY_50_50, boss: 'fallen_knight', members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_rhapsodist: 1, elite_stormcaller: 1 } }
-];
+// 라운드 표(60라운드). 앞 라운드일수록 적게, 뒤로 갈수록 많이. 10라운드마다 보스, 5라운드마다 정예 묶음.
+// 이름은 앞 30개를 뒤 30라운드에 "재집결"로 다시 쓴다. 수치는 플레이 후 고칠 초안이다
+const ROUND_NAMES = ['신참 원정대', '마을 자경단', '날쌘 도굴꾼', '수상한 혼성대', '견습 마법사와 친구들', '보물 사냥단', '왕국 정찰대', '은빛 검 기사단', '최후의 선봉대', '대마도사의 제자들', '국경 수비대', '현상금 사냥꾼', '마법 학회 원정대', '왕실 근위대', '용병 대부대', '야습대', '성기사단', '전쟁 마법사단', '왕국 선봉군', '부대장 친위대', '복수의 원정대', '그림자 추적대', '대마법 연합', '철의 군단', '왕국 총동원령', '끝없는 행렬', '성전의 기사들', '현자의 군세', '왕국 최정예', '용사단 본대'];
+const ROUND_RULES = {
+    count: r => Math.round(8 + r * 1.1),                     // 일반 용사 수(r은 1부터)
+    // 구성 순환: 전사 위주, 도적 무리, 혼성, 마법사 많음
+    mix: [{ warrior: 1 }, { warrior: 0.7, rogue: 0.3 }, { rogue: 1 }, { warrior: 0.6, mage: 0.4 }, { warrior: 0.5, rogue: 0.3, mage: 0.2 }],
+    eliteEvery: 5, eliteBase: 1, elitePer: 15,              // 5라운드마다 정예: 1명 + 15라운드마다 1명
+    elites: ['elite_tamer', 'elite_swordsman', 'elite_stormcaller', 'elite_rhapsodist'],
+    bosses: ['archmage', 'fallen_knight'],                  // 10라운드마다 번갈아
+};
+const WAVES = (function buildRounds() {
+    const out = [];
+    for (let r = 1; r <= 60; r++) {
+        const R = ROUND_RULES;
+        const mix = R.mix[r <= 2 ? 0 : (r - 1) % R.mix.length];
+        const total = R.count(r);
+        const members = {};
+        for (const k of Object.keys(mix)) members[k] = Math.max(1, Math.round(total * mix[k]));
+        const w = { party: (r > 30 ? '재집결 ' : '') + ROUND_NAMES[(r - 1) % 30], members };
+        if (r >= 3) w.entry = r < 5 ? ENTRY_70_30 : (r < 8 ? ENTRY_60_40 : ENTRY_50_50);
+        if (r >= 3 && (r % R.eliteEvery === 0 || r === 3)) {
+            const n = R.eliteBase + Math.floor(r / R.elitePer);
+            w.elites = {};
+            for (let i = 0; i < n; i++) { const e = R.elites[(r + i) % R.elites.length]; w.elites[e] = (w.elites[e] || 0) + 1; }
+        }
+        if (r % 10 === 0) w.boss = R.bosses[(r / 10 - 1) % R.bosses.length];
+        out.push(w);
+    }
+    return out;
+})();
 
 // 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.
 for (const [type, elite] of Object.entries(ELITES)) {

@@ -460,13 +460,13 @@ assert(UI.buttons.find(b => b.id === 'summon').full, 'summon button shows full')
 {
     let pair = null;
     for (const a of Game.monsters) for (const b of Game.monsters) {
-        const plan = mergePlan(a.type, b.type);
+        const plan = Game.mergePlanFor(a, b); // 같은 등급이 3마리 있어야 하므로 맵 상태로 판단한다
         // 히든 조합식은 아래에서 처음 발견을 시험하므로 피한다
         if (!pair && a !== b && plan.kind !== 'none' && !(plan.recipe && plan.recipe.hidden)) pair = [a, b];
     }
     assert(pair, 'some pair can merge among 24');
     const res = Game.merge({ monster: pair[0] }, { monster: pair[1] });
-    assert(res.ok);
+    assert(res.ok, 'merge failed ' + JSON.stringify({ ok: res.ok, reason: res.reason, a: pair[0].type, b: pair[1].type }));
     assert.strictEqual(Game.monsters.length, 24 - res.materials.length + 1, 'merge frees a spot');
     assert.strictEqual(res.materials.length, res.kind === 'grade' ? 3 : 2, 'grade merge uses 3, recipe 2');
     while (Game.monsters.length < 23) Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r)));
@@ -917,10 +917,7 @@ assert.strictEqual(es.bounty, HEROES.mage.bounty * 3);
 assert(ew.anim && ew.sprite === 'pl_elite_duelist' && ew.anim.attack.folder === 'slash' && ew.anim.death.dirs.join() === 'south', 'elite uses PixelLab art');
 assert.strictEqual(CORRUPTED.elite_tamer.hp, CORRUPTED.rogue.hp * 2);
 assert.strictEqual(CORRUPTED.elite_tamer.damage, CORRUPTED.rogue.damage * 2);
-assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
-    const n = Object.values(w.elites || {}).reduce((a, b) => a + b, 0);
-    return n >= 1 && n <= 3;
-}), 'elites from wave 3, 1~3 each');
+assert(!WAVES[0].elites && !WAVES[1].elites && WAVES[2].elites && WAVES.filter(w => w.elites).length >= 12, 'elites from wave 3, then every 5 rounds');
 {
     const hpBefore = Game.hp;
     const e = createHero('elite_swordsman', 3, 0, false);
@@ -1876,13 +1873,14 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     clearBoard();
     Game.hp = COMBAT_RULES.maxHp;
     // 5번째 웨이브: 기존 파티 그대로 대마도사가 나온다. 마지막 웨이브는 부대장 그대로
-    const w5 = WAVES[4];
-    assert.strictEqual(w5.boss, 'archmage');
-    assert.strictEqual(w5.party, '견습 마법사와 친구들');
-    assert.strictEqual(JSON.stringify(w5.members), '{"warrior":15,"mage":3}');
-    assert.strictEqual(JSON.stringify(w5.elites), '{"elite_stormcaller":1}');
+    // 표에는 10라운드마다 보스가 있다. 아래 시험은 5번째 라운드에 임시로 대마도사를 넣어 중간 보스 규칙을 본다
+    assert.strictEqual(WAVES[9].boss, 'archmage');
+    assert.strictEqual(WAVES[19].boss, 'fallen_knight');
     assert.strictEqual(WAVES[WAVES.length - 1].boss, 'fallen_knight');
-    assert.strictEqual(WAVES.filter(w => w.boss).length, 2, 'two boss waves');
+    assert.strictEqual(WAVES.length, 60);
+    assert.strictEqual(WAVES.filter(w => w.boss).length, 6, 'six boss rounds');
+    const w5 = WAVES[4];
+    w5.boss = 'archmage';
     // 체력: 부대장과 같은 계산(전사 x 15 x 웨이브 배율)에 waveHpMul(초안 0.6)
     assert.strictEqual(BOSSES.archmage.waveHpMul, 0.6);
     assert(!BOSSES.fallen_knight.waveHpMul, 'fallen knight keeps full hp');
@@ -1893,7 +1891,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     }
 
     // 보상 표: 몬스터 1장(희귀 또는 영웅, 영웅 40%), 장비 1장(희귀 또는 영웅, 영웅 40%), 골드 300G 1장
-    assert.strictEqual(JSON.stringify(BOSS_REWARD_RULES), '{"monsterCards":1,"epicChance":0.4,"gold":300}');
+    assert.strictEqual(JSON.stringify(BOSS_REWARD_RULES), '{"roundEvery":5,"monsterCards":1,"epicChance":0.4,"gold":300}');
     assert.strictEqual(EQUIP_RULES.rewardEpicChance, 0.4);
     const kinds = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : (c.kind === 'equip' ? c.id : c.type)).join();
     // 난수 순서: 몬스터 등급, 몬스터, 장비 등급, 장비
@@ -1919,7 +1917,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(Game.startWave());
     const mb = Game.heroes.find(h => h.boss);
     assert(mb && mb.bossKey === 'archmage', 'archmage in wave 5');
-    assert.strictEqual(Game.heroes.length, 15 + 3 + 1 + 1);
+    assert.strictEqual(Game.heroes.length, [...Object.values(w5.members), ...Object.values(w5.elites || {})].reduce((a, b) => a + b, 0) + 1);
     assert(Math.abs(mb.maxHp - HEROES.warrior.hp * 15 * (1 + COMBAT_RULES.hpPerWave * 4) * 0.6) < 1e-9, 'wave 5 archmage hp');
     // 보스를 처치해도 전투 중에는 카드를 띄우지 않는다
     const keep = Game.place('orc_guard', 1, 4); // 길로 나가도 보상 카드(x 346부터)에 가리지 않는 자리
@@ -2527,12 +2525,14 @@ assert.strictEqual(Game.units.length, 0);
     Game.summonCount = 0;
 }
 
+delete WAVES[4].boss; // 앞 시험에서 넣은 임시 보스
 // 한 판 끝까지: 보스 패턴 포함, 예외 없이 승리 화면까지 간다
 Game.gold = 6000;
 [[3,4,'skeleton_archer'],[4,5,'dark_mage'],[3,2,'orc_guard'],[7,5,'skeleton_archer'],[9,5,'dark_mage'],[6,10,'skeleton_archer'],[12,4,'orc_guard'],[13,5,'dark_mage'],[14,7,'dark_mage'],[16,7,'skeleton_archer'],[12,6,'dark_mage'],[16,5,'dark_mage'],
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
     [17,10,'orc_guard'],[20,9,'orc_guard'],[22,8,'orc_guard'],[19,10,'skeleton_archer'],[20,6,'dark_mage'],[23,6,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
+Game.heroHpMul = 0.15; // 규칙이 끝까지 도는지 보는 시험이라 난이도는 낮춘다
 let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false, equipped = 0;
 const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
@@ -2550,7 +2550,7 @@ while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
         if (free && Game.equipMonster(free, 0).ok) equipped++;
     }
     if (Game.state === 'prep') Game.startWave();
-    if (Game.waveIndex === 4 && Game.heroes.some(h => h.bossKey === 'archmage')) sawArchmage = true;
+    if (Game.heroes.some(h => h.bossKey === 'archmage')) sawArchmage = true;
     UI.update(1 / 30);
     Game.update(1 / 30);
     if (Game.heroes.some(h => h.elite)) eliteWaves.add(Game.waveIndex);
@@ -2560,8 +2560,8 @@ while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
 }
 assert.strictEqual(Game.state, 'victory', 'wave ' + (Game.waveIndex + 1) + ' hp ' + Game.hp + ' heroes ' + Game.heroes.map(h => h.type + (h.boss ? 'B' : '') + ':' + Math.round(h.d)).join(' '));
 assert(sawCharge && sawStomp, 'boss patterns fired');
-assert(sawArchmage && rewards === 1, 'archmage in wave 5, one boss reward (rewards ' + rewards + ')');
-assert.strictEqual(eliteWaves.size, WAVES.length - 2, 'elites appeared in waves 3..' + WAVES.length);
+assert(sawArchmage && rewards >= 11, 'archmage, a card reward every 5 rounds (rewards ' + rewards + ')');
+assert(eliteWaves.size >= 12, 'elites appeared every 5 rounds');
 assert(equipped >= 1, 'boss reward equipment was equipped');
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });
@@ -2902,9 +2902,9 @@ delete globalThis.localStorage;
 progress(STAGES.length);
 UI.loadout = { lord: 'rift', relics: [] };
 toSelect();
-assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('picked3'), 'three picked slots');
+assert(['picked0', 'picked1', 'picked2', 'picked3'].every(hasBtn) && !hasBtn('picked4'), 'four picked slots');
 {
-    const rects = ['picked0', 'picked1', 'picked2', 'begin'].map(btnOf);
+    const rects = ['picked0', 'picked1', 'picked2', 'picked3', 'begin'].map(btnOf);
     const grid = UI.buttons.filter(b => b.relicId);
     const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     for (const r of rects) for (const g of grid) assert(!overlap(r, g), 'picked slots clear of the grid');
@@ -2913,27 +2913,28 @@ assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('picked3'), 't
 btn('relic_pouch');
 btn('relic_hourglass');
 btn('relic_bottle');
+btn('relic_eye');
 UI.toast = null;
 btn('relic_dice');
-same(UI.loadout.relics, ['pouch', 'hourglass', 'bottle'], 'fourth refused');
+same(UI.loadout.relics, ['pouch', 'hourglass', 'bottle', 'eye'], 'fifth refused');
 assert(UI.toast && UI.toast.text.includes('가득'), 'full toast');
 btn('relic_hourglass');
 btn('relic_dice');
-same(UI.loadout.relics, ['pouch', 'bottle', 'dice']);
+same(UI.loadout.relics, ['pouch', 'bottle', 'eye', 'dice']);
 btn('picked0');
-same(UI.loadout.relics, ['bottle', 'dice'], 'picked slot removes');
+same(UI.loadout.relics, ['bottle', 'eye', 'dice'], 'picked slot removes');
 btn('relic_pouch');
 btn('begin');
-assert(Game.relics.join() === 'bottle,dice,pouch' && Game.gold === COMBAT_RULES.startGold + 100 && Game.summonCost() === 20, 'three relics apply');
+assert(Game.relics.join() === 'bottle,eye,dice,pouch' && Game.gold === COMBAT_RULES.startGold + 100 && Game.summonCost() === 20, 'four relics apply');
 near(Game.lightningDamage(), COMBAT_RULES.lightning.damage * 1.25 * 1.5, 'rift + bottle');
 UI.setTab('demon');
 UI.update(0);
 {
-    const slots = ['barRelic0', 'barRelic1', 'barRelic2'].map(btnOf);
+    const slots = ['barRelic0', 'barRelic1', 'barRelic2', 'barRelic3'].map(btnOf);
     const roar = btnOf('roar');
     const light = btnOf('lightning');
     const bag = btnOf('bag0');
-    assert(slots.every(Boolean) && !hasBtn('barRelic3'), 'three relic slots in the bar');
+    assert(slots.every(Boolean) && !hasBtn('barRelic4'), 'four relic slots in the bar');
     assert(light.x + light.w <= roar.x && slots.every(s => roar.x + roar.w <= s.x && s.x + s.w <= bag.x && s.y + s.h <= GAME_HEIGHT), 'bar layout fits');
     assert(light.w >= 180, 'skill buttons stay readable');
 }
@@ -2942,9 +2943,9 @@ progress(3);
 Game.hp = 1;
 damageThrone(1);
 btn('retry');
-same(UI.loadout.relics, ['dice'], 'locked relic dropped, trimmed to one slot');
+same(UI.loadout.relics, ['eye'], 'locked relic dropped, trimmed to one slot');
 btn('begin');
-assert(Game.relics.join() === 'dice');
+assert(Game.relics.join() === 'eye');
 
 // 마왕 대사: 공통 대사에 고른 마왕의 대사가 더해진다
 progress(STAGES.length);
@@ -3233,7 +3234,7 @@ assert(typeof META_RULES === 'undefined', 'no soul rules');
 assert(Object.values(DEMON_LORDS).every(l => !('unlock' in l)) && Object.values(RELICS).every(r => !('unlock' in r)), 'no prices');
 assert(typeof Meta.buy === 'undefined' && typeof Meta.buySlot === 'undefined' && typeof Meta.price === 'undefined', 'no buying');
 assert.strictEqual(META_VERSION, 3);
-assert.strictEqual(Meta.maxSlots(), 3);
+assert.strictEqual(Meta.maxSlots(), 4);
 
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
@@ -3254,7 +3255,7 @@ assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.hasRelic
 Meta.data.cleared = ids(STAGES);
 same(Meta.lordsOwned(), Object.keys(DEMON_LORDS), 'all lords after the story');
 same(Meta.relicsOwned(), Object.keys(RELICS), 'all relics after the story');
-assert.strictEqual(Meta.relicSlots(), 3);
+assert.strictEqual(Meta.relicSlots(), 4);
 // 깬 목록 순서와 상관없이(이상하게 저장돼도) 계산은 같다
 Meta.data.cleared = ['s5'];
 assert(Meta.hasLord('gold_king') && Meta.hasRelic('banner') && Meta.isOpen('s6') && !Meta.isOpen('s2'), 'computed per stage');
@@ -3321,7 +3322,7 @@ freshWindow();
     const all = memoryStorage();
     all.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: Array.from({ length: 12 }, (_, i) => 's' + (i + 1)), runs: 12, wins: 12, bestStage: 12 });
     freshWindow(all);
-    assert(STAGES.every(st => Meta.isCleared(st.id)) && Meta.data.bestStage === STAGES.length && Meta.relicSlots() === 3, 'v2 complete story stays complete');
+    assert(STAGES.every(st => Meta.isCleared(st.id)) && Meta.data.bestStage === STAGES.length && Meta.relicSlots() === 4, 'v2 complete story stays complete');
     Meta.save();
     assert.strictEqual(stored().version, 3, 'saved as v3');
 }
@@ -3575,14 +3576,13 @@ assert(STORY_TITLE.name && STORY_TITLE.sub, 'one story title');
 same(STAGES.map(s => s.no), [1, 2, 3, 4, 5, 6], 'six stages');
 same(STAGES.map(s => s.name), ['첫 손님', '도굴꾼 소동', '건너편 세입자', '왕국 정찰대', '수금하러 왔다', '부대장의 최후'], 'stage names');
 assert.strictEqual(new Set(ids(STAGES)).size, 6, 'unique ids');
-// 웨이브(표의 인덱스, 겹쳐도 된다). 중간 보스 웨이브(4)는 쓰지 않는다
-same(STAGES.map(s => s.waves), [[0, 1, 2], [1, 2, 3], [2, 3, 5, 6], [3, 5, 6, 7], [5, 6, 7, 8], [6, 7, 8, 8, 9]], 'wave lists');
-assert(STAGES.every(s => !s.waves.includes(4)), 'mid-boss wave unused');
-// 보스는 마지막 웨이브에만: 3·5번 대마도사, 6번 부대장
+// 장 N은 1라운드부터 N*10라운드까지 한 판이다
+same(STAGES.map(s => s.waves.length), [10, 20, 30, 40, 50, 60], 'rounds per chapter');
+assert(STAGES.every(s => s.waves.every((w, i) => w === i)), 'rounds start at 1');
+// 보스는 10라운드마다, 번갈아
 const bosses = s => stageWaves(s).map(w => w.boss || null);
 const before = JSON.stringify(WAVES);
-same(STAGES.map(bosses), [[null, null, null], [null, null, null], [null, null, null, 'archmage'], [null, null, null, null],
-    [null, null, null, 'archmage'], [null, null, null, null, 'fallen_knight']], 'bosses only on the last wave');
+assert(STAGES.every(s => bosses(s).every((b, i) => (b !== null) === ((i + 1) % 10 === 0))), 'boss every 10 rounds');
 assert.strictEqual(JSON.stringify(WAVES), before, 'WAVES untouched');
 // 나머지 값은 WAVES 그대로(파티, 인원, 정예, 입구). 같은 웨이브를 두 번 써도 따로 복사한다
 for (const s of STAGES) {
@@ -3594,10 +3594,9 @@ for (const s of STAGES) {
 }
 {
     const w6 = stageWaves(STAGES[5]);
-    assert(w6[2] !== w6[3] && w6[2].level === 8 && w6[3].level === 8, 'repeated wave copied twice');
 }
 // 체력 배율: 표대로 0.5에서 0.8까지 오른다. 시작 골드 보너스는 줄지 않는다
-same(STAGES.map(s => s.hpMul), [0.5, 0.55, 0.6, 0.65, 0.7, 0.8], 'hp multipliers');
+same(STAGES.map(s => s.hpMul), [0.5, 0.6, 0.7, 0.8, 0.9, 1], 'hp multipliers');
 for (let i = 1; i < STAGES.length; i++) assert(STAGES[i].goldBonus >= STAGES[i - 1].goldBonus && STAGES[i].goldBonus >= 0, 'gold bonus');
 // 해금 표: 스테이지마다 표대로, 마왕 2명과 유물 16종이 한 번씩, 칸 3개(1·4·6번), 엔딩은 6번
 const un = s => s.unlocks.map(u => u.kind === 'slot' || u.kind === 'ending' ? u.kind : u.kind + ':' + u.id);
@@ -3606,7 +3605,7 @@ same(STAGES.map(un), [
     ['relic:chalice', 'relic:dice', 'relic:candle', 'relic:tablet'],
     ['lord:bone_queen', 'relic:shackles', 'relic:drum', 'relic:eye'],
     ['slot', 'relic:handgem', 'relic:hourglass', 'relic:key'],
-    ['lord:gold_king', 'relic:banner', 'relic:bottle'],
+    ['slot', 'lord:gold_king', 'relic:banner', 'relic:bottle'],
     ['slot', 'relic:mirror', 'ending']], 'unlock table');
 {
     const all = STAGES.flatMap(s => s.unlocks);
@@ -3616,8 +3615,8 @@ same(STAGES.map(un), [
     assert.strictEqual(new Set(relics).size, 16);
     same(lords, ['bone_queen', 'gold_king'], 'two lords');
     assert(!lords.includes(DEFAULT_LORD), 'default lord is free');
-    assert.strictEqual(all.filter(u => u.kind === 'slot').length, 3, 'three slots');
-    same([1, 2, 3].map(n => unlockStage('slot', n).no), [1, 4, 6], 'slot stages');
+    assert.strictEqual(all.filter(u => u.kind === 'slot').length, 4, 'four slots');
+    same([1, 2, 3, 4].map(n => unlockStage('slot', n).no), [1, 4, 5, 6], 'slot stages');
     assert(unlockStage('relic', 'mirror').no === 6 && unlockStage('lord', 'gold_king').no === 5 && unlockStage('lord', 'bone_queen').no === 3 && unlockStage('lord', 'rift') === null, 'unlock stage lookup');
 }
 // 대화: 스테이지마다 시작 전과 승리 2~4줄, 말하는 사람은 등장인물 표에 있고 초상이 있다
@@ -3675,9 +3674,9 @@ Game.reset(null, 's2');
 Game.startWave();
 {
     const w = Game.waves[0];
-    assert.strictEqual(w.level, 1);
+    assert.strictEqual(w.level, 0);
     const h = Game.heroes[0];
-    near(h.maxHp, HEROES[h.type].hp * (1 + COMBAT_RULES.hpPerWave * 1) * 0.55, 's2 wave 1 is table wave 2');
+    near(h.maxHp, HEROES[h.type].hp * 0.6, 's2 round 1');
 }
 // 마지막 웨이브의 보스는 스테이지 보스. 그 웨이브가 끝나면 보상 없이 승리(3, 5, 6번 모두)
 for (const st of STAGES.filter(x => x.boss)) {
@@ -3694,23 +3693,25 @@ for (const st of STAGES.filter(x => x.boss)) {
     Game.update(1 / 30);
     assert(Game.state === 'victory' && !Game.bossReward, st.id + ' last-wave boss: victory without reward');
 }
-// 스토리 웨이브 중간에는 보스가 없어 보상 3택이 나오지 않는다
-for (const st of STAGES) {
+// 카드 보상: 5라운드마다, 마지막 라운드는 카드 없이 승리
+{
+    const st = STAGES[0];
     Game.reset(null, st.id);
     for (let i = 0; i < st.waves.length - 1; i++) {
         Game.waveIndex = i;
         Game.state = 'prep';
         Game.bossReward = null;
         Game.startWave();
-        assert(!Game.heroes.some(h => h.boss), st.id + ' wave ' + i + ' has no boss');
         Game.heroes = [];
+        Game.bossDefeated = false;
         Game.update(1 / 30);
-        assert(Game.state === 'prep' && !Game.bossReward, st.id + ' wave ' + i + ' no reward');
+        assert(Game.state === 'prep', 'round ' + (i + 1) + ' cleared');
+        assert.strictEqual(!!Game.bossReward, (i + 1) % BOSS_REWARD_RULES.roundEvery === 0, 'round ' + (i + 1) + ' card');
     }
 }
 // 마지막 웨이브가 아닌 보스(스토리 없는 판의 5번째 웨이브): 지금 규칙대로 보상 3택
 Game.reset();
-Game.waveIndex = 4;
+Game.waveIndex = 9;
 Game.startWave();
 {
     const boss = Game.heroes.find(h => h.boss);
@@ -3774,7 +3775,7 @@ assert(btnOf('roar').x + btnOf('roar').w <= btnOf('bag0').x, 'skills fit');
 UI.setTab('monster');
 assert(Game.summon().ok, 'summon works');
 UI.update(0);
-assert.strictEqual(Game.waves.length, 3, 'stage 1 has three waves');
+assert.strictEqual(Game.waves.length, 10, 'chapter 1 has ten rounds');
 // 진다 → 다시 도전(대화 없이, 고르기도 건너뛰고) 또는 지도
 loseRun();
 assert(hasBtn('retry') && hasBtn('to_hq') && !hasBtn('next_stage'), 'defeat buttons');
@@ -3895,7 +3896,7 @@ freshWindow();
     same(HQ_ROOM.decor.filter(d => d.unlockStage).map(d => d.unlockStage), [2, 4, 6], 'decor at stages 2, 4, 6');
     same(Meta.lordsOwned(), ['rift', 'bone_queen', 'gold_king'], 'three lords');
     same(Meta.relicsOwned(), Object.keys(RELICS), 'sixteen relics');
-    assert.strictEqual(Meta.relicSlots(), 3, 'three slots');
+    assert.strictEqual(Meta.relicSlots(), 4, 'four slots');
     same(seenCards, STAGES.flatMap(s => s.unlocks), 'every unlock card shown once in order');
     assert(seenCards[seenCards.length - 1].kind === 'ending', 'ending card last');
     assert(Meta.data.cleared.length === 6 && Meta.data.bestStage === 6 && Meta.data.wins === 6 && Meta.data.runs === 6, 'records');
@@ -4413,3 +4414,68 @@ console.log('smoke ok: zones');
     assert(corners.every(c => c.open.length >= 2), 'every corner joins two ways');
     console.log('smoke ok: zone maps');
 }
+
+// ----- 소환 강화, 라운드 타이머, 중간 저장 -----
+vm.runInContext(`{
+assert.strictEqual(STAGES.length, 6);
+for (const L of SUMMON_LEVELS) assert(Math.abs(Object.values(L.odds).reduce((a, b) => a + b, 0) - 1) < 1e-9, 'odds sum to 1');
+assert(SUMMON_LEVELS.every(L => !L.odds.mythic), 'mythic is never summoned');
+Game.reset();
+assert.strictEqual(Game.summonLevel, 0);
+Game.gold = 50;
+assert.strictEqual(Game.upgradeSummon().reason, 'gold');
+Game.gold = 100000;
+for (let i = 1; i < SUMMON_LEVELS.length; i++) assert(Game.upgradeSummon().ok, 'level ' + i);
+assert.strictEqual(Game.upgradeSummon().reason, 'max');
+assert.strictEqual(Game.summonUpgradeCost(), null);
+const top = SUMMON_LEVELS[SUMMON_LEVELS.length - 1].odds;
+assert.strictEqual(Game.summonOdds().legendary, top.legendary, 'odds follow the level');
+const seen = new Set();
+for (let i = 0; i < 2000; i++) seen.add(MONSTERS[Game.rollSummon()].grade);
+assert(seen.has('legendary') && !seen.has('mythic'), 'legendary can be summoned at a high level');
+Game.reset();
+assert.strictEqual(Game.summonLevel, 0, 'level resets');
+
+// 라운드: 시간이 지나면 남은 용사와 함께 다음 라운드, 다 잡으면 준비 뒤 다음 라운드, 일찍 부르면 골드
+Game.reset();
+Game.startWave();
+const firstCount = Game.heroes.length;
+assert.strictEqual(Game.roundTimer, COMBAT_RULES.roundTime);
+assert(Game.heroes.every(h => (h.waiting ? h.delay : 0) <= COMBAT_RULES.spawnWindow + 1), 'round spawns inside the window');
+for (const h of Game.heroes) h.speed = 0;
+Game.roundTimer = 0.01;
+Game.update(0.05);
+assert.strictEqual(Game.waveIndex, 1, 'timer starts the next round');
+assert.strictEqual(Game.state, 'wave');
+assert(Game.heroes.length > firstCount, 'leftover heroes stay');
+const g = Game.gold;
+Game.roundTimer = 10;
+assert(Game.nextRound(), 'call the next round early');
+assert(Game.gold > g + 10 - 1, 'early call pays');
+Game.waveIndex = Game.waves.length - 1;
+assert.strictEqual(Game.nextRound(), false, 'last round must be cleared');
+
+// 중간 저장과 이어하기
+const store = {};
+globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+Game.reset({ lord: DEFAULT_LORD, relics: [] }, 's2');
+Game.gold = 777;
+Game.summonLevel = 3;
+Game.waveIndex = 7;
+const m = Game.place('orc_guard', ...[...BUILD_CELLS][0].split(',').map(Number));
+setMonsterRank(m, 2);
+Game.state = 'wave';
+Game.saveRun();
+const d = Game.readRunSave();
+assert(d && d.waveIndex === 7, 'saved');
+Game.reset();
+assert(Game.loadRun(d), 'loaded');
+assert(Game.stage === 's2' && Game.gold === 777 && Game.summonLevel === 3 && Game.waveIndex === 7 && Game.monsters.length === 1 && Game.monsters[0].rank === 2 && Game.state === 'prep', 'restored');
+Game.finish(false);
+assert.strictEqual(Game.readRunSave(), null, 'finish clears the save');
+store[RUN_SAVE_KEY] = '{bad';
+assert.strictEqual(Game.readRunSave(), null, 'broken save ignored');
+delete globalThis.localStorage;
+assert.strictEqual(Game.readRunSave(), null, 'no storage');
+console.log('smoke ok: summon level, rounds, save');
+}`, ctx, { filename: 'smoke-rounds' });
