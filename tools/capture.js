@@ -690,6 +690,27 @@ const SCENES = {
         }
     },
 
+    // 지역 8곳(ZONES)을 차례로: 같은 판에 지역만 바꿔 맵을 다시 그린다. 몬스터 몇과 걷는 용사를 함께 올려 길 폭과 섬 크기를 본다.
+    // 파일은 zones_<지역>.png
+    zones: {
+        setup: () => {
+            startRun();
+            Game.gold = 2000;
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
+            Game.place('frost_witch', 16, 9);
+            Game.waveIndex = 6;
+            Game.startWave();
+            seededRandom(3, () => advance(6));
+            Fx.reset();
+            UI.onMove(GAME_WIDTH / 2, 600);
+            freezeScene();
+        },
+        shots: ['moonGarden', 'coast', 'frost', 'skySea', 'sunForge', 'warTemple', 'starChoir', 'ember'],
+        shot: id => { Game.zone = id; }
+    },
+
     // 몬스터 23종을 모두 맵에 올린 모습(준비 단계). 막는 11종은 서로 다른 길 지점으로 걸어 나가 서고,
     // 원거리·지원 12종은 길에서 떨어진 칸에 선다. 발이 떠 있거나 잘린 몬스터가 없는지 본다
     roster: {
@@ -926,6 +947,18 @@ async function captureScene(browser, url, name, problems) {
     if (scene.afterFreeze) await page.evaluate(scene.afterFreeze);
     // 고정한 상태가 한 번 이상 그려지도록 두 프레임 기다린다
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    if (scene.shots) {
+        // 한 장면에서 여러 장: shot(값)을 부른 뒤 두 프레임 기다려 찍는다
+        let file;
+        for (const v of scene.shots) {
+            await page.evaluate(scene.shot, v);
+            await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+            file = path.join(outDir, `${name}_${v}.png`);
+            await page.screenshot({ path: file });
+        }
+        await page.close();
+        return { file, fps };
+    }
     const file = path.join(outDir, `${name}.png`);
     await page.screenshot({ path: file });
     await page.close();

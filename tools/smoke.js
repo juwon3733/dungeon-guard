@@ -112,9 +112,6 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         if (def.art.impact) assert(sheets[def.art.impact], def.id + ' impact sheet');
     }
 
-    // 그림은 PixelLab으로 만든 것만 남긴다: assets/sprites에는 아래 이름만 있다
-    const KEEP = [/^pl_(?!fac_)/, /^equip_/, /^relic_/, /^lord_/, /^prop2_/, /^uiicon_/, /^tileset_/, /^hq_/, /^ui_kit\.png$/, /^ui_buttons\.png$/];
-    for (const f of fs.readdirSync(path.join(root, 'assets/sprites'))) assert(KEEP.some(re => re.test(f)), 'only PixelLab art remains: ' + f);
     // 본부 그림: 물건 16장(64px)과 바닥 타일셋(128px, 32px 타일 16칸)이 있고 불러오기 목록에 들어 있다. 타일 좌표 JSON은 코드(WANG_TILES)로 옮겨 지웠다
     const hqSprites = vm.runInContext('HQ_SPRITES', actx);
     assert.strictEqual(hqSprites.length, 17, 'sixteen hq pictures and the tileset');
@@ -123,31 +120,9 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         assert.deepStrictEqual(pngSize(name), name === 'tileset_hq' ? [128, 128] : [64, 64], name + ' size');
     }
     assert(!fs.existsSync(path.join(root, 'docs/hq_tileset.json')), 'hq tileset json moved into code');
-    assert.strictEqual(Object.keys(vm.runInContext('WANG_TILES', actx)).length, 16, 'sixteen wang tiles');
     globalThis.HQ_SPRITE_NAMES = hqSprites;
     // 불러오는 그림은 모두 파일이 있다(지운 그림을 부르는 곳이 없다)
-    for (const n of names) {
-        const file = n.startsWith('pfx_') ? path.join(root, 'assets/fx', n + '.png') : path.join(root, 'assets/sprites', n + '.png');
-        assert(fs.existsSync(file), 'loaded picture exists: ' + n);
-    }
-    // 코드에 지운 그림 이름이 남지 않는다
-    const GONE = /['"`](boss_|portrait_|island_|void_|bridgedeck_|tile_(shadow|void)|wall_|prop_|ui_(skillSlot|itemSlot|button(?!s['"`])|closeButton|window)|icon_|enemy_|object_|pl_fac_)|_female|_walk_|ELITE_ART\.footPx/;
-    const jsFiles = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? jsFiles(path.join(dir, e.name)) : (e.name.endsWith('.js') ? [path.join(dir, e.name)] : []));
-    for (const f of [...jsFiles(path.join(root, 'js')), path.join(root, 'tools/capture.js')]) {
-        fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => assert(!GONE.test(line), `removed art referenced: ${path.relative(root, f)}:${i + 1}`));
-    }
-    // 이전 그림의 출처 이름이 저장소 어디에도 없다(파일 이름 포함)
-    {
-        const word = new RegExp(['a', 's', 't', 'e', 'r', 'i', 'a'].join(''), 'i');
-        const { execFileSync } = require('child_process');
-        let tracked = [];
-        try { tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean); } catch (e) { tracked = []; }
-        for (const f of tracked) {
-            assert(!word.test(f), 'old source name in file name: ' + f);
-            if (!/\.(js|mjs|md|json|html|css|txt)$/.test(f) || !fs.existsSync(path.join(root, f))) continue;
-            assert(!word.test(fs.readFileSync(path.join(root, f), 'utf8')), 'old source name in ' + f);
-        }
-    }
+    for (const n of names) assert(fs.existsSync(path.join(root, vm.runInContext(`assetPath(${JSON.stringify(n)})`, actx))), 'loaded picture exists: ' + n);
     // 용사, 정예, 보스: 동작마다 방향 폴더에 프레임 수만큼 그림이 있고 첫 프레임 발끝이 캔버스 안이다
     const heroes = vm.runInContext('HEROES', actx);
     const bosses = vm.runInContext('BOSSES', actx);
@@ -167,19 +142,48 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     for (const id of ['elite_swordsman', 'elite_tamer', 'elite_stormcaller', 'elite_rhapsodist']) {
         assert(heroes[id].anim.death && heroes[id].anim.death.dirs.join() === 'south', id + ' dies facing south');
     }
-    // 맵 그림: 타일셋은 128px(32px 타일 4x4), 소품은 64px, Wang 표는 꼭짓점 16가지를 모두 담는다
-    const wang = vm.runInContext('WANG_TILES', actx);
-    assert.strictEqual(Object.keys(wang).length, 16, 'sixteen wang tiles');
-    for (let k = 0; k < 16; k++) {
-        const key = k.toString(2).padStart(4, '0');
-        const [x, y, w, h] = wang[key];
-        assert(w === 32 && h === 32 && x % 32 === 0 && y % 32 === 0 && x < 128 && y < 128, 'wang tile ' + key);
+    // 지역 8곳: 우주 배경, 섬, 다리 그림(webp)이 있고 불러오기 목록에 들어 있다. 다리 자르기 범위는 원본(1024px) 안이다.
+    // 지역 소품은 64px 그림이고 발끝 높이가 있다
+    const zones = vm.runInContext('ZONES', actx);
+    assert.deepStrictEqual(Object.keys(zones), ['moonGarden', 'coast', 'frost', 'skySea', 'sunForge', 'warTemple', 'starChoir', 'ember'], 'eight zones');
+    const webpSize = file => {
+        const b = fs.readFileSync(file);
+        assert.strictEqual(b.toString('ascii', 0, 4) + b.toString('ascii', 8, 12), 'RIFFWEBP', file + ' is webp');
+        const t = b.toString('ascii', 12, 16);
+        if (t === 'VP8X') return [1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)];
+        if (t === 'VP8L') { const v = b.readUInt32LE(21); return [(v & 0x3fff) + 1, ((v >> 14) & 0x3fff) + 1]; }
+        return [b.readUInt16LE(26) & 0x3fff, b.readUInt16LE(28) & 0x3fff];
+    };
+    for (const [id, z] of Object.entries(zones)) {
+        for (const kind of ['void', 'island', 'bridgedeck']) {
+            const name = `${kind}_${id}`;
+            const file = path.join(root, 'assets/sprites', name + '.webp');
+            assert(fs.existsSync(file), 'zone art ' + name);
+            assert(names.includes(name), name + ' in Assets.names()');
+            const [w, h] = webpSize(file);
+            assert(w >= 1000 && h >= 900, name + ' size');
+            if (kind === 'bridgedeck') assert(z.deck[0] >= 0 && z.deck[1] <= h && z.deck[1] - z.deck[0] >= 300, id + ' deck crop inside');
+        }
+        assert(typeof z.name === 'string' && z.name.length > 1, id + ' name');
+        assert(z.light.length === 4 && z.vignette.length === 4 && z.vignette[3] <= 0.2, id + ' light and a light vignette');
+        assert(z.gate.length === 3 && z.post.length === 3, id + ' gate and post colors');
+        assert(z.props.length >= 1 && z.props.length <= 4, id + ' few props');
+        for (const [sprite] of z.props) {
+            assert.deepStrictEqual(pngSize(sprite), [64, 64], sprite + ' is 64px');
+            assert(names.includes(sprite), sprite + ' in Assets.names()');
+            assert(typeof vm.runInContext(`propFootPx('${sprite}')`, actx) === 'number', sprite + ' foot');
+        }
     }
-    for (const t of ['tileset_path', 'tileset_water']) assert.deepStrictEqual(pngSize(t), [128, 128], t);
-    for (const d of vm.runInContext('DECOR', actx)) {
-        assert.deepStrictEqual(pngSize(d.sprite), [64, 64], d.sprite + ' is 64px');
-        assert(typeof vm.runInContext(`propFootPx('${d.sprite}')`, actx) === 'number', d.sprite + ' foot');
+    assert.deepStrictEqual(pngSize('prop2_throne'), [64, 64], 'throne chair');
+    // 맵 타일셋은 지웠다(본부 바닥 tileset_hq만 남는다)
+    for (const t of ['tileset_path', 'tileset_water']) assert(!fs.existsSync(path.join(root, 'assets/sprites', t + '.png')), t + ' removed');
+    // UI 재질: 48px 9칸 원본 6장. 양피지와 나무판(ui_kit, ui_buttons)은 쓰지 않는다
+    for (const n of vm.runInContext('UI_SHEETS', actx)) {
+        assert.deepStrictEqual(pngSize(n), [48, 48], n + ' is 48px');
+        assert(names.includes(n), n + ' in Assets.names()');
     }
+    assert(!names.includes('ui_kit') && !names.includes('ui_buttons'), 'no parchment or wood kit');
+    for (const f of ['js/ui/uikit.js', 'js/ui/ui.js', 'js/ui/hq.js']) assert(!/ui_kit|ui_buttons|UI_HP_BAR/.test(fs.readFileSync(path.join(root, f), 'utf8')), f + ' does not use the old kit');
 }
 vm.runInContext(`
 // 입력은 main.js와 같은 길로 넣는다: 누름(onDown) → 움직임(onMove) → 뗌(onUp). 마우스와 터치가 같은 pointer 이벤트다
@@ -1829,20 +1833,17 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert.strictEqual(JSON.stringify(ROUTE_TILES.south), '[[0,11],[10,11],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
     assert(MERGE_TILE.col === 10 && MERGE_TILE.row === 8 && THRONE_TILE.col === 27 && THRONE_TILE.row === 7);
     for (const key of BUILD_CELLS) { const r = Number(key.split(',')[1]); assert(r >= 2 && r <= 12, 'build rows 2..12: ' + key); }
-    // 물가는 건설 칸, 길, 왕좌 둘레에 들어가지 않고 길과 왕좌 둘레에 붙지 않는다. 소품은 건설 칸과 길(입구 문 제외)에 놓이지 않는다
-    assert(WATER_MAP.length === MAP_ROWS && WATER_MAP.every(line => line.length === MAP_COLS), 'water map size');
-    for (let c = 0; c < MAP_COLS; c++) for (let r = 0; r < MAP_ROWS; r++) {
-        if (!isWaterCell(c, r)) continue;
-        assert(!isBuildCell(c, r), 'water off build cells ' + c + ',' + r);
-        for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
-            assert(!isPathCell(c + dc, r + dr) && !isThroneArea(c + dc, r + dr), 'water away from path ' + c + ',' + r);
+    // 건설 칸은 지역과 관계없이 그대로다(179칸, 이전 맵과 같은 칸). 소품 자리(PROP_CELLS)는 건설 칸이 아니다
+    assert.strictEqual(BUILD_CELLS.size, 179, 'build cell count');
+    assert.strictEqual([...BUILD_CELLS].sort().join(' '), '1,10 1,12 1,2 1,4 1,5 1,9 10,12 10,2 11,10 11,11 11,12 11,2 11,4 11,5 11,6 11,7 11,8 11,9 12,10 12,11 12,12 12,2 12,4 12,5 12,6 12,7 12,8 12,9 13,10 13,11 13,12 13,2 13,4 13,5 13,6 13,7 13,8 13,9 14,10 14,11 14,12 14,2 14,4 14,5 14,6 14,7 14,8 14,9 15,12 15,2 16,10 16,12 16,2 16,3 16,4 16,5 16,6 16,7 16,8 16,9 17,10 17,12 17,2 17,3 17,4 17,5 17,6 17,7 17,8 17,9 18,10 18,12 18,9 19,10 19,12 19,5 19,6 19,7 19,8 19,9 2,10 2,12 2,2 2,4 2,5 2,9 20,10 20,12 20,5 20,6 20,7 20,8 20,9 21,12 21,5 21,6 22,10 22,11 22,12 22,5 22,6 22,8 22,9 23,10 23,11 23,12 23,5 23,6 23,8 23,9 24,5 24,6 24,8 24,9 25,5 25,6 25,8 25,9 26,9 27,9 28,9 3,10 3,12 3,2 3,4 3,5 3,6 3,7 3,8 3,9 4,10 4,12 4,2 4,4 4,5 4,6 4,7 4,8 4,9 5,10 5,12 5,2 5,9 6,10 6,12 6,2 6,3 6,4 6,5 6,6 6,7 6,9 7,10 7,12 7,2 7,3 7,4 7,5 7,6 7,7 7,9 8,10 8,12 8,2 8,3 8,4 8,5 8,6 8,7 8,9 9,10 9,12 9,2 9,3 9,4 9,5 9,6 9,7 9,9', 'build cells unchanged');
+    for (const [c, r] of PROP_CELLS) assert(!isBuildCell(c, r) && !isPathCell(c, r) && !isThroneArea(c, r), 'prop cell ' + c + ',' + r);
+    // 지역 소품은 건설 칸, 길, 왕좌 둘레에 놓이지 않는다
+    for (const id of ZONE_IDS) {
+        for (const [sprite, c, r] of ZONES[id].props) {
+            assert(!isBuildCell(c, r) && !isPathCell(c, r) && !isThroneArea(c, r), id + ' prop on free land ' + sprite + ' ' + c + ',' + r);
+            assert(c >= 0 && c < MAP_COLS && r >= 0 && r < MAP_ROWS, id + ' prop inside the map');
         }
     }
-    for (const p of DECOR) {
-        assert(!isBuildCell(p.col, p.row) && !isWaterCell(p.col, p.row), 'decor on free land ' + p.sprite + ' ' + p.col + ',' + p.row);
-        assert(!isPathCell(p.col, p.row) || p.sprite === 'prop2_gate', 'only gates stand on the path');
-    }
-    for (const g of ROUTE_IDS.map(id => ROUTES[id].tiles[0])) assert(DECOR.some(p => p.sprite === 'prop2_gate' && p.col === g[0] && p.row === g[1]), 'gate at every entrance');
     // 왕좌 둘레(제물 판정)는 건설 칸이 아니다
     for (let c = 0; c < MAP_COLS; c++) for (let r = 0; r < MAP_ROWS; r++) {
         if (isThroneArea(c, r)) assert(!isBuildCell(c, r) && Game.onThrone(tileX(c), tileY(r)), 'throne area ' + c + ',' + r);
@@ -4096,3 +4097,67 @@ Meta.data = Meta.fresh();
 UI.openSelect(null);
 console.log('smoke ok: ui layout');
 }`, ctx, { filename: 'smoke-ui' });
+
+// 지역: 스테이지 표의 zone, 판을 시작하면 Game.zone이 바뀐다. 스토리 없는 판(시험 도구)은 ember
+vm.runInContext(`{
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
+same(STAGES.map(s => s.zone), ['moonGarden', 'coast', 'frost', 'skySea', 'sunForge', 'warTemple'], 'stage zones');
+assert(STAGES.every(s => ZONES[s.zone]), 'every stage zone exists');
+assert.strictEqual(DEFAULT_ZONE, 'ember', 'no-story zone');
+for (const s of STAGES) {
+    Game.reset(null, s.id);
+    assert.strictEqual(Game.zone, s.zone, s.id + ' zone');
+    assert.strictEqual(zoneOf(s.id), s.zone);
+}
+Game.reset();
+assert(Game.stage === null && Game.zone === 'ember', 'test run is ember');
+assert.strictEqual(zoneOf('nope'), 'ember', 'unknown stage falls back');
+assert.strictEqual(Object.keys(WANG_TILES).length, 16, 'sixteen hq wang tiles');
+console.log('smoke ok: zones');
+}`, ctx, { filename: 'smoke-zones' });
+
+// 맵 그리기: 지역 8곳을 차례로 바꿔 다시 그려도 오류가 없고, 바꾼 지역의 섬·배경·다리 그림을 부른다(가짜 캔버스).
+// 판 중에는 Game.zone, 그 밖에는 고른 스테이지(UI.stageId)의 지역을 그린다
+{
+    const calls = [];
+    const fakeCtx = () => new Proxy({}, {
+        get(t, k) {
+            if (k in t) return t[k];
+            if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => ({ addColorStop() {} });
+            if (k === 'measureText') return s => ({ width: String(s).length * 10 });
+            return (...args) => { if (k === 'drawImage') calls.push(args[0] && args[0].name); };
+        },
+        set(t, k, v) { t[k] = v; return true; }
+    });
+    const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
+    const rctx = vm.createContext({ console, Math, Set, Map, Object, Array, Number, String, JSON, document });
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
+        vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
+    }
+    vm.runInContext(`
+        var loadedNames = [];
+        var Assets = { get(name) { loadedNames.push(name); return { name, width: name.startsWith('bridgedeck_') ? 1536 : 1254, height: 1024 }; }, tinted() { return null; } };
+        var Game = { state: 'prep', zone: 'ember', time: 1, inPlay() { return this.state === 'prep' || this.state === 'wave'; } };
+        var UI = { stageId: null };
+    `, rctx);
+    for (const id of vm.runInContext('ZONE_IDS', rctx)) {
+        calls.length = 0;
+        vm.runInContext(`Game.zone = '${id}'; Render.buildMap(Render.zoneNow());`, rctx);
+        assert.strictEqual(vm.runInContext('Render.mapZone', rctx), id, id + ' map built');
+        for (const kind of ['void', 'island', 'bridgedeck']) assert(calls.includes(`${kind}_${id}`), id + ' draws ' + kind);
+        assert(calls.filter(n => n === `bridgedeck_${id}`).length > 20, id + ' deck along the path');
+        // 문과 소품 그리기도 오류가 없다
+        vm.runInContext(`for (const g of Render.gates()) Render.drawGate(document.createElement('canvas').getContext('2d'), g, ZONES['${id}']);`, rctx);
+    }
+    // 판 밖(타이틀, 시작 전 대화)은 고른 스테이지의 지역
+    vm.runInContext(`Game.state = 'story'; UI.stageId = 's2';`, rctx);
+    assert.strictEqual(vm.runInContext('Render.zoneNow()', rctx), 'coast', 'story screen uses the picked stage zone');
+    vm.runInContext(`UI.stageId = null;`, rctx);
+    assert.strictEqual(vm.runInContext('Render.zoneNow()', rctx), 'ember', 'title uses ember');
+    // 꺾이는 곳: 합류점(10,8)은 세 쪽(왼쪽, 아래, 위)이 열린 T자
+    const corners = vm.runInContext('Render.deckCorners().map(c => ({ x: c.x, y: c.y, open: [...c.open].sort() }))', rctx);
+    const merge = corners.find(c => c.x === 10 * 96 + 48 && c.y === 8 * 96 + 48);
+    assert(merge && JSON.stringify(merge.open) === JSON.stringify(['-1,0', '0,-1', '0,1']), 'merge tile is a T junction');
+    assert(corners.every(c => c.open.length >= 2), 'every corner joins two ways');
+    console.log('smoke ok: zone maps');
+}

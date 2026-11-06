@@ -1,4 +1,4 @@
-// 1지역 지하 정원의 경로. 입구마다 왕좌까지 가는 꺾은선을 적고, 거리 계산은 아래에서 만든다.
+// 맵 경로(모든 지역이 같다). 입구마다 왕좌까지 가는 꺾은선을 적고, 거리 계산은 아래에서 만든다.
 // 합류형: 남쪽 길은 합류점(10,8)에서 북쪽 길과 만나 그 뒤로는 같은 칸을 지난다(docs/MULTI_PATH.md 5절).
 // 합류 뒤 구간은 두 길에서 좌표와 남은 거리(length - d)가 같으므로 길이 달라도 남은 거리로 비교할 수 있다.
 // 길이는 북쪽 49칸, 남쪽 47칸이다(이전 맵과 같다)
@@ -92,81 +92,43 @@ function remainingDistance(h) { return ROUTES[h.route || 'north'].length - h.d; 
 
 function isPathCell(col, row) { return PATH_CELLS.has(col + ',' + row); }
 
-// Wang 타일(tileset_path, tileset_water, 본부 바닥 tileset_hq 공통 배치). 열쇠는 꼭짓점 NW, NE, SW, SE가 upper면 1, lower면 0.
-// tileset_hq는 그림에서 upper가 나무 바닥, lower가 붉은 카펫이다(js/ui/hq.js의 HQ_ROOM.carpet).
-// 값은 타일셋 안의 bounding_box [x, y, 너비, 높이](32px)다. 두 타일셋의 lower(이끼 바닥)는 같은 그림이라 이어진다.
-// upper는 tileset_path에서 벽돌 길, tileset_water에서 물가다
-const WANG_TILES = {
-    '1101': [0, 0, 32, 32],
-    '1010': [32, 0, 32, 32],
-    '0100': [64, 0, 32, 32],
-    '1100': [96, 0, 32, 32],
-    '0110': [0, 32, 32, 32],
-    '1000': [32, 32, 32, 32],
-    '0000': [64, 32, 32, 32],
-    '0001': [96, 32, 32, 32],
-    '1011': [0, 64, 32, 32],
-    '0011': [32, 64, 32, 32],
-    '0010': [64, 64, 32, 32],
-    '0101': [96, 64, 32, 32],
-    '1111': [0, 96, 32, 32],
-    '1110': [32, 96, 32, 32],
-    '1001': [64, 96, 32, 32],
-    '0111': [96, 96, 32, 32]
+// 지역: 우주 배경(void_) 위에 떠 있는 섬(island_)과 다리 길(bridgedeck_). 판을 시작할 때 이번 지역으로 맵을 다시 그린다(Render.buildMap).
+// 스테이지 표(STAGES)의 zone이 지역이고, 스토리 없는 판(시험 도구)은 DEFAULT_ZONE이다.
+//   name: 표지판에 함께 보이는 지역 이름
+//   deck: 다리 그림(1536x1024)에서 난간까지 포함한 세로 범위 [위, 아래](원본 px). 아래 매달린 장식은 자른다
+//   props: 소품 [그림, 열, 줄]. 섬 그림에 장식이 있어 적게 쓰고, PROP_CELLS나 건설 칸 밖에만 놓는다
+//   light: 섬 가운데를 밝히는 빛 [r, g, b, 세기], vignette: 가장자리에 지역 색을 얹는 세기(어둡게 덮지 않는다)
+//   gate: 입구 소용돌이 문 색 [바깥, 가운데, 빛], post: 꺾이는 곳 기둥 색 [테, 몸, 빛]
+const ZONES = {
+    moonGarden: { name: '달빛 정원', deck: [288, 760], props: [['prop2_crystal', 18, 6], ['prop2_pillar', 18, 8], ['prop2_mushrooms', 1, 7]],
+        light: [150, 190, 255, 0.16], vignette: [120, 110, 220, 0.16], gate: ['#3b5bd9', '#8fd0ff', '180,220,255'], post: ['#1b2440', '#6d7fb0', '#bfe3ff'] },
+    coast: { name: '별모래 해안', deck: [272, 712], props: [['prop2_boulder', 18, 6], ['prop2_chest', 18, 8], ['prop2_boulder', 25, 11]],
+        light: [255, 230, 170, 0.12], vignette: [60, 190, 170, 0.14], gate: ['#17807a', '#7af0d8', '150,255,230'], post: ['#3a2814', '#a07a4a', '#ffe0a0'] },
+    frost: { name: '서리 봉우리', deck: [272, 712], props: [['prop2_crystal', 18, 6], ['prop2_crystal', 18, 8], ['prop2_crystal', 19, 3]],
+        light: [200, 235, 255, 0.12], vignette: [90, 170, 255, 0.16], gate: ['#2a78d6', '#c8f0ff', '190,235,255'], post: ['#1c3350', '#8ab8e0', '#e8f8ff'] },
+    skySea: { name: '하늘 바다', deck: [256, 728], props: [['prop2_crystal', 18, 6], ['prop2_boulder', 18, 8]],
+        light: [150, 240, 230, 0.14], vignette: [60, 160, 255, 0.16], gate: ['#1d7fd0', '#8ff4ff', '150,240,255'], post: ['#1f3a3a', '#6fa8a0', '#c8fff0'] },
+    sunForge: { name: '태양의 대장간', deck: [280, 744], props: [['prop2_brazier', 18, 6], ['prop2_brazier', 18, 8], ['prop2_cauldron', 19, 3]],
+        light: [255, 170, 80, 0.16], vignette: [255, 120, 40, 0.16], gate: ['#c2410c', '#ffd27a', '255,200,110'], post: ['#2a1608', '#8a5a2a', '#ffcc55'] },
+    warTemple: { name: '전쟁 신전', deck: [256, 768], props: [['prop2_banner', 18, 6], ['prop2_obelisk', 18, 8], ['prop2_brazier', 1, 7]],
+        light: [255, 150, 120, 0.12], vignette: [220, 40, 50, 0.16], gate: ['#9b1c2c', '#ff9a7a', '255,140,120'], post: ['#1a1418', '#5a4a52', '#ff5a4a'] },
+    starChoir: { name: '별의 성가대', deck: [256, 784], props: [['prop2_obelisk', 18, 6], ['prop2_crystal', 18, 8]],
+        light: [180, 170, 255, 0.16], vignette: [130, 90, 255, 0.18], gate: ['#5b3bd9', '#d8c8ff', '210,190,255'], post: ['#1e1a3a', '#6a5fb0', '#e0d0ff'] },
+    ember: { name: '잿불 균열', deck: [232, 728], props: [['prop2_brazier', 18, 6], ['prop2_brazier', 18, 8], ['prop2_bones', 1, 7]],
+        light: [255, 140, 70, 0.14], vignette: [255, 80, 30, 0.16], gate: ['#b8320c', '#ffb050', '255,170,80'], post: ['#1a1010', '#4a3a3a', '#ff7a2a'] }
 };
-
-// 물가: '~'가 물(tileset_water의 upper), 나머지는 이끼 바닥이다. 한 줄이 MAP_COLS칸, MAP_ROWS줄.
-// 물은 건설 칸, 길, 왕좌 둘레에 들어가지 않고 길과 왕좌 둘레에 붙지도 않는다(한 타일에 길과 물이 함께 오면 이을 타일이 없다).
-// 입구 쪽(왼쪽)과 왕좌 쪽(오른쪽)은 비워 둔다
-const WATER_MAP = [
-    '...~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-    '....~~~...~~~~~~~~~~~~~~~~....',
-    '....................~~~~~.....',
-    '.....................~~~......',
-    '..............................',
-    '..............................',
-    '..............................',
-    '..............................',
-    '..............................',
-    '..............................',
-    '...........................~~~',
-    '..........................~~~~',
-    '.........................~~~~~',
-    '...~~~~~...~~~~~~~~~~~~~~~~~~~',
-    '..~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
-];
-function isWaterCell(col, row) {
-    const line = WATER_MAP[clamp(row, 0, MAP_ROWS - 1)];
-    return line[clamp(col, 0, MAP_COLS - 1)] === '~';
+const ZONE_IDS = Object.keys(ZONES);
+const DEFAULT_ZONE = 'ember'; // 스토리 없는 판(시험 도구)
+// 판의 지역: 스테이지 표의 zone, 없으면 DEFAULT_ZONE
+function zoneOf(stageId) {
+    const st = typeof STAGES !== 'undefined' ? STAGES.find(s => s.id === stageId) : null;
+    return st && ZONES[st.zone] ? st.zone : DEFAULT_ZONE;
 }
 
-// 소품(prop2_<이름>, 64px 그림을 화면 2배). 놓인 칸은 건설 불가다. 그림이 2x2칸쯤이라 건설 칸이 없는 빈 곳에만 놓는다.
-// 입구 문(gate)은 길 첫 칸에 걸쳐 세우고, 왕좌(throne)는 drawThrone이 마왕 뒤에 그린다
-const DECOR = [
-    { sprite: 'prop2_gate', col: 0, row: 3 },
-    { sprite: 'prop2_gate', col: 0, row: 11 },
-    { sprite: 'prop2_tree', col: 1, row: 1 },
-    { sprite: 'prop2_cauldron', col: 8, row: 1 },
-    { sprite: 'prop2_crystal', col: 19, row: 3 },
-    { sprite: 'prop2_boulder', col: 26, row: 1 },
-    { sprite: 'prop2_stairs', col: 28, row: 2 },
-    { sprite: 'prop2_chest', col: 29, row: 4 },
-    { sprite: 'prop2_brazier', col: 29, row: 5 },
-    { sprite: 'prop2_brazier', col: 29, row: 9 },
-    { sprite: 'prop2_obelisk', col: 18, row: 6 },
-    { sprite: 'prop2_pillar', col: 18, row: 8 },
-    { sprite: 'prop2_banner', col: 0, row: 5 },
-    { sprite: 'prop2_cage', col: 1, row: 7 },
-    { sprite: 'prop2_mushrooms', col: 0, row: 9 },
-    { sprite: 'prop2_tree', col: 25, row: 11 },
-    { sprite: 'prop2_bones', col: 8, row: 13 },
-    { sprite: 'prop2_spikes', col: 1, row: 14 }
-];
+// 소품 자리: 건설 칸에서 빼 두는 칸. 지역 소품은 이 칸이나 건설 칸 밖에 놓는다(지역이 바뀌어도 건설 칸은 같다)
+const PROP_CELLS = [[19, 3], [28, 2], [18, 6], [18, 8], [1, 7], [25, 11]];
 // 소품 그림(64px 캔버스) 안의 발끝 높이: 그림의 맨 아래 줄. 칸 아래쪽(PROP_FOOT_Y)에 맞춘다
-const PROP_FOOT = {
-    banner: 62, bones: 51, boulder: 57, brazier: 61, cage: 63, cauldron: 60, chest: 58, crystal: 59,
-    gate: 62, mushrooms: 59, obelisk: 62, pillar: 62, spikes: 59, stairs: 57, throne: 62, tree: 62
-};
+const PROP_FOOT = { banner: 62, bones: 51, boulder: 57, brazier: 61, cauldron: 60, chest: 58, crystal: 59, mushrooms: 59, obelisk: 62, pillar: 62, throne: 62 };
 const PROP_FOOT_Y = 39; // 칸 가운데에서 소품 발끝까지 아래로 내린 거리(세계 px). 칸 아래 끝(48)보다 조금 위
 function propFootPx(sprite) { return PROP_FOOT[sprite.replace('prop2_', '')]; }
 
@@ -175,10 +137,10 @@ const BUILD_REACH = 2; // 길에서 이 칸 수까지 지을 수 있다
 // Why: 길에서 너무 먼 칸까지 열면 사거리 낭비만 늘고, 2칸까지는 가까이 지을지 물러날지 판단이 생긴다.
 const BUILD_CELLS = (function findBuildCells() {
     const result = new Set();
-    for (let r = 2; r <= MAP_ROWS - 3; r++) { // 맨 위 두 줄과 맨 아래 두 줄은 HUD와 물가 자리다(2~12줄)
+    for (let r = 2; r <= MAP_ROWS - 3; r++) { // 맨 위 두 줄과 맨 아래 두 줄은 HUD와 섬 가장자리 자리다(2~12줄)
         for (let c = 1; c <= MAP_COLS - 2; c++) {
             if (isPathCell(c, r)) continue;
-            if (DECOR.some(p => p.col === c && p.row === r)) continue;
+            if (PROP_CELLS.some(([pc, pr]) => pc === c && pr === r)) continue;
             if (isThroneArea(c, r)) continue;
             let near = false;
             for (let dy = -BUILD_REACH; dy <= BUILD_REACH; dy++) {

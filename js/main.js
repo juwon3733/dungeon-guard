@@ -61,11 +61,11 @@ function frame(now) {
 }
 
 function drawLoading() {
-    ctx.fillStyle = UI_THEME.walnutDark;
+    ctx.fillStyle = UI_THEME.navyDark;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     const ratio = Assets.total ? Assets.loaded / Assets.total : 0;
-    UIKit.text(ctx, '던전 수호대', GAME_WIDTH / 2, 470, 80, UI_THEME.cream, 'center');
-    UIKit.bar(ctx, GAME_WIDTH / 2 - 300, 560, 600, 24, ratio, UI_THEME.wax);
+    UIKit.text(ctx, '던전 수호대', GAME_WIDTH / 2, 470, 80, UI_THEME.cream, 'center', 'bold');
+    UIKit.bar(ctx, GAME_WIDTH / 2 - 300, 560, 600, 24, ratio, UI_THEME.goldLine);
 }
 
 window.addEventListener('resize', fitCanvas);
@@ -111,7 +111,7 @@ fitCanvas();
 loadSettings();
 Meta.load(); // 영구 수집 기록(못 읽으면 초기값)
 Assets.loadAll(() => {
-    Render.buildMap();
+    Render.buildMap(Render.zoneNow());
     ready = true;
 });
 requestAnimationFrame(frame);

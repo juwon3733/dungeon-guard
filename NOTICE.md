@@ -2,8 +2,15 @@
 
 ## 그림
 
-`assets/sprites/`의 그림(캐릭터, 마왕, 맵 타일, 소품, 장비, 유물, UI)은 모두 이 게임을 위해 PixelLab(https://www.pixellab.ai)으로 만든 것입니다.
-다른 게임에서 가져온 이전 그림은 모두 지웠습니다. 만든 그림의 목록과 규격은 `docs/PIXELLAB_ASSETS.md`에 있습니다.
+`assets/sprites/`의 캐릭터, 마왕, 소품, 장비, 유물, UI 아이콘(`uiicon_*`), 본부 그림은 이 게임을 위해 PixelLab(https://www.pixellab.ai)으로 만든 것입니다.
+만든 그림의 목록과 규격은 `docs/PIXELLAB_ASSETS.md`에 있습니다.
+
+## Asteria 그림
+
+아래 그림은 이 게임의 제작자가 직접 만든 게임 Asteria의 그림입니다. 제작자의 결정(2026-11-07, "Asteria 정도 느낌, Asteria 티 나도 돼")으로 다시 씁니다.
+
+- 지역 8곳의 섬, 우주 배경, 다리: `island_<지역>.webp`, `void_<지역>.webp`, `bridgedeck_<지역>.webp` (`moonGarden`, `coast`, `frost`, `skySea`, `sunForge`, `warTemple`, `starChoir`, `ember`)
+- UI 틀: `ui_window.png`, `ui_button.png`, `ui_buttonHover.png`, `ui_closeButton.png`, `ui_itemSlot.png`, `ui_skillSlot.png`, 원본 키트 `asteria_ui_kit.png`
 
 ## pixelfx
 
