@@ -440,6 +440,18 @@ const Render = {
     drawMonster(ctx, m) {
         const def = MONSTERS[m.type];
         const footY = m.y + MONSTER_FOOT;
+        if (m.reveal > 0) return; // 합치기 결과: 빨려 들어가는 연출이 끝나면 나타난다
+        // 끄는 중인 몬스터는 제자리에 흐리게 남긴다
+        const dragged = UI.drag && UI.drag.src.monster === m;
+        if (dragged) {
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+        }
+        this.drawMonsterInner(ctx, m, def, footY);
+        if (dragged) ctx.restore();
+    },
+
+    drawMonsterInner(ctx, m, def, footY) {
         if (m.down > 0) {
             this.drawRespawn(ctx, def, m);
             return;
@@ -471,10 +483,11 @@ const Render = {
         else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
         this.monsterBody(ctx, def, m, img, clip);
 
-        // 단계 표시
-        for (let i = 0; i < m.tier; i++) {
+        // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
+        this.gradeMark(ctx, m.x, footY + 20, def.grade);
+        for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
             const sx = m.x - (m.tier - 1) * 11 + i * 22;
-            const sy = footY + 20;
+            const sy = footY + 40;
             ctx.fillStyle = '#120c20';
             ctx.fillRect(sx - 8, sy - 8, 16, 16);
             ctx.fillStyle = m.tier >= 3 ? '#ffd76a' : '#c8a6ff';
@@ -487,9 +500,190 @@ const Render = {
         }
     },
 
+    // 등급 마름모: 일반은 작고 흐리게, 희귀 이상은 크고 빛나게
+    gradeMark(ctx, x, y, grade) {
+        const color = MONSTER_GRADES[grade].color;
+        const s = grade === 'common' ? 6 : 9;
+        ctx.save();
+        if (grade !== 'common') {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(${MONSTER_GRADES[grade].glow},${0.25 + Math.sin(Game.time * 4 + x) * 0.08})`;
+            ctx.beginPath();
+            ctx.ellipse(x, y - 20, 42, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        ctx.fillStyle = '#120c20';
+        ctx.beginPath();
+        ctx.moveTo(x, y - s - 4); ctx.lineTo(x + s + 4, y); ctx.lineTo(x, y + s + 4); ctx.lineTo(x - s - 4, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    },
+
+    // 합칠 수 있는 몬스터 발밑의 고리. hot이면 지금 놓으려는 대상이다
+    mergeRing(ctx, x, y, color, hot) {
+        const pulse = 0.8 + Math.sin(Game.time * 8) * 0.2;
+        ctx.save();
+        ctx.globalAlpha = hot ? 1 : pulse;
+        ctx.lineWidth = hot ? 8 : 5;
+        ctx.strokeStyle = color;
+        ctx.setLineDash(hot ? [] : [12, 8]);
+        ctx.lineDashOffset = -Game.time * 50;
+        ctx.beginPath();
+        ctx.ellipse(x, y, hot ? 54 : 46, hot ? 19 : 16, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (hot) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.25;
+            ctx.fill();
+        }
+        ctx.restore();
+    },
+
+    // 소환·합치기 연출 한 개. pt(점)는 { bench } 또는 세계 좌표를 연출 중심(세계 좌표)으로 바꾼다
+    //   합치기: delay 동안 두 몬스터가 하얗게 달아오르며 결과 자리로 빨려 들어가고, 그 뒤 빛이 터진다
+    //   터진 뒤: 등급 색 빛, 빛줄기(희귀 이상), 퍼지는 고리, 불꽃, 결과 이름. 등급이 높을수록 크고 길다
+    drawPop(ctx, p, pt) {
+        const g = GRADE_FX[p.grade] || GRADE_FX.common;
+        const rgb = MONSTER_GRADES[p.grade].glow;
+        const to = pt(p.to);
+        ctx.imageSmoothingEnabled = false;
+        if (p.kind === 'merge' && p.age < p.delay) {
+            const k = p.age / p.delay;
+            const e = k * k;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const glow = ctx.createRadialGradient(to.x, to.y, 4, to.x, to.y, 50 + 110 * k);
+            glow.addColorStop(0, `rgba(255,255,255,${0.7 * k})`);
+            glow.addColorStop(0.4, `rgba(${rgb},${0.5 * k})`);
+            glow.addColorStop(1, `rgba(${rgb},0)`);
+            ctx.fillStyle = glow;
+            ctx.fillRect(to.x - 170, to.y - 170, 340, 340);
+            ctx.restore();
+            p.from.forEach((f, i) => {
+                const from = pt(f);
+                const side = i ? 1 : -1;
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const swirl = Math.sin(k * Math.PI) * Math.min(80, len * 0.3) * side;
+                const x = from.x + dx * e - dy / len * swirl;
+                const y = from.y + dy * e + dx / len * swirl;
+                // 꼬리 불꽃
+                ctx.fillStyle = `rgba(${rgb},${0.8 * k})`;
+                for (let j = 1; j <= 4; j++) {
+                    const kk = Math.max(0, k - j * 0.06);
+                    const ee = kk * kk;
+                    const sw = Math.sin(kk * Math.PI) * Math.min(80, len * 0.3) * side;
+                    ctx.fillRect(Math.round(from.x + dx * ee - dy / len * sw) - 4, Math.round(from.y + dy * ee + dx / len * sw) - 4, 8, 8);
+                }
+                const name = `${MONSTERS[p.fromTypes[i]].sprite}/rotations/south`;
+                const white = Math.round(Math.min(1, k * 1.6) * 4) / 4; // 색 입힌 사본 캐시가 늘지 않게 4단계로 끊는다
+                const img = white > 0 ? Assets.tinted(name, '#ffffff', white) : Assets.get(name);
+                this.sprite(ctx, img, x, y + 40 * (1 - 0.6 * e), 2 * (1 - 0.6 * e));
+            });
+            return;
+        }
+        const t = p.age - p.delay;
+        const T = g.pop;
+        const k = clamp(t / T, 0, 1);
+        const fade = 1 - k;
+        const ease = 1 - Math.pow(1 - k, 3);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        // 터지는 빛
+        const flash = clamp(1 - t / 0.35, 0, 1);
+        const r0 = 60 + g.rays * 6 + 120 * ease;
+        const glow = ctx.createRadialGradient(to.x, to.y, 4, to.x, to.y, r0);
+        glow.addColorStop(0, `rgba(255,255,255,${0.9 * flash + 0.25 * fade})`);
+        glow.addColorStop(0.35, `rgba(${rgb},${0.6 * fade})`);
+        glow.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = glow;
+        ctx.fillRect(to.x - r0, to.y - r0, r0 * 2, r0 * 2);
+        // 빛기둥: 희귀 이상
+        if (g.rays) {
+            const colH = 260 + g.rays * 14;
+            const col = ctx.createLinearGradient(0, to.y - colH, 0, to.y + 30);
+            col.addColorStop(0, `rgba(${rgb},0)`);
+            col.addColorStop(1, `rgba(${rgb},${0.55 * fade})`);
+            ctx.fillStyle = col;
+            const cw = 30 + g.rays * 2;
+            ctx.fillRect(to.x - cw / 2, to.y - colH, cw, colH + 30);
+        }
+        // 빛줄기
+        for (let i = 0; i < g.rays; i++) {
+            const ang = p.seed + i / g.rays * Math.PI * 2 + t * 0.9;
+            const len = 90 + 220 * ease + (i % 2) * 40;
+            ctx.fillStyle = `rgba(${i % 2 ? '255,255,255' : rgb},${0.45 * fade})`;
+            ctx.beginPath();
+            ctx.moveTo(to.x, to.y);
+            ctx.lineTo(to.x + Math.cos(ang - 0.07) * len, to.y + Math.sin(ang - 0.07) * len);
+            ctx.lineTo(to.x + Math.cos(ang + 0.07) * len, to.y + Math.sin(ang + 0.07) * len);
+            ctx.closePath();
+            ctx.fill();
+        }
+        // 퍼지는 고리
+        for (let i = 0; i < (g.rays ? 2 : 1); i++) {
+            const kk = clamp(k * 1.4 - i * 0.25, 0, 1);
+            if (kk <= 0 || kk >= 1) continue;
+            ctx.globalAlpha = 1 - kk;
+            ctx.strokeStyle = i ? '#ffffff' : `rgb(${rgb})`;
+            ctx.lineWidth = 10 * (1 - kk) + 2;
+            ctx.beginPath();
+            ctx.arc(to.x, to.y, 30 + (140 + g.rays * 8) * Math.sqrt(kk), 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        // 불꽃: 상태 없이 시간과 번호로 위치를 정한다
+        for (let i = 0; i < g.sparks; i++) {
+            const ang = p.seed * 3 + i * 2.39996;
+            const dist = (70 + (i % 7) * 26 + g.rays * 5) * ease;
+            const x = to.x + Math.cos(ang) * dist;
+            const y = to.y + Math.sin(ang) * dist * 0.8 + k * k * 90;
+            const sz = i % 3 === 0 ? 10 : 6;
+            ctx.fillStyle = i % 3 === 0 ? `rgba(255,255,255,${fade})` : `rgba(${rgb},${fade})`;
+            ctx.fillRect(Math.round(x / 2) * 2 - sz / 2, Math.round(y / 2) * 2 - sz / 2, sz, sz);
+        }
+        ctx.restore();
+        // 결과 그림의 하얀 섬광: 커졌다가 줄며 사라진다
+        if (t < 0.3) {
+            const name = `${MONSTERS[p.type].sprite}/rotations/south`;
+            ctx.save();
+            ctx.globalAlpha = 1 - t / 0.3;
+            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 40, 2 + (1 - t / 0.3) * 1.2);
+            ctx.restore();
+        }
+        // 결과 이름과 등급: 합치기는 언제나, 소환은 희귀 이상만
+        if (p.kind === 'merge' || p.grade !== 'common') {
+            const big = p.grade === 'epic' || p.grade === 'legendary';
+            const a = clamp(Math.min(t / 0.12, (T + 0.4 - t) / 0.3), 0, 1);
+            const popK = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
+            const label = p.kind === 'summon' ? `${MONSTER_GRADES[p.grade].name} 등장!` : MONSTERS[p.type].name;
+            const size = Math.round((big ? 44 : 32) * popK / WORLD_ZOOM);
+            // 대기 칸 연출 글자는 단축키 안내 줄(화면 y 934)보다 위에 띄운다
+            const ly = (p.to.bench !== undefined ? to.y - 250 : to.y - 130) - t * 30;
+            const lx = clamp(to.x, 220, WORLD_WIDTH - 220);
+            ctx.save();
+            ctx.globalAlpha = a;
+            UIKit.text(ctx, label, lx, ly, size, MONSTER_GRADES[p.grade].light, 'center');
+            if (p.kind === 'summon' || p.grade !== 'common') {
+                const sub = p.kind === 'summon' ? MONSTERS[p.type].name : `${MONSTER_GRADES[p.grade].name}!`;
+                UIKit.text(ctx, sub, lx, ly + size * 0.95, Math.round(22 / WORLD_ZOOM), '#ffffff', 'center');
+            }
+            ctx.restore();
+        }
+    },
+
     // 막는 몬스터가 놓인 칸: 길로 나간 동안 칸이 비어 보이지 않게 바닥에 표식을 남긴다
     drawMonsterHome(ctx, m) {
-        if (!m.blocks || m.down > 0) return;
+        if (!m.blocks || m.down > 0 || m.reveal > 0) return;
         const x = m.homeX;
         const y = m.homeY + MONSTER_FOOT;
         ctx.save();
@@ -622,14 +816,15 @@ const Render = {
 
     // 몬스터를 놓을 수 있는 길 옆 칸: 건설 모드에서는 밝게, 준비 시간에는 흐리게 보여 준다. 길 칸에는 놓을 수 없다
     drawBuildPads(ctx) {
-        const placing = UI.placing;
+        const placing = !!UI.drag;
         if (!placing && Game.state !== 'prep') return;
         const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
         const color = '190,150,255';
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
-            if (Game.monsterAt(c, r)) continue;
+            const occupant = Game.monsterAt(c, r);
+            if (occupant && !(UI.drag && UI.drag.src.monster === occupant)) continue;
             const x = c * TILE;
             const y = MAP_TOP + r * TILE;
             if (placing) {
@@ -643,7 +838,7 @@ const Render = {
 
     // 건설 모드에서 마우스가 있는 칸: 지을 수 있으면 금색, 없으면 빨간색
     drawHoverCell(ctx) {
-        const cell = UI.placing && UI.hoverCell;
+        const cell = UI.drag && UI.hoverCell;
         if (!cell || Game.state === 'title') return;
         const ok = UI.canPlaceAt(cell.col, cell.row);
         const x = cell.col * TILE;

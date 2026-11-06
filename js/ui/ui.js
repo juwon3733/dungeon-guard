@@ -3,14 +3,24 @@ const BAR_H = 124; // 하단 바 높이
 const BAR_TAB_X = 206; // 체력 구슬 오른쪽의 탭 버튼
 const BAR_SLOT_X = 362; // 첫 슬롯 위치
 const BAR_SLOT_W = 236;
+const SUMMON_BTN_W = 186; // 몬스터 탭의 소환 버튼
+const BENCH_X = BAR_SLOT_X + SUMMON_BTN_W + 12; // 첫 대기 칸
+const BENCH_CELL = 104; // 대기 칸 한 변
+const BENCH_GAP = 8;
+const NEXT_BTN_X = 1132;
+const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
 
 const UI = {
     mouse: { x: 0, y: 0 },
     buttons: [],
     hoverCell: null,
     selectedMonster: null,
-    tab: 'monster', // 하단 바 탭: 'monster' 몬스터 배치, 'demon' 마왕 스킬
-    placing: null, // 건설 모드에서 놓을 몬스터 id
+    selectedBench: null, // 누른 대기 칸 번호
+    tab: 'monster', // 하단 바 탭: 'monster' 소환과 대기 칸, 'demon' 마왕 스킬
+    press: null, // 몬스터를 누른 순간: { src, x, y }. DRAG_START 넘게 움직이면 drag가 된다
+    drag: null, // 끄는 중: { src, type, x, y }. src는 { bench } 또는 { monster }
+    dropTarget: null, // 끄는 동안 손가락 아래 놓을 곳(미리보기용)
+    returning: [], // 놓지 못해 제자리로 날아가는 그림
     hoverCorpse: null,
     hoverButton: null,
     targeting: false,
@@ -50,33 +60,42 @@ const UI = {
         small('pause', G.paused ? '▶' : 'II', G.paused, () => { G.paused = !G.paused; });
         small('speed', `${G.speed}x`, G.speed > 1, () => { G.speed = G.speed === 1 ? 2 : 1; });
 
-        // 하단 바: 탭 두 개, 탭에 따라 몬스터 슬롯이나 마왕 스킬 슬롯, 다음 웨이브
+        // 하단 바: 탭 두 개, 탭에 따라 소환 버튼과 대기 칸이나 마왕 스킬 슬롯, 다음 웨이브
         const barY = GAME_HEIGHT - BAR_H;
         this.button('tab_monster', BAR_TAB_X, barY + 8, 136, 52, { tab: 'monster', label: '몬스터', onClick: () => this.setTab('monster') });
         this.button('tab_demon', BAR_TAB_X, barY + 66, 136, 52, { tab: 'demon', label: '마왕', onClick: () => this.setTab('demon') });
         const slotY = barY + 12;
         const slotX = i => BAR_SLOT_X + i * (BAR_SLOT_W + 10);
         if (this.tab === 'monster') {
-            MONSTER_SLOTS.forEach((type, i) => {
-                this.button(`place_${type}`, slotX(i), slotY, BAR_SLOT_W, 104, {
-                    card: type, hotkey: String(i + 1), disabled: G.gold < MONSTERS[type].cost,
-                    onClick: () => this.pickMonster(type)
-                });
+            const full = G.freeBenchSlot() < 0;
+            this.button('summon', BAR_SLOT_X, slotY, SUMMON_BTN_W, BENCH_CELL, {
+                summonBtn: true, disabled: full || G.gold < SUMMON_RULES.cost, full,
+                onClick: () => this.doSummon()
             });
+            for (let i = 0; i < SUMMON_RULES.benchSize; i++) {
+                const r = this.benchRect(i);
+                // 대기 칸은 누르면 바로 동작하지 않는다. 떼는 순간 끌기인지 누르기인지 나눈다(onDown, onUp)
+                this.button(`bench_${i}`, r.x, r.y, r.w, r.h, { bench: i });
+            }
         } else {
             this.button('lightning', slotX(0), slotY, BAR_SLOT_W, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
             this.button('roar', slotX(1), slotY, BAR_SLOT_W, 104, { skill: 'roar', onClick: () => this.useRoar() });
         }
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
-            this.button('next', slotX(3) + 20, barY + 22, 330, 84, {
+            this.button('next', NEXT_BTN_X, barY + 22, 320, 84, {
                 label: G.waveIndex === 0 ? '첫 웨이브 시작' : `다음 웨이브  +${bonus}G`, theme: 'gold', size: 28,
                 sub: `${Math.ceil(Math.max(0, G.prepTimer))}초 뒤 자동 시작`,
                 onClick: () => { G.startWave(); this.clearSelection(); }
             });
         }
 
-        if (this.selectedMonster) this.layoutMonsterMenu();
+        if (this.selectedMonster || this.selectedBench !== null) this.layoutMonsterMenu();
+    },
+
+    // 대기 칸 i의 화면 사각형
+    benchRect(i) {
+        return { x: BENCH_X + i * (BENCH_CELL + BENCH_GAP), y: GAME_HEIGHT - BAR_H + 12, w: BENCH_CELL, h: BENCH_CELL };
     },
 
     popupOrigin(worldX, worldY, w, h) {
@@ -89,16 +108,42 @@ const UI = {
         return { x, y };
     },
 
+    // 지금 고른 몬스터: { type, loc }. 끄는 중이면 끄는 몬스터다
+    focus() {
+        if (this.drag) return { type: this.drag.type, loc: this.drag.src };
+        if (this.selectedMonster) return { type: this.selectedMonster.type, loc: { monster: this.selectedMonster } };
+        if (this.selectedBench !== null && Game.bench[this.selectedBench]) return { type: Game.bench[this.selectedBench], loc: { bench: this.selectedBench } };
+        return null;
+    },
+
+    // 화면에 보여 줄 합치기 결과. 히든 조합식은 드러내지 않는다(등급 합치기가 되면 그것으로, 아니면 '???')
+    shownPlan(a, b) {
+        const plan = mergePlan(a, b);
+        if (plan.kind !== 'recipe' || !plan.recipe.hidden) return plan;
+        if (MONSTERS[a].grade === MONSTERS[b].grade && nextGrade(MONSTERS[a].grade)) return { kind: 'grade', grade: nextGrade(MONSTERS[a].grade) };
+        return { kind: 'unknown' };
+    },
+
+    // 팝업 줄: 이름과 수치, 함께 합칠 수 있는 몬스터, 판매. 강화는 MONSTER_UPGRADE_ENABLED일 때만
     layoutMonsterMenu() {
         const f = this.selectedMonster;
-        const def = MONSTERS[f.type];
-        const w = 360;
-        const rows = f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0);
-        const h = 108 + rows * 88 + 62;
-        const o = this.popupOrigin(f.x, f.y, w, h);
-        this.popup = { x: o.x, y: o.y, w, h, monster: f };
-        let y = o.y + 100;
-        if (f.tier === 1) {
+        const type = f ? f.type : Game.bench[this.selectedBench];
+        if (!type) { this.clearSelection(); return; }
+        const def = MONSTERS[type];
+        const recipes = publicRecipesFor(type);
+        const upgrades = f && MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
+        const w = 460;
+        const h = 166 + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
+        let o;
+        if (f) {
+            o = this.popupOrigin(f.x, f.y, w, h);
+        } else {
+            const r = this.benchRect(this.selectedBench);
+            o = { x: clamp(r.x + r.w / 2 - w / 2, 12, GAME_WIDTH - w - 12), y: r.y - 24 - h };
+        }
+        this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
+        let y = o.y + h - 64 - upgrades * 88;
+        if (upgrades === 1) {
             const cost = upgradeCost(f.type, 2);
             this.button('up2', o.x + 12, y, w - 24, 80, {
                 upgrade: { name: '2단계 강화', desc: f.blocks ? '피해·체력 +50%' : '피해 +50%', cost },
@@ -106,7 +151,7 @@ const UI = {
                 onClick: () => { if (!Game.upgrade(f)) this.showToast('골드가 부족합니다.'); }
             });
             y += 88;
-        } else if (f.tier === 2) {
+        } else if (upgrades === 2) {
             const cost = upgradeCost(f.type, 3);
             for (const key of ['A', 'B']) {
                 const b = def.branches[key];
@@ -117,55 +162,207 @@ const UI = {
                 y += 88;
             }
         }
-        const refund = Math.floor(f.invested * COMBAT_RULES.sellRefund);
+        const slot = this.selectedBench;
         this.button('sell', o.x + 12, y, w - 24, 50, {
-            label: `판매  +${refund}G`, theme: 'danger', size: 22,
-            onClick: () => { Game.sell(f); this.clearSelection(); }
+            label: `판매  +${Game.sellValue(type)}G`, theme: 'danger', size: 22,
+            onClick: () => {
+                if (f) Game.sell(f);
+                else Game.sellBench(slot);
+                this.clearSelection();
+            }
         });
     },
 
     clearSelection() {
         this.selectedMonster = null;
+        this.selectedBench = null;
         this.popup = null;
     },
 
-    // 우클릭과 Esc: 건설 모드, 번개 조준, 몬스터 선택을 모두 끈다
+    // 우클릭과 Esc: 끌기, 번개 조준, 몬스터 선택을 모두 끈다
     cancel() {
         this.clearSelection();
-        this.placing = null;
+        this.cancelDrag();
         this.targeting = false;
+    },
+
+    cancelDrag() {
+        this.press = null;
+        this.drag = null;
+        this.dropTarget = null;
+        this.hoverCell = null;
     },
 
     startGame() {
         Game.reset();
         Game.speed = 1;
         this.cancel();
+        this.returning = [];
         this.tab = 'monster';
     },
 
     setTab(tab) {
         if (this.tab === tab) return;
         this.tab = tab;
-        if (tab !== 'monster') this.placing = null;
+        if (tab !== 'monster') { this.cancelDrag(); this.selectedBench = null; }
         if (tab !== 'demon') this.targeting = false;
     },
 
-    // 몬스터 슬롯을 고르면 건설 모드가 된다. 같은 슬롯을 다시 고르면 취소한다
-    pickMonster(type) {
-        if (!type) return;
+    // 소환 버튼과 S 키
+    doSummon() {
         this.setTab('monster');
-        if (this.placing === type) { this.placing = null; return; }
-        const def = MONSTERS[type];
-        if (Game.gold < def.cost) {
-            this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
-            return;
+        const res = Game.summon();
+        if (res.ok) {
+            this.targeting = false;
+            return res;
         }
-        this.placing = type;
-        this.targeting = false;
-        this.clearSelection();
+        if (res.reason === 'full') this.showToast('대기 칸이 가득 찼습니다. 몬스터를 맵에 놓거나 합치세요.');
+        else if (res.reason === 'gold') this.showToast(`소환에는 ${SUMMON_RULES.cost}골드가 필요합니다.`);
+        Sfx.play('mergeFail');
+        return res;
     },
 
-    canPlaceAt(col, row) { return !!this.placing && Game.canPlace(this.placing, col, row); },
+    // 끄는 몬스터를 (col, row) 칸에 놓을 수 있는지. 맵의 몬스터는 자기 칸으로 돌아가는 것도 된다(아무 일 없음)
+    canPlaceAt(col, row) {
+        if (!this.drag) return false;
+        const src = this.drag.src;
+        if (src.monster && src.monster.col === col && src.monster.row === row) return true;
+        return Game.canPlace(this.drag.type, col, row);
+    },
+
+    // 화면 좌표 아래 놓을 곳: { bench: i } | { monster } | { cell: {col, row} } | null(하단 바 등)
+    dropAt(x, y) {
+        const b = this.buttonAt(x, y);
+        if (b && b.bench !== undefined) return Game.bench[b.bench] ? { bench: b.bench, occupied: true } : { bench: b.bench };
+        if (b || y > GAME_HEIGHT - BAR_H) return null;
+        const wx = x / WORLD_ZOOM;
+        const wy = y / WORLD_ZOOM;
+        const col = Math.floor(wx / TILE);
+        const row = Math.floor((wy - MAP_TOP) / TILE);
+        const m = Game.monsterAt(col, row) || Game.monsterNear(wx, wy);
+        if (m) return { monster: m };
+        return { cell: { col, row } };
+    },
+
+    // 놓으면 일어날 일(미리보기와 실제 처리가 같이 쓴다)
+    //   merge: 합치기(plan은 화면용) / place: 칸에 놓기·옮기기 / bench: 빈 대기 칸으로 / back: 제자리 / invalid: 놓을 수 없음(reason)
+    dropAction(t) {
+        const d = this.drag;
+        if (!d || !t) return { action: 'back' };
+        const src = d.src;
+        if (t.monster || t.occupied) {
+            const loc = t.monster ? { monster: t.monster } : { bench: t.bench };
+            if (Game.sameLoc(src, loc)) return { action: 'back' };
+            const plan = this.shownPlan(d.type, Game.typeAt(loc));
+            const real = mergePlan(d.type, Game.typeAt(loc));
+            return real.kind === 'none' ? { action: 'invalid', loc, reason: real.reason, plan } : { action: 'merge', loc, plan };
+        }
+        if (t.bench !== undefined) {
+            if (src.monster) return { action: 'invalid', reason: 'toBench' };
+            return { action: 'bench', slot: t.bench };
+        }
+        const { col, row } = t.cell;
+        if (src.monster && src.monster.col === col && src.monster.row === row) return { action: 'back' };
+        if (Game.canPlace(d.type, col, row)) return { action: 'place', col, row };
+        let reason = 'cell';
+        if (isPathCell(col, row)) reason = 'path';
+        return { action: 'invalid', reason, col, row };
+    },
+
+    // 대기 칸이나 맵의 몬스터를 누른다. 다른 곳은 바로 클릭으로 처리한다
+    onDown(x, y, shift) {
+        Sfx.unlock();
+        this.onMove(x, y);
+        this.layout();
+        this.press = null;
+        const b = this.buttonAt(x, y);
+        const inGame = Game.inPlay();
+        if (b && b.bench !== undefined) {
+            if (Game.bench[b.bench]) this.press = { src: { bench: b.bench }, x, y };
+            else this.clearSelection();
+            return;
+        }
+        if (!b && inGame && !this.targeting) {
+            const wx = x / WORLD_ZOOM;
+            const wy = y / WORLD_ZOOM;
+            const col = Math.floor(wx / TILE);
+            const row = Math.floor((wy - MAP_TOP) / TILE);
+            if (!this.corpseAt(wx, wy)) {
+                const m = Game.monsterAt(col, row) || Game.monsterNear(wx, wy);
+                if (m) {
+                    this.press = { src: { monster: m }, x, y };
+                    return;
+                }
+            }
+        }
+        this.onClick(x, y, shift);
+    },
+
+    onUp(x, y) {
+        this.onMove(x, y);
+        const press = this.press;
+        const drag = this.drag;
+        this.press = null;
+        if (drag) {
+            this.drop(this.dropAt(x, y), x, y);
+            this.cancelDrag();
+            return;
+        }
+        if (!press) return;
+        // 끌지 않고 뗐다: 누른 몬스터를 고른다. 같은 몬스터를 다시 누르면 닫는다
+        Sfx.play('click');
+        if (press.src.monster) {
+            const m = press.src.monster;
+            const again = this.selectedMonster === m;
+            this.clearSelection();
+            if (!again) this.selectedMonster = m;
+        } else {
+            const again = this.selectedBench === press.src.bench;
+            this.clearSelection();
+            if (!again) this.selectedBench = press.src.bench;
+        }
+    },
+
+    drop(t, x, y) {
+        const d = this.drag;
+        const act = this.dropAction(t);
+        if (act.action === 'merge') {
+            const res = Game.merge(d.src, act.loc);
+            if (res.ok) return;
+            act.action = 'invalid';
+            act.reason = res.reason;
+        }
+        if (act.action === 'place') {
+            const ok = d.src.monster ? Game.moveMonster(d.src.monster, act.col, act.row) : Game.deploy(d.src.bench, act.col, act.row);
+            if (ok) return;
+            act.action = 'invalid';
+            act.reason = 'cell';
+        }
+        if (act.action === 'bench') {
+            if (Game.moveBench(d.src.bench, act.slot)) { Sfx.play('click'); return; }
+            act.action = 'back';
+        }
+        // 놓지 못했다: 안내하고 제자리로 날아간다
+        if (act.action === 'invalid') {
+            const msg = {
+                top: '영웅은 최고 등급이라 더 합칠 수 없습니다.',
+                mismatch: '등급이 다르고 조합식도 없어 합칠 수 없습니다.',
+                path: '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.',
+                cell: '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.',
+                toBench: '맵의 몬스터는 대기 칸으로 돌아가지 않습니다. 다른 칸으로 옮기거나 합치세요.'
+            }[act.reason] || '여기에는 놓을 수 없습니다.';
+            this.showToast(msg);
+            Sfx.play('mergeFail');
+        }
+        this.returning.push({ type: d.type, x, y, to: this.locScreen(d.src), age: 0, life: 0.22 });
+    },
+
+    // 자리의 화면 좌표(발끝): 대기 칸은 칸 가운데 아래쪽, 맵은 놓은 칸
+    locScreen(loc) {
+        if (loc.monster) return { x: loc.monster.homeX * WORLD_ZOOM, y: (loc.monster.homeY + MONSTER_FOOT) * WORLD_ZOOM };
+        const r = this.benchRect(loc.bench);
+        return { x: r.x + r.w / 2, y: r.y + r.h - 14 };
+    },
 
     toggleLightning() {
         this.setTab('demon');
@@ -207,15 +404,27 @@ const UI = {
         this.hoverButton = this.buttonAt(x, y);
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
-        this.hoverCorpse = this.hoverButton ? null : this.corpseAt(wx, wy);
-        const col = Math.floor(wx / TILE);
-        const row = Math.floor((wy - MAP_TOP) / TILE);
-        const inGame = Game.state === 'prep' || Game.state === 'wave';
-        this.hoverCell = inGame && this.placing && !this.hoverButton && col >= 0 && row >= 0 ? { col, row } : null;
+        this.hoverCorpse = this.hoverButton || this.drag ? null : this.corpseAt(wx, wy);
+        if (this.press && !this.drag && distance(x, y, this.press.x, this.press.y) > DRAG_START) {
+            const type = Game.typeAt(this.press.src);
+            if (type && Game.inPlay()) {
+                this.drag = { src: this.press.src, type };
+                this.clearSelection();
+                this.targeting = false;
+                Sfx.play('pickup');
+            }
+            this.press = null;
+        }
+        if (!this.drag) { this.hoverCell = null; this.dropTarget = null; return; }
+        if (!Game.inPlay()) { this.cancelDrag(); return; }
+        this.drag.x = x;
+        this.drag.y = y;
+        this.dropTarget = this.dropAt(x, y);
+        this.hoverCell = this.dropTarget && this.dropTarget.cell && this.dropTarget.cell.col >= 0 && this.dropTarget.cell.row >= 0 ? this.dropTarget.cell : null;
     },
 
-    // shift: Shift를 누른 채 지으면 건설 모드를 이어 간다
-    onClick(x, y, shift) {
+    // 버튼, 번개 조준, 타락, 빈 곳 누르기. 몬스터를 누르고 끄는 것은 onDown과 onUp이 맡는다
+    onClick(x, y) {
         Sfx.unlock();
         this.layout();
         const b = this.buttonAt(x, y);
@@ -225,7 +434,7 @@ const UI = {
             return;
         }
         const G = Game;
-        if (G.state !== 'prep' && G.state !== 'wave') return;
+        if (!G.inPlay()) return;
 
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
@@ -235,17 +444,6 @@ const UI = {
         }
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
-        // 건설 모드: 놓을 수 있는 칸이면 놓는다. 아니면 아래 타락과 안내로 넘어간다
-        if (this.placing && this.canPlaceAt(col, row)) {
-            const def = MONSTERS[this.placing];
-            if (G.place(this.placing, col, row)) {
-                if (!shift) this.placing = null;
-            } else {
-                this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
-                this.placing = null;
-            }
-            return;
-        }
         const corpse = this.corpseAt(wx, wy);
         if (corpse) {
             const res = corruptCorpse(corpse);
@@ -253,24 +451,10 @@ const UI = {
             this.corruptHintShown = true;
             return;
         }
-        if (this.placing) {
-            let msg = '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.';
-            if (isPathCell(col, row)) msg = '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.';
-            if (G.monsterAt(col, row)) msg = '이미 몬스터가 있는 칸입니다.';
-            this.showToast(msg);
-            return;
-        }
-        // 놓은 칸을 눌러도, 길로 걸어 나간 몬스터를 눌러도 강화·판매 창을 연다
-        const f = G.monsterAt(col, row) || G.monsterNear(wx, wy);
-        if (f) {
-            this.selectedMonster = this.selectedMonster === f ? null : f;
-            this.popup = null;
-            return;
-        }
-        if (isBuildCell(col, row)) {
+        if (isBuildCell(col, row) && !G.monsterAt(col, row)) {
             this.clearSelection();
             this.setTab('monster');
-            this.showToast('아래 몬스터 탭에서 놓을 몬스터를 고르세요.');
+            this.showToast(G.bench.some(Boolean) ? '아래 대기 칸의 몬스터를 이 칸으로 끌어 놓으세요.' : `소환(S, ${SUMMON_RULES.cost}G)으로 몬스터를 뽑은 뒤 이 칸으로 끌어 놓으세요.`);
             return;
         }
         this.clearSelection();
@@ -284,10 +468,10 @@ const UI = {
             return;
         }
         if (code === 'Space') { G.startWave(); this.clearSelection(); }
+        else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyQ') this.toggleLightning();
         else if (code === 'KeyW') this.useRoar();
         else if (code === 'Tab') this.setTab(this.tab === 'monster' ? 'demon' : 'monster');
-        else if (/^Digit[1-9]$/.test(code)) this.pickMonster(MONSTER_SLOTS[Number(code.slice(5)) - 1]);
         else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
         else if (code === 'KeyP') G.paused = !G.paused;
         else if (code === 'Escape') this.cancel();
@@ -299,19 +483,26 @@ const UI = {
             if (this.toast.age > this.toast.life) this.toast = null;
         }
         if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
+        if (this.selectedBench !== null && !Game.bench[this.selectedBench]) this.clearSelection();
+        // 끄는 몬스터가 맵에서 사라졌거나(판 종료 등) 대기 칸이 비면 끌기를 그만둔다
+        if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
+        for (const r of this.returning) r.age += dt;
+        this.returning = this.returning.filter(r => r.age < r.life);
         this.layout();
         this.hoverButton = this.buttonAt(this.mouse.x, this.mouse.y);
     },
 
-    // 세계 위에 깔리는 사거리 표시와 건설 모드의 반투명 몬스터
+    // 세계 위에 깔리는 표시: 끄는 동안 놓을 칸 미리보기(반투명 그림, 사거리, 나갈 지점), 합칠 수 있는 몬스터 발밑 고리,
+    // 고른 몬스터의 사거리
     drawRanges(ctx) {
-        const cell = this.placing && this.hoverCell;
+        const cell = this.drag && this.hoverCell;
         if (cell) {
             const ok = this.canPlaceAt(cell.col, cell.row);
-            const def = MONSTERS[this.placing];
+            const type = this.drag.type;
+            const def = MONSTERS[type];
             const ghost = { x: tileX(cell.col), y: tileY(cell.row), dir: 'down', atkPose: 0, anim: 0 };
             const color = ok ? 'rgba(255,224,138,1)' : 'rgba(255,90,110,1)';
-            if (monsterBlocks(this.placing)) {
+            if (monsterBlocks(type)) {
                 // 막는 몬스터는 걸어 나가 설 길 지점과 그곳의 붙잡는 범위를 보여 준다
                 const r = rallyPoint(cell.col, cell.row);
                 if (ok) this.drawRallyPath(ctx, ghost.x, ghost.y + MONSTER_FOOT, r.x, r.y + 10);
@@ -325,8 +516,23 @@ const UI = {
             Render.monsterBody(ctx, def, ghost, Assets.get(name), clip); // drawMonster와 같은 위치와 배율
             ctx.restore();
         }
-        if (this.selectedMonster) {
-            const f = this.selectedMonster;
+        const focus = this.focus();
+        if (focus) {
+            // 합칠 수 있는 맵의 몬스터: 발밑에 고리. 놓으려는 대상은 더 밝게
+            const target = this.drag && this.dropTarget && this.dropTarget.monster;
+            for (const m of Game.monsters) {
+                if (focus.loc.monster === m || m.reveal > 0) continue;
+                const plan = this.shownPlan(focus.type, m.type);
+                if (plan.kind === 'none' || plan.kind === 'unknown') continue;
+                Render.mergeRing(ctx, m.homeX, m.homeY + MONSTER_FOOT, plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan.grade].color, target === m);
+                // 길로 걸어 나간 몬스터도 서 있는 곳에 고리를 그린다
+                if (m.blocks && distance(m.x, m.y, m.homeX, m.homeY) > 20 && m.down <= 0) {
+                    Render.mergeRing(ctx, m.x, m.y + MONSTER_FOOT, plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan.grade].color, target === m);
+                }
+            }
+        }
+        const f = this.selectedMonster;
+        if (f) {
             if (f.blocks) {
                 this.drawRallyPath(ctx, f.homeX, f.homeY + MONSTER_FOOT, f.rally.x, f.rally.y + MONSTER_FOOT);
                 Render.rangeRing(ctx, f.rally.x, f.rally.y + MONSTER_FOOT, monsterStats(f).range * TILE, 'rgba(255,224,138,1)');
@@ -381,8 +587,12 @@ const UI = {
         this.drawStreak(ctx);
         if (this.popup) this.drawPopup(ctx);
         this.drawButtons(ctx);
+        this.drawMergeBadges(ctx);
         this.drawHints(ctx);
         this.drawBanner(ctx);
+        this.drawPops(ctx);
+        this.drawDragged(ctx);
+        this.drawDiscovery(ctx);
         if (this.toast) {
             const a = clamp((this.toast.life - this.toast.age) / 0.3, 0, 1);
             ctx.save();
@@ -394,7 +604,7 @@ const UI = {
             ctx.fillStyle = 'rgba(4,2,14,0.45)';
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             UIKit.text(ctx, '일시정지', GAME_WIDTH / 2, 330, 62, '#ffe08a', 'center');
-            UIKit.text(ctx, '멈춘 상태에서도 배치와 타락을 할 수 있습니다.', GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
+            UIKit.text(ctx, '멈춘 상태에서도 소환, 배치, 합치기, 타락을 할 수 있습니다.', GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
         }
         if (G.state === 'victory' || G.state === 'defeat') {
             this.drawResult(ctx);
@@ -565,47 +775,81 @@ const UI = {
     },
 
     // 몬스터의 rotations/south 그림을 size 크기 네모 안에 그리고, 등급 색 테두리를 두른다
-    drawMonsterIcon(ctx, type, x, y, size) {
+    drawMonsterIcon(ctx, type, x, y, size, noFrame) {
         const def = MONSTERS[type];
-        ctx.fillStyle = '#0d0918';
-        ctx.fillRect(x, y, size, size);
+        if (!noFrame) {
+            ctx.fillStyle = '#0d0918';
+            ctx.fillRect(x, y, size, size);
+        }
         const img = Assets.get(`${def.sprite}/rotations/south`);
         if (img) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, size, size);
+            ctx.clip();
             ctx.imageSmoothingEnabled = false;
             const s = img.width * Math.max(1, Math.floor(size / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
             ctx.drawImage(img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+            ctx.restore();
         }
+        if (noFrame) return;
         ctx.lineWidth = 3;
         ctx.strokeStyle = MONSTER_GRADES[def.grade].color;
         ctx.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
     },
 
+    // 고른 몬스터 정보: 이름, 등급, 역할, 수치, 함께 합칠 수 있는 몬스터. 판매 버튼은 layoutMonsterMenu가 놓는다
     drawPopup(ctx) {
         const p = this.popup;
+        const f = p.monster;
+        const def = MONSTERS[p.type];
+        const grade = MONSTER_GRADES[def.grade];
         UIKit.frame(ctx, p.x, p.y, p.w, p.h, 'panel', 8);
-        if (p.monster) {
-            const f = p.monster;
-            const def = MONSTERS[f.type];
-            const stats = monsterStats(f);
-            const tier = f.branch ? `3단계 · ${def.branches[f.branch].name}` : `${f.tier}단계`;
-            this.drawMonsterIcon(ctx, f.type, p.x + 16, p.y + 14, 56);
-            UIKit.text(ctx, def.name, p.x + 84, p.y + 30, 26, '#ffe08a');
-            UIKit.plain(ctx, tier, p.x + p.w - 20, p.y + 30, 20, '#c9b6ea', 'right');
-            UIKit.plain(ctx, `${MONSTER_GRADES[def.grade].name} · ${MONSTER_ROLES[def.role].name}`, p.x + 84, p.y + 58, 17, MONSTER_GRADES[def.grade].color);
-            let line = `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
-            if (f.blocks) {
-                line = f.down > 0 ? `${Math.ceil(f.down)}초 뒤 다시 나옴 · 피해 ${Math.round(stats.damage)}`
-                    : `체력 ${Math.ceil(f.hp)}/${Math.round(stats.hp)} · 피해 ${Math.round(stats.damage)} · 막기 ${stats.block}`;
-            }
-            UIKit.plain(ctx, line, p.x + 20, p.y + 86, 18, '#ffffff');
+        this.drawMonsterIcon(ctx, p.type, p.x + 16, p.y + 16, 64);
+        UIKit.text(ctx, def.name, p.x + 96, p.y + 36, 28, '#ffe08a');
+        UIKit.plain(ctx, f ? '맵' : '대기 칸', p.x + p.w - 20, p.y + 36, 18, '#c9b6ea', 'right');
+        UIKit.plain(ctx, `${grade.name} · ${MONSTER_ROLES[def.role].name} · ${MONSTER_FAMILIES[def.family]}`, p.x + 96, p.y + 68, 19, grade.light);
+        const stats = monsterStats(f || { type: p.type, tier: 1, branch: null });
+        let line1;
+        let line2;
+        if (monsterBlocks(p.type)) {
+            line1 = f && f.down > 0 ? `${Math.ceil(f.down)}초 뒤 다시 나옴` : `체력 ${Math.ceil(f ? f.hp : stats.hp)}/${Math.round(stats.hp)}`;
+            line1 += ` · 피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초`;
+            line2 = `막기 ${stats.block}명 · 쓰러지면 ${stats.respawn}초 뒤 다시 나옴`;
+        } else {
+            line1 = `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
+            line2 = stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림';
         }
+        UIKit.plain(ctx, line1, p.x + 20, p.y + 108, 19, '#ffffff');
+        UIKit.plain(ctx, line2, p.x + 20, p.y + 138, 18, '#d8ccef');
+
+        // 함께 합칠 수 있는 몬스터
+        let y = p.y + 166;
+        ctx.fillStyle = 'rgba(216,169,79,0.45)';
+        ctx.fillRect(p.x + 16, y, p.w - 32, 2);
+        UIKit.plain(ctx, '함께 합칠 수 있는 몬스터', p.x + 20, y + 18, 18, '#ffd76a');
+        y += 34;
+        for (const r of p.recipes) {
+            const res = MONSTERS[r.result];
+            this.drawMonsterIcon(ctx, r.partner, p.x + 18, y + 2, 44);
+            UIKit.plain(ctx, MONSTERS[r.partner].name, p.x + 72, y + 24, 19, '#ffffff');
+            UIKit.text(ctx, '→', p.x + 222, y + 24, 22, '#ffd76a', 'center');
+            this.drawMonsterIcon(ctx, r.result, p.x + 246, y + 2, 44);
+            UIKit.plain(ctx, res.name, p.x + 300, y + 24, 19, MONSTER_GRADES[res.grade].light);
+            y += 50;
+        }
+        const next = nextGrade(def.grade);
+        const gradeLine = next ? `같은 ${grade.name} 등급 아무나 → ${MONSTER_GRADES[next].name} 무작위 1마리`
+            : `${grade.name}은 최고 등급이라 등급 합치기를 할 수 없습니다`;
+        UIKit.plain(ctx, gradeLine, p.x + 20, y + 18, 17, next ? MONSTER_GRADES[next].light : '#a59db5');
     },
 
     drawButtons(ctx) {
         for (const b of this.buttons) {
             const hover = this.hoverButton === b && !b.disabled;
             if (b.skill) this.drawSkillButton(ctx, b, hover);
-            else if (b.card) this.drawCardButton(ctx, b, hover);
+            else if (b.summonBtn) this.drawSummonButton(ctx, b, hover);
+            else if (b.bench !== undefined) this.drawBenchSlot(ctx, b, this.hoverButton === b);
             else if (b.tab) this.drawTabButton(ctx, b, hover);
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, hover);
             else {
@@ -616,6 +860,101 @@ const UI = {
                 UIKit.text(ctx, b.label, b.x + b.w / 2, ly, b.size || 24, '#ffffff', 'center');
                 if (b.sub) UIKit.text(ctx, b.sub, b.x + b.w / 2, ly + 30, 18, '#fff2d0', 'center');
             }
+        }
+        // 대기 칸 설명은 다른 칸 위로 겹치므로 버튼을 모두 그린 뒤에 그린다
+        const hb = this.hoverButton;
+        if (hb && hb.bench !== undefined && !this.drag && !this.popup && Game.bench[hb.bench] && !Fx.pops.some(p => p.to.bench === hb.bench)) {
+            const def = MONSTERS[Game.bench[hb.bench]];
+            this.drawTooltip(ctx, hb.x, hb.y - 92, `${def.name} · ${MONSTER_GRADES[def.grade].name} ${MONSTER_ROLES[def.role].name}`, '길 옆 칸으로 끌어 놓거나, 다른 몬스터 위에 놓아 합칩니다.');
+        }
+    },
+
+    drawSummonButton(ctx, b, hover) {
+        const G = Game;
+        const pulse = !b.disabled && G.bench.every(t => !t) && G.monsters.length === 0 ? Math.sin(G.time * 5) * 0.5 + 0.5 : 0;
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, b.disabled ? 'off' : (hover ? 'goldHover' : 'gold'), 6);
+        if (pulse > 0) {
+            ctx.save();
+            ctx.globalAlpha = pulse * 0.5;
+            ctx.strokeStyle = '#fff1c8';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+            ctx.restore();
+        }
+        UIKit.text(ctx, '소환', b.x + 22, b.y + 34, 32, b.disabled ? '#a59db5' : '#ffffff');
+        UIKit.text(ctx, 'S', b.x + b.w - 16, b.y + 30, 22, b.disabled ? '#8a8299' : '#fff2d0', 'right');
+        const sub = b.full ? '대기 칸 가득' : `${SUMMON_RULES.cost}G`;
+        UIKit.text(ctx, sub, b.x + 22, b.y + 76, b.full ? 20 : 26, b.full ? '#ff8f8f' : (G.gold < SUMMON_RULES.cost ? '#ff8f8f' : '#fff2b0'));
+        const used = G.bench.filter(Boolean).length;
+        if (!b.full) UIKit.plain(ctx, `${used}/${SUMMON_RULES.benchSize}`, b.x + b.w - 16, b.y + 78, 18, b.disabled ? '#8a8299' : '#fff2d0', 'right');
+        if (hover) {
+            const o = SUMMON_RULES.odds;
+            const odds = GRADE_ORDER.filter(g => o[g] > 0).map(g => `${MONSTER_GRADES[g].name} ${Math.round(o[g] * 100)}%`).join(' · ');
+            this.drawTooltip(ctx, b.x, b.y - 92, `몬스터 소환 · ${SUMMON_RULES.cost}G`, odds);
+        }
+    },
+
+    // 대기 칸: 빈 칸은 점선, 몬스터가 있으면 그림과 등급 테두리. 끄는 동안 합칠 수 있는 칸은 빛난다
+    drawBenchSlot(ctx, b, hover) {
+        const G = Game;
+        const type = G.bench[b.bench];
+        const focus = this.focus();
+        const isSource = focus && !focus.loc.monster && focus.loc.bench === b.bench;
+        const dropHere = this.drag && this.dropTarget && this.dropTarget.bench === b.bench;
+        let plan = null;
+        if (focus && type && !isSource) plan = this.shownPlan(focus.type, type);
+        const canMerge = plan && (plan.kind === 'recipe' || plan.kind === 'grade');
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, dropHere ? 'buttonHover' : (hover && type && !this.drag ? 'buttonHover' : 'dark'), 6);
+        if (!type) {
+            ctx.save();
+            ctx.strokeStyle = dropHere ? '#ffe08a' : 'rgba(150,130,190,0.45)';
+            ctx.setLineDash([8, 6]);
+            ctx.lineWidth = 2;
+            ctx.strokeRect(b.x + 14, b.y + 14, b.w - 28, b.h - 28);
+            ctx.restore();
+            UIKit.plain(ctx, String(b.bench + 1), b.x + b.w / 2, b.y + b.h / 2, 22, 'rgba(170,150,210,0.5)', 'center');
+            return;
+        }
+        const def = MONSTERS[type];
+        const gradeColor = MONSTER_GRADES[def.grade].color;
+        // 소환·합치기 직후에는 그림이 튀어 오른다
+        const pop = Fx.pops.find(p => p.to.bench === b.bench && p.age >= p.delay);
+        const hidden = Fx.pops.some(p => p.to.bench === b.bench && p.age < p.delay);
+        let k = 1;
+        if (pop) {
+            const t = (pop.age - pop.delay) / 0.3;
+            k = t < 1 ? 1 + Math.sin(t * Math.PI) * 0.35 : 1;
+        }
+        ctx.save();
+        ctx.globalAlpha = isSource && this.drag ? 0.25 : 1;
+        if (!hidden) {
+            const size = 96 * k;
+            const img = Assets.get(`${def.sprite}/rotations/south`);
+            ctx.fillStyle = `rgba(${MONSTER_GRADES[def.grade].glow},0.16)`;
+            ctx.fillRect(b.x + 6, b.y + 6, b.w - 12, b.h - 12);
+            if (img) {
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(img, b.x + b.w / 2 - size / 2, b.y + b.h / 2 - size / 2 + 2, size, size);
+            }
+        }
+        ctx.restore();
+        // 등급 테두리: 희귀 이상은 은은하게 숨 쉰다
+        ctx.lineWidth = def.grade === 'common' ? 3 : 4;
+        ctx.strokeStyle = gradeColor;
+        ctx.strokeRect(b.x + 4, b.y + 4, b.w - 8, b.h - 8);
+        if (canMerge || dropHere) {
+            const color = dropHere && plan && !canMerge ? '#ff5a6e' : (plan && plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan ? plan.grade : def.grade].color);
+            ctx.save();
+            ctx.globalAlpha = 0.6 + Math.sin(G.time * 8) * 0.3;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = dropHere ? 7 : 5;
+            ctx.strokeRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+            ctx.restore();
+        }
+        if (isSource && !this.drag) {
+            ctx.strokeStyle = '#ffe08a';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
         }
     },
 
@@ -671,23 +1010,6 @@ const UI = {
         UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2, 26, on ? '#ffffff' : '#c9b6ea', 'center');
     },
 
-    drawCardButton(ctx, b, hover) {
-        const def = MONSTERS[b.card];
-        const active = this.placing === b.card;
-        UIKit.frame(ctx, b.x, b.y, b.w, b.h, active ? 'goldHover' : (b.disabled ? 'off' : (hover ? 'buttonHover' : 'dark')), 6);
-        ctx.save();
-        if (b.disabled) ctx.globalAlpha = 0.4;
-        this.drawMonsterIcon(ctx, b.card, b.x + 8, b.y + 8, b.h - 16);
-        ctx.restore();
-        const tx = b.x + b.h + 4;
-        UIKit.text(ctx, def.name, tx, b.y + 32, 21, b.disabled ? '#8a8299' : '#ffffff');
-        UIKit.text(ctx, `${def.cost}G`, tx, b.y + 72, 24, b.disabled ? '#ff8f8f' : '#ffe08a');
-        UIKit.text(ctx, b.hotkey, b.x + b.w - 16, b.y + 72, 22, '#e4d8fa', 'right');
-        if (this.hoverButton === b) { // 골드가 모자라 어두운 슬롯도 설명은 보여 준다
-            this.drawTooltip(ctx, b.x, b.y - 92, `${def.name} · ${MONSTER_ROLES[def.role].name}`, def.desc);
-        }
-    },
-
     drawUpgradeButton(ctx, b, hover) {
         UIKit.frame(ctx, b.x, b.y, b.w, b.h, b.disabled ? 'off' : (hover ? 'buttonHover' : 'button'), 6);
         UIKit.text(ctx, b.upgrade.name, b.x + 18, b.y + 26, 23, '#ffffff');
@@ -697,17 +1019,174 @@ const UI = {
 
     drawHints(ctx) {
         const G = Game;
-        UIKit.text(ctx, 'Tab 탭 전환 · Space 다음 웨이브 · F 배속 · P 일시정지 · M 소리', GAME_WIDTH - 20, GAME_HEIGHT - 146, 20, '#e4d8fa', 'right');
+        UIKit.text(ctx, 'S 소환 · Tab 탭 전환 · Space 다음 웨이브 · F 배속 · P 일시정지 · M 소리', GAME_WIDTH - 20, GAME_HEIGHT - 146, 20, '#e4d8fa', 'right');
 
         let hint = null;
+        const benchCount = G.bench.filter(Boolean).length;
         if (this.targeting) hint = '번개를 떨어뜨릴 곳을 누르세요. Esc로 취소합니다.';
-        else if (this.placing) hint = `빛나는 길 옆 칸을 눌러 놓으세요.${monsterBlocks(this.placing) ? ' 근접 몬스터는 길로 걸어 나갑니다.' : ''} Shift 이어 놓기 · 우클릭/Esc 취소`;
-        else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = '아래 몬스터 탭에서 몬스터를 고른 뒤 빛나는 칸을 누르세요.';
+        else if (this.drag) hint = this.drag.src.monster ? '빈 길 옆 칸으로 옮기거나, 다른 몬스터 위에 놓아 합치세요.' : '빛나는 길 옆 칸에 놓거나, 다른 몬스터 위에 놓아 합치세요.';
+        else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0 && benchCount === 0) hint = `아래 소환 버튼(S)을 눌러 몬스터를 뽑으세요. 1회 ${SUMMON_RULES.cost}골드입니다.`;
+        else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = '대기 칸의 몬스터를 길 옆 칸으로 끌어 놓으세요. 몬스터끼리 겹쳐 놓으면 합칩니다.';
         else if (G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
         if (hint) {
             const pulse = 1 + Math.sin(G.time * 5) * 0.03;
             UIKit.text(ctx, hint, GAME_WIDTH / 2, 196, Math.round(32 * pulse), '#ffe08a', 'center');
         }
+    },
+
+    // 화면 좌표: 맵 몬스터 머리 위(배지 자리)
+    monsterTopScreen(m) {
+        return { x: m.x * WORLD_ZOOM, y: (m.y + MONSTER_FOOT - MONSTERS[m.type].art.barY - 26) * WORLD_ZOOM };
+    },
+
+    // 고르거나 끄는 동안 합칠 수 있는 몬스터 위의 배지: 공개 조합식은 결과 그림, 등급 합치기는 다음 등급 '?'
+    drawMergeBadges(ctx) {
+        const focus = this.focus();
+        if (!focus || !Game.inPlay()) return;
+        const badge = (x, y, plan, hot) => {
+            const s = hot ? 56 : 44;
+            const bx = Math.round(x - s / 2);
+            const by = Math.round(y - s);
+            const bob = Math.round(Math.sin(Game.time * 4 + x) * 2);
+            if (plan.kind === 'recipe') {
+                UIKit.frame(ctx, bx - 4, by - 4 + bob, s + 8, s + 8, 'gold', 4);
+                this.drawMonsterIcon(ctx, plan.result, bx, by + bob, s);
+            } else {
+                const color = MONSTER_GRADES[plan.grade].color;
+                UIKit.frame(ctx, bx - 4, by - 4 + bob, s + 8, s + 8, 'dark', 4);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(bx, by + bob, s, s);
+                UIKit.text(ctx, '?', x, by + s / 2 + bob, hot ? 34 : 28, color, 'center');
+            }
+        };
+        const hotMonster = this.drag && this.dropTarget && this.dropTarget.monster;
+        for (const m of Game.monsters) {
+            if (focus.loc.monster === m || m.reveal > 0) continue;
+            const plan = this.shownPlan(focus.type, m.type);
+            if (plan.kind !== 'recipe' && plan.kind !== 'grade') continue;
+            const p = this.monsterTopScreen(m.down > 0 ? { ...m, x: m.homeX, y: m.homeY } : m);
+            badge(p.x, p.y, plan, hotMonster === m);
+        }
+        if (this.tab === 'monster') {
+            Game.bench.forEach((type, i) => {
+                if (!type || (!focus.loc.monster && focus.loc.bench === i)) return;
+                const plan = this.shownPlan(focus.type, type);
+                if (plan.kind !== 'recipe' && plan.kind !== 'grade') return;
+                const r = this.benchRect(i);
+                badge(r.x + r.w / 2, r.y - 8, plan, this.drag && this.dropTarget && this.dropTarget.bench === i);
+            });
+        }
+        // 끄는 중 놓을 곳 설명: 합치면 무엇이 되는지, 왜 안 되는지
+        if (!this.drag || !this.dropTarget) return;
+        const act = this.dropAction(this.dropTarget);
+        let text = null;
+        let color = '#ffe08a';
+        if (act.action === 'merge') {
+            text = act.plan.kind === 'recipe' ? `합치기 → ${MONSTERS[act.plan.result].name}`
+                : (act.plan.kind === 'grade' ? `합치기 → ${MONSTER_GRADES[act.plan.grade].name} 무작위` : '합치기 → ???');
+            color = act.plan.kind === 'recipe' ? '#ffd76a' : (act.plan.kind === 'grade' ? MONSTER_GRADES[act.plan.grade].color : '#ffffff');
+        } else if (act.action === 'invalid' && (act.reason === 'top' || act.reason === 'mismatch')) {
+            text = act.reason === 'top' ? '합칠 수 없음 · 최고 등급' : '합칠 수 없음';
+            color = '#ff8f8f';
+        }
+        if (text) {
+            // 손가락 아래쪽에 띄운다. 하단 바 근처에서는 위쪽에 띄운다
+            const x = clamp(this.mouse.x, 200, GAME_WIDTH - 200);
+            const y = this.mouse.y > GAME_HEIGHT - 260 ? this.mouse.y - 150 : this.mouse.y + 70;
+            UIKit.text(ctx, text, x, y, 28, color, 'center');
+        }
+    },
+
+    // 끄는 몬스터 그림(손가락을 따라감)과 놓지 못해 제자리로 돌아가는 그림
+    drawDragged(ctx) {
+        const draw = (type, sx, sy, alpha) => {
+            const def = MONSTERS[type];
+            const ghost = { x: sx / WORLD_ZOOM, y: sy / WORLD_ZOOM, dir: 'down', atkPose: 0, anim: Game.time, moving: false };
+            const { clip, name } = Render.monsterFrame(def, ghost);
+            ctx.save();
+            ctx.scale(WORLD_ZOOM, WORLD_ZOOM);
+            ctx.globalAlpha = alpha;
+            Render.monsterBody(ctx, def, ghost, Assets.get(name), clip);
+            ctx.restore();
+        };
+        for (const r of this.returning) {
+            const k = clamp(r.age / r.life, 0, 1);
+            const e = 1 - (1 - k) * (1 - k);
+            draw(r.type, r.x + (r.to.x - r.x) * e, r.y + 20 + (r.to.y - 10 - r.y - 20) * e, 0.85 * (1 - k * 0.5));
+        }
+        if (!this.drag || this.drag.x === undefined) return;
+        // 놓을 수 있는 칸 위에서는 칸에 붙은 반투명 그림(drawRanges)만 보인다
+        if (this.hoverCell && this.canPlaceAt(this.hoverCell.col, this.hoverCell.row)) return;
+        draw(this.drag.type, this.drag.x, this.drag.y + 20, 0.9);
+    },
+
+    // 소환과 합치기 연출. 대기 칸 위에도 보이도록 화면 맨 위에 세계 배율로 그린다
+    popPoint(pt) {
+        if (pt.bench !== undefined) {
+            const r = this.benchRect(pt.bench);
+            return { x: (r.x + r.w / 2) / WORLD_ZOOM, y: (r.y + r.h / 2) / WORLD_ZOOM };
+        }
+        return { x: pt.x, y: pt.y - 30 };
+    },
+
+    drawPops(ctx) {
+        if (!Fx.pops.length) return;
+        ctx.save();
+        ctx.scale(WORLD_ZOOM, WORLD_ZOOM);
+        for (const p of Fx.pops) Render.drawPop(ctx, p, pt => this.popPoint(pt));
+        ctx.restore();
+    },
+
+    // "히든 조합 발견!": 화면 가운데 띠, 재료 두 마리와 결과
+    drawDiscovery(ctx) {
+        const d = Fx.discovery;
+        if (!d || d.age < 0) return;
+        const a = clamp(Math.min(d.age / 0.2, (d.life - d.age) / 0.4), 0, 1);
+        const cx = GAME_WIDTH / 2;
+        const cy = 520;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = 'rgba(4,2,14,0.55)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        const band = ctx.createLinearGradient(0, cy - 220, 0, cy + 220);
+        band.addColorStop(0, 'rgba(60,20,90,0)');
+        band.addColorStop(0.2, 'rgba(60,20,90,0.92)');
+        band.addColorStop(0.8, 'rgba(40,12,60,0.92)');
+        band.addColorStop(1, 'rgba(40,12,60,0)');
+        ctx.fillStyle = band;
+        ctx.fillRect(0, cy - 220, GAME_WIDTH, 440);
+        ctx.fillStyle = '#ffd76a';
+        ctx.fillRect(0, cy - 176, GAME_WIDTH, 4);
+        ctx.fillRect(0, cy + 172, GAME_WIDTH, 4);
+        // 결과 뒤에서 도는 빛줄기
+        const rx = cx + 250;
+        const ry = cy + 40;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 14; i++) {
+            const ang = d.age * 0.7 + i / 14 * Math.PI * 2;
+            ctx.fillStyle = i % 2 ? 'rgba(255,215,106,0.16)' : 'rgba(200,120,255,0.16)';
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx + Math.cos(ang - 0.09) * 260, ry + Math.sin(ang - 0.09) * 260);
+            ctx.lineTo(rx + Math.cos(ang + 0.09) * 260, ry + Math.sin(ang + 0.09) * 260);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+        const pop = d.age < 0.25 ? 1.4 - d.age / 0.25 * 0.4 : 1;
+        UIKit.text(ctx, '히든 조합 발견!', cx, cy - 112, Math.round(88 * pop), '#ffd76a', 'center');
+        const icon = (type, x, size) => {
+            this.drawMonsterIcon(ctx, type, x - size / 2, ry - size / 2, size);
+            UIKit.text(ctx, MONSTERS[type].name, x, ry + size / 2 + 24, size > 100 ? 30 : 24, size > 100 ? MONSTER_GRADES[MONSTERS[type].grade].light : '#ffffff', 'center');
+        };
+        icon(d.a, cx - 400, 96);
+        UIKit.text(ctx, '+', cx - 275, ry, 52, '#ffffff', 'center');
+        icon(d.b, cx - 150, 96);
+        UIKit.text(ctx, '=', cx + 40, ry, 52, '#ffd76a', 'center');
+        icon(d.type, rx, 144);
+        ctx.restore();
     },
 
     drawBanner(ctx) {
@@ -764,11 +1243,11 @@ const UI = {
         UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 442, 36, '#ffffff', 'center');
         UIKit.frame(ctx, cx - 460, 488, 920, 252, 'panel', 8);
         const lines = [
-            '아래 몬스터 탭에서 몬스터를 골라 길 옆 칸에 놓으세요.',
-            '오크는 길로 걸어 나가 막고, 궁수와 마법사는 제자리에서 공격합니다.',
+            '소환(S)으로 몬스터를 뽑고, 대기 칸에서 길 옆 칸으로 끌어 놓으세요.',
+            '몬스터를 다른 몬스터 위에 놓으면 합쳐 더 강한 몬스터가 됩니다.',
+            '같은 등급 2마리는 상위 등급으로, 조합식은 정해진 몬스터로. 숨은 조합도 있습니다.',
             '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
-            '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!',
-            '용사가 왕좌에 닿으면 마왕의 체력이 줄어듭니다.'
+            '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!'
         ];
         lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 530 + i * 42, 26, '#efe6ff', 'center'));
         UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층', cx, 900, 24, '#b8a9d0', 'center');
@@ -792,7 +1271,7 @@ const UI = {
             ['남은 마왕 체력', `${G.hp} / ${COMBAT_RULES.maxHp}`],
             ['처치한 용사', `${G.stats.kills}명`],
             ['타락시킨 용사', `${G.stats.corrupted}명`],
-            ['놓은 몬스터', `${G.stats.placed}마리`],
+            ['소환 / 합치기', `${G.stats.summoned}번 / ${G.stats.merged}번`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ];
         if (!win) rows.splice(0, 1, ['막아 낸 웨이브', `${G.waveIndex} / ${WAVES.length}`]);

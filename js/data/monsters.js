@@ -1,13 +1,27 @@
 // 몬스터 표. 한 줄을 추가하면 몬스터가 들어간다. 코드는 id가 아니라 역할(role)과 수치(stats)로 동작을 정한다.
 // 설계: docs/MONSTER_DESIGN.md. 수치는 플레이 후 고칠 초안이다. 거리는 타일 단위, 시간은 초 단위다.
 
-// 등급: 테두리 색만 쓴다. 층 보상 확률과 등급 연출은 다음 작업이다
+// 등급: 낮은 등급부터 적는다. 등급 합치기는 같은 등급 2마리를 바로 다음 등급의 무작위 1마리로 바꾼다.
+// 다음 등급에 몬스터가 없으면 그 등급이 최고 등급이라 합칠 수 없다(지금은 영웅. 전설 몬스터는 아직 없다)
+// glow는 소환·합치기 연출의 빛 색(r,g,b), light는 어두운 바탕 위 글자 색이다
 const MONSTER_GRADES = {
-    common: { name: '일반', color: '#9a96a8' },
-    rare: { name: '희귀', color: '#4f8cff' },
-    epic: { name: '영웅', color: '#b25cff' },
-    legendary: { name: '전설', color: '#ffc63d' }
+    common: { name: '일반', color: '#9a96a8', glow: '200,196,220', light: '#e8e4f2' },
+    rare: { name: '희귀', color: '#4f8cff', glow: '90,150,255', light: '#9cc2ff' },
+    epic: { name: '영웅', color: '#b25cff', glow: '190,100,255', light: '#dfa8ff' },
+    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a' }
 };
+const GRADE_ORDER = Object.keys(MONSTER_GRADES);
+
+// 소환과 판매. odds는 등급별 소환 확률이다(합이 1). 전설은 몬스터가 생기면 확률을 넣는다
+const SUMMON_RULES = {
+    cost: 40,       // 소환 1회 골드
+    benchSize: 5,   // 하단 대기 칸 수
+    odds: { common: 0.70, rare: 0.25, epic: 0.05 },
+    refund: { common: 20, rare: 60, epic: 150, legendary: 300 } // 판매 환불(등급별 고정)
+};
+
+// 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
+const MONSTER_UPGRADE_ENABLED = false;
 
 // 역할: 모든 몬스터는 길 옆 칸(BUILD_CELLS)에 놓는다.
 //   blocks가 true면 놓은 칸에서 가장 가까운 길 지점으로 걸어 나가 용사를 막고, 쓰러지면 놓은 칸에서 다시 나온다.
@@ -32,6 +46,8 @@ const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', 
 //   anim.walk가 있으면 길로 걸어 나갈 때 반복한다
 //   hand는 투사체가 나가는 손 위치(발끝 기준 위쪽 y, 동서 방향일 때 앞쪽 x, 세계 px), barY는 체력바 높이, glow는 뒤쪽 빛 색
 // 원거리 몬스터는 아직 공격받지 않아 hp를 쓰지 않는다
+// cost는 강화 비용 계산(upgradeCost)에만 쓴다. 소환은 SUMMON_RULES.cost로 등급과 관계없이 같다
+// summon이 false면 소환에서 나오지 않고 조합으로만 얻는다(히든 등급용)
 const MONSTERS = {
     orc_guard: {
         id: 'orc_guard', name: '오크 경비병', role: 'tank', family: 'orc', grade: 'common',
@@ -80,11 +96,96 @@ const MONSTERS = {
                 attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 56, east: 57, north: 56 } }
             }
         }
+    },
+    orc_berserker: {
+        id: 'orc_berserker', name: '오크 광전사', role: 'melee', family: 'orc', grade: 'rare',
+        sprite: 'pl_mon_orc_berserker', cost: 120,
+        stats: { hp: 180, damage: 22, interval: 0.7, range: 0.8, block: 2, respawn: 8 },
+        abilities: [], unlock: 'start',
+        desc: '길로 걸어 나가 용사 2명을 붙잡고 빠르게 벱니다.',
+        art: {
+            scale: 2, barY: 92, idleFps: 0, glow: '255,110,60',
+            anim: {
+                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
+                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
+                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 53, north: 53 } }
+            }
+        }
+    },
+    curse_shooter: {
+        id: 'curse_shooter', name: '저주 사수', role: 'ranged', family: 'undead', grade: 'rare',
+        sprite: 'pl_mon_curse_shooter', cost: 120,
+        stats: { hp: 50, damage: 22, interval: 1.0, range: 4 },
+        abilities: [], unlock: 'start',
+        desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏩니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 3, glow: '170,90,255', hand: { x: 34, y: 50 },
+            anim: {
+                idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 62, east: 64, north: 61 } },
+                attack: { folder: 'shoot', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 56, north: 55 } }
+            }
+        }
+    },
+    bone_knight: {
+        id: 'bone_knight', name: '해골 기사', role: 'tank', family: 'undead', grade: 'epic',
+        sprite: 'pl_mon_bone_knight', cost: 250,
+        stats: { hp: 500, damage: 30, interval: 1.0, range: 0.9, block: 5, respawn: 6 },
+        abilities: [], unlock: 'start',
+        desc: '길로 걸어 나가 용사를 5명까지 붙잡고 오래 버팁니다.',
+        art: {
+            scale: 2, barY: 100, idleFps: 0, glow: '170,120,255',
+            anim: {
+                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
+                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
+                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 56, north: 54 } }
+            }
+        }
     }
 };
 
-// 하단 몬스터 탭의 슬롯 순서이자 단축키 1~9. 지금은 기본 제공(unlock: 'start')만 나온다
-const MONSTER_SLOTS = Object.keys(MONSTERS).filter(id => MONSTERS[id].unlock === 'start');
+// 조합식: 두 재료(a, b)를 합치면 result가 나온다. 순서는 상관없다. 등급 합치기보다 먼저 적용한다.
+// hidden이면 미리 보여 주지 않고, 처음 만들면 "히든 조합 발견!" 연출을 한다(이번 시험판은 발견 기록을 저장하지 않는다)
+const MONSTER_RECIPES = [
+    { a: 'skeleton_archer', b: 'dark_mage', result: 'curse_shooter', hidden: false },
+    { a: 'orc_guard', b: 'dark_mage', result: 'orc_berserker', hidden: false },
+    { a: 'orc_berserker', b: 'curse_shooter', result: 'bone_knight', hidden: false },
+    { a: 'orc_guard', b: 'skeleton_archer', result: 'bone_knight', hidden: true }
+];
+
+// 등급별 소환·등급 합치기 후보. 표 순서를 따른다
+function gradePool(grade) {
+    return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].summon !== false);
+}
+
+function findRecipe(a, b) {
+    return MONSTER_RECIPES.find(r => (r.a === a && r.b === b) || (r.a === b && r.b === a)) || null;
+}
+
+// 등급 합치기 결과 등급. 다음 등급에 몬스터가 없으면(최고 등급) null
+function nextGrade(grade) {
+    const next = GRADE_ORDER[GRADE_ORDER.indexOf(grade) + 1];
+    return next && gradePool(next).length ? next : null;
+}
+
+// 두 몬스터를 합칠 수 있는지와 결과(무작위 없이). 위에서부터 먼저 적용한다
+//   { kind: 'recipe', recipe, result } 조합식 / { kind: 'grade', grade } 등급 합치기(결과는 grade 등급 무작위)
+//   { kind: 'none', reason: 'top' | 'mismatch' } 합칠 수 없음. top은 최고 등급끼리
+function mergePlan(a, b) {
+    const recipe = findRecipe(a, b);
+    if (recipe) return { kind: 'recipe', recipe, result: recipe.result };
+    const ga = MONSTERS[a].grade;
+    if (ga === MONSTERS[b].grade) {
+        const grade = nextGrade(ga);
+        return grade ? { kind: 'grade', grade } : { kind: 'none', reason: 'top' };
+    }
+    return { kind: 'none', reason: 'mismatch' };
+}
+
+// 몬스터 하나로 만들 수 있는 공개 조합식(팝업과 끌기 표시용). 히든 조합식은 넣지 않는다
+function publicRecipesFor(type) {
+    return MONSTER_RECIPES.filter(r => !r.hidden && (r.a === type || r.b === type))
+        .map(r => ({ partner: r.a === type ? r.b : r.a, result: r.result }));
+}
 
 function monsterBlocks(type) { return MONSTER_ROLES[MONSTERS[type].role].blocks; }
 

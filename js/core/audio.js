@@ -97,7 +97,30 @@ const Sfx = {
             bossDown: () => { this.noise(0.9, 0.35, 3000); [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.3, 'square', 0.1, 1, now + i * 0.13)); },
             victory: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.tone(f, 0.2, 'square', 0.1, 1, now + i * 0.14)),
             defeat: () => [330, 294, 262, 196].forEach((f, i) => this.tone(f, 0.4, 'sawtooth', 0.12, 1, now + i * 0.24)),
-            click: () => this.tone(760, 0.05, 'square', 0.05)
+            click: () => this.tone(760, 0.05, 'square', 0.05),
+            pickup: () => this.tone(540, 0.06, 'square', 0.05, 1.5),
+            mergeFail: () => { this.tone(150, 0.14, 'square', 0.08); this.tone(110, 0.18, 'square', 0.07, 1, now + 0.09); },
+            // 소환: 등급(arg 0 일반, 1 희귀, 2 영웅)이 높을수록 음이 길고 화려하다
+            summon: () => {
+                const g = arg || 0;
+                const notes = [[392, 523], [392, 523, 659, 784], [262, 392, 523, 659, 784, 1047]][Math.min(g, 2)];
+                notes.forEach((f, i) => this.tone(f, 0.12 + g * 0.04, 'square', 0.08, 1, now + i * 0.06));
+                if (g >= 1) this.noise(0.2 + g * 0.15, 0.05 + g * 0.04, 6000);
+                if (g >= 2) this.tone(98, 0.8, 'sawtooth', 0.14, 0.5, now + 0.3);
+            },
+            // 합치기: 빨려 드는 소리가 올라가다 결과가 나오는 순간(MERGE_REVEAL) 터진다
+            merge: () => {
+                const g = arg || 0;
+                const hit = now + 0.42;
+                this.tone(180, 0.4, 'triangle', 0.1, 4);
+                this.tone(240, 0.4, 'square', 0.04, 4);
+                const chord = [[523, 659, 784], [523, 659, 784, 1047], [392, 523, 659, 784, 1047, 1319]][Math.min(g, 2)];
+                chord.forEach((f, i) => this.tone(f, 0.22 + g * 0.1, 'square', 0.07, 1, hit + i * 0.045));
+                this.tone(110 - g * 15, 0.3 + g * 0.2, 'sawtooth', 0.12 + g * 0.04, 0.4, hit);
+                if (this.ctx) setTimeout(() => this.noise(0.25 + g * 0.2, 0.12 + g * 0.06, 2500 + g * 1500), 420);
+            },
+            // 히든 조합 발견: 합치기 소리 뒤에 이어지는 팡파르
+            hidden: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.18, 'square', 0.09, 1, now + 0.5 + i * 0.1))
         }[name];
         if (n) n();
     },

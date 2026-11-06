@@ -27,6 +27,15 @@ function run(plan, options) {
 // 경로 순서대로 배치 후보를 정렬한다
 const CANDIDATES = [[3,4],[5,5],[3,6],[5,3],[7,6],[9,4],[9,6],[7,4],[11,4],[13,5],[11,6],[13,7],[15,7],[17,6],[15,5],[11,8],[13,4],[3,2],[6,8],[9,2]];
 
+// Why: 게임은 이제 무작위 소환과 합치기로 몬스터를 얻는다. 이 시험은 그 전처럼 원하는 몬스터를 고정 가격(cost)에 사서 놓는
+// 전략만 비교한다. 소환·합치기 판의 밸런스는 아직 재지 않는다(수치가 초안이다).
+function buy(G, type, c, r) {
+    if (G.gold < MONSTERS[type].cost) return false;
+    if (!G.place(type, c, r)) return false;
+    G.gold -= MONSTERS[type].cost;
+    return true;
+}
+
 function nextCell(G, offset) {
     for (const [c, r] of CANDIDATES.slice(offset || 0)) if (isBuildCell(c, r) && !G.monsterAt(c, r)) return [c, r];
     return null;
@@ -36,7 +45,7 @@ const plans = {
     nothing() {},
     archersOnly(G) {
         const cell = nextCell(G);
-        if (cell && G.gold >= 50) G.place('skeleton_archer', cell[0], cell[1]);
+        if (cell) buy(G, 'skeleton_archer', cell[0], cell[1]);
     },
     balanced(G) {
         const n = G.monsters.length;
@@ -52,7 +61,7 @@ const plans = {
             return;
         }
         const cell = nextCell(G);
-        if (cell && G.gold >= MONSTERS[want].cost) G.place(want, cell[0], cell[1]);
+        if (cell) buy(G, want, cell[0], cell[1]);
     },
     skilled(G, o) {
         plans.balanced(G, o);

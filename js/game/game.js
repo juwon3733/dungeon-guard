@@ -2,10 +2,12 @@
 const Game = {
     state: 'title', // title | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
+    bench: [], // 하단 대기 칸. 칸마다 몬스터 id 또는 null
+    discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0,
-    stats: { kills: 0, corrupted: 0, placed: 0, time: 0 },
+    stats: { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, time: 0 },
     time: 0,
 
     reset() {
@@ -14,6 +16,7 @@ const Game = {
         this.waveIndex = 0;
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
+        this.bench = new Array(SUMMON_RULES.benchSize).fill(null);
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -25,7 +28,7 @@ const Game = {
         this.streak = 0;
         this.streakTimer = 0;
         this.throneFlash = 0;
-        this.stats = { kills: 0, corrupted: 0, placed: 0, time: 0 };
+        this.stats = { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, time: 0 };
         Fx.reset();
         this.state = 'prep';
     },
@@ -53,11 +56,9 @@ const Game = {
         return isBuildCell(col, row);
     },
 
+    // 몬스터를 칸에 바로 세운다(비용 없음). 대기 칸에서 놓기(deploy)와 시험 도구가 쓴다
     place(type, col, row) {
-        const def = MONSTERS[type];
         if (!this.canPlace(type, col, row)) return false;
-        if (this.gold < def.cost) return false;
-        this.gold -= def.cost;
         const m = createMonster(type, col, row);
         this.monsters.push(m);
         this.stats.placed++;
@@ -67,6 +68,146 @@ const Game = {
         Sfx.play('build');
         return m;
     },
+
+    inPlay() { return this.state === 'prep' || this.state === 'wave'; },
+
+    freeBenchSlot() { return this.bench.indexOf(null); },
+
+    // 등급을 SUMMON_RULES.odds로 고른 뒤 그 등급 몬스터 중 하나를 고른다. Math.random을 두 번 쓴다
+    rollSummon() {
+        const grades = GRADE_ORDER.filter(g => SUMMON_RULES.odds[g] > 0 && gradePool(g).length);
+        let r = Math.random();
+        let grade = grades[0];
+        for (const g of grades) {
+            if (r < SUMMON_RULES.odds[g]) { grade = g; break; }
+            r -= SUMMON_RULES.odds[g];
+        }
+        return randItem(gradePool(grade));
+    },
+
+    // 골드를 내고 무작위 몬스터 1마리를 빈 대기 칸에 넣는다. 실패하면 reason: 'full' | 'gold' | 'state'
+    summon() {
+        if (!this.inPlay()) return { ok: false, reason: 'state' };
+        const slot = this.freeBenchSlot();
+        if (slot < 0) return { ok: false, reason: 'full' };
+        if (this.gold < SUMMON_RULES.cost) return { ok: false, reason: 'gold' };
+        this.gold -= SUMMON_RULES.cost;
+        const type = this.rollSummon();
+        this.bench[slot] = type;
+        this.stats.summoned++;
+        const grade = MONSTERS[type].grade;
+        Fx.pop({ kind: 'summon', to: { bench: slot }, type, grade });
+        Sfx.play('summon', GRADE_ORDER.indexOf(grade));
+        return { ok: true, slot, type };
+    },
+
+    // 대기 칸의 몬스터를 길 옆 칸에 놓는다. 비용은 없다
+    deploy(slot, col, row) {
+        const type = this.bench[slot];
+        if (!type || !this.canPlace(type, col, row)) return false;
+        this.bench[slot] = null;
+        return this.place(type, col, row);
+    },
+
+    // 대기 칸끼리 옮긴다(빈 칸으로)
+    moveBench(from, to) {
+        if (from === to || !this.bench[from] || this.bench[to]) return false;
+        this.bench[to] = this.bench[from];
+        this.bench[from] = null;
+        return true;
+    },
+
+    // 맵의 몬스터를 다른 빈 길 옆 칸으로 옮긴다. 쓰러져 있으면 새 칸에서 마저 기다린다
+    moveMonster(m, col, row) {
+        if (m.col === col && m.row === row) return false;
+        if (!this.canPlace(m.type, col, row)) return false;
+        this.releaseMonster(m);
+        m.col = col;
+        m.row = row;
+        m.homeX = m.x = tileX(col);
+        m.homeY = m.y = tileY(row);
+        m.moving = false;
+        m.shot = null;
+        if (m.blocks) {
+            const r = rallyPoint(col, row);
+            m.rally = { d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
+        }
+        Fx.ring(m.x, m.y + MONSTER_FOOT, 70, '#c79bff', 0.3);
+        Fx.burst(m.x, m.y, '#c79bff', 10, 240, 0.35, 6);
+        Sfx.play('build');
+        return true;
+    },
+
+    // 붙잡던 용사를 놓아준다(옮기기, 판매, 합치기)
+    releaseMonster(m) {
+        m.target = null;
+        for (const h of this.heroes) if (h.blocker === m) h.blocker = null;
+    },
+
+    removeMonster(m) {
+        this.monsters = this.monsters.filter(x => x !== m);
+        m.removed = true;
+        this.releaseMonster(m);
+    },
+
+    // 자리: { bench: 칸 번호 } 또는 { monster: 맵의 몬스터 }
+    typeAt(loc) {
+        if (!loc) return null;
+        if (loc.monster) return loc.monster.removed ? null : loc.monster.type;
+        return this.bench[loc.bench] || null;
+    },
+
+    sameLoc(a, b) { return a.monster || b.monster ? a.monster === b.monster : a.bench === b.bench; },
+
+    // 연출 좌표: 대기 칸은 칸 번호, 맵은 세계 좌표(서 있는 곳)
+    fxPoint(loc) { return loc.monster ? { x: loc.monster.x, y: loc.monster.y } : { bench: loc.bench }; },
+
+    // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 src 자리는 빈다.
+    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' }
+    merge(src, dst) {
+        const a = this.typeAt(src);
+        const b = this.typeAt(dst);
+        if (!a || !b) return { ok: false, reason: 'empty' };
+        if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
+        const plan = mergePlan(a, b);
+        if (plan.kind === 'none') return { ok: false, reason: plan.reason };
+        const type = plan.kind === 'recipe' ? plan.result : randItem(gradePool(plan.grade));
+        const hidden = !!(plan.recipe && plan.recipe.hidden);
+        let discovered = false;
+        if (hidden) {
+            const key = [plan.recipe.a, plan.recipe.b].sort().join('+');
+            discovered = !this.discovered.has(key);
+            this.discovered.add(key);
+        }
+        const from = [this.fxPoint(src), this.fxPoint(dst)];
+        if (src.monster) this.removeMonster(src.monster);
+        else this.bench[src.bench] = null;
+        let monster = null;
+        let to;
+        if (dst.monster) {
+            const old = dst.monster;
+            monster = createMonster(type, old.col, old.row);
+            monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
+            this.monsters[this.monsters.indexOf(old)] = monster;
+            old.removed = true;
+            this.releaseMonster(old);
+            to = { x: monster.x, y: monster.y };
+        } else {
+            this.bench[dst.bench] = type;
+            to = { bench: dst.bench };
+        }
+        this.stats.merged++;
+        const grade = MONSTERS[type].grade;
+        Fx.pop({ kind: 'merge', from, fromTypes: [a, b], to, type, grade, hidden });
+        Sfx.play('merge', GRADE_ORDER.indexOf(grade));
+        if (discovered) {
+            Fx.discovery = { a: plan.recipe.a, b: plan.recipe.b, type, age: -MERGE_REVEAL, life: 3.6 };
+            Sfx.play('hidden');
+        }
+        return { ok: true, type, kind: plan.kind, hidden, discovered, monster };
+    },
+
+    sellValue(type) { return SUMMON_RULES.refund[MONSTERS[type].grade] || 0; },
 
     upgrade(m, branch) {
         const nextTier = m.tier + 1;
@@ -86,13 +227,23 @@ const Game = {
         return true;
     },
 
+    // 판매 환불은 등급별 고정값(SUMMON_RULES.refund)이다
     sell(m) {
-        this.gold += Math.floor(m.invested * COMBAT_RULES.sellRefund);
-        this.monsters = this.monsters.filter(x => x !== m);
-        m.removed = true;
-        for (const h of this.heroes) if (h.blocker === m) h.blocker = null;
+        this.gold += this.sellValue(m.type);
+        this.removeMonster(m);
         Fx.burst(m.x, m.y, '#a9a2c4', 16, 280, 0.4, 6);
+        Fx.goldPulse = 1;
         Sfx.play('sell');
+    },
+
+    sellBench(slot) {
+        const type = this.bench[slot];
+        if (!type) return false;
+        this.gold += this.sellValue(type);
+        this.bench[slot] = null;
+        Fx.goldPulse = 1;
+        Sfx.play('sell');
+        return true;
     },
 
     startWave() {

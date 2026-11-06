@@ -121,7 +121,6 @@ const COMBAT_RULES = {
     prepTime: 20,
     firstPrepTime: 35,
     earlyGoldPerSecond: 1,
-    sellRefund: 0.7,
     hpPerWave: 0.14,
     corpseTime: 5,
     corruptCostMul: 8,

@@ -20,17 +20,123 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
-    // 시작 버튼을 눌러 준비 단계로 들어가고, 오크 경비병을 고른 채 마우스를 길 옆 칸 위에 올려 둔다.
-    // 반투명 그림과 걸어 나갈 길 지점(깃발) 미리보기가 보인다
+    // 시작 버튼을 눌러 준비 단계로 들어간 첫 화면: 빈 대기 칸 5개와 소환 버튼, 첫 안내 문구
     prep: {
-        setup: () => {
-            pressButton('start');
-            pressButton('place_orc_guard');
-            const [c, r] = isBuildCell(6, 5) ? [6, 5] : [...BUILD_CELLS][0].split(',').map(Number);
-            UI.onMove(tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM);
-        },
+        setup: () => { pressButton('start'); },
         // 건설 칸 테두리는 Game.time으로 깜빡인다. 가장 밝은 순간(sin = 1)에 멈춘다
         afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 소환: 대기 칸 넷을 채운 뒤 다섯째 칸에 영웅(해골 기사)이 나오는 순간. 소환 버튼에 마우스를 올려 확률 설명을 띄운다
+    summon: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 400;
+            for (const r of [[0.1, 0.1], [0.5, 0.5], [0.1, 0.9], [0.8, 0.9]]) withRandom(r, () => pressButton('summon'));
+            advance(1.5);
+            withRandom([0.97, 0], () => pressButton('summon'));
+            advance(0.22);
+            const b = UI.buttons.find(x => x.id === 'summon');
+            UI.onMove(b.x + 40, b.y + 40);
+            freezeScene();
+        }
+    },
+
+    // 끌기: 대기 칸의 암흑 마법사를 빈 길 옆 칸 위로 끄는 중. 칸 표시, 반투명 그림, 사거리와
+    // 맵·대기 칸의 합칠 수 있는 몬스터 배지(조합식은 결과 그림, 같은 등급은 ?)가 보인다
+    drag: {
+        setup: () => {
+            setupBoard();
+            dragHold(benchCenter(0), cellCenter(9, 5));
+            freezeScene();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 끌어서 스켈레톤 궁수 위에 올린 순간: "합치기 → 저주 사수" 안내와 밝은 고리
+    dragMerge: {
+        setup: () => {
+            setupBoard();
+            const m = Game.monsterAt(6, 4);
+            dragHold(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            freezeScene();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 합치기 직전: 두 몬스터가 하얗게 달아오르며 결과 자리로 빨려 드는 중
+    mergeSuck: {
+        setup: () => {
+            setupBoard();
+            const m = Game.monsterAt(6, 4);
+            dragDrop(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            advance(0.28);
+            freezeScene();
+        }
+    },
+
+    // 합치기 순간(희귀 결과, 맵): 빛이 터지고 저주 사수가 나온다
+    merge: {
+        setup: () => {
+            setupBoard();
+            const m = Game.monsterAt(6, 4);
+            dragDrop(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            advance(MERGE_REVEAL + 0.12);
+            freezeScene();
+        }
+    },
+
+    // 영웅 합치기(대기 칸): 희귀 2마리가 해골 기사가 되는 순간. 가장 화려한 등급 연출
+    mergeEpic: {
+        setup: () => {
+            setupBoard();
+            Game.bench[3] = 'curse_shooter';
+            Game.bench[4] = 'orc_berserker';
+            dragDrop(benchCenter(4), benchCenter(3));
+            advance(MERGE_REVEAL + 0.16);
+            freezeScene();
+        }
+    },
+
+    // 히든 조합 발견: 오크 경비병 + 스켈레톤 궁수 = 해골 기사
+    hidden: {
+        setup: () => {
+            setupBoard();
+            const m = Game.monsterAt(6, 4);
+            dragDrop(benchCenter(1), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            advance(MERGE_REVEAL + 0.7);
+            freezeScene();
+        }
+    },
+
+    // 대기 칸 몬스터를 누른 정보 팝업: 이름, 등급, 역할, 수치, 함께 합칠 수 있는 몬스터, 판매
+    popup: {
+        setup: () => {
+            setupBoard();
+            const c = benchCenter(0);
+            UI.onMove(c[0], c[1]);
+            UI.onDown(c[0], c[1]);
+            UI.onUp(c[0], c[1]);
+            freezeScene();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 맵 몬스터(해골 기사, 영웅)를 누른 정보 팝업. 최고 등급 안내
+    popupField: {
+        setup: () => {
+            setupBoard();
+            const [c, r] = [[10, 7], [11, 6], [9, 6], [7, 5]].find(([x, y]) => Game.canPlace('bone_knight', x, y));
+            const m = Game.place('bone_knight', c, r);
+            advance(1.5);
+            // 길로 걸어 나간 해골 기사를 누른다(놓은 칸이 아니라 서 있는 곳)
+            const p = [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM];
+            UI.onMove(p[0], p[1]);
+            UI.onDown(p[0], p[1]);
+            UI.onUp(p[0], p[1]);
+            if (UI.selectedMonster !== m) throw new Error('해골 기사를 고르지 못했습니다');
+            freezeScene();
+        }
     },
 
     // 몬스터 3종을 길 옆에 놓고 웨이브를 시작한 뒤, 오크가 길로 나가 용사를 붙잡을 때까지 시간을 빨리 돌린다
@@ -79,8 +185,16 @@ const SCENES = {
             const labels = [];
             const footY = j => seg.ay + rowLane(j);
             dirs.forEach((dir, i) => labels.push([dir, colX(i), footY(0) - 130]));
+            dirs.forEach((dir, i) => labels.push([dir, colX(i) + 900, footY(types.length) - 140]));
             types.forEach((type, j) => labels.push([HEROES[type].name, colX(0) - 105, footY(j) - 55]));
-            MONSTER_SLOTS.forEach((type, j) => labels.push([MONSTERS[type].name, colX(0) - 105, footY(types.length + j) - 55]));
+            // 몬스터 6종: 일반 3종은 용사 아래 줄에, 희귀·영웅 3종은 오른쪽 묶음에 둔다(화면 세로가 모자라다)
+            const monsterTypes = Object.keys(MONSTERS);
+            const RIGHT = 900;
+            const monsterPos = j => (j < 3 ? { dx: 0, row: types.length + j } : { dx: RIGHT, row: types.length + j - 3 });
+            monsterTypes.forEach((type, j) => {
+                const p = monsterPos(j);
+                labels.push([MONSTERS[type].name, colX(0) + p.dx - 105, footY(p.row) - 55]);
+            });
             types.forEach((type, j) => {
                 dirs.forEach((dir, i) => {
                     const h = createHero(type, 0, 0, false);
@@ -89,11 +203,12 @@ const SCENES = {
                 });
             });
             // 몬스터: 네 방향 모두. 그림은 south/east/north만 있고 왼쪽은 동쪽을 뒤집어 그린다
-            MONSTER_SLOTS.forEach((type, j) => {
+            monsterTypes.forEach((type, j) => {
+                const p = monsterPos(j);
                 dirs.forEach((dir, i) => {
                     const m = createMonster(type, 0, 0);
                     // 발끝(y + MONSTER_FOOT)을 용사 줄과 같은 높이에 맞춘다
-                    Object.assign(m, { x: colX(i), y: footY(types.length + j) - MONSTER_FOOT, dir, anim: 0 });
+                    Object.assign(m, { x: colX(i) + p.dx, y: footY(p.row) - MONSTER_FOOT, dir, anim: 0 });
                     Game.monsters.push(m);
                 });
             });
@@ -201,6 +316,36 @@ const PAGE_HELPERS = () => {
         UI.onMove(b.x + 5, b.y + 5);
         UI.onClick(b.x + 5, b.y + 5);
     };
+    // Math.random 고정(배열이면 차례로). 소환 결과를 장면마다 같게 만든다
+    window.withRandom = (v, fn) => {
+        const old = Math.random;
+        const list = Array.isArray(v) ? v.slice() : null;
+        Math.random = () => (list ? list.shift() : v);
+        try { return fn(); } finally { Math.random = old; }
+    };
+    window.advance = seconds => {
+        for (let i = 0; i < Math.round(seconds * 60); i++) { UI.update(1 / 60); Game.update(1 / 60); }
+    };
+    window.benchCenter = i => { const r = UI.benchRect(i); return [r.x + r.w / 2, r.y + r.h / 2]; };
+    window.cellCenter = (c, r) => [tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM];
+    // 끌기 장면 공통 판: 맵에 오크 경비병(6,6)·스켈레톤 궁수(6,4)·암흑 마법사(10,5), 대기 칸에 일반 셋과 희귀 하나
+    window.setupBoard = () => {
+        pressButton('start');
+        Game.gold = 300;
+        Game.place('orc_guard', 6, 6);
+        Game.place('skeleton_archer', 6, 4);
+        Game.place('dark_mage', 10, 5);
+        Game.bench = ['dark_mage', 'orc_guard', 'skeleton_archer', 'curse_shooter', null];
+        advance(1.6); // 오크가 길로 걸어 나가고 설치 효과가 사라진다
+        Fx.reset();
+    };
+    // 실제 입력 경로로 누른 채 끈다(떼지 않음)
+    window.dragHold = (from, to) => {
+        UI.onMove(from[0], from[1]);
+        UI.onDown(from[0], from[1]);
+        for (let i = 1; i <= 6; i++) UI.onMove(from[0] + (to[0] - from[0]) * i / 6, from[1] + (to[1] - from[1]) * i / 6);
+    };
+    window.dragDrop = (from, to) => { dragHold(from, to); UI.onUp(to[0], to[1]); };
     // 장면 고정: 게임 진행을 멈추고, 남은 건설 효과 같은 연출은 그대로 둔 채 더 이상 움직이지 않게 한다
     window.freezeScene = () => { Game.update = () => {}; };
     // rAF 횟수로 실제 그리기 속도를 잰다

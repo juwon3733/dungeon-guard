@@ -69,15 +69,33 @@ function drawLoading() {
 }
 
 window.addEventListener('resize', fitCanvas);
-canvas.addEventListener('pointermove', e => { const p = toVirtual(e); UI.onMove(p.x, p.y); });
-canvas.addEventListener('pointerdown', e => {
-    e.preventDefault();
+// 마우스와 터치를 pointer 이벤트 하나로 받는다. 누른 손가락(포인터)만 끌기에 쓰고, 두 번째 손가락은 무시한다.
+// 누르는 동안 캔버스 밖으로 나가도 이어지도록 포인터를 붙잡는다(setPointerCapture)
+let activePointer = null;
+canvas.addEventListener('pointermove', e => {
+    if (activePointer !== null && e.pointerId !== activePointer) return;
     const p = toVirtual(e);
     UI.onMove(p.x, p.y);
-    if (!ready) return;
-    if (e.button === 2) UI.cancel(); // 우클릭은 건설 모드와 조준을 취소한다
-    else UI.onClick(p.x, p.y, e.shiftKey);
 });
+canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!ready) return;
+    if (activePointer !== null) return;
+    const p = toVirtual(e);
+    if (e.button === 2) { UI.onMove(p.x, p.y); UI.cancel(); return; } // 우클릭은 끌기와 조준을 취소한다
+    activePointer = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 붙잡지 못해도 동작한다 */ }
+    UI.onDown(p.x, p.y, e.shiftKey);
+});
+const endPointer = (e, cancelled) => {
+    if (e.pointerId !== activePointer) return;
+    activePointer = null;
+    const p = toVirtual(e);
+    if (cancelled) UI.cancelDrag();
+    else UI.onUp(p.x, p.y);
+};
+canvas.addEventListener('pointerup', e => endPointer(e, false));
+canvas.addEventListener('pointercancel', e => endPointer(e, true));
 canvas.addEventListener('contextmenu', e => {
     e.preventDefault();
     UI.cancel();
