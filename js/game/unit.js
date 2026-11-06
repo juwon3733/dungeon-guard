@@ -1,44 +1,49 @@
-// 마왕군 유닛: 오크 초소의 오크와 타락한 용사.
-const BLOCK_CAPACITY = 3;
-
-function createOrc(owner, slot, stats) {
-    // 길을 따라 앞뒤로, 길 폭 방향으로도 어긋나게 세워 두 마리가 겹치지 않게 한다
-    const offset = slot === 0 ? -42 : 42;
-    const p = pathAt(owner.rally.d + offset);
-    const side = slot === 0 ? -16 : 16;
-    return {
-        kind: 'orc', owner, slot, x: owner.x, y: owner.y, homeX: p.x - p.dy * side, homeY: p.y + p.dx * side, d: owner.rally.d + offset,
-        hp: stats.unitHp, maxHp: stats.unitHp, damage: stats.damage, interval: stats.interval, armor: stats.armor,
-        range: 1.1, blockCount: 0, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: Math.random() * 4, target: null,
-        facing: 1, ranged: false
-    };
-}
+// 마왕군 유닛: 타락한 용사. 길 몬스터와 함께 쓰는 길막기 규칙(holdHeroes)과 피해 처리(damageUnit)도 여기 있다.
+const BLOCK_CAPACITY = 3; // 타락 유닛 하나가 붙잡는 용사 수
 
 function createCorruptUnit(corpse) {
     const def = CORRUPTED[corpse.type];
     return {
-        kind: 'corrupt', heroType: corpse.type, female: corpse.female, owner: null, slot: -1,
-        x: corpse.x, y: corpse.y, homeX: corpse.x, homeY: corpse.y, d: corpse.d,
+        kind: 'corrupt', heroType: corpse.type, female: corpse.female,
+        x: corpse.x, y: corpse.y, d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
         range: def.range, ranged: !!def.ranged, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
         // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.
-        facing: 1, dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
+        dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
     };
 }
 
+// 길을 막는 쪽(타락 근접 유닛, 길 몬스터)이 용사를 붙잡고, 지금 때릴 용사를 돌려준다.
+// Why: 무리를 상대하므로 하나가 여러 명(capacity)을 붙잡는다. 나머지는 지나가 추가 배치 판단이 생긴다.
+function holdHeroes(u, capacity, range) {
+    if (u.target && (u.target.dead || u.target.waiting)) u.target = null;
+    // 돌진 등으로 붙잡은 용사가 빠져나가면 놓아준다
+    if (u.target && u.target.blocker !== u) u.target = null;
+    const held = Game.heroes.filter(h => h.blocker === u && !h.dead);
+    if (held.length < capacity) {
+        const candidate = nearestHero(u.x, u.y, range * TILE, h => canBlockHero(u, h));
+        if (candidate) { candidate.blocker = u; held.push(candidate); }
+    }
+    if (!u.target && held.length) u.target = held[0];
+    return u.target;
+}
+
 function damageUnit(u, amount) {
-    if (u.removed) return;
+    if (u.removed || u.hp <= 0) return;
     const dealt = amount * (1 - (u.armor || 0));
     u.hp -= dealt;
     u.flash = 0.09;
     Fx.number(u, u.x, u.y - 74, Math.round(dealt), '#ff8f8f', false);
     Fx.burst(u.x, u.y - 30, '#ff8f8f', 2, 150, 0.24, 5);
-    if (u.hp <= 0) {
-        u.removed = true;
-        Fx.burst(u.x, u.y - 44, u.kind === 'corrupt' ? '#c56bff' : '#d59560', 14, 320, 0.45, 7);
-        Sfx.play('unitDown');
-        for (const h of Game.heroes) if (h.blocker === u) h.blocker = null;
+    if (u.hp > 0) return;
+    if (u.kind === 'monster') {
+        knockDownMonster(u);
+        return;
     }
+    u.removed = true;
+    Fx.burst(u.x, u.y - 44, '#c56bff', 14, 320, 0.45, 7);
+    Sfx.play('unitDown');
+    for (const h of Game.heroes) if (h.blocker === u) h.blocker = null;
 }
 
 function updateUnit(u, dt) {
@@ -56,37 +61,17 @@ function updateUnit(u, dt) {
         return;
     }
 
-    // 초소에서 길로 걸어 나온다
-    const toHome = distance(u.x, u.y, u.homeX, u.homeY);
-    if (toHome > 6) {
-        const v = 170 * dt;
-        u.facing = u.homeX >= u.x ? 1 : -1;
-        u.dir = dirFromVector(u.homeX - u.x, u.homeY - u.y);
-        u.x += (u.homeX - u.x) / toHome * Math.min(v, toHome);
-        u.y += (u.homeY - u.y) / toHome * Math.min(v, toHome);
-        u.moving = true;
-        return;
-    }
-    u.moving = false;
-
-    if (u.target && (u.target.dead || u.target.waiting)) u.target = null;
     if (!u.ranged) {
-        // 돌진 등으로 붙잡은 용사가 빠져나가면 놓아준다
-        if (u.target && u.target.blocker !== u) u.target = null;
-        // Why: 무리를 상대하므로 유닛 하나가 최대 3명을 붙잡는다. 나머지는 지나가 추가 배치 판단이 생긴다.
-        const held = Game.heroes.filter(h => h.blocker === u && !h.dead);
-        if (held.length < BLOCK_CAPACITY) {
-            const candidate = nearestHero(u.x, u.y, u.range * TILE, h => canBlockHero(u, h));
-            if (candidate) { candidate.blocker = u; held.push(candidate); }
+        holdHeroes(u, BLOCK_CAPACITY, u.range);
+    } else {
+        if (u.target && (u.target.dead || u.target.waiting)) u.target = null;
+        if (!u.target || distance(u.x, u.y, heroWorld(u.target).x, heroWorld(u.target).y) > u.range * TILE) {
+            u.target = nearestHero(u.x, u.y, u.range * TILE);
         }
-        if (!u.target && held.length) u.target = held[0];
-    } else if (!u.target || distance(u.x, u.y, heroWorld(u.target).x, heroWorld(u.target).y) > u.range * TILE) {
-        u.target = nearestHero(u.x, u.y, u.range * TILE);
     }
     if (!u.target) return;
 
     const tp = heroWorld(u.target);
-    u.facing = tp.x >= u.x ? 1 : -1;
     u.dir = dirFromVector(tp.x - u.x, tp.y - u.y);
     u.atk -= dt;
     if (u.atk <= 0) {

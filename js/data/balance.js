@@ -1,36 +1,4 @@
-// 계획서의 초기값. 거리는 타일 단위, 시간은 초 단위다.
-const FACILITIES = {
-    archer: {
-        name: '유령 궁수탑', role: '단일 공격', cost: 50, damage: 8, interval: 0.8, range: 3,
-        desc: '가장 앞선 용사를 빠르게 쏩니다.',
-        branches: {
-            A: { name: '연사', desc: '공격 간격 0.4초', interval: 0.4 },
-            B: { name: '저격', desc: '피해 3배, 사거리 5', damageMul: 3, range: 5 }
-        }
-    },
-    crystal: {
-        name: '암흑 수정', role: '광역 공격', cost: 100, damage: 20, interval: 2.0, range: 2.5, splash: 1,
-        desc: '마력 구체로 무리를 함께 공격합니다.',
-        branches: {
-            A: { name: '폭발', desc: '피해 범위 반경 2', splash: 2 },
-            B: { name: '관통', desc: '일직선 빔으로 공격', beam: true }
-        }
-    },
-    barracks: {
-        name: '오크 초소', role: '길막기', cost: 70, damage: 6, interval: 1.0, range: 1.6,
-        unitHp: 60, respawn: 8, unitCount: 2,
-        desc: '오크 2기가 길을 막고 싸웁니다.',
-        branches: {
-            A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
-            B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
-        }
-    }
-};
-
-// 2단계 비용은 건설비의 80%, 3단계는 150%
-function upgradeCost(type, nextTier) {
-    return Math.round(FACILITIES[type].cost * (nextTier === 2 ? 0.8 : 1.5));
-}
+// 계획서의 초기값. 거리는 타일 단위, 시간은 초 단위다. 몬스터 표는 js/data/monsters.js에 있다.
 
 // PixelLab 동작 그림. dirs가 있으면 그 방향만 있고, 서쪽은 동쪽을 뒤집어 쓴다.
 // footPx는 캔버스 안의 발끝 높이다. 캔버스 크기가 방향마다 달라 방향별로 적기도 한다
@@ -41,12 +9,6 @@ const ORC_ART = {
         walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 58 } },
         attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 50, east: 52, north: 51 } }
     }
-};
-
-const FACILITY_ART = {
-    archer: { sprite: 'pl_fac_archer', footPx: 92 },
-    crystal: { sprite: 'pl_fac_crystal', footPx: 91 },
-    barracks: { sprite: 'pl_fac_barracks', footPx: 91 }
 };
 
 const HEROES = {
@@ -79,7 +41,7 @@ const HEROES = {
         atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
         name: '마법사', sprite: 'pl_hero_mage', scale: 2, barY: 84, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
-        counter: '시설 정지, 먼저 처치'
+        counter: '몬스터 정지, 먼저 처치'
     }
 };
 
@@ -130,7 +92,7 @@ const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
 // art가 없으면 부대장 전용 그림, 있으면 Asteria 직업 그림을 scale배로 그린다. starY는 정지 별 높이(발 기준 위쪽 세계 px)
 const BOSSES = {
     fallen_knight: {
-        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 시설·유닛 정지',
+        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지',
         hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
         starY: 165,
         patterns: [

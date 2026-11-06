@@ -20,10 +20,12 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
-    // 시작 버튼을 눌러 준비 단계로 들어가고, 마우스를 건설 칸 위에 올려 둔다
+    // 시작 버튼을 눌러 준비 단계로 들어가고, 오크 경비병을 고른 채 마우스를 길 옆 칸 위에 올려 둔다.
+    // 반투명 그림과 걸어 나갈 길 지점(깃발) 미리보기가 보인다
     prep: {
         setup: () => {
             pressButton('start');
+            pressButton('place_orc_guard');
             const [c, r] = isBuildCell(6, 5) ? [6, 5] : [...BUILD_CELLS][0].split(',').map(Number);
             UI.onMove(tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM);
         },
@@ -31,16 +33,16 @@ const SCENES = {
         afterFreeze: () => { Game.time = Math.PI / 6; }
     },
 
-    // 시설 3종을 짓고 웨이브를 시작한 뒤 용사가 시설 앞에 올 때까지 시간을 빨리 돌린다
+    // 몬스터 3종을 길 옆에 놓고 웨이브를 시작한 뒤, 오크가 길로 나가 용사를 붙잡을 때까지 시간을 빨리 돌린다
     combat: {
         setup: () => {
             pressButton('start');
-            Game.gold = 2000; // 장면용: 세 시설을 모두 지을 돈
-            // 화면 가운데쯤(길이 ㄷ자로 꺾이는 곳)에 지어 싸움이 입구 그림에 가리지 않게 한다
-            Game.build('barracks', 6, 6);
-            Game.build('archer', 6, 4);
-            Game.build('crystal', 10, 5);
-            Fx.reset(); // 건설 효과를 지운다
+            Game.gold = 2000; // 장면용: 세 몬스터를 모두 놓을 돈
+            // 화면 가운데쯤(길이 ㄷ자로 꺾이는 곳)에 놓아 싸움이 입구 그림에 가리지 않게 한다
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
+            Fx.reset(); // 배치 효과를 지운다
             // Why: 첫 웨이브는 전사뿐이라 세 직업이 섞인 7번째 웨이브로 띄운다. 수치 확인용이 아니라 그림 확인용이다.
             Game.waveIndex = 6;
             Game.startWave();
@@ -50,14 +52,14 @@ const SCENES = {
                 UI.update(step);
                 Game.update(step);
                 const walking = Game.heroes.filter(h => !h.waiting).length;
-                if (walking >= 14 && Game.units.some(u => Game.heroes.some(h => h.blocker === u))) break;
+                if (walking >= 14 && Game.monsters.some(m => Game.heroes.some(h => h.blocker === m))) break;
             }
         },
         // 빨리 돌린 뒤에는 실제 속도로 조금 더 돌려 연출 효과가 자연스럽게 보이게 한다
         settleMs: 400
     },
 
-    // 용사 3종 x 4방향, 오크, 시체를 한 화면에 세운다
+    // 용사 3종과 몬스터 3종 x 4방향, 시체를 한 화면에 세운다
     units: {
         setup: () => {
             Game.reset();
@@ -72,12 +74,13 @@ const SCENES = {
             // Why: d가 구간 양 끝과 같으면 이웃 구간(세로)으로 계산되어 lane이 가로로 붙는다. 양 끝을 비워 둔다.
             const margin = 48;
             const colX = i => seg.ax + margin + i * ((seg.len - margin * 2) / 3);
-            const rowLane = j => 110 + j * 135; // 위쪽 HUD를 피해 길 아래 바닥에 세운다
+            const rowLane = j => 100 + j * 118; // 위쪽 HUD를 피해 길 아래 바닥에 세운다
             // 이름표 위치는 세계 좌표 [글자, x, 이름표 윗변 y]. 칸이 좁아 열 머리(방향)와 행 머리(직업)로 단다
             const labels = [];
             const footY = j => seg.ay + rowLane(j);
             dirs.forEach((dir, i) => labels.push([dir, colX(i), footY(0) - 130]));
-            ['warrior', 'rogue', 'mage', 'orc'].forEach((type, j) => labels.push([type === 'orc' ? '오크' : HEROES[type].name, colX(0) - 105, footY(j) - 55]));
+            types.forEach((type, j) => labels.push([HEROES[type].name, colX(0) - 105, footY(j) - 55]));
+            MONSTER_SLOTS.forEach((type, j) => labels.push([MONSTERS[type].name, colX(0) - 105, footY(types.length + j) - 55]));
             types.forEach((type, j) => {
                 dirs.forEach((dir, i) => {
                     const h = createHero(type, 0, 0, false);
@@ -85,11 +88,14 @@ const SCENES = {
                     Game.heroes.push(h);
                 });
             });
-            // 오크: 네 방향 모두. 오크 그림은 south/east/north만 있고 왼쪽은 뒤집어 그린다
-            dirs.forEach((dir, i) => {
-                const x = colX(i);
-                const y = footY(3);
-                Game.units.push({ kind: 'orc', x, y, dir, hp: 1, maxHp: 1, atkPose: 0, flash: 0, anim: 0, moving: false });
+            // 몬스터: 네 방향 모두. 그림은 south/east/north만 있고 왼쪽은 동쪽을 뒤집어 그린다
+            MONSTER_SLOTS.forEach((type, j) => {
+                dirs.forEach((dir, i) => {
+                    const m = createMonster(type, 0, 0);
+                    // 발끝(y + MONSTER_FOOT)을 용사 줄과 같은 높이에 맞춘다
+                    Object.assign(m, { x: colX(i), y: footY(types.length + j) - MONSTER_FOOT, dir, anim: 0 });
+                    Game.monsters.push(m);
+                });
             });
             // 시체: 쓰러지는 동작이 끝난 마지막 프레임
             types.forEach((type, j) => {
@@ -117,12 +123,12 @@ const SCENES = {
         setup: () => {
             pressButton('start');
             Game.gold = 2000;
-            Game.build('barracks', 6, 6);
-            Game.build('archer', 6, 4);
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
             Fx.reset();
             Game.waveIndex = 6;
             Game.startWave();
-            const rally = Game.facilities.find(f => f.rally).rally.d;
+            const rally = Game.monsters.find(f => f.rally).rally.d;
             const put = (type, d, lane) => {
                 const h = createHero(type, Game.waveIndex, 0, false);
                 Object.assign(h, { waiting: false, d, lane, cast: 99, song: 99 });
@@ -154,13 +160,13 @@ const SCENES = {
         setup: () => {
             pressButton('start');
             Game.gold = 2000;
-            Game.build('barracks', 6, 6);
-            Game.build('archer', 6, 4);
-            Game.build('crystal', 10, 5);
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
             Fx.reset();
             Game.waveIndex = 0;
             Game.startWave();
-            const rally = Game.facilities.find(f => f.rally).rally.d;
+            const rally = Game.monsters.find(f => f.rally).rally.d;
             const boss = createHero(null, 0, 0, 'archmage');
             Object.assign(boss, { waiting: false, d: rally - 1.5 * TILE });
             Game.heroes = [boss];

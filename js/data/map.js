@@ -94,3 +94,10 @@ const BUILD_CELLS = (function findBuildCells() {
 })();
 
 function isBuildCell(col, row) { return BUILD_CELLS.has(col + ',' + row); }
+
+// 막는 몬스터가 놓인 칸에서 걸어 나가 설 길 지점(d: 입구로부터 거리)
+function rallyPoint(col, row) {
+    const d = nearestPathDistance(tileX(col), tileY(row));
+    const p = pathAt(d);
+    return { d, x: p.x, y: p.y };
+}

@@ -2,7 +2,7 @@
 
 function damageHero(hero, amount, fromX, fromY, color) {
     if (hero.dead) return;
-    // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수탑만 짓는 배치를 스스로 깎는다.
+    // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     const dealt = Math.max(1, amount - (hero.armor || 0));
     hero.hp -= dealt;
     hero.flash = 0.09;
@@ -167,12 +167,11 @@ function castRoar() {
     return true;
 }
 
-// 정지·감전의 대상 목록: (x, y)에서 반경 rangePx 안의 방어 쪽 전부(시설과 마왕군 유닛).
-// Why: 시설이 몬스터로 바뀌는 중이다. 정지 대상은 모두 이 함수로 얻으므로, 전환 뒤에는 여기만 고치면 된다.
+// 정지·감전의 대상 목록: (x, y)에서 반경 rangePx 안의 방어 쪽 전부(몬스터와 타락 유닛). 쓰러진 몬스터는 뺀다.
 // 돌려주는 대상은 x, y와 stun(남은 정지 초)을 가진다.
 function stunTargets(x, y, rangePx) {
     const list = [];
-    for (const f of Game.facilities) if (distance(x, y, f.x, f.y) <= rangePx) list.push(f);
+    for (const m of Game.monsters) if (!(m.down > 0) && distance(x, y, m.x, m.y) <= rangePx) list.push(m);
     for (const u of Game.units) if (!u.removed && distance(x, y, u.x, u.y) <= rangePx) list.push(u);
     return list;
 }

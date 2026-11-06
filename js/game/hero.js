@@ -55,7 +55,7 @@ function createHero(type, waveIndex, delay, bossKey) {
 // 유닛 u가 용사 h를 새로 붙잡을 수 있는지
 function canBlockHero(u, h) {
     if (h.blocker || h.chargeTime > 0 || h.slip > 0) return false;
-    if (u.kind === 'orc' && !h.boss && HEROES[h.type].passOrcs) return false;
+    if (u.kind === 'monster' && MONSTERS[u.type].family === 'orc' && !h.boss && HEROES[h.type].passOrcs) return false;
     return true;
 }
 
@@ -197,10 +197,10 @@ function updateSong(h, dt) {
     Sfx.play('spawn');
 }
 
-// 검사의 돌파: 막은 유닛을 길 옆으로 밀치고 잠깐 정지시킨 뒤 지나간다
+// 검사의 돌파: 막은 쪽을 길 옆으로 밀치고 잠깐 정지시킨 뒤 지나간다
 function breakThrough(h, unit, rule) {
     const w = heroWorld(h);
-    // 길 진행 방향에 수직으로, 유닛이 서 있던 쪽으로 민다. 유닛은 정지가 풀리면 제자리로 걸어 돌아간다
+    // 길 진행 방향에 수직으로, 서 있던 쪽으로 민다. 몬스터는 정지가 풀리면 길 지점으로 걸어 돌아간다
     let nx = -w.dy;
     let ny = w.dx;
     if ((unit.x - w.x) * nx + (unit.y - w.y) * ny < 0) { nx = -nx; ny = -ny; }
