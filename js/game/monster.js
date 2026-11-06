@@ -67,6 +67,7 @@ function monsterHand(m) {
 
 function updateMonster(m, dt) {
     m.anim += dt;
+    if (m.reveal > 0) m.reveal -= dt; // 합치기 결과: 연출이 끝날 때까지 그림을 숨긴다
     m.flash = Math.max(0, m.flash - dt);
     m.atkPose = Math.max(0, m.atkPose - dt);
     if (m.down > 0) {
