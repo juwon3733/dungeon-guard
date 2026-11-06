@@ -844,7 +844,7 @@ const clearBoard = () => { Game.heroes = []; Game.units = []; Game.monsters = []
     const boss = place(null, 700, 'archmage');
     const knight = createHero(null, 0, 0, 'fallen_knight');
     assert(boss.boss && !boss.elite && boss.bossKey === 'archmage' && boss.name === def.name);
-    assert.strictEqual(boss.maxHp, knight.maxHp, 'same hp as fallen knight');
+    assert.strictEqual(boss.maxHp, knight.maxHp * def.waveHpMul, 'fallen knight hp x waveHpMul');
     assert.strictEqual(boss.throneDamage, def.throneDamage);
     assert(def.art.sprite === 'stormcaller' && Math.abs(def.art.scale - 3 / WORLD_ZOOM) < 1e-9);
     const [p1, p2] = def.patterns;
@@ -1212,6 +1212,146 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.skills.lightning = 0;
 }
 
+// 중간 보스와 보스 보상 3택
+{
+    clearBoard();
+    Game.hp = COMBAT_RULES.maxHp;
+    // 5번째 웨이브: 기존 파티 그대로 대마도사가 나온다. 마지막 웨이브는 부대장 그대로
+    const w5 = WAVES[4];
+    assert.strictEqual(w5.boss, 'archmage');
+    assert.strictEqual(w5.party, '견습 마법사와 친구들');
+    assert.strictEqual(JSON.stringify(w5.members), '{"warrior":15,"mage":3}');
+    assert.strictEqual(JSON.stringify(w5.elites), '{"elite_stormcaller":1}');
+    assert.strictEqual(WAVES[WAVES.length - 1].boss, 'fallen_knight');
+    assert.strictEqual(WAVES.filter(w => w.boss).length, 2, 'two boss waves');
+    // 체력: 부대장과 같은 계산(전사 x 15 x 웨이브 배율)에 waveHpMul(초안 0.6)
+    assert.strictEqual(BOSSES.archmage.waveHpMul, 0.6);
+    assert(!BOSSES.fallen_knight.waveHpMul, 'fallen knight keeps full hp');
+    assert(Math.abs(createHero(null, 4, 0, 'archmage').maxHp - createHero(null, 4, 0, 'fallen_knight').maxHp * 0.6) < 1e-9);
+    // 발끝: 동작과 방향마다 값이 있다
+    for (const pose of ['walk', 'cast', 'atk']) for (const dir of ['down', 'left', 'right', 'up']) {
+        assert(typeof BOSSES.archmage.art.footPx[pose][dir] === 'number', 'archmage foot ' + pose + ' ' + dir);
+    }
+
+    // 보상 표: 몬스터 2장(희귀 또는 영웅, 영웅 40%)과 골드 300G 1장
+    assert.strictEqual(JSON.stringify(BOSS_REWARD_RULES), '{"monsterCards":2,"epicChance":0.4,"gold":300}');
+    const kinds = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : c.type).join();
+    assert.strictEqual(withRandom([0.39, 0, 0.4, 0], () => kinds(Game.rollBossReward())), 'bone_knight,orc_berserker,gold300', 'epic under 40%');
+    assert.strictEqual(withRandom([0.4, 0.99, 0.4, 0], () => kinds(Game.rollBossReward())), 'curse_shooter,orc_berserker,gold300', 'rare from 40%');
+    // 영웅이 두 번 나와도 같은 몬스터는 겹치지 않는다(영웅 후보가 다 나왔으면 희귀에서)
+    assert.strictEqual(withRandom([0, 0, 0, 0], () => kinds(Game.rollBossReward())), 'bone_knight,orc_berserker,gold300', 'no duplicate epic');
+    // 희귀가 두 번 나와도 겹치지 않는다
+    assert.strictEqual(withRandom([0.9, 0, 0.9, 0], () => kinds(Game.rollBossReward())), 'orc_berserker,curse_shooter,gold300', 'no duplicate rare');
+    for (let i = 0; i < 300; i++) {
+        const r = Game.rollBossReward();
+        assert.strictEqual(r.cards.length, 3);
+        const [a, b, g] = r.cards;
+        assert(a.kind === 'monster' && b.kind === 'monster' && a.type !== b.type, 'two different monsters');
+        for (const c of [a, b]) {
+            const def = MONSTERS[c.type];
+            assert((def.grade === 'rare' || def.grade === 'epic') && def.summon !== false, 'rare or epic only: ' + c.type);
+        }
+        assert(g.kind === 'gold' && g.gold === 300);
+    }
+
+    // 5번째 웨이브 시작: 대마도사가 파티 뒤에 나온다
+    Game.state = 'prep';
+    Game.waveIndex = 4;
+    assert(Game.startWave());
+    const mb = Game.heroes.find(h => h.boss);
+    assert(mb && mb.bossKey === 'archmage', 'archmage in wave 5');
+    assert.strictEqual(Game.heroes.length, 15 + 3 + 1 + 1);
+    assert(Math.abs(mb.maxHp - HEROES.warrior.hp * 15 * (1 + COMBAT_RULES.hpPerWave * 4) * 0.6) < 1e-9, 'wave 5 archmage hp');
+    // 보스를 처치해도 전투 중에는 카드를 띄우지 않는다
+    const keep = Game.place('orc_guard', 3, 6);
+    Game.heroes = [mb];
+    mb.waiting = false;
+    damageHero(mb, 1e9);
+    assert(mb.dead && Game.bossDefeated && !Game.bossReward && Game.state === 'wave', 'no reward during battle');
+    // 웨이브가 끝나 준비 단계에 들어가면 카드 3장
+    Game.update(1 / 30);
+    assert.strictEqual(Game.state, 'prep');
+    assert.strictEqual(Game.waveIndex, 5);
+    assert(Game.bossReward && Game.bossReward.cards.length === 3 && !Game.bossDefeated, 'reward after wave');
+    UI.update(0);
+    assert(['reward0', 'reward1', 'reward2'].every(id => UI.buttons.some(b => b.id === id && !b.disabled)), 'three cards');
+    // 고르기 전: 준비 시간이 멈추고 다음 웨이브가 시작되지 않는다. 소환 버튼과 다음 웨이브 버튼도 없다
+    const prep0 = Game.prepTimer;
+    tick(COMBAT_RULES.prepTime + 2);
+    assert.strictEqual(Game.state, 'prep', 'wave does not auto start');
+    assert.strictEqual(Game.prepTimer, prep0, 'prep timer paused');
+    assert(!Game.startWave(), 'startWave refused');
+    UI.onKey('Space');
+    assert.strictEqual(Game.state, 'prep');
+    assert(!hasBtn('next') && !hasBtn('summon') && !hasBtn('tab_demon'), 'bar buttons hidden while choosing');
+    // 맵을 바꾸는 입력은 막는다: 소환(S, 직접 호출), 끌어 옮기기, 몬스터 누르기
+    const count0 = Game.monsters.length;
+    UI.onKey('KeyS');
+    assert(!Game.summon().ok && Game.monsters.length === count0, 'no summon while choosing');
+    const home = [keep.col, keep.row];
+    dragTo(monXY(keep), cellXY(5, 5));
+    assert(keep.col === home[0] && keep.row === home[1] && !UI.drag, 'no drag while choosing');
+    click(...monXY(keep));
+    assert(!UI.selectedMonster && !UI.popup, 'no monster popup while choosing');
+    // 1 키로 첫 카드(몬스터)를 고르면 맵의 빈 칸에 소환처럼 나온다. 소환 비용과 횟수는 그대로
+    const pick = Game.bossReward.cards[0];
+    const cost0 = Game.summonCost();
+    const gold0 = Game.gold;
+    UI.onKey('Digit1');
+    assert(!Game.bossReward, 'reward closed');
+    assert.strictEqual(Game.monsters.length, count0 + 1);
+    const got = Game.monsters[Game.monsters.length - 1];
+    assert(got.type === pick.type && isBuildCell(got.col, got.row) && Game.monsterAt(got.col, got.row) === got, 'reward monster on map');
+    assert(Fx.pops.some(p => p.kind === 'summon' && p.type === pick.type && p.to.x === got.x), 'summon effect');
+    assert(Game.summonCost() === cost0 && Game.gold === gold0, 'reward is free');
+    // 고른 뒤에는 준비 시간이 다시 흐르고 입력이 돌아온다
+    tick(1);
+    assert(Game.prepTimer < prep0, 'prep timer resumes');
+    assert(hasBtn('next') && hasBtn('tab_monster'), 'bar buttons back');
+    // 골드 카드를 누르면 300G
+    Game.bossReward = Game.rollBossReward();
+    btn('reward2');
+    assert(!Game.bossReward && Game.gold === gold0 + 300, 'gold card');
+    // 상한(24마리)이 차 있으면 몬스터 카드가 꺼지고 골드만 고를 수 있다
+    for (const key of BUILD_CELLS) {
+        if (Game.fieldFull()) break;
+        const [c, r] = key.split(',').map(Number);
+        Game.place('skeleton_archer', c, r);
+    }
+    assert(Game.fieldFull());
+    Game.bossReward = Game.rollBossReward();
+    UI.update(0);
+    const rb = id => UI.buttons.find(b => b.id === id);
+    assert(rb('reward0').disabled && rb('reward1').disabled && !rb('reward2').disabled, 'monster cards dimmed at cap');
+    UI.toast = null;
+    UI.onKey('Digit2');
+    btn('reward0');
+    assert(Game.bossReward && Game.monsters.length === SUMMON_RULES.maxField, 'monster card refused at cap');
+    assert(UI.toast && UI.toast.text.includes('골드'), 'cap toast');
+    UI.onKey('Digit3');
+    assert(!Game.bossReward && Game.gold === gold0 + 600, 'gold at cap');
+    // 마지막 보스는 보상 없이 승리
+    clearBoard();
+    Game.state = 'wave';
+    Game.waveIndex = WAVES.length - 1;
+    const lastBoss = place(null, 700, 'fallen_knight');
+    damageHero(lastBoss, 1e9);
+    Game.update(1 / 30);
+    assert(Game.state === 'victory' && !Game.bossReward && !Game.bossDefeated, 'last boss: victory without reward');
+    // 다시 시작하면 보상 상태도 처음으로
+    btn('retry');
+    Game.bossReward = Game.rollBossReward();
+    Game.bossDefeated = true;
+    Game.hp = 1;
+    damageThrone(1);
+    assert.strictEqual(Game.state, 'defeat');
+    btn('retry');
+    assert(Game.state === 'prep' && !Game.bossReward && !Game.bossDefeated, 'reward state reset on retry');
+    const t0 = Game.prepTimer;
+    Game.update(0.1);
+    assert(Game.prepTimer < t0, 'prep timer runs after retry');
+}
+
 // 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)
 assert(Game.summon().ok && Game.summonCost() > SUMMON_RULES.cost, 'cost rose before retry');
 setMonsterRank(Game.monsters[0], 4);
@@ -1240,10 +1380,19 @@ Game.gold = 6000;
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
     [17,6,'orc_guard'],[19,8,'orc_guard'],[21,8,'orc_guard'],[19,6,'skeleton_archer'],[18,7,'dark_mage'],[21,5,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
-let guard = 0, sawCharge = false, sawStomp = false;
+let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false;
 const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
+    // 보스 보상: 첫 카드(몬스터)를 고르고, 자리가 없으면 골드
+    if (Game.bossReward) {
+        rewards++;
+        assert(!Game.startWave(), 'no wave before reward');
+        UI.onKey('Digit1');
+        if (Game.bossReward) UI.onKey('Digit3');
+        assert(!Game.bossReward);
+    }
     if (Game.state === 'prep') Game.startWave();
+    if (Game.waveIndex === 4 && Game.heroes.some(h => h.bossKey === 'archmage')) sawArchmage = true;
     UI.update(1 / 30);
     Game.update(1 / 30);
     if (Game.heroes.some(h => h.elite)) eliteWaves.add(Game.waveIndex);
@@ -1253,6 +1402,7 @@ while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
 }
 assert.strictEqual(Game.state, 'victory', 'wave ' + (Game.waveIndex + 1) + ' hp ' + Game.hp + ' heroes ' + Game.heroes.map(h => h.type + (h.boss ? 'B' : '') + ':' + Math.round(h.d)).join(' '));
 assert(sawCharge && sawStomp, 'boss patterns fired');
+assert(sawArchmage && rewards === 1, 'archmage in wave 5, one boss reward (rewards ' + rewards + ')');
 assert.strictEqual(eliteWaves.size, WAVES.length - 2, 'elites appeared in waves 3..' + WAVES.length);
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });

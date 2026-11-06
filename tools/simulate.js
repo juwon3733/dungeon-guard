@@ -17,6 +17,7 @@ function run(plan, options) {
     let guard = 0;
     while ((Game.state === 'prep' || Game.state === 'wave') && guard++ < 200000) {
         plan(Game, options);
+        if (Game.bossReward) Game.pickBossReward(Game.bossReward.cards.length - 1); // 보스 보상은 골드를 고른다
         if (Game.state === 'prep' && options.skipPrep) Game.startWave();
         Game.update(DT);
     }
