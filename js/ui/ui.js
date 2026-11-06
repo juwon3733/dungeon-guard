@@ -47,14 +47,13 @@ const LOADOUT_KEY = 'dungeonGuard.loadout'; // 직전 선택 저장(localStorage
 const STORY_MAP = { x: 60, y: 110, w: 1800, h: 660 };
 const STORY_INFO = { x: 60, y: 790, w: 1800, h: 250 };
 const STAMP_R = 46; // 도장 반지름
-const STORY_CHAPTER_X = [60, 640, 1290, 1860]; // 장 구역의 경계(지도 위 장 이름 자리)
 // 대화: 맵 위를 어둡게 덮고 아래쪽에 양피지 대화창, 왼쪽에 초상과 이름표. 글자는 한 글자씩 나온다
 const DIALOGUE_BOX = { x: 140, y: 730, w: 1640, h: 300 };
 const DIALOGUE_CPS = 40; // 초당 글자 수
 // 해금 카드
 const UNLOCK_CARD = { w: 600, h: 620, y: 190 };
 // 도감: 탭 3개(몬스터, 조합식, 기록). 스크롤 없이 칸으로 나누고 넘치면 쪽을 넘긴다. 표(MONSTERS, MONSTER_RECIPES)를 읽어 그린다
-const COL_TABS = [{ key: 'monster', label: '몬스터', icon: 'summon' }, { key: 'recipe', label: '조합식', icon: 'book' }, { key: 'record', label: '기록', icon: 'wave' }];
+const COL_TABS = [{ key: 'monster', label: '몬스터', icon: 'summon' }, { key: 'recipe', label: '조합식', icon: 'book' }]; // 기록은 본부의 고블린 비서(js/ui/hq.js)
 const COL_TOP = 206; // 내용이 시작하는 높이
 const COL_MON = { cols: 4, rows: 3, w: 420, h: 236, gap: 24 }; // 몬스터 카드
 const COL_RECIPE = { cols: 2, rows: 6, w: 860, h: 100, gap: 16 }; // 조합식 줄
@@ -85,7 +84,7 @@ const UI = {
     hintKey: null, // 지금 보이는 안내 쪽지 종류
     hintCounts: {}, // 안내 쪽지 종류별로 나온 횟수(HINT_SHOWS까지만 보인다)
     loadout: null, // 선택 화면의 { lord, relics }. 처음 열 때 저장소에서 읽고, 다시 시작해도 남는다
-    collection: null, // 열린 도감: { tab: 'monster' | 'recipe' | 'record', page }. 타이틀, 스토리 지도, 선택 화면에서 연다
+    collection: null, // 열린 도감: { tab: 'monster' | 'recipe', page }. 본부 서재, 스토리 지도, 선택 화면에서 연다
     stageId: null, // 고르기 화면과 이번 판의 스토리 스테이지(STAGES id). null이면 스토리 없는 판(시험 도구)
     storyPick: null, // 스토리 지도에서 고른 스테이지 id
     dialogue: null, // 진행 중인 대화: { lines: [[인물, 대사]], index, chars, title, onDone }
@@ -127,8 +126,11 @@ const UI = {
         }
         if (G.state === 'title') {
             const label = Meta.data.cleared.length || Meta.data.runs ? '이어하기' : '시작하기';
-            this.button('start', GAME_WIDTH / 2 - 210, 800, 420, 100, { label, icon: 'lord', theme: 'gold', size: 38, onClick: () => this.openStoryMap() });
-            this.button('collection', GAME_WIDTH / 2 - 130, 918, 260, 72, { label: '도감', icon: 'book', size: 28, onClick: () => this.openCollection() });
+            this.button('start', GAME_WIDTH / 2 - 210, 640, 420, 100, { label, icon: 'lord', theme: 'gold', size: 38, onClick: () => this.openHQ() });
+            return;
+        }
+        if (G.state === 'hq') {
+            this.layoutHQ(); // js/ui/hq.js
             return;
         }
         if (G.state === 'story') {
@@ -234,8 +236,8 @@ const UI = {
         } catch (e) { /* 저장을 못 해도 이번 창에서는 선택이 남는다 */ }
     },
 
-    // 도감을 열 수 있는 메뉴 화면(타이틀, 스토리 지도, 선택 화면)
-    menuState() { return Game.state === 'title' || Game.state === 'story' || Game.state === 'select'; },
+    // 도감을 열 수 있는 메뉴 화면(타이틀, 본부, 스토리 지도, 선택 화면)
+    menuState() { return Game.state === 'title' || Game.state === 'hq' || Game.state === 'story' || Game.state === 'select'; },
 
     // 고르기 화면. stageId는 이번에 할 스토리 스테이지(없으면 스토리 없는 판). 직전 선택이 남아 있다(잠긴 마왕과 유물은 기본값으로)
     openSelect(stageId) {
@@ -271,7 +273,7 @@ const UI = {
 
     layoutStoryMap() {
         this.button('collection', 60, 22, 200, 68, { label: '도감', icon: 'book', size: 28, onClick: () => this.openCollection() });
-        this.button('map_title', GAME_WIDTH - 260, 22, 200, 68, { label: '타이틀', icon: 'close', size: 26, onClick: () => { this.cancel(); Game.state = 'title'; } });
+        this.button('map_close', GAME_WIDTH - 260, 22, 200, 68, { label: '본부로', icon: 'close', size: 26, onClick: () => this.openHQ() });
         for (const st of STAGES) {
             const r = this.stampRect(st);
             this.button(`stage_${st.id}`, r.x, r.y, r.w, r.h, { stamp: st.id, onClick: () => this.pickStage(st.id) });
@@ -390,7 +392,7 @@ const UI = {
         else Sfx.play('upgrade');
     },
 
-    // 결과 화면: 스테이지 승리는 다음 스테이지와 지도, 패배는 다시 도전과 지도. 스토리 없는 판은 다시 시작(고르기 화면)
+    // 결과 화면: 스테이지 승리는 다음 스테이지와 본부, 패배는 다시 도전과 본부. 스토리 없는 판은 다시 시작(고르기 화면)
     layoutResult() {
         const G = Game;
         const cx = GAME_WIDTH / 2;
@@ -409,13 +411,13 @@ const UI = {
             this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.prepareStage(G.stage) });
         }
         const solo = win && !hasNext;
-        this.button('to_map', solo ? cx - 205 : cx + 10, 770, 410, 90, { label: '지도로', icon: 'book', theme: solo ? 'gold' : null, size: 30, onClick: () => this.openStoryMap() });
+        this.button('to_hq', solo ? cx - 205 : cx + 10, 770, 410, 90, { label: '본부로', icon: 'lord', theme: solo ? 'gold' : null, size: 30, onClick: () => this.openHQ() });
     },
 
-    // 결과 화면의 Space·Enter: 주요 버튼(다음 스테이지, 다시 도전, 지도)
+    // 결과 화면의 Space·Enter: 주요 버튼(다음 스테이지, 다시 도전, 본부)
     resultPrimary() {
         this.layout();
-        const b = ['next_stage', 'retry', 'to_map'].map(id => this.buttons.find(x => x.id === id)).find(Boolean);
+        const b = ['next_stage', 'retry', 'to_hq'].map(id => this.buttons.find(x => x.id === id)).find(Boolean);
         if (b) b.onClick();
     },
 
@@ -560,17 +562,9 @@ const UI = {
             this.button('col_prev', GAME_WIDTH / 2 - 194, GAME_HEIGHT - 98, 64, 68, { arrow: 'left', disabled: C.page === 0, onClick: () => this.turnCollectionPage(-1) });
             this.button('col_next', GAME_WIDTH / 2 + 130, GAME_HEIGHT - 98, 64, 68, { arrow: 'right', disabled: C.page >= pages - 1, onClick: () => this.turnCollectionPage(1) });
         }
-        if (C.tab === 'record') {
-            const armed = this.wipeArmed > 0;
-            this.button('col_wipe', GAME_WIDTH / 2 - 270, 900, 540, 88, {
-                label: armed ? '정말 지울까요? 한 번 더!' : '기록 지우기', icon: 'close',
-                sub: armed ? '스테이지 진행, 해금, 도감이 모두 처음으로' : null,
-                theme: 'danger', size: armed ? 26 : 30, onClick: () => this.pressWipe()
-            });
-        }
     },
 
-    // 기록 지우기: 한 번 누르면 확인을 기다리고, WIPE_ARM_TIME 안에 한 번 더 누르면 지운다. 지운 뒤 바로 처음 상태로
+    // 기록 지우기(본부 고블린 비서의 장부): 한 번 누르면 확인을 기다리고, WIPE_ARM_TIME 안에 한 번 더 누르면 지운다. 지운 뒤 바로 처음 상태로
     pressWipe() {
         if (this.wipeArmed <= 0) {
             this.wipeArmed = WIPE_ARM_TIME;
@@ -1053,7 +1047,7 @@ const UI = {
             return;
         }
         if (this.collection && this.menuState()) {
-            // 도감: Esc 닫기, 좌우 화살표로 쪽 넘기기, 1·2·3 탭
+            // 도감: Esc 닫기(연 화면으로), 좌우 화살표로 쪽 넘기기, 1·2 탭
             const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
             const tab = m && COL_TABS[Number(m[1]) - 1];
             if (code === 'Escape') this.closeCollection();
@@ -1063,20 +1057,24 @@ const UI = {
             return;
         }
         if (G.state === 'title') {
-            if (code === 'Space' || code === 'Enter') this.openStoryMap();
+            if (code === 'Space' || code === 'Enter') this.openHQ();
+            return;
+        }
+        if (G.state === 'hq') {
+            this.onHqKey(code); // js/ui/hq.js
             return;
         }
         if (G.state === 'victory' || G.state === 'defeat') {
             if (code === 'Space' || code === 'Enter') this.resultPrimary();
-            else if (code === 'Escape' && G.stage) this.openStoryMap();
+            else if (code === 'Escape' && G.stage) this.openHQ();
             return;
         }
         if (G.state === 'story') {
-            // 좌우 화살표로 열린 스테이지를 고르고 Space·Enter로 출전, Esc는 타이틀
+            // 좌우 화살표로 열린 스테이지를 고르고 Space·Enter로 출전, Esc는 본부
             if (code === 'ArrowLeft') this.stepStagePick(-1);
             else if (code === 'ArrowRight') this.stepStagePick(1);
             else if (code === 'Space' || code === 'Enter') this.goStage();
-            else if (code === 'Escape') G.state = 'title';
+            else if (code === 'Escape') this.openHQ();
             return;
         }
         if (G.state === 'select') {
@@ -1277,6 +1275,14 @@ const UI = {
         if (G.state === 'title') {
             this.drawTitle(ctx);
             this.drawButtons(ctx);
+            return;
+        }
+        if (G.state === 'hq') {
+            // 본부: 방(시설은 drawHQ가 그린다) 또는 안 화면, 그 위에 버튼과 쪽지
+            this.drawHQ(ctx);
+            this.drawButtons(ctx);
+            this.drawTopTip(ctx);
+            this.drawToast(ctx);
             return;
         }
         if (G.state === 'select') {
@@ -2009,6 +2015,7 @@ const UI = {
             if (b.lordCard || b.relicId || b.pickedSlot !== undefined) continue; // 선택 화면 칸은 drawSelect가 그린다
             if (b.lockedSlot) continue; // 잠긴 유물 칸도 drawSelect가 그린다
             if (b.stamp) continue; // 스토리 지도의 도장은 drawStoryMap이 그린다
+            if (b.facility || b.content) continue; // 본부 시설과 도전의 문 콘텐츠는 drawHQ가 그린다
             const st = this.btnState(b);
             if (b.skill) this.drawSkillButton(ctx, b, st);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, st);
@@ -2354,6 +2361,7 @@ const UI = {
         if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) return { key: 'summon', text: `소환(S)하면 길 옆에 몬스터가 나옵니다 · ${G.summonCost()}G` };
         if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: '몬스터를 다른 몬스터 위에 놓으면 합쳐집니다' };
         if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '몬스터를 왕좌로 끌어 바치면 체력을 회복합니다' };
+        if (G.state === 'wave' && G.waveIndex === 0 && G.skills.lightning <= 0) return { key: 'lightning', text: '마왕 탭의 번개(Q)로 용사를 직접 때리세요' };
         if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사를 5초 안에 누르면 부하가 됩니다!' };
         return null;
     },
@@ -2607,24 +2615,11 @@ const UI = {
         ctx.fillStyle = T.cream;
         ctx.fillText('던전 수호대', cx, 310 + lift);
         ctx.restore();
-        // 부제: 쇠사슬 없이 못 박힌 나무 판
+        // 부제: 쇠사슬 없이 못 박힌 나무 판. 설명은 1번 스테이지 대화와 판 중 안내 쪽지에 있다
         UIKit.plank(ctx, cx - 470, 408, 940, 68);
         UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 443, 30, T.cream, 'center');
-        const lines = [
-            `소환(S)하면 몬스터가 길 옆 칸에 바로 나옵니다. 맵에 ${SUMMON_RULES.maxField}마리까지.`,
-            '몬스터를 다른 몬스터 위에 놓으면 합쳐 더 강해집니다.',
-            '같은 등급 2마리는 상위 등급으로, 조합식은 정해진 몬스터로.',
-            '보스와 정예가 주는 장비는 보관함에서 몬스터 위로 끌어 끼웁니다.',
-            '스토리 스테이지를 처음 깨면 마왕, 유물, 유물 칸이 풀립니다.',
-            CORRUPTION_ENABLED && '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
-            '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!'
-        ].filter(Boolean);
-        const ph = 70 + lines.length * 36;
-        UIKit.panel(ctx, cx - 520, 490, 1040, ph, { seal: true });
-        lines.forEach((t, i) => UIKit.ink(ctx, t, cx, 540 + i * 36, 23, T.ink, 'center'));
         UIKit.plank(ctx, GAME_WIDTH - 330, 18, 300, 72);
         UIKit.text(ctx, `스토리 ${Meta.data.cleared.length} / ${STAGES.length}`, GAME_WIDTH - 180, 55, 30, T.gold, 'center');
-        UIKit.text(ctx, '품질 시험판 · 메인 스토리 1부 · 본 몬스터와 찾은 조합식은 도감에 남습니다', cx, 1036, 20, T.creamSoft, 'center');
     },
 
     drawResult(ctx) {
@@ -2666,16 +2661,20 @@ const UI = {
             ctx.fillRect(cx - 390, 588, 780, 3);
             if (win && res.firstClear) {
                 UIKit.ink(ctx, '처음 깸!', cx - 390, 630, 34, T.inkWax, 'left', 'bold');
-                res.unlocks.forEach((u, i) => this.drawUnlockIcon(ctx, u, cx - 200 + i * 92, 600, 72));
+                // 풀린 것이 많으면(3개 이상) 아이콘을 줄이고 이름은 아이콘 아래 한 줄로
+                const many = res.unlocks.length > 2;
+                const size = many ? 64 : 72;
+                res.unlocks.forEach((u, i) => this.drawUnlockIcon(ctx, u, cx - 200 + i * (size + 16), 598, size));
                 const names = res.unlocks.map(u => this.unlockInfo(u).name).join(' · ');
-                UIKit.ink(ctx, names, cx - 200 + res.unlocks.length * 92 + 8, 636, 22, T.ink, 'left', 'bold');
+                if (many) UIKit.ink(ctx, names, cx - 200, 686, 20, T.ink, 'left', 'bold');
+                else UIKit.ink(ctx, names, cx - 200 + res.unlocks.length * 92 + 8, 636, 22, T.ink, 'left', 'bold');
             } else if (win) {
                 UIKit.ink(ctx, '다시 깸 · 해금은 처음 깰 때만 받습니다', cx, 630, 24, T.inkSoft, 'center', 'bold');
             } else {
                 UIKit.ink(ctx, '다시 도전하면 시작 전 대화 없이 바로 시작합니다', cx, 630, 22, T.inkSoft, 'center');
             }
             const next = nextStage(st.id);
-            if (win && !next) line = '"1부 끝! 2층 분양은... 다음 이야기에서."';
+            if (win && !next) line = '"이야기는 끝! 이제 본부의 도전의 문이다."';
             else if (win) line = `"다음은 ${next.no}. ${next.name}. 쉬지 마라."`;
         }
         UIKit.ink(ctx, line, cx, 726, 24, T.ink, 'center');
@@ -2713,25 +2712,17 @@ const UI = {
         return { kind: '엔딩', name: '1부 끝' };
     },
 
-    // 스토리 지도: 커다란 양피지 지도에 장 이름, 점선 길, 12개 도장. 아래 나무판에 고른 스테이지 설명과 처음 깰 때의 보상
+    // 스토리 지도: 커다란 양피지 지도에 이야기 제목, 점선 길, 스테이지 도장. 아래 나무판에 고른 스테이지 설명과 처음 깰 때의 보상
     drawStoryMap(ctx) {
         const T = UI_THEME;
         const M = STORY_MAP;
         this.drawTable(ctx);
         UIKit.text(ctx, '스토리 지도', GAME_WIDTH / 2, 56, 44, T.cream, 'center');
         UIKit.panel(ctx, M.x, M.y, M.w, M.h, { seal: true });
-        // 장 구역: 큰 장 이름과 한 줄 설명, 구역 사이 점선
-        STORY_CHAPTERS.forEach((ch, i) => {
-            const x0 = STORY_CHAPTER_X[i];
-            const x1 = STORY_CHAPTER_X[i + 1];
-            const done = STAGES.filter(st => st.chapter === ch.id).every(st => Meta.isCleared(st.id));
-            UIKit.ink(ctx, ch.name, (x0 + x1) / 2, M.y + 78, 40, done ? T.inkWax : T.ink, 'center', 'bold');
-            UIKit.ink(ctx, ch.sub, (x0 + x1) / 2, M.y + 118, 19, T.inkSoft, 'center');
-            if (i > 0) {
-                ctx.fillStyle = T.parchmentDark;
-                for (let y = M.y + 50; y < M.y + M.h - 40; y += 22) ctx.fillRect(x0 - 2, y, 4, 10);
-            }
-        });
+        // 이야기 제목과 한 줄 설명(다 깨면 붉은 잉크)
+        const done = STAGES.every(st => Meta.isCleared(st.id));
+        UIKit.ink(ctx, STORY_TITLE.name, M.x + M.w / 2, M.y + 78, 40, done ? T.inkWax : T.ink, 'center', 'bold');
+        UIKit.ink(ctx, STORY_TITLE.sub, M.x + M.w / 2, M.y + 118, 19, T.inkSoft, 'center');
         // 점선 길: 깬 구간은 붉은 잉크, 나머지는 흐린 잉크
         for (let i = 1; i < STAGES.length; i++) {
             const a = STAGES[i - 1].map;
@@ -2801,16 +2792,15 @@ const UI = {
         this.drawStoryInfo(ctx);
     },
 
-    // 지도 아래 나무판: 고른 스테이지의 번호, 이름, 장, 웨이브 수, 보스, 처음 깰 때의 보상 아이콘
+    // 지도 아래 나무판: 고른 스테이지의 번호, 이름, 웨이브 수, 보스, 처음 깰 때의 보상 아이콘
     drawStoryInfo(ctx) {
         const T = UI_THEME;
         const I = STORY_INFO;
         UIKit.plank(ctx, I.x, I.y, I.w, I.h);
         const st = stageDef(this.storyPick);
         if (!st) return;
-        const ch = STORY_CHAPTERS.find(c => c.id === st.chapter);
         const cleared = Meta.isCleared(st.id);
-        UIKit.text(ctx, `${ch.name} · 스테이지 ${st.no}`, I.x + 50, I.y + 50, 24, T.creamSoft);
+        UIKit.text(ctx, `${STORY_TITLE.name} · 스테이지 ${st.no} / ${STAGES.length}`, I.x + 50, I.y + 50, 24, T.creamSoft);
         UIKit.text(ctx, st.name, I.x + 50, I.y + 110, 56, T.cream);
         UIKit.icon(ctx, 'wave', I.x + 46, I.y + 154);
         UIKit.text(ctx, `웨이브 ${st.waves.length}`, I.x + 102, I.y + 180, 28, T.gold);
@@ -2924,8 +2914,8 @@ const UI = {
         } else if (u.kind === 'slot') {
             UIKit.ink(ctx, `유물을 ${Meta.relicSlots()}개까지 들고 시작합니다`, cx, y, 26, T.inkGood, 'center', 'bold');
         } else {
-            UIKit.ink(ctx, '용사단 본대를 물리쳤습니다.', cx, y, 26, T.ink, 'center', 'bold');
-            UIKit.ink(ctx, '2층 이야기는 다음에 이어집니다.', cx, y + 40, 22, T.inkSoft, 'center');
+            UIKit.ink(ctx, '메인 스토리를 모두 깼습니다.', cx, y, 26, T.ink, 'center', 'bold');
+            UIKit.ink(ctx, '이제 본부의 도전의 문에서 겨루세요.', cx, y + 40, 22, T.inkSoft, 'center');
         }
         if (C.list.length > 1) UIKit.text(ctx, `${C.index + 1} / ${C.list.length}`, cx, U.y + U.h + 20, 22, T.creamSoft, 'center');
     },
@@ -2978,8 +2968,7 @@ const UI = {
         UIKit.icon(ctx, 'book', 60, 38);
         UIKit.text(ctx, '도감', 118, 62, 46, UI_THEME.cream);
         if (C.tab === 'monster') this.drawDexMonsters(ctx);
-        else if (C.tab === 'recipe') this.drawDexRecipes(ctx);
-        else this.drawDexRecord(ctx);
+        else this.drawDexRecipes(ctx);
         const pages = this.collectionPages(C.tab);
         if (pages > 1) UIKit.text(ctx, `${C.page + 1} / ${pages}`, GAME_WIDTH / 2, GAME_HEIGHT - 64, 30, UI_THEME.cream, 'center');
     },
@@ -3062,31 +3051,5 @@ const UI = {
             UIKit.text(ctx, showResult ? res.name : '???', c.x + 682, cy, 19, showResult ? MONSTER_GRADES[res.grade].light : T.creamSoft);
             if (r.hidden) UIKit.text(ctx, found ? '히든' : '히든 조합식', c.x + c.w - 16, c.y + 18, 16, T.gold, 'right');
         }
-    },
-
-    // 기록 탭: 판 수, 승리 수, 스토리 진행, 풀린 마왕·유물·유물 칸과 도감 수. 기록 지우기 버튼은 layoutCollection이 놓는다
-    drawDexRecord(ctx) {
-        const T = UI_THEME;
-        const d = Meta.data;
-        const cx = GAME_WIDTH / 2;
-        const hidden = MONSTER_RECIPES.filter(r => r.hidden);
-        UIKit.panel(ctx, cx - 430, COL_TOP - 10, 860, 640, { seal: true });
-        const rows = [
-            ['판 수', `${d.runs}판`],
-            ['승리 수', `${d.wins}번`],
-            ['깬 스테이지', `${d.cleared.length} / ${STAGES.length}`],
-            ['최고 스테이지', d.bestStage ? `${d.bestStage}. ${STAGES[d.bestStage - 1].name}` : '없음'],
-            ['마왕', `${Meta.lordsOwned().length} / ${Object.keys(DEMON_LORDS).length}`],
-            ['유물', `${Meta.relicsOwned().length} / ${Object.keys(RELICS).length}`],
-            ['유물 칸', `${Meta.relicSlots()} / ${Meta.maxSlots()}`],
-            ['본 몬스터', `${d.seen.length} / ${Object.keys(MONSTERS).length}`],
-            ['찾은 히든 조합식', `${hidden.filter(r => Meta.hasRecipe(r)).length} / ${hidden.length}`]
-        ];
-        rows.forEach(([k, v], i) => {
-            const y = COL_TOP + 56 + i * 62;
-            UIKit.ink(ctx, k, cx - 360, y, 28, T.inkSoft);
-            UIKit.ink(ctx, v, cx + 360, y, 34, T.ink, 'right', 'bold');
-        });
-        UIKit.text(ctx, '마왕, 유물, 유물 칸은 스토리 스테이지를 처음 깰 때 풀립니다.', cx, 870, 21, T.creamSoft, 'center');
     }
 };

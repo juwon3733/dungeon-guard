@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
@@ -113,8 +113,18 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     }
 
     // 그림은 PixelLab으로 만든 것만 남긴다: assets/sprites에는 아래 이름만 있다
-    const KEEP = [/^pl_(?!fac_)/, /^equip_/, /^relic_/, /^lord_/, /^prop2_/, /^uiicon_/, /^tileset_/, /^ui_kit\.png$/, /^ui_buttons\.png$/];
+    const KEEP = [/^pl_(?!fac_)/, /^equip_/, /^relic_/, /^lord_/, /^prop2_/, /^uiicon_/, /^tileset_/, /^hq_/, /^ui_kit\.png$/, /^ui_buttons\.png$/];
     for (const f of fs.readdirSync(path.join(root, 'assets/sprites'))) assert(KEEP.some(re => re.test(f)), 'only PixelLab art remains: ' + f);
+    // 본부 그림: 물건 16장(64px)과 바닥 타일셋(128px, 32px 타일 16칸)이 있고 불러오기 목록에 들어 있다. 타일 좌표 JSON은 코드(WANG_TILES)로 옮겨 지웠다
+    const hqSprites = vm.runInContext('HQ_SPRITES', actx);
+    assert.strictEqual(hqSprites.length, 17, 'sixteen hq pictures and the tileset');
+    for (const name of hqSprites) {
+        assert(names.includes(name), name + ' in Assets.names()');
+        assert.deepStrictEqual(pngSize(name), name === 'tileset_hq' ? [128, 128] : [64, 64], name + ' size');
+    }
+    assert(!fs.existsSync(path.join(root, 'docs/hq_tileset.json')), 'hq tileset json moved into code');
+    assert.strictEqual(Object.keys(vm.runInContext('WANG_TILES', actx)).length, 16, 'sixteen wang tiles');
+    globalThis.HQ_SPRITE_NAMES = hqSprites;
     // 불러오는 그림은 모두 파일이 있다(지운 그림을 부르는 곳이 없다)
     for (const n of names) {
         const file = n.startsWith('pfx_') ? path.join(root, 'assets/fx', n + '.png') : path.join(root, 'assets/sprites', n + '.png');
@@ -200,11 +210,11 @@ const withRandom = (v, fn) => {
 // 영구 수집은 저장소 없이 초기값에서 시작한다(시험끼리 기록이 이어지지 않게 블록마다 처음 상태로 둔다)
 assert(typeof localStorage === 'undefined', 'smoke runs without storage');
 Meta.data = Meta.fresh();
-// 시작: 타이틀 → 스토리 지도. 이 묶음은 스토리 없이 WAVES 전부로 도는 판(시험 도구용 고르기 화면 → 시작)을 쓴다.
-// 스토리 흐름은 맨 아래 smoke-story 묶음에서 본다
+// 시작: 타이틀 → 본부. 이 묶음은 스토리 없이 WAVES 전부로 도는 판(시험 도구용 고르기 화면 → 시작)을 쓴다.
+// 스토리 흐름은 아래 smoke-story, 본부는 smoke-hq 묶음에서 본다
 assert.strictEqual(Game.state, 'title');
 btn('start');
-assert.strictEqual(Game.state, 'story');
+assert.strictEqual(Game.state, 'hq');
 UI.openSelect(null);
 assert.strictEqual(Game.state, 'select');
 assert.strictEqual(JSON.stringify(UI.loadout), '{"lord":"rift","relics":[]}', 'default loadout');
@@ -2560,11 +2570,11 @@ const memoryStorage = () => {
 };
 const brokenStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
 // 기록을 이 시험용으로: 스토리 스테이지를 앞에서부터 n개 깬 상태(저장소는 건드리지 않는다).
-// 12개면 마왕 3명, 유물 16종, 칸 3개. 6개면 균열의 군주와 뼈의 여왕, 유물 11종, 칸 1개
-const progress = n => { Meta.data = Meta.sanitize({ version: 2, cleared: STAGES.slice(0, n).map(s => s.id) }); };
+// 6개(전부)면 마왕 3명, 유물 16종, 칸 3개. 3개면 균열의 군주와 뼈의 여왕, 유물 10종, 칸 1개
+const progress = n => { Meta.data = Meta.sanitize({ version: META_VERSION, cleared: STAGES.slice(0, n).map(s => s.id) }); };
 // 스토리 없는 판의 고르기 화면(시험 도구용)
 const toSelect = () => { Game.state = 'title'; UI.openSelect(null); };
-progress(12);
+progress(STAGES.length);
 
 // ----- 표 -----
 same(Object.keys(DEMON_LORDS), ['rift', 'bone_queen', 'gold_king'], 'three lords');
@@ -2762,8 +2772,8 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
     assert(r2.ok && Game.hp === 8 && Game.skills.lightning === 5, 'sacrifice applied');
 }
 
-// ----- 선택 화면: 고르고 시작, 다시 시작, 저장소(스테이지 6까지 깸: 마왕 2명, 유물 칸 1개) -----
-progress(6);
+// ----- 선택 화면: 고르고 시작, 다시 시작, 저장소(스테이지 3까지 깸: 마왕 2명, 유물 칸 1개) -----
+progress(3);
 globalThis.localStorage = memoryStorage();
 UI.loadout = null; // 창을 새로 연 것처럼
 toSelect();
@@ -2780,7 +2790,7 @@ UI.onKey('Digit1');
 assert.strictEqual(UI.loadout.lord, 'rift', 'key 1');
 UI.toast = null;
 UI.onKey('Digit3');
-assert(UI.loadout.lord === 'rift' && UI.toast.text.includes('스테이지 8에서 해금'), 'key 3: locked gold king says where it unlocks');
+assert(UI.loadout.lord === 'rift' && UI.toast.text.includes('스테이지 5에서 해금'), 'key 3: locked gold king says where it unlocks');
 btn('lord_bone_queen');
 // 유물: 눌러 넣고, 다른 것을 누르면 바꾸고(칸 1개), 다시 누르면 뺀다. 고른 칸을 눌러도 뺀다
 btn('relic_pouch');
@@ -2872,7 +2882,7 @@ for (const [raw, want] of [
 delete globalThis.localStorage;
 
 // ----- 유물 칸 3개(스토리를 다 깸): 화면과 게임이 동작한다 -----
-progress(12);
+progress(STAGES.length);
 UI.loadout = { lord: 'rift', relics: [] };
 toSelect();
 assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('picked3'), 'three picked slots');
@@ -2910,8 +2920,8 @@ UI.update(0);
     assert(light.x + light.w <= roar.x && slots.every(s => roar.x + roar.w <= s.x && s.x + s.w <= bag.x && s.y + s.h <= GAME_HEIGHT), 'bar layout fits');
     assert(light.w >= 180, 'skill buttons stay readable');
 }
-// 칸이 1개인 기록(스테이지 6까지)으로 돌아가면 잠긴 유물(번개 병)은 빠지고 앞의 1개만 쓴다
-progress(6);
+// 칸이 1개인 기록(스테이지 3까지)으로 돌아가면 잠긴 유물(번개 병)은 빠지고 앞의 1개만 쓴다
+progress(3);
 Game.hp = 1;
 damageThrone(1);
 btn('retry');
@@ -2920,7 +2930,7 @@ btn('begin');
 assert(Game.relics.join() === 'dice');
 
 // 마왕 대사: 공통 대사에 고른 마왕의 대사가 더해진다
-progress(12);
+progress(STAGES.length);
 Game.reset({ lord: 'gold_king', relics: [] });
 assert.strictEqual(withRandom(0.9999, () => lordLine('waveStart')), DEMON_LORDS.gold_king.speech.waveStart.slice(-1)[0], 'gold king line');
 assert(SPEECH.waveStart.includes(withRandom(0, () => lordLine('waveStart'))), 'common lines stay');
@@ -2969,13 +2979,13 @@ const ids = list => list.map(s => s.id);
 assert(typeof META_RULES === 'undefined', 'no soul rules');
 assert(Object.values(DEMON_LORDS).every(l => !('unlock' in l)) && Object.values(RELICS).every(r => !('unlock' in r)), 'no prices');
 assert(typeof Meta.buy === 'undefined' && typeof Meta.buySlot === 'undefined' && typeof Meta.price === 'undefined', 'no buying');
-assert.strictEqual(META_VERSION, 2);
+assert.strictEqual(META_VERSION, 3);
 assert.strictEqual(Meta.maxSlots(), 3);
 
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 2, cleared: [], seen: [], recipes: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -2984,17 +2994,17 @@ assert(!Meta.hasLord('nope') && !Meta.hasLord('toString') && !Meta.hasRelic('toS
 
 // ----- 해금은 깬 스테이지에서 계산한다(저장하지 않는다) -----
 Meta.data.cleared = ['s1'];
-assert(Meta.relicSlots() === 1 && Meta.hasRelic('pouch') && !Meta.hasRelic('horn'), 'stage 1: slot and pouch');
+assert(Meta.relicSlots() === 1 && Meta.hasRelic('pouch') && Meta.hasRelic('horn') && Meta.hasRelic('heart') && !Meta.hasRelic('chalice'), 'stage 1: slot, pouch, horn, heart');
 assert(Meta.isOpen('s2') && !Meta.isOpen('s3'), 'stage 2 opens after stage 1');
-Meta.data.cleared = ['s1', 's2', 's3', 's4'];
-assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.hasRelic('shackles'), 'stage 4: bone queen');
+Meta.data.cleared = ['s1', 's2', 's3'];
+assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.hasRelic('shackles'), 'stage 3: bone queen');
 Meta.data.cleared = ids(STAGES);
 same(Meta.lordsOwned(), Object.keys(DEMON_LORDS), 'all lords after the story');
 same(Meta.relicsOwned(), Object.keys(RELICS), 'all relics after the story');
 assert.strictEqual(Meta.relicSlots(), 3);
 // 깬 목록 순서와 상관없이(이상하게 저장돼도) 계산은 같다
-Meta.data.cleared = ['s8'];
-assert(Meta.hasLord('gold_king') && Meta.hasRelic('key') && Meta.isOpen('s9') && !Meta.isOpen('s2'), 'computed per stage');
+Meta.data.cleared = ['s5'];
+assert(Meta.hasLord('gold_king') && Meta.hasRelic('banner') && Meta.isOpen('s6') && !Meta.isOpen('s2'), 'computed per stage');
 assert(!('lords' in Meta.data) && !('relics' in Meta.data) && !('slots' in Meta.data) && !('souls' in Meta.data), 'unlocks are not stored');
 
 // ----- 판 결과: 판 수, 승리 수, 깬 스테이지, 최고 스테이지. 처음 깰 때만 해금 -----
@@ -3011,7 +3021,7 @@ freshWindow();
     same(Meta.data.cleared, ['s1'], 'cleared once');
     assert(Meta.data.runs === 4 && Meta.data.wins === 3 && Meta.data.bestStage === 1, 'run records');
     same(stored(), Meta.data, 'saved after each run');
-    assert.strictEqual(stored().version, 2, 'version saved');
+    assert.strictEqual(stored().version, 3, 'version saved');
     // 다시 열어도 그대로
     const before = JSON.stringify(Meta.data);
     freshWindow(localStorage);
@@ -3033,9 +3043,34 @@ freshWindow();
     same(UI.loadout, { lord: 'rift', relics: [] }, 'v1 loadout cleaned');
     btn('begin');
     assert(Game.state === 'prep' && Game.lord === 'rift' && Game.relics.length === 0, 'plays after migration');
-    // 저장할 때는 버전 2로
+    // 저장할 때는 지금 버전으로
     Meta.save();
-    assert(stored().version === 2 && !('souls' in stored()) && !('lords' in stored()), 'saved as v2');
+    assert(stored().version === 3 && !('souls' in stored()) && !('lords' in stored()), 'saved as v3');
+}
+
+// ----- 버전 2 저장 이전(12스테이지 때): 깬 스테이지와 최고 스테이지를 새 표로(옛 번호 N → 새 번호 ceil(N / 2)), 나머지는 그대로 -----
+{
+    const storage = memoryStorage();
+    storage.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: ['s1', 's2', 's3', 's4', 's5', 's6', 's7'], seen: ['orc_guard'],
+        recipes: ['orc_berserker+skeleton_archer'], runs: 11, wins: 7, bestStage: 7 });
+    freshWindow(storage);
+    same(Meta.data, Object.assign(Meta.fresh(), { cleared: ['s1', 's2', 's3', 's4'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], runs: 11, wins: 7, bestStage: 4 }), 'v2 migrated');
+    assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.relicSlots() === 2 && Meta.isOpen('s5') && !Meta.isOpen('s6'), 'v2 progress kept');
+    // 옛 표에만 있던 id(s7~s12)도 버리지 않고 옮긴다: 12번까지 깼으면 6번까지
+    for (const [old, want, best] of [[['s12'], ['s6'], 6], [['s9', 's10', 's11', 's12'], ['s5', 's6'], 6], [['s2'], ['s1'], 1], [['s3', 's13', 's0'], ['s2'], 2]]) {
+        const st = memoryStorage();
+        st.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: old, runs: 3, wins: 3, bestStage: 0 });
+        freshWindow(st);
+        same(Meta.data.cleared, want, 'v2 ' + old.join());
+        assert.strictEqual(Meta.data.bestStage, best, 'v2 best ' + old.join());
+    }
+    // 다 깬 옛 기록은 새 표도 다 깬 것으로(엔딩까지)
+    const all = memoryStorage();
+    all.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: Array.from({ length: 12 }, (_, i) => 's' + (i + 1)), runs: 12, wins: 12, bestStage: 12 });
+    freshWindow(all);
+    assert(STAGES.every(st => Meta.isCleared(st.id)) && Meta.data.bestStage === STAGES.length && Meta.relicSlots() === 3, 'v2 complete story stays complete');
+    Meta.save();
+    assert.strictEqual(stored().version, 3, 'saved as v3');
 }
 
 // ----- 망가진 값: 고쳐 쓰고 모르는 id는 버린다 -----
@@ -3045,11 +3080,15 @@ for (const [raw, want] of [
     ['[1,2]', {}],
     ['"x"', {}],
     ['7', {}],
-    [JSON.stringify({ version: 2, cleared: ['s2', 'nope', 's2', 'toString', 5], seen: ['orc_guard', 'toString', 7],
-        recipes: ['bad', 'orc_berserker+skeleton_archer', 'orc_berserker+skeleton_archer'], runs: '3', wins: 5, bestStage: 999, extra: 1 }),
-        { cleared: ['s2'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], bestStage: 12 }],
-    [JSON.stringify({ version: 2, cleared: 's1', runs: 4.7, wins: 2, bestStage: 3.5 }), { runs: 4, wins: 2, bestStage: 3 }],
-    [JSON.stringify({ version: 2, cleared: ['s3'], runs: Infinity, wins: 9, bestStage: -1 }), { cleared: ['s3'], bestStage: 3 }],
+    [JSON.stringify({ version: 3, cleared: ['s2', 'nope', 's2', 'toString', 5], seen: ['orc_guard', 'toString', 7],
+        recipes: ['bad', 'orc_berserker+skeleton_archer', 'orc_berserker+skeleton_archer'], equips: ['sword', 'nope', 'sword', 'toString', 3],
+        runs: '3', wins: 5, bestStage: 999, extra: 1 }),
+        { cleared: ['s2'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], equips: ['sword'], bestStage: 6 }],
+    [JSON.stringify({ version: 3, cleared: 's1', equips: 'sword', runs: 4.7, wins: 2, bestStage: 3.5 }), { runs: 4, wins: 2, bestStage: 3 }],
+    [JSON.stringify({ version: 3, cleared: ['s3'], runs: Infinity, wins: 9, bestStage: -1 }), { cleared: ['s3'], bestStage: 3 }],
+    [JSON.stringify({ version: 2, cleared: ['s2', 'nope', 's2', 'toString', 5], equips: ['sword'], runs: '3', wins: 5, bestStage: 999 }), { cleared: ['s1'], bestStage: 6 }],
+    [JSON.stringify({ version: 2, cleared: 's1', runs: 4.7, wins: 2, bestStage: 3.5 }), { runs: 4, wins: 2, bestStage: 2 }],
+    [JSON.stringify({ version: 2, cleared: ['s3'], runs: Infinity, wins: 9, bestStage: -1 }), { cleared: ['s2'], bestStage: 2 }],
     [JSON.stringify({ version: 99, cleared: ['s1'], runs: 2 }), { runs: 2 }],
     [JSON.stringify({ souls: 12.7, slots: 2, runs: 4, wins: 2 }), { runs: 4 }]
 ]) {
@@ -3057,6 +3096,9 @@ for (const [raw, want] of [
     storage.data['dungeonGuard.meta'] = raw;
     freshWindow(storage);
     same(Meta.data, Object.assign(Meta.fresh(), want), 'clean ' + raw);
+    UI.openHQ();
+    UI.update(0);
+    assert(Game.state === 'hq' && UI.buttons.filter(b => b.facility).length === HQ_FACILITIES.length, 'hq with ' + raw);
     UI.openStoryMap();
     assert(Game.state === 'story' && Meta.isOpen('s1'), 'story map with ' + raw);
     UI.openSelect(null);
@@ -3104,21 +3146,40 @@ assert(res.ok && !res.hidden && Meta.hasRecipe(MONSTER_RECIPES[0]) && Meta.hasSe
 Game.bossReward = { cards: [{ kind: 'monster', type: 'dark_mage' }] };
 assert(Game.pickBossReward(0).ok && Meta.hasSeen('dark_mage'), 'boss reward records');
 same(stored().seen, ['orc_guard', 'bone_knight', 'curse_shooter', 'dark_mage'], 'seen saved');
+// 장비 기록(무기고): 정예 드롭, 보스 보상, 돌아온 장비, 보관함이 가득 차 골드로 바뀐 장비도 얻은 것으로 한 번씩 남는다
+assert(Meta.data.equips.length === 0 && !Meta.seeEquip('nope') && !Meta.seeEquip('toString'), 'no equipment yet, unknown ids ignored');
+Game.gainEquip('sword');
+same(Meta.data.equips, ['sword'], 'bag gain records');
+Game.gainEquip('sword');
+same(Meta.data.equips, ['sword'], 'recorded once');
+Game.bossReward = { cards: [{ kind: 'equip', id: 'crown' }] };
+assert(Game.pickBossReward(0).ok && Meta.hasEquip('crown'), 'boss reward equipment records');
+withRandom([0, 0, 0], () => Game.eliteDrop(100, 100)); // 희귀 첫 장비(룬 전투 도끼)
+assert.strictEqual(Meta.data.equips.length, 3, 'elite drop records');
+while (!Game.bagFull()) Game.equipBag.push('bow');
+Game.gainEquip('cape');
+assert(Meta.hasEquip('cape') && !Game.equipBag.includes('cape'), 'converted to gold still counts');
+assert(!Meta.hasEquip('bow'), 'only gained equipment');
+Game.equipBag = [];
+same(stored().equips, Meta.data.equips, 'equipment saved');
 // 다시 열어도 남는다
 freshWindow(localStorage);
-assert(Meta.hasSeen('bone_knight') && Meta.hasRecipe(MONSTER_RECIPES[3]), 'records survive reload');
+assert(Meta.hasSeen('bone_knight') && Meta.hasRecipe(MONSTER_RECIPES[3]) && Meta.hasEquip('crown') && Meta.data.equips.length === 4, 'records survive reload');
 
-// ----- 도감 화면: 타이틀, 스토리 지도, 선택 화면에서 연다. 탭 3개, 표를 읽어 칸을 만든다 -----
-btn('collection');
-assert(UI.collection && UI.collection.tab === 'monster' && Game.state === 'title', 'opened from title');
-assert(['col_tab_monster', 'col_tab_recipe', 'col_tab_record', 'col_close'].every(hasBtn) && !hasBtn('start'), 'collection buttons');
+// ----- 도감 화면: 본부 서재, 스토리 지도, 선택 화면에서 연다. 탭 2개(기록은 본부 고블린 비서), 표를 읽어 칸을 만든다 -----
+assert(!hasBtn('collection'), 'no collection button on the title');
+btn('start');
+btn('hq_bookshelf');
+assert(UI.collection && UI.collection.tab === 'monster' && Game.state === 'hq', 'opened from the hq bookshelf');
+assert(['col_tab_monster', 'col_tab_recipe', 'col_close'].every(hasBtn) && !hasBtn('col_tab_record') && !hasBtn('hq_wartable'), 'collection buttons');
 // 23종은 한 쪽(12칸)에 다 들어가지 않아 쪽 넘김이 생긴다: 12 + 11
 assert.strictEqual(Object.keys(MONSTERS).length, 23);
 assert.strictEqual(UI.collectionPages('monster'), 2, 'two monster pages');
 assert.strictEqual(UI.collectionCells().length, 12, 'first page full');
 assert(hasBtn('col_prev') && hasBtn('col_next') && btnOf('col_prev').disabled, 'page buttons');
 UI.onKey('Space');
-assert(Game.state === 'title' && UI.collection, 'Space does not start while the collection is open');
+UI.onKey('Digit1');
+assert(Game.state === 'hq' && UI.collection && !UI.hqView, 'hq keys do nothing while the collection is open');
 btn('col_next');
 assert(UI.collection.page === 1 && UI.collectionCells().length === 11, 'second page holds the rest');
 assert.strictEqual(UI.collectionCells()[10].item, 'archlich', 'table order');
@@ -3140,12 +3201,12 @@ assert.strictEqual(UI.collectionCells().length, 12, 'recipe page full');
 btn('col_next');
 assert.strictEqual(UI.collectionCells().length, 4, 'recipe second page');
 for (const c of UI.collectionCells()) assert(c.y + c.h <= btnOf('col_prev').y, 'recipe row above the page buttons');
+UI.onKey('Digit1');
+assert.strictEqual(UI.collection.tab, 'monster', 'key 1');
 UI.onKey('Digit3');
-assert.strictEqual(UI.collection.tab, 'record', 'key 3');
-assert(hasBtn('col_wipe'), 'wipe button on the record tab');
-assert(!hasBtn('col_prev'), 'record tab has one page');
+assert.strictEqual(UI.collection.tab, 'monster', 'no third tab');
 UI.onKey('Escape');
-assert(UI.collection === null && hasBtn('start'), 'Esc closes');
+assert(UI.collection === null && Game.state === 'hq' && hasBtn('hq_bookshelf'), 'Esc back to the hq');
 // 스토리 지도에서도 연다
 UI.openStoryMap();
 btn('collection');
@@ -3161,7 +3222,7 @@ Game.state = 'title';
         MONSTERS[id] = Object.assign({}, MONSTERS.orc_guard, { id, name: id });
         extra.push(id);
     }
-    btn('collection');
+    UI.openCollection();
     assert.strictEqual(UI.collectionPages('monster'), 3, 'three pages');
     btn('col_next');
     btn('col_next');
@@ -3170,19 +3231,23 @@ Game.state = 'title';
     UI.closeCollection();
 }
 
-// ----- 기록 지우기: 두 번 눌러야 지우고, 지운 뒤 바로 처음 상태 -----
+// ----- 기록 지우기(본부 고블린 비서의 장부): 두 번 눌러야 지우고, 지운 뒤 바로 처음 상태 -----
 {
-    Meta.data.cleared = ids(STAGES).slice(0, 5); // 스테이지 5까지: 뼈의 여왕, 유물 칸 1개
+    Meta.data.cleared = ids(STAGES).slice(0, 3); // 스테이지 3까지: 뼈의 여왕, 유물 칸 1개
     Meta.data.runs = 6;
     Meta.save();
-    UI.openSelect('s6');
+    UI.openSelect('s4');
     btn('lord_bone_queen');
-    btn('relic_eye'); // 아직 잠김(스테이지 6)
+    btn('relic_key'); // 아직 잠김(스테이지 4)
     btn('relic_candle');
     same(UI.loadout, { lord: 'bone_queen', relics: ['candle'] });
     btn('collection');
     assert(UI.collection && Game.state === 'select', 'opened from select');
-    btn('col_tab_record');
+    assert(!hasBtn('col_wipe'), 'no wipe in the collection');
+    UI.onKey('Escape');
+    UI.openHQ();
+    btn('hq_goblin_desk');
+    assert(UI.hqView === 'record' && hasBtn('hq_close'), 'record book');
     btn('col_wipe');
     assert(Meta.hasLord('bone_queen') && UI.wipeArmed > 0, 'first press only arms');
     assert(btnOf('col_wipe').sub.includes('스테이지'), 'wipe warns about story progress');
@@ -3194,9 +3259,11 @@ Game.state = 'title';
     same(Meta.data, Meta.fresh(), 'wiped');
     same(stored(), Meta.fresh(), 'wiped in storage');
     same(UI.loadout, { lord: 'rift', relics: [] }, 'loadout back to defaults');
-    assert(UI.collection.tab === 'record' && UI.toast.text.includes('지웠'), 'stays on the record tab');
+    assert(UI.hqView === 'record' && UI.toast.text.includes('지웠'), 'stays on the record book');
     assert.strictEqual(UI.stageId, 's1', 'locked stage falls back to the first stage');
     UI.onKey('Escape');
+    assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the book');
+    UI.openSelect(UI.stageId);
     assert(btnOf('lord_bone_queen').locked && !hasBtn('picked0') && hasBtn('slotLocked0'), 'select screen back to the first state');
 }
 
@@ -3205,8 +3272,8 @@ Meta.data = Meta.fresh();
 console.log('smoke ok: meta record');
 }`, ctx, { filename: 'smoke-meta' });
 
-// 메인 스토리: 표, 흐름(지도 → 대화 → 고르기 → 전투 → 승리 대화 → 해금 카드 → 결과), 열림 순서, 다시 깨기, 패배,
-// 웨이브 범위와 보스 덮어쓰기, 체력 배율, 대화 넘기기와 건너뛰기, 고르기 건너뛰기, 유물 칸 0개, 12번까지 끝까지 깨기
+// 메인 스토리: 표, 흐름(본부 → 지도 → 대화 → 고르기 → 전투 → 승리 대화 → 해금 카드 → 결과 → 본부), 열림 순서, 다시 깨기, 패배,
+// 웨이브 목록과 보스 덮어쓰기, 체력 배율, 대화 넘기기와 건너뛰기, 고르기 건너뛰기, 유물 칸 0개, 6번까지 끝까지 깨기
 vm.runInContext(`{
 const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
 const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
@@ -3249,31 +3316,22 @@ const clickThrough = () => {
     return n;
 };
 
-// ----- 표 -----
-same(STORY_CHAPTERS.map(c => c.name), ['1장 집들이', '2장 빚쟁이', '3장 용사단 본대'], 'chapters');
-same(STAGES.map(s => s.no), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 'twelve stages');
-same(STAGES.map(s => s.chapter), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3], 'chapters per stage');
-same(STAGES.map(s => s.name), ['첫 손님', '마을 자경단', '도굴꾼 소동', '건너편 세입자', '왕국 정찰대', '은빛 검 기사단', '두 갈래 습격', '수금하러 왔다',
-    '선봉대', '끝없는 행렬', '왕좌 앞 전투', '부대장의 최후'], 'stage names');
-assert.strictEqual(new Set(ids(STAGES)).size, 12, 'unique ids');
-// 웨이브 범위(표의 인덱스)와 수
-const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-same(STAGES.map(s => s.waves), [range(0, 2), range(0, 3), range(1, 5), range(2, 6), range(2, 7), range(3, 8), range(2, 8), range(3, 9),
-    range(2, 9), range(1, 9), range(0, 9), range(0, 9)], 'wave ranges');
-same(STAGES.map(s => s.waves.length), [3, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 10], 'wave counts');
-// 보스 덮어쓰기: 4·8·11은 대마도사, 12는 부대장이 마지막 웨이브. 8~11은 보스 없는 표
+// ----- 표: 6스테이지, 장 구분 없음 -----
+assert(typeof STORY_CHAPTERS === 'undefined' && STAGES.every(s => !('chapter' in s)), 'no chapters');
+assert(STORY_TITLE.name && STORY_TITLE.sub, 'one story title');
+same(STAGES.map(s => s.no), [1, 2, 3, 4, 5, 6], 'six stages');
+same(STAGES.map(s => s.name), ['첫 손님', '도굴꾼 소동', '건너편 세입자', '왕국 정찰대', '수금하러 왔다', '부대장의 최후'], 'stage names');
+assert.strictEqual(new Set(ids(STAGES)).size, 6, 'unique ids');
+// 웨이브(표의 인덱스, 겹쳐도 된다). 중간 보스 웨이브(4)는 쓰지 않는다
+same(STAGES.map(s => s.waves), [[0, 1, 2], [1, 2, 3], [2, 3, 5, 6], [3, 5, 6, 7], [5, 6, 7, 8], [6, 7, 8, 8, 9]], 'wave lists');
+assert(STAGES.every(s => !s.waves.includes(4)), 'mid-boss wave unused');
+// 보스는 마지막 웨이브에만: 3·5번 대마도사, 6번 부대장
 const bosses = s => stageWaves(s).map(w => w.boss || null);
 const before = JSON.stringify(WAVES);
-same(bosses(STAGES[0]), [null, null, null], 's1 no boss');
-same(bosses(STAGES[2]), [null, null, null, 'archmage', null], 's3 keeps the archmage of the table (mid boss, reward)');
-same(bosses(STAGES[3]), [null, null, 'archmage', null, 'archmage'], 's4 ends with the archmage');
-same(bosses(STAGES[7]), [null, null, null, null, null, null, 'archmage'], 's8: boss-less table, archmage last');
-same(bosses(STAGES[8]), [null, null, null, null, null, null, null, null], 's9: boss-less table');
-same(bosses(STAGES[9]), [null, null, null, null, null, null, null, null, null], 's10: boss-less table');
-same(bosses(STAGES[10]), [null, null, null, null, null, null, null, null, null, 'archmage'], 's11: archmage last');
-same(bosses(STAGES[11]), [null, null, null, null, 'archmage', null, null, null, null, 'fallen_knight'], 's12: mid archmage, captain last');
+same(STAGES.map(bosses), [[null, null, null], [null, null, null], [null, null, null, 'archmage'], [null, null, null, null],
+    [null, null, null, 'archmage'], [null, null, null, null, 'fallen_knight']], 'bosses only on the last wave');
 assert.strictEqual(JSON.stringify(WAVES), before, 'WAVES untouched');
-// 나머지 값은 WAVES 그대로(파티, 인원, 정예, 입구)
+// 나머지 값은 WAVES 그대로(파티, 인원, 정예, 입구). 같은 웨이브를 두 번 써도 따로 복사한다
 for (const s of STAGES) {
     stageWaves(s).forEach((w, i) => {
         const src = WAVES[s.waves[i]];
@@ -3281,16 +3339,22 @@ for (const s of STAGES) {
         for (const k of ['party', 'members', 'elites', 'entry']) same(w[k], src[k], s.id + ' wave ' + i + ' ' + k);
     });
 }
-// 체력 배율: 1번 0.6에서 12번 1.0까지 차츰 오른다
-assert(STAGES[0].hpMul === 0.6 && STAGES[11].hpMul === 1, 'hp 0.6 to 1.0');
-for (let i = 1; i < STAGES.length; i++) assert(STAGES[i].hpMul > STAGES[i - 1].hpMul, 'hp rises');
+{
+    const w6 = stageWaves(STAGES[5]);
+    assert(w6[2] !== w6[3] && w6[2].level === 8 && w6[3].level === 8, 'repeated wave copied twice');
+}
+// 체력 배율: 표대로 0.5에서 0.8까지 오른다. 시작 골드 보너스는 줄지 않는다
+same(STAGES.map(s => s.hpMul), [0.5, 0.55, 0.6, 0.65, 0.7, 0.8], 'hp multipliers');
 for (let i = 1; i < STAGES.length; i++) assert(STAGES[i].goldBonus >= STAGES[i - 1].goldBonus && STAGES[i].goldBonus >= 0, 'gold bonus');
-// 해금 표: 스테이지마다 표대로, 마왕 2명과 유물 16종이 한 번씩, 칸 3개(1·7·11번), 엔딩은 12번
+// 해금 표: 스테이지마다 표대로, 마왕 2명과 유물 16종이 한 번씩, 칸 3개(1·4·6번), 엔딩은 6번
 const un = s => s.unlocks.map(u => u.kind === 'slot' || u.kind === 'ending' ? u.kind : u.kind + ':' + u.id);
 same(STAGES.map(un), [
-    ['slot', 'relic:pouch'], ['relic:horn', 'relic:heart'], ['relic:chalice', 'relic:dice'], ['lord:bone_queen', 'relic:shackles'],
-    ['relic:candle', 'relic:tablet'], ['relic:drum', 'relic:eye'], ['slot', 'relic:handgem'], ['lord:gold_king', 'relic:key'],
-    ['relic:hourglass', 'relic:banner'], ['relic:bottle'], ['slot', 'relic:mirror'], ['ending']], 'unlock table');
+    ['slot', 'relic:pouch', 'relic:horn', 'relic:heart'],
+    ['relic:chalice', 'relic:dice', 'relic:candle', 'relic:tablet'],
+    ['lord:bone_queen', 'relic:shackles', 'relic:drum', 'relic:eye'],
+    ['slot', 'relic:handgem', 'relic:hourglass', 'relic:key'],
+    ['lord:gold_king', 'relic:banner', 'relic:bottle'],
+    ['slot', 'relic:mirror', 'ending']], 'unlock table');
 {
     const all = STAGES.flatMap(s => s.unlocks);
     const relics = all.filter(u => u.kind === 'relic').map(u => u.id);
@@ -3300,30 +3364,40 @@ same(STAGES.map(un), [
     same(lords, ['bone_queen', 'gold_king'], 'two lords');
     assert(!lords.includes(DEFAULT_LORD), 'default lord is free');
     assert.strictEqual(all.filter(u => u.kind === 'slot').length, 3, 'three slots');
-    same([1, 2, 3].map(n => unlockStage('slot', n).no), [1, 7, 11], 'slot stages');
-    assert(unlockStage('relic', 'mirror').no === 11 && unlockStage('lord', 'gold_king').no === 8 && unlockStage('lord', 'rift') === null, 'unlock stage lookup');
+    same([1, 2, 3].map(n => unlockStage('slot', n).no), [1, 4, 6], 'slot stages');
+    assert(unlockStage('relic', 'mirror').no === 6 && unlockStage('lord', 'gold_king').no === 5 && unlockStage('lord', 'bone_queen').no === 3 && unlockStage('lord', 'rift') === null, 'unlock stage lookup');
 }
-// 대화: 스테이지마다 시작 전과 승리 3~6줄, 말하는 사람은 등장인물 표에 있고 초상이 있다
+// 대화: 스테이지마다 시작 전과 승리 2~4줄, 말하는 사람은 등장인물 표에 있고 초상이 있다
 for (const s of STAGES) {
     for (const lines of [s.intro, s.outro]) {
-        assert(lines.length >= 3 && lines.length <= 6, s.id + ' 3~6 lines');
+        assert(lines.length >= 2 && lines.length <= 4, s.id + ' 2~4 lines');
         for (const [who, text] of lines) {
             assert(STORY_CAST[who] && castPortrait(who), s.id + ' cast ' + who);
             assert(typeof text === 'string' && text.length > 0 && text.length <= 60, s.id + ' line length');
         }
     }
-    assert(Array.isArray(s.map) && s.map[0] > 60 && s.map[0] < 1860 && s.map[1] > 110 && s.map[1] < 770, s.id + ' stamp on the map');
+    assert(Array.isArray(s.map) && s.map[0] > 60 + STAMP_R && s.map[0] < 1860 - STAMP_R && s.map[1] > 110 + 140 && s.map[1] < 770 - STAMP_R - 40, s.id + ' stamp on the map');
+}
+// 도장끼리 겹치지 않는다
+for (let i = 0; i < STAGES.length; i++) {
+    for (let j = i + 1; j < STAGES.length; j++) {
+        const [a, b] = [STAGES[i].map, STAGES[j].map];
+        assert(Math.hypot(a[0] - b[0], a[1] - b[1]) > STAMP_R * 4, 'stamps apart ' + i + ' ' + j);
+    }
 }
 same(Object.keys(STORY_CAST), ['rift', 'bone_queen', 'gold_king', 'goblin', 'warrior', 'archmage', 'captain'], 'cast');
 for (const c of Object.values(STORY_CAST)) {
     const p = c.lord ? DEMON_LORDS[c.lord].portrait : c.portrait;
     assert(p && p.sprite && p.crop.length === 3, c.name + ' portrait crop');
 }
-// 동료가 되는 마왕은 자기 스테이지 대화에 나온다
-assert(STAGES[3].intro.some(l => l[0] === 'bone_queen') && STAGES[7].intro.some(l => l[0] === 'gold_king'), 'lords join in their stage');
+// 동료가 되는 마왕은 자기 스테이지 대화에 나오고, 엔딩 대화는 도전의 문으로 이어 준다
+assert(STAGES[2].intro.some(l => l[0] === 'bone_queen') && STAGES[4].intro.some(l => l[0] === 'gold_king'), 'lords join in their stage');
+assert(STAGES[5].outro.some(l => l[1].includes('도전의 문')), 'ending points to the challenge gate');
+// 타이틀의 설명은 1번 스테이지 대화로 옮겼다: 소환, 합치기, 번개
+assert(['소환', '합쳐', '번개'].every(w => STAGES[0].intro.some(l => l[1].includes(w))), 'tutorial in stage 1');
 // 코드에 스테이지별 분기가 없다(id 문자열은 데이터에만)
 {
-    const src = ${JSON.stringify(['js/game/game.js', 'js/game/meta.js', 'js/game/hero.js', 'js/ui/ui.js', 'js/main.js'].map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'))};
+    const src = ${JSON.stringify(['js/game/game.js', 'js/game/meta.js', 'js/game/hero.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/main.js'].map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'))};
     for (const s of STAGES) assert(!new RegExp("['\\"\`]" + s.id + "['\\"\`]").test(src), 'no branch on stage ' + s.id);
 }
 
@@ -3341,37 +3415,53 @@ for (const s of STAGES) {
     assert.strictEqual(Game.gold, COMBAT_RULES.startGold + s.goldBonus, s.id + ' start gold');
 }
 Game.reset(null, 's1');
-near(createHero('warrior', 0, 0, false).hp, HEROES.warrior.hp * 0.6, 'stage 1 hero hp x0.6');
-near(createHero(null, 0, 0, 'archmage').hp, HEROES[BOSSES.archmage.base].hp * BOSSES.archmage.hpMultiplier * 0.6 * (BOSSES.archmage.waveHpMul || 1), 'boss hp x0.6');
+near(createHero('warrior', 0, 0, false).hp, HEROES.warrior.hp * 0.5, 'stage 1 hero hp x0.5');
+near(createHero(null, 0, 0, 'archmage').hp, HEROES[BOSSES.archmage.base].hp * BOSSES.archmage.hpMultiplier * 0.5 * (BOSSES.archmage.waveHpMul || 1), 'boss hp x0.5');
 // 웨이브를 시작하면 용사 체력은 원래 웨이브 단계(level)와 스테이지 배율로
-Game.reset(null, 's5');
+Game.reset(null, 's2');
 Game.startWave();
 {
     const w = Game.waves[0];
-    assert.strictEqual(w.level, 2);
-    const h = Game.heroes.find(x => x.type === 'rogue');
-    near(h.maxHp, HEROES.rogue.hp * (1 + COMBAT_RULES.hpPerWave * 2) * 0.75, 's5 wave 1 is table wave 3');
+    assert.strictEqual(w.level, 1);
+    const h = Game.heroes[0];
+    near(h.maxHp, HEROES[h.type].hp * (1 + COMBAT_RULES.hpPerWave * 1) * 0.55, 's2 wave 1 is table wave 2');
 }
-// 마지막 웨이브의 보스는 스테이지 보스. 그 웨이브가 끝나면 보상 없이 승리
-Game.reset(null, 's4');
+// 마지막 웨이브의 보스는 스테이지 보스. 그 웨이브가 끝나면 보상 없이 승리(3, 5, 6번 모두)
+for (const st of STAGES.filter(x => x.boss)) {
+    Game.reset(null, st.id);
+    Game.waveIndex = st.waves.length - 1;
+    Game.startWave();
+    const boss = Game.heroes.find(h => h.boss);
+    assert(boss && boss.bossKey === st.boss, st.id + ' last wave boss');
+    const lv = st.waves[st.waves.length - 1];
+    const B = BOSSES[st.boss];
+    near(boss.maxHp, HEROES[B.base].hp * B.hpMultiplier * (1 + COMBAT_RULES.hpPerWave * lv) * st.hpMul * (B.waveHpMul || 1), st.id + ' boss hp with stage');
+    damageHero(boss, 1e9);
+    Game.heroes = [];
+    Game.update(1 / 30);
+    assert(Game.state === 'victory' && !Game.bossReward, st.id + ' last-wave boss: victory without reward');
+}
+// 스토리 웨이브 중간에는 보스가 없어 보상 3택이 나오지 않는다
+for (const st of STAGES) {
+    Game.reset(null, st.id);
+    for (let i = 0; i < st.waves.length - 1; i++) {
+        Game.waveIndex = i;
+        Game.state = 'prep';
+        Game.bossReward = null;
+        Game.startWave();
+        assert(!Game.heroes.some(h => h.boss), st.id + ' wave ' + i + ' has no boss');
+        Game.heroes = [];
+        Game.update(1 / 30);
+        assert(Game.state === 'prep' && !Game.bossReward, st.id + ' wave ' + i + ' no reward');
+    }
+}
+// 마지막 웨이브가 아닌 보스(스토리 없는 판의 5번째 웨이브): 지금 규칙대로 보상 3택
+Game.reset();
 Game.waveIndex = 4;
 Game.startWave();
 {
     const boss = Game.heroes.find(h => h.boss);
-    assert(boss && boss.bossKey === 'archmage', 's4 last wave boss');
-    near(boss.maxHp, HEROES[BOSSES.archmage.base].hp * BOSSES.archmage.hpMultiplier * (1 + COMBAT_RULES.hpPerWave * 6) * 0.71 * (BOSSES.archmage.waveHpMul || 1), 'boss hp with stage');
-    damageHero(boss, 1e9);
-    Game.heroes = [];
-    Game.update(1 / 30);
-    assert(Game.state === 'victory' && !Game.bossReward, 'last-wave boss: victory without reward');
-}
-// 마지막 웨이브가 아닌 보스(4번의 3번째 웨이브): 지금 규칙대로 보상 3택
-Game.reset(null, 's4');
-Game.waveIndex = 2;
-Game.startWave();
-{
-    const boss = Game.heroes.find(h => h.boss);
-    assert(boss && boss.bossKey === 'archmage', 's4 mid boss');
+    assert(boss && boss.bossKey === 'archmage', 'mid boss without a story');
     damageHero(boss, 1e9);
     Game.heroes = [];
     Game.update(1 / 30);
@@ -3379,15 +3469,17 @@ Game.startWave();
 }
 Meta.data = Meta.fresh();
 
-// ----- 첫 실행 흐름: 타이틀 → 지도 → 대화 → (고르기 건너뜀) → 전투 → 승리 대화 → 해금 카드 → 결과 → 지도 -----
+// ----- 첫 실행 흐름: 타이틀 → 본부 → 작전 테이블(지도) → 대화 → (고르기 건너뜀) → 전투 → 승리 대화 → 해금 카드 → 결과 → 본부 -----
 freshWindow();
 UI.update(0);
 assert.strictEqual(btnOf('start').label, '시작하기', 'title says start on a fresh record');
 btn('start');
+assert.strictEqual(Game.state, 'hq');
+btn('hq_wartable');
 assert.strictEqual(Game.state, 'story');
 assert.strictEqual(UI.storyPick, 's1', 'first stage picked');
 UI.update(0);
-assert.strictEqual(UI.buttons.filter(b => b.stamp).length, 12, 'twelve stamps');
+assert.strictEqual(UI.buttons.filter(b => b.stamp).length, 6, 'six stamps');
 assert(!btnOf('stage_go').disabled && btnOf('stage_go').label === '출전', 'go');
 // 잠긴 도장은 고르지 못하고 조건을 알린다
 btn('stage_s3');
@@ -3432,7 +3524,7 @@ UI.update(0);
 assert.strictEqual(Game.waves.length, 3, 'stage 1 has three waves');
 // 진다 → 다시 도전(대화 없이, 고르기도 건너뛰고) 또는 지도
 loseRun();
-assert(hasBtn('retry') && hasBtn('to_map') && !hasBtn('next_stage'), 'defeat buttons');
+assert(hasBtn('retry') && hasBtn('to_hq') && !hasBtn('next_stage'), 'defeat buttons');
 assert(!Meta.isCleared('s1') && Meta.data.runs === 1 && Meta.data.wins === 0 && !UI.dialogue, 'defeat keeps nothing');
 btn('retry');
 assert(Game.state === 'prep' && Game.stage === 's1' && !UI.dialogue && Game.monsters.length === 0, 'retry skips the dialogue');
@@ -3446,14 +3538,21 @@ assert(UI.unlockCards && UI.unlockCards.index === 0, 'unlock cards');
 same(UI.unlockCards.list, STAGES[0].unlocks);
 assert.strictEqual(btnOf('unlock_ok').label, '다음');
 UI.onKey('Space');
-assert(UI.unlockCards.index === 1 && btnOf('unlock_ok').label === '확인', 'second card');
+assert(UI.unlockCards.index === 1 && btnOf('unlock_ok').label === '다음', 'second card');
+UI.onKey('Space');
+UI.onKey('Space');
+assert(UI.unlockCards.index === 3 && btnOf('unlock_ok').label === '확인', 'last card');
 btn('unlock_ok');
-assert(!UI.unlockCards && hasBtn('next_stage') && hasBtn('to_map'), 'result after the cards');
-assert(btnOf('next_stage').sub.includes('마을 자경단'), 'next stage button names it');
-// 지도로: 깬 스테이지는 붉은 밀랍, 다음이 열린다
-btn('to_map');
+assert(!UI.unlockCards && hasBtn('next_stage') && hasBtn('to_hq'), 'result after the cards');
+assert(btnOf('next_stage').sub.includes('도굴꾼 소동'), 'next stage button names it');
+// 본부로: 판을 비우고, 작전 테이블에 다음 스테이지 느낌표. 지도에서 깬 스테이지는 붉은 밀랍, 다음이 열린다
+btn('to_hq');
+assert(Game.state === 'hq' && !UI.hqView, 'back to the hq after the run');
+assert.strictEqual(Game.monsters.length, 0, 'field cleared in the hq');
+assert(UI.hqHasNews(HQ_FACILITIES.find(f => f.id === 'wartable')), 'next stage badge');
+btn('hq_wartable');
+assert(!UI.hqHasNews(HQ_FACILITIES.find(f => f.id === 'wartable')), 'badge gone after entering');
 assert(Game.state === 'story' && UI.storyPick === 's2' && Meta.isOpen('s2') && !Meta.isOpen('s3'), 'map after the first clear');
-assert.strictEqual(Game.monsters.length, 0, 'field cleared on the map');
 // 다시 깨기: 대화는 다시 나오고 건너뛸 수 있다. 해금 카드는 없다
 btn('stage_s1');
 assert.strictEqual(btnOf('stage_go').label, '다시 하기', 'replay label');
@@ -3463,12 +3562,12 @@ btn('dlg_skip');
 // 이제 유물 칸 1개와 황금 주머니가 있어 고르기 화면이 나온다
 assert(Game.state === 'select' && UI.stageId === 's1', 'select screen with a relic to pick');
 assert(hasBtn('picked0') && hasBtn('slotLocked1') && hasBtn('slotLocked2') && hasBtn('select_back'), 'one slot, two locked slots');
-assert(btnOf('relic_pouch').locked === false && btnOf('relic_horn').locked, 'only pouch');
+assert(['relic_pouch', 'relic_horn', 'relic_heart'].every(id => btnOf(id).locked === false) && btnOf('relic_chalice').locked, 'stage 1 relics');
 UI.toast = null;
-btn('relic_horn');
+btn('relic_chalice');
 assert(UI.toast.text.includes('스테이지 2에서 해금') && UI.loadout.relics.length === 0, 'locked relic says its stage');
 btn('lord_gold_king');
-assert(UI.toast.text.includes('스테이지 8에서 해금') && UI.loadout.lord === 'rift', 'locked lord says its stage');
+assert(UI.toast.text.includes('스테이지 5에서 해금') && UI.loadout.lord === 'rift', 'locked lord says its stage');
 btn('relic_pouch');
 assert(btnOf('begin').sub.includes('첫 손님'), 'begin names the stage');
 btn('begin');
@@ -3487,19 +3586,28 @@ assert(Game.state === 'select' && UI.stageId === 's2');
 UI.onKey('Escape');
 assert(Game.state === 'story', 'Esc back to the map');
 UI.onKey('Escape');
-assert(Game.state === 'title', 'Esc from the map to the title');
+assert(Game.state === 'hq', 'Esc from the map to the hq');
+btn('hq_wartable');
+btn('map_close');
+assert(Game.state === 'hq', 'map close button to the hq');
+UI.onKey('Escape');
+assert(Game.state === 'title', 'Esc from the hq to the title');
 UI.update(0);
 assert.strictEqual(btnOf('start').label, '이어하기', 'title says continue');
 
-// ----- 12번까지 끝까지 깬다: 표대로 마왕 2명, 유물 16종, 칸 3개가 모두 풀리고 엔딩 -----
+// ----- 6번까지 끝까지 깬다: 표대로 마왕 2명, 유물 16종, 칸 3개가 모두 풀리고 엔딩. 판이 끝날 때마다 본부로 돌아온다 -----
 freshWindow();
 {
     const seenCards = [];
+    const decor = () => HQ_ROOM.decor.filter(d => !d.unlockStage || Meta.isCleared(STAGES.find(x => x.no === d.unlockStage).id)).length;
     btn('start');
+    assert.strictEqual(decor(), HQ_ROOM.decor.filter(d => !d.unlockStage).length, 'base decor');
     for (const s of STAGES) {
+        assert(Game.state === 'hq', 'in the hq before ' + s.id);
+        btn('hq_wartable');
         assert.strictEqual(UI.storyPick, s.id, 'map picks the next stage ' + s.id);
         assert(Meta.isOpen(s.id) && !Meta.isCleared(s.id), s.id + ' open');
-        if (s.no < 12) assert(!Meta.isOpen(STAGES[s.no].id), 'stage after ' + s.id + ' still locked');
+        if (s.no < STAGES.length) assert(!Meta.isOpen(STAGES[s.no].id), 'stage after ' + s.id + ' still locked');
         btn('stage_go');
         assert(UI.dialogue && UI.dialogue.lines === s.intro);
         clickThrough();
@@ -3521,32 +3629,37 @@ freshWindow();
         assert(UI.unlockCards, s.id + ' unlock cards');
         while (UI.unlockCards) { seenCards.push(UI.unlockCards.list[UI.unlockCards.index]); btn('unlock_ok'); }
         assert(Meta.isCleared(s.id), s.id + ' cleared');
-        if (s.no < 12) {
-            assert(hasBtn('next_stage') && hasBtn('to_map'));
-            btn('to_map');
+        if (s.no < STAGES.length) {
+            assert(hasBtn('next_stage') && hasBtn('to_hq'));
         } else {
-            assert(!hasBtn('next_stage') && hasBtn('to_map') && btnOf('to_map').theme === 'gold', 'last stage: map is the main button');
+            assert(!hasBtn('next_stage') && hasBtn('to_hq') && btnOf('to_hq').theme === 'gold', 'last stage: hq is the main button');
         }
+        btn('to_hq');
+        assert(Game.state === 'hq' && Game.monsters.length === 0, 'back to the hq after ' + s.id);
+        // 해금이 늘면 장식이 늘어난다(2, 4, 6번)
+        assert.strictEqual(decor(), HQ_ROOM.decor.filter(d => !d.unlockStage || d.unlockStage <= s.no).length, 'decor after ' + s.id);
     }
+    same(HQ_ROOM.decor.filter(d => d.unlockStage).map(d => d.unlockStage), [2, 4, 6], 'decor at stages 2, 4, 6');
     same(Meta.lordsOwned(), ['rift', 'bone_queen', 'gold_king'], 'three lords');
     same(Meta.relicsOwned(), Object.keys(RELICS), 'sixteen relics');
     assert.strictEqual(Meta.relicSlots(), 3, 'three slots');
     same(seenCards, STAGES.flatMap(s => s.unlocks), 'every unlock card shown once in order');
     assert(seenCards[seenCards.length - 1].kind === 'ending', 'ending card last');
-    assert(Meta.data.cleared.length === 12 && Meta.data.bestStage === 12 && Meta.data.wins === 12 && Meta.data.runs === 12, 'records');
-    btn('to_map');
-    assert(Game.state === 'story' && UI.storyPick === 's12' && STAGES.every(s => Meta.isCleared(s.id)), 'all cleared');
+    assert(Meta.data.cleared.length === 6 && Meta.data.bestStage === 6 && Meta.data.wins === 6 && Meta.data.runs === 6, 'records');
+    assert(hqGoblinLine().includes('도전의 문'), 'goblin points to the challenge gate after the story');
+    btn('hq_wartable');
+    assert(Game.state === 'story' && UI.storyPick === 's6' && STAGES.every(s => Meta.isCleared(s.id)), 'all cleared');
     // 다 깬 뒤 고르기 화면: 잠긴 것이 없다
-    UI.openSelect('s12');
+    UI.openSelect('s6');
     UI.update(0);
     assert(!UI.buttons.some(b => b.locked) && !UI.buttons.some(b => b.lockedSlot) && ['picked0', 'picked1', 'picked2'].every(hasBtn), 'nothing locked');
 }
 
 // ----- 유물 칸 0개인데 마왕이 둘(이상한 저장): 고르기 화면이 동작한다 -----
 freshWindow();
-Meta.data.cleared = ['s4']; // 뼈의 여왕만(칸 없음)
+Meta.data.cleared = ['s3']; // 뼈의 여왕만(칸 없음)
 assert(Meta.relicSlots() === 0 && Meta.lordsOwned().length === 2 && !UI.canSkipSelect(), 'select shown');
-UI.openSelect('s5');
+UI.openSelect('s4');
 assert(!hasBtn('picked0') && ['slotLocked0', 'slotLocked1', 'slotLocked2'].every(hasBtn), 'all slots locked');
 UI.toast = null;
 btn('relic_shackles');
@@ -3561,6 +3674,295 @@ UI.stageId = null;
 Game.state = 'title';
 console.log('smoke ok: story');
 }`, ctx, { filename: 'smoke-story' });
+
+// 본부: 타이틀 → 본부, 시설 6개 들어가고 나오기(클릭, 숫자 키), 느낌표 표시와 사라짐, 첫 실행의 도전의 문,
+// 콘텐츠 열림 조건(unlockStage), 장식, 고블린 대사, 설정, 전투 뒤 본부 복귀, 저장 이전 뒤 이어하기
+vm.runInContext(`{
+const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
+const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
+const btnOf = id => { UI.update(0); return UI.buttons.find(b => b.id === id); };
+const btn = id => { const b = btnOf(id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
+const memoryStorage = () => {
+    const data = {};
+    return { data, getItem: k => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); } };
+};
+const freshWindow = storage => {
+    globalThis.localStorage = storage || memoryStorage();
+    Meta.load();
+    UI.loadout = null;
+    UI.collection = null;
+    UI.dialogue = null;
+    UI.unlockCards = null;
+    UI.afterRun = null;
+    UI.stageId = null;
+    UI.hqView = null;
+    UI.hqSettings = false;
+    UI.hqSeen = null;
+    UI.toast = null;
+    Game.state = 'title';
+};
+const fac = id => HQ_FACILITIES.find(f => f.id === id);
+const news = id => UI.hqHasNews(fac(id));
+
+// ----- 표 -----
+same(HQ_FACILITIES.map(f => f.id), ['wartable', 'bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk', 'portal'], 'six facilities');
+same(HQ_FACILITIES.map(f => f.name), ['작전 테이블', '서재', '보물 진열장', '무기고', '고블린 비서', '도전의 문'], 'facility names');
+for (const f of HQ_FACILITIES) {
+    assert(!!f.action !== !!f.view, f.id + ' opens one thing');
+    assert(!f.action || typeof UI[f.action] === 'function', f.id + ' action');
+    assert(f.desc && f.desc.length <= 24, f.id + ' short desc');
+    assert(Number.isInteger(f.scale) && f.scale >= 2, f.id + ' integer scale');
+}
+// 도전의 문은 가장 크고 가운데
+{
+    const portal = fac('portal');
+    assert(HQ_FACILITIES.every(f => f === portal || f.scale < portal.scale), 'portal is the biggest');
+    assert.strictEqual(portal.x + 32 * portal.scale, GAME_WIDTH / 2, 'portal in the middle');
+}
+// 그림: 방과 시설이 쓰는 그림은 모두 불러오기 목록(HQ_SPRITES)에 있고, 16장을 모두 쓴다
+{
+    const used = [...HQ_ROOM.wall, HQ_ROOM.throne.sprite, ...HQ_ROOM.decor.map(d => d.sprite), ...HQ_FACILITIES.map(f => f.sprite)];
+    const loaded = ${JSON.stringify(globalThis.HQ_SPRITE_NAMES)};
+    for (const n of used) assert(loaded.includes(n), n + ' loaded');
+    same([...new Set(used)].sort(), loaded.filter(n => n !== 'tileset_hq').sort(), 'every hq picture used');
+    assert(HQ_ROOM.decor.every(d => Number.isInteger(d.scale)), 'decor integer scale');
+    assert(HQ_ROOM.wall.length * 192 >= GAME_WIDTH, 'wall covers the width');
+}
+assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.length === 0, 'no contents yet');
+
+// ----- 첫 실행: 타이틀 → 본부. 작전 테이블에 느낌표, 도전의 문은 처음부터 들어간다(준비 중) -----
+freshWindow();
+UI.update(0);
+assert(!hasBtn('collection') && hasBtn('start'), 'title: start only');
+btn('start');
+assert(Game.state === 'hq' && !UI.hqView, 'title to the hq');
+UI.update(0);
+same(UI.buttons.filter(b => b.facility).map(b => b.key), [1, 2, 3, 4, 5, 6], 'number keys on the plates');
+assert(news('wartable'), 'first stage badge on the war table');
+assert(['bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk', 'portal'].every(id => !news(id)), 'nothing else is new');
+assert(hqGoblinLine().includes('작전 테이블'), 'goblin tells what to do first');
+btn('hq_portal');
+assert(UI.hqView === 'portal' && hasBtn('hq_close'), 'portal open on the first run');
+UI.update(0);
+assert(!UI.buttons.some(b => b.content), 'no contents: only the notice');
+UI.onKey('Escape');
+assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the portal');
+
+// ----- 시설 6개: 누르면 들어가고 닫기(Esc)로 본부. 숫자 키도 같다 -----
+const enterAndLeave = (how, id) => {
+    const f = fac(id);
+    if (how === 'click') btn('hq_' + id);
+    else UI.onKey('Digit' + (HQ_FACILITIES.indexOf(f) + 1));
+    if (f.action === 'openStoryMap') {
+        assert(Game.state === 'story' && hasBtn('map_close'), id + ': story map');
+    } else if (f.action === 'openCollection') {
+        assert(Game.state === 'hq' && UI.collection && hasBtn('col_close'), id + ': collection');
+    } else {
+        assert(Game.state === 'hq' && UI.hqView === f.view && hasBtn('hq_close') && !hasBtn('hq_wartable'), id + ': ' + f.view);
+    }
+    if (how === 'click') {
+        const close = ['map_close', 'col_close', 'hq_close'].find(hasBtn);
+        btn(close);
+    } else {
+        UI.onKey('Escape');
+    }
+    assert(Game.state === 'hq' && !UI.hqView && !UI.collection && hasBtn('hq_wartable'), id + ': back to the hq (' + how + ')');
+};
+for (const how of ['click', 'key']) for (const f of HQ_FACILITIES) enterAndLeave(how, f.id);
+UI.onKey('Numpad6');
+assert.strictEqual(UI.hqView, 'portal', 'numpad keys too');
+UI.onKey('Escape');
+UI.onKey('Digit7');
+UI.onKey('Digit0');
+assert(Game.state === 'hq' && !UI.hqView, 'other keys do nothing');
+// 터치(마우스 이동 없이 누르기)도 된다
+{
+    const b = btnOf('hq_relic_case');
+    UI.onDown(b.x + b.w / 2, b.y + b.h / 2);
+    UI.onUp(b.x + b.w / 2, b.y + b.h / 2);
+    assert.strictEqual(UI.hqView, 'relics', 'touch opens');
+    UI.closeHqView();
+}
+// 이름표까지 누르는 자리다
+{
+    const b = btnOf('hq_bookshelf');
+    click(b.x + b.w / 2, b.y + b.h - 4);
+    assert(UI.collection, 'plate opens');
+    UI.closeCollection();
+}
+// 마우스를 올리면 그 시설이 hover
+{
+    const b = btnOf('hq_weapon_rack');
+    UI.onMove(b.x + 40, b.y + 40);
+    assert(UI.hoverButton && UI.hoverButton.facility === fac('weapon_rack'), 'hover a facility');
+    UI.onMove(5, 1070);
+}
+// 소리 버튼과 설정
+{
+    const muted = Sfx.muted;
+    btn('mute');
+    assert.strictEqual(Sfx.muted, !muted, 'mute toggles');
+    btn('mute');
+    btn('hq_settings');
+    assert(UI.hqSettings && ['set_sound', 'set_fx', 'set_title', 'set_close'].every(hasBtn) && !hasBtn('hq_wartable'), 'settings');
+    UI.onKey('Digit1');
+    assert(UI.hqSettings && Game.state === 'hq', 'keys wait while settings are open');
+    UI.onKey('Escape');
+    assert(!UI.hqSettings && hasBtn('hq_wartable'), 'Esc closes settings');
+    btn('hq_settings');
+    btn('set_title');
+    assert(Game.state === 'title', 'settings: to the title');
+    btn('start');
+}
+
+// ----- 느낌표: 새 해금, 다음 스테이지, 본 몬스터, 얻은 장비. 시설에 들어가면 사라진다 -----
+freshWindow();
+btn('start');
+btn('hq_wartable');
+assert(!news('wartable'), 'gone after entering');
+UI.openHQ();
+Meta.finishRun('s1', true, 3);
+assert(news('wartable') && news('relic_case'), 'stage 1 clear: next stage and new relics');
+Meta.seeMonster('orc_guard');
+Meta.seeEquip('sword');
+assert(news('bookshelf') && news('weapon_rack') && !news('goblin_desk'), 'new monster and equipment');
+for (const id of ['relic_case', 'bookshelf', 'weapon_rack']) {
+    btn('hq_' + id);
+    UI.onKey('Escape');
+    assert(!news(id), id + ' badge gone');
+}
+Meta.seeEquip('sword');
+assert(!news('weapon_rack'), 'same equipment: no badge');
+Meta.seeEquip('axe');
+assert(news('weapon_rack'), 'another equipment: badge again');
+// 본 값은 따로 저장해 창을 다시 열어도 남는다(게임 기록 Meta와는 따로)
+{
+    const raw = JSON.parse(localStorage.data[HQ_SEEN_KEY]);
+    assert(raw.relic_case && raw.wartable, 'seen values stored');
+    assert(!('hqSeen' in Meta.data), 'not in the game record');
+    freshWindow(localStorage);
+    assert(!news('relic_case') && !news('bookshelf') && news('weapon_rack'), 'seen values survive reload');
+}
+// 망가진 값이나 저장소가 없어도 돈다
+for (const raw of ['not json', '[1]', '7', JSON.stringify({ wartable: 5, toString: 'x' })]) {
+    const st = memoryStorage();
+    st.data[HQ_SEEN_KEY] = raw;
+    freshWindow(st);
+    btn('start');
+    assert(Game.state === 'hq' && news('wartable'), 'broken seen values: ' + raw);
+    btn('hq_wartable');
+    assert(!news('wartable'), 'enter works with ' + raw);
+}
+delete globalThis.localStorage;
+UI.hqSeen = null;
+UI.openHQ();
+btn('hq_wartable');
+UI.openHQ();
+assert(!news('wartable'), 'no storage: kept in memory');
+
+// ----- 도전의 문 콘텐츠: unlockStage가 없으면 처음부터, 있으면 그 스테이지를 깨야 열린다 -----
+freshWindow();
+HQ_CONTENTS.push({ id: 'test_open', name: '시험 처음', desc: '처음부터 열림' }, { id: 'test_s2', name: '시험 둘', desc: '2번 뒤', unlockStage: 2 },
+    { id: 'test_s6', name: '시험 여섯', desc: '6번 뒤', unlockStage: 6 });
+{
+    btn('start');
+    assert(news('portal'), 'open content: badge on the portal');
+    btn('hq_portal');
+    assert(!news('portal'), 'badge gone');
+    UI.update(0);
+    same(UI.buttons.filter(b => b.content).map(b => [b.id, b.locked]), [['content_test_open', false], ['content_test_s2', true], ['content_test_s6', true]], 'first run');
+    UI.toast = null;
+    btn('content_test_s2');
+    assert(UI.toast.text.includes('스테이지 2'), 'locked content says its stage');
+    UI.toast = null;
+    btn('content_test_open');
+    assert(UI.toast.text.includes('곧'), 'open content without a mode: notice');
+    let entered = 0;
+    HQ_CONTENTS[0].enter = () => { entered++; };
+    btn('content_test_open');
+    assert.strictEqual(entered, 1, 'enter hook');
+    UI.closeHqView();
+    Meta.finishRun('s1', true, 3);
+    Meta.finishRun('s2', true, 3);
+    assert(news('portal'), 'new content opened: badge');
+    btn('hq_portal');
+    UI.update(0);
+    same(UI.buttons.filter(b => b.content).map(b => b.locked), [false, false, true], 'stage 2 cleared');
+    Meta.data.cleared = STAGES.map(s => s.id);
+    same(HQ_CONTENTS.map(hqContentOpen), [true, true, true], 'story done: all open');
+    // 열린 콘텐츠 버튼끼리와 닫기 버튼은 겹치지 않고 화면 안
+    UI.update(0);
+    const list = UI.buttons;
+    for (const a of list) {
+        assert(a.x >= 0 && a.y >= 0 && a.x + a.w <= GAME_WIDTH && a.y + a.h <= GAME_HEIGHT, a.id + ' inside');
+        for (const b of list) assert(a === b || !(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h), a.id + ' overlaps ' + b.id);
+    }
+}
+HQ_CONTENTS.length = 0;
+
+// ----- 장식과 고블린 대사: 진행에 따라 -----
+freshWindow();
+{
+    const placed = () => HQ_ROOM.decor.filter(d => !d.unlockStage || Meta.isCleared(STAGES.find(x => x.no === d.unlockStage).id)).length;
+    const base = HQ_ROOM.decor.filter(d => !d.unlockStage).length;
+    const lines = new Set();
+    for (let n = 0; n <= STAGES.length; n++) {
+        Meta.data.cleared = STAGES.slice(0, n).map(s => s.id);
+        assert.strictEqual(placed(), base + [0, 0, 1, 1, 2, 2, 3][n], 'decor after ' + n);
+        const line = hqGoblinLine();
+        assert(line.length > 0 && !line.includes('{'), 'goblin line ' + n);
+        if (n < STAGES.length) assert(line.includes(String(n + 1)) || n === 0, 'goblin names the next stage ' + n);
+        lines.add(line);
+    }
+    assert.strictEqual(lines.size, STAGES.length + 1, 'a different line for each step');
+}
+
+// ----- 전투 뒤 본부 복귀: 결과의 본부로, Esc. 다음 스테이지는 바로 그 스테이지 대화 -----
+freshWindow();
+{
+    btn('start');
+    UI.enterStage('s1');
+    UI.endDialogue();
+    assert(Game.state === 'prep' && Game.stage === 's1', 'run');
+    Game.hp = 1;
+    damageThrone(1);
+    UI.update(0);
+    UI.onKey('Escape');
+    assert(Game.state === 'hq' && Game.monsters.length === 0, 'Esc on the result: hq');
+    UI.enterStage('s1');
+    UI.endDialogue();
+    Game.waveIndex = Game.waves.length - 1;
+    Game.state = 'wave';
+    Game.heroes = [];
+    Game.update(1 / 30);
+    UI.update(0);
+    UI.endDialogue();
+    while (UI.unlockCards) btn('unlock_ok');
+    btn('next_stage');
+    assert(UI.dialogue && UI.stageId === 's2' && UI.dialogue.lines === STAGES[1].intro, 'next stage goes straight in');
+}
+
+// ----- 저장 이전 뒤 이어하기: 옛 12스테이지 기록으로 열어도 본부와 지도가 돈다 -----
+{
+    const st = memoryStorage();
+    st.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9'], runs: 20, wins: 9, bestStage: 9 });
+    freshWindow(st);
+    UI.update(0);
+    assert.strictEqual(btnOf('start').label, '이어하기', 'continue');
+    btn('start');
+    assert(Game.state === 'hq' && Meta.data.cleared.length === 5 && Meta.hasLord('gold_king'), 'migrated save in the hq');
+    btn('hq_wartable');
+    assert(UI.storyPick === 's6', 'next stage on the map');
+}
+
+delete globalThis.localStorage;
+Meta.data = Meta.fresh();
+UI.hqSeen = null;
+UI.stageId = null;
+Game.state = 'title';
+console.log('smoke ok: hq');
+}`, ctx, { filename: 'smoke-hq' });
 
 // UI 배치: 모든 화면과 탭에서 버튼이 화면 안에 있고 서로 겹치지 않는다. 왼쪽 아래 체력 막대는 체력 값을 따라간다
 vm.runInContext(`{
@@ -3593,13 +3995,31 @@ UI.afterRun = null;
 Game.paused = false;
 Game.state = 'title';
 check('title');
+// 본부: 방(시설 6개, 소리와 설정), 설정 창, 안 화면 4개. 시설 버튼은 서로, 오른쪽 위 버튼과 겹치지 않는다
+for (const n of [0, 3, STAGES.length]) {
+    Meta.data.cleared = STAGES.slice(0, n).map(s => s.id);
+    UI.openHQ();
+    same(check('hq, ' + n + ' cleared').map(b => b.id), [...HQ_FACILITIES.map(f => 'hq_' + f.id), 'hq_settings', 'mute'], 'hq buttons');
+}
+UI.hqSettings = true;
+check('hq settings');
+UI.hqSettings = false;
+for (const view of ['relics', 'armory', 'record', 'portal']) {
+    UI.hqView = view;
+    check('hq ' + view);
+}
+HQ_CONTENTS.push({ id: 'test_a', name: '시험 A', desc: '처음부터' }, { id: 'test_b', name: '시험 B', desc: '스테이지 4', unlockStage: 4 }, { id: 'test_c', name: '시험 C', desc: '스테이지 6', unlockStage: 6 });
+check('hq portal with contents');
+HQ_CONTENTS.length = 0;
+UI.closeHqView();
+Meta.data = Meta.fresh();
 // 스토리 지도, 시작 전 대화, 해금 카드
 UI.openStoryMap();
 check('story map');
-Meta.data.cleared = STAGES.slice(0, 6).map(s => s.id);
+Meta.data.cleared = STAGES.slice(0, 3).map(s => s.id);
 UI.openStoryMap();
-check('story map, six cleared');
-UI.enterStage('s7');
+check('story map, three cleared');
+UI.enterStage('s4');
 check('dialogue');
 UI.endDialogue();
 check('select from a stage');
@@ -3663,9 +4083,9 @@ Game.finish(true);
 check('victory');
 Game.state = 'defeat';
 check('defeat');
-// 스테이지 결과: 승리(다음 스테이지와 지도), 마지막 스테이지 승리(지도만), 패배(다시 도전과 지도)
+// 스테이지 결과: 승리(다음 스테이지와 본부), 마지막 스테이지 승리(본부만), 패배(다시 도전과 본부)
 Meta.data.cleared = ['s1'];
-for (const [stage, state, want] of [['s1', 'victory', ['next_stage', 'to_map']], ['s12', 'victory', ['to_map']], ['s2', 'defeat', ['retry', 'to_map']]]) {
+for (const [stage, state, want] of [['s1', 'victory', ['next_stage', 'to_hq']], ['s6', 'victory', ['to_hq']], ['s2', 'defeat', ['retry', 'to_hq']]]) {
     Game.reset(null, stage);
     UI.afterRun = null;
     Game.state = state;

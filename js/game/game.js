@@ -6,7 +6,7 @@ function lordLine(kind) {
 }
 
 const Game = {
-    state: 'title', // title | story(스토리 지도) | select | prep | wave | victory | defeat
+    state: 'title', // title | hq(본부) | story(스토리 지도) | select | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
     runResult: null, // 판이 끝날 때의 기록(Meta.finishRun): 처음 깼는지, 풀린 것. 결과 화면과 해금 카드가 보여 준다
@@ -290,6 +290,7 @@ const Game = {
     // (x, y)는 연출 위치(세계 좌표, 없으면 연출 없음). { kind: 'bag' | 'gold', id }
     gainEquip(id, x, y) {
         const def = EQUIPMENT[id];
+        Meta.seeEquip(id); // 무기고 기록(골드로 바뀌어도 얻은 것으로 친다)
         if (!this.bagFull()) {
             this.equipBag.push(id);
             if (x !== undefined) Fx.drops.push({ id, x, y, age: 0, life: 1.3 });
@@ -379,6 +380,7 @@ const Game = {
         if (card.kind === 'equip') {
             if (this.bagFull()) return { ok: false, reason: 'bagFull' };
             this.equipBag.push(card.id);
+            Meta.seeEquip(card.id);
             Sfx.play('upgrade');
             this.bossReward = null;
             return { ok: true, card };

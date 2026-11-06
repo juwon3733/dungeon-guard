@@ -1,0 +1,644 @@
+// 본부(마왕의 방): 타이틀 다음 화면. 정면에서 본 방에 시설을 놓고, 시설을 눌러(숫자 키 1~6, 터치) 들어간다.
+// 방 구성은 HQ_ROOM, 시설은 HQ_FACILITIES, 도전의 문 콘텐츠는 HQ_CONTENTS, 고블린 비서 대사는 HQ_GOBLIN_LINES 표만 읽는다.
+// 그림은 assets/sprites/hq_<이름>.png(64px)와 tileset_hq.png(32px Wang 타일. 그림에서는 upper가 나무 바닥, lower가 붉은 카펫).
+// 게임 규칙(전투, 해금, 저장)은 건드리지 않는다. 시설의 느낌표(새로 볼 것)는 본 값만 localStorage(HQ_SEEN_KEY)에 따로 둔다.
+
+const HQ_SEEN_KEY = 'dungeonGuard.hqSeen'; // 시설마다 마지막으로 들어갔을 때 본 "새 소식" 값
+const HQ_TILE = 64; // 바닥 타일(32px)을 2배로
+const HQ_WALL_H = 192; // 위쪽 벽 세 줄(타일 64px x 3)
+const HQ_PLATE_H = 46; // 시설 이름표 높이
+const HQ_HOVER_GROW = 1.06; // 마우스를 올린 시설은 이만큼 커진다
+
+// 방 구성. 좌표는 화면 px(그림 네모의 왼쪽 위). scale은 그림 배율(물건 2배, 시설 3~4배)
+//   wall: 위쪽 벽(왼쪽부터, 3배로 이어 붙인다), wallColor: 벽 그림 사이 빈 곳의 벽돌 색
+//   carpet: 붉은 카펫(타일 꼭짓점 좌표 [x0, y0, x1, y1], 끝 포함). 꼭짓점 (cx, cy)는 화면 (cx * 64, 192 + cy * 64)
+//   throne: 왕좌, lord: 지금 고른 마왕이 서는 자리(발끝 화면 좌표, 2배)
+//   decor: 장식. unlockStage가 있으면 그 스테이지를 깬 뒤에 놓인다(해금이 늘면 방이 꾸며진다)
+const HQ_ROOM = {
+    wall: ['hq_wall_banner', 'hq_window', 'hq_wall_banner', 'hq_window', 'hq_wall_banner', 'hq_wall_banner', 'hq_window', 'hq_wall_banner', 'hq_window', 'hq_wall_banner'],
+    wallColor: '#3a2620',
+    carpet: [[13, 0, 17, 15], [11, 0, 19, 3], [4, 9, 26, 10]],
+    throne: { sprite: 'hq_throne', x: 770, y: 176, scale: 3 },
+    lord: { x: 1030, foot: 384 },
+    decor: [
+        { sprite: 'hq_notice_board', x: 1640, y: 84, scale: 2 },
+        { sprite: 'hq_plant', x: 636, y: 214, scale: 2 },
+        { sprite: 'hq_crates', x: 70, y: 880, scale: 2 },
+        { sprite: 'hq_tea_table', x: 560, y: 880, scale: 2 },
+        { sprite: 'hq_fireplace', x: 150, y: 100, scale: 2, unlockStage: 2 },
+        { sprite: 'hq_dummy', x: 1720, y: 480, scale: 2, unlockStage: 4 },
+        { sprite: 'hq_vault', x: 90, y: 590, scale: 2, unlockStage: 6 }
+    ]
+};
+
+// 시설: 누르면 들어간다. 숫자 키는 표 순서(1부터).
+//   action: UI의 여는 함수 이름(스토리 지도, 도감) 또는 view: 본부 안 화면(hq.js가 그린다)
+//   news: 새로 볼 것이 있으면 그 값(문자열), 없으면 null. 들어갈 때 본 값과 다르면 붉은 밀랍 느낌표
+const HQ_FACILITIES = [
+    { id: 'wartable', sprite: 'hq_wartable', name: '작전 테이블', desc: '스토리 지도 · 다음 스테이지 출전', x: 330, y: 470, scale: 3, action: 'openStoryMap',
+        news: () => { const st = hqNextStage(); return st ? st.id : null; } },
+    { id: 'bookshelf', sprite: 'hq_bookshelf', name: '서재', desc: '도감 · 본 몬스터와 조합식', x: 400, y: 140, scale: 3, action: 'openCollection',
+        news: () => (Meta.data.seen.length + Meta.data.recipes.length ? `${Meta.data.seen.length}/${Meta.data.recipes.length}` : null) },
+    { id: 'relic_case', sprite: 'hq_relic_case', name: '보물 진열장', desc: '마왕과 유물 목록 · 효과와 해금', x: 1330, y: 140, scale: 3, view: 'relics',
+        news: () => { const n = Meta.unlocked().filter(u => u.kind !== 'ending').length; return n ? String(n) : null; } },
+    { id: 'weapon_rack', sprite: 'hq_weapon_rack', name: '무기고', desc: '장비 16종 · 등급, 효과, 얻는 법', x: 1420, y: 450, scale: 3, view: 'armory',
+        news: () => (Meta.data.equips.length ? String(Meta.data.equips.length) : null) },
+    { id: 'goblin_desk', sprite: 'hq_goblin_desk', name: '고블린 비서', desc: '기록 장부 · 기록 지우기', x: 1450, y: 780, scale: 3, view: 'record',
+        news: () => null },
+    { id: 'portal', sprite: 'hq_portal', name: '도전의 문', desc: '도전 콘텐츠 · 처음부터 열려 있습니다', x: 800, y: 396, scale: 5, view: 'portal', main: true,
+        news: () => { const open = HQ_CONTENTS.filter(hqContentOpen); return open.length ? open.map(c => c.id).join() : null; } }
+];
+
+// 도전의 문 콘텐츠. 스토리를 다 깨지 않아도 문에는 처음부터 들어간다. 콘텐츠마다 unlockStage(스테이지 번호)를 깨면 열리고,
+// 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
+const HQ_CONTENTS = [];
+
+// 고블린 비서의 말풍선: 깬 스테이지 수가 cleared 이상인 마지막 줄. {no}, {name}은 다음 스테이지 번호와 이름
+const HQ_GOBLIN_LINES = [
+    { cleared: 0, text: '사장님, 첫 손님이 문 앞에 와 있어요! 작전 테이블로 가요.' },
+    { cleared: 1, text: '사장님, {no}번 스테이지 손님이 기다려요. 차는 제가 낼게요.' },
+    { cleared: 2, text: '벽 너머에서 뼈 소리가 나요. {no}번 {name}, 가 보시죠.' },
+    { cleared: 3, text: '여왕님이 월세를 뼈로 냈어요. 다음은 {no}번이에요, 사장님.' },
+    { cleared: 4, text: '금고 냄새 맡은 분이 오신대요. {no}번에서 수금 막아 주세요!' },
+    { cleared: 5, text: '마지막 손님 부대장님이에요! {no}번만 깨면 이야기 끝!' },
+    { cleared: 6, text: '이야기는 끝! 이제 도전의 문이 진짜 장사예요, 사장님.' }
+];
+
+// 다음에 할 스토리 스테이지(열렸고 아직 안 깬 첫 스테이지). 다 깼으면 null
+function hqNextStage() {
+    return STAGES.find(st => Meta.isOpen(st.id) && !Meta.isCleared(st.id)) || null;
+}
+
+// 도전의 문 콘텐츠가 열렸는지: unlockStage가 없으면 처음부터, 있으면 그 번호의 스테이지를 깼을 때
+function hqContentOpen(c) {
+    if (!c.unlockStage) return true;
+    const st = STAGES.find(s => s.no === c.unlockStage);
+    return !!st && Meta.isCleared(st.id);
+}
+
+// 고블린 비서의 지금 대사
+function hqGoblinLine() {
+    const n = Meta.data.cleared.length;
+    let line = HQ_GOBLIN_LINES[0];
+    for (const l of HQ_GOBLIN_LINES) if (n >= l.cleared) line = l;
+    const next = hqNextStage();
+    return line.text.replace('{no}', next ? next.no : '').replace('{name}', next ? next.name : '');
+}
+
+// 장비 얻는 법: 정예 드롭은 일반과 희귀, 보스 보상 카드는 희귀와 영웅(EQUIP_RULES와 game.js의 뽑기 규칙)
+function equipSources(grade) {
+    const out = [];
+    if (grade === 'common' || grade === 'rare') out.push(grade === 'rare' ? '정예 처치(드물게)' : '정예 처치');
+    if (grade === 'rare' || grade === 'epic') out.push(grade === 'epic' ? '보스 보상(드물게)' : '보스 보상');
+    return out.join(' · ');
+}
+
+// 본부 안 화면의 카드 격자(진열장 유물, 무기고 장비): 4열
+const HQ_GRID = { cols: 4, w: 430, h: 128, gapX: 20, gapY: 14, x: 70, y: 392 };
+const HQ_LORD_CARD = { w: 580, h: 196, gap: 20, y: 132 };
+
+Object.assign(UI, {
+    hqView: null, // 본부 안 화면: null(방) | 'relics' | 'armory' | 'record' | 'portal'
+    hqSettings: false, // 본부 설정 창이 열려 있는지
+    hqSeen: null, // 시설마다 본 "새 소식" 값(HQ_SEEN_KEY에서 읽는다)
+
+    // 본부로: 타이틀의 시작, 스토리 지도·도감·결과 화면의 닫기와 Esc가 여기로 온다
+    openHQ() {
+        this.collection = null;
+        this.dialogue = null;
+        this.unlockCards = null;
+        this.afterRun = null;
+        this.hqView = null;
+        this.hqSettings = false;
+        this.wipeArmed = 0;
+        this.cancel();
+        this.returning = [];
+        Game.clearField();
+        Game.state = 'hq';
+        Game.paused = false;
+        this.loadout = cleanLoadout(this.loadout || this.loadLoadout());
+    },
+
+    // ----- 느낌표(새로 볼 것) -----
+
+    loadHqSeen() {
+        if (this.hqSeen) return this.hqSeen;
+        let raw = null;
+        try {
+            raw = JSON.parse(localStorage.getItem(HQ_SEEN_KEY) || 'null');
+        } catch (e) { /* 처음 상태 */ }
+        this.hqSeen = {};
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            for (const f of HQ_FACILITIES) if (typeof raw[f.id] === 'string') this.hqSeen[f.id] = raw[f.id];
+        }
+        return this.hqSeen;
+    },
+
+    // 시설에 새로 볼 것이 있는지(느낌표)
+    hqHasNews(f) {
+        const v = f.news();
+        return v !== null && v !== undefined && this.loadHqSeen()[f.id] !== v;
+    },
+
+    markHqSeen(f) {
+        const v = f.news();
+        const seen = this.loadHqSeen();
+        if (v === null || v === undefined) delete seen[f.id];
+        else seen[f.id] = v;
+        try {
+            localStorage.setItem(HQ_SEEN_KEY, JSON.stringify(seen));
+        } catch (e) { /* 저장을 못 해도 이번 창에서는 사라진다 */ }
+    },
+
+    // ----- 시설 -----
+
+    // 시설 그림 네모와 이름표(누르는 자리는 둘을 합친 네모)
+    hqFacilityRect(f) {
+        const size = 64 * f.scale;
+        return { x: f.x, y: f.y, w: size, h: size + 4 + HQ_PLATE_H };
+    },
+
+    enterFacility(f) {
+        this.markHqSeen(f);
+        this.hqSettings = false;
+        if (f.view) {
+            this.hqView = f.view;
+            this.wipeArmed = 0;
+        } else {
+            this[f.action]();
+        }
+    },
+
+    closeHqView() {
+        this.hqView = null;
+        this.wipeArmed = 0;
+    },
+
+    layoutHQ() {
+        if (this.hqSettings) {
+            const x = GAME_WIDTH / 2 - 260;
+            this.button('set_sound', x + 40, 330, 440, 80, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
+            this.button('set_fx', x + 40, 430, 440, 80, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
+            this.button('set_title', x + 40, 530, 440, 80, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
+            this.button('set_close', x + 40, 650, 440, 80, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
+            return;
+        }
+        if (this.hqView) {
+            this.layoutHqView();
+            return;
+        }
+        HQ_FACILITIES.forEach((f, i) => {
+            const r = this.hqFacilityRect(f);
+            this.button(`hq_${f.id}`, r.x, r.y, r.w, r.h, { facility: f, key: i + 1, onClick: () => this.enterFacility(f) });
+        });
+        const bx = GAME_WIDTH - TOP_BTN - 12;
+        this.button('hq_settings', bx, 12, TOP_BTN, TOP_BTN, { icon: 'gear', iconOnly: true, tip: '설정', onClick: () => { this.hqSettings = true; } });
+        this.button('mute', bx - TOP_BTN - 6, 12, TOP_BTN, TOP_BTN, {
+            icon: 'sound', iconOnly: true, on: Sfx.muted, slash: Sfx.muted, tip: Sfx.muted ? '소리 켜기 (M)' : '소리 끄기 (M)',
+            onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); }
+        });
+    },
+
+    // 본부 안 화면: 닫기 버튼과 화면별 버튼(기록 지우기, 콘텐츠)
+    layoutHqView() {
+        this.button('hq_close', GAME_WIDTH - 230, 28, 180, 68, { label: '닫기', icon: 'close', size: 26, onClick: () => this.closeHqView() });
+        if (this.hqView === 'record') {
+            const armed = this.wipeArmed > 0;
+            this.button('col_wipe', GAME_WIDTH / 2 - 270, 930, 540, 88, {
+                label: armed ? '정말 지울까요? 한 번 더!' : '기록 지우기', icon: 'close',
+                sub: armed ? '스테이지 진행, 해금, 도감이 모두 처음으로' : null,
+                theme: 'danger', size: armed ? 26 : 30, onClick: () => this.pressWipe()
+            });
+        }
+        if (this.hqView === 'portal') {
+            HQ_CONTENTS.forEach((c, i) => {
+                const r = this.hqContentRect(i);
+                const open = hqContentOpen(c);
+                this.button(`content_${c.id}`, r.x, r.y, r.w, r.h, { content: c, locked: !open, onClick: () => this.pickContent(c) });
+            });
+        }
+    },
+
+    hqContentRect(i) {
+        return { x: GAME_WIDTH / 2 - 560, y: 250 + i * 150, w: 1120, h: 132 };
+    },
+
+    // 콘텐츠를 누른다: 잠겼으면 열리는 스테이지, 열렸으면 그 콘텐츠의 enter(아직 없으면 준비 중)
+    pickContent(c) {
+        if (!hqContentOpen(c)) {
+            this.showToast(`${c.name}: 스테이지 ${c.unlockStage}을(를) 깨면 열립니다.`);
+            Sfx.play('mergeFail');
+            return;
+        }
+        if (c.enter) c.enter();
+        else this.showToast(`${c.name}: 곧 열립니다.`);
+    },
+
+    // 본부 키: 1~6 시설, Esc 닫기(안 화면 → 방 → 타이틀)
+    onHqKey(code) {
+        if (this.hqSettings) {
+            if (code === 'Escape') this.hqSettings = false;
+            return;
+        }
+        if (this.hqView) {
+            if (code === 'Escape') this.closeHqView();
+            return;
+        }
+        const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+        const f = m && HQ_FACILITIES[Number(m[1]) - 1];
+        if (f) {
+            Sfx.play('click');
+            this.enterFacility(f);
+        } else if (code === 'Escape') {
+            Game.state = 'title';
+        }
+    },
+
+    // ----- 그리기 -----
+
+    drawHQ(ctx) {
+        if (this.hqView) {
+            this.drawTable(ctx);
+            this[{ relics: 'drawHqRelics', armory: 'drawHqArmory', record: 'drawHqRecord', portal: 'drawHqPortal' }[this.hqView]](ctx);
+            return;
+        }
+        this.drawHqRoom(ctx);
+        // 위쪽 왼쪽 표지판: 본부 이름과 스토리 진행
+        const T = UI_THEME;
+        UIKit.chain(ctx, 70, 0, 22);
+        UIKit.chain(ctx, 470, 0, 22);
+        UIKit.plank(ctx, 40, 18, 460, 78);
+        UIKit.text(ctx, '마왕군 본부', 70, 57, 34, T.cream);
+        UIKit.text(ctx, `스토리 ${Meta.data.cleared.length}/${STAGES.length}`, 474, 58, 24, T.gold, 'right');
+        this.drawGoblinBubble(ctx);
+        if (this.hqSettings) this.drawHqSettings(ctx);
+    },
+
+    // 방: 벽, 바닥(카펫), 그리고 뒤에서 앞으로(바닥 높이 순) 장식, 왕좌, 마왕, 시설
+    drawHqRoom(ctx) {
+        ctx.drawImage(this.hqBackground(), 0, 0);
+        const items = [];
+        const R = HQ_ROOM;
+        for (const d of R.decor) {
+            const st = d.unlockStage && STAGES.find(s => s.no === d.unlockStage);
+            if (d.unlockStage && !(st && Meta.isCleared(st.id))) continue;
+            items.push({ foot: d.y + 64 * d.scale, draw: () => this.drawHqSprite(ctx, d.sprite, d.x, d.y, d.scale) });
+        }
+        items.push({ foot: R.throne.y + 64 * R.throne.scale, draw: () => this.drawHqSprite(ctx, R.throne.sprite, R.throne.x, R.throne.y, R.throne.scale) });
+        const lord = DEMON_LORDS[(this.loadout || cleanLoadout(null)).lord] || DEMON_LORDS[DEFAULT_LORD];
+        items.push({ foot: R.lord.foot, draw: () => {
+            const img = Assets.get(lord.sprite);
+            if (!img) return;
+            const bob = Math.round(Math.sin(Game.time * 2) * 1) * 2;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, Math.round(R.lord.x - img.width), Math.round(R.lord.foot - lord.footPx * 2 + bob), img.width * 2, img.height * 2);
+        } });
+        for (const b of this.buttons) {
+            if (!b.facility) continue;
+            const f = b.facility;
+            items.push({ foot: f.y + 64 * f.scale, draw: () => this.drawFacility(ctx, b) });
+        }
+        items.sort((a, b) => a.foot - b.foot);
+        for (const it of items) it.draw();
+        // 이름표와 느낌표, 설명은 물건 위에
+        for (const b of this.buttons) if (b.facility) this.drawFacilityPlate(ctx, b);
+        const hover = this.hoverButton && this.hoverButton.facility ? this.hoverButton : null;
+        if (hover) this.drawFacilityTip(ctx, hover);
+    },
+
+    // 벽과 바닥은 그림이 다 불러와진 뒤 한 번 그려 둔다
+    hqBackground() {
+        if (this.hqBg) return this.hqBg;
+        const c = document.createElement('canvas');
+        c.width = GAME_WIDTH;
+        c.height = GAME_HEIGHT;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        // 바닥: 타일 표는 맵과 같은 WANG_TILES. 그림에서 upper(1)는 나무 바닥, lower(0)는 붉은 카펫이라 카펫 꼭짓점이 0이다
+        const tiles = Assets.get('tileset_hq');
+        const carpet = (cx, cy) => HQ_ROOM.carpet.some(([x0, y0, x1, y1]) => cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1);
+        const cols = Math.ceil(GAME_WIDTH / HQ_TILE);
+        const rows = Math.ceil((GAME_HEIGHT - HQ_WALL_H) / HQ_TILE);
+        for (let r = 0; r < rows; r++) {
+            for (let col = 0; col < cols; col++) {
+                const key = [carpet(col, r), carpet(col + 1, r), carpet(col, r + 1), carpet(col + 1, r + 1)].map(v => (v ? '0' : '1')).join('');
+                const [bx, by, bw, bh] = WANG_TILES[key];
+                if (tiles) g.drawImage(tiles, bx, by, bw, bh, col * HQ_TILE, HQ_WALL_H + r * HQ_TILE, HQ_TILE, HQ_TILE);
+            }
+        }
+        // 벽: 벽돌 색을 깔고 벽 그림을 3배로 이어 붙인다. 아래에 굽도리 판
+        g.fillStyle = HQ_ROOM.wallColor;
+        g.fillRect(0, 0, GAME_WIDTH, HQ_WALL_H);
+        const seg = GAME_WIDTH / HQ_ROOM.wall.length;
+        HQ_ROOM.wall.forEach((name, i) => {
+            const img = Assets.get(name);
+            if (img) g.drawImage(img, Math.round(i * seg + (seg - 192) / 2), 0, 192, 192);
+        });
+        g.fillStyle = UI_THEME.walnutDark;
+        g.fillRect(0, HQ_WALL_H - 10, GAME_WIDTH, 14);
+        g.fillStyle = 'rgba(20,10,4,0.35)';
+        g.fillRect(0, HQ_WALL_H + 4, GAME_WIDTH, 10);
+        if (tiles && Assets.get(HQ_ROOM.wall[0])) this.hqBg = c; // 그림이 모두 있을 때만 남겨 둔다
+        return c;
+    },
+
+    drawHqSprite(ctx, name, x, y, scale) {
+        const img = Assets.get(name);
+        if (!img) return;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, Math.round(x), Math.round(y), img.width * scale, img.height * scale);
+    },
+
+    // 시설 그림: 발밑 그림자, 마우스를 올리면 살짝 커지고 밝아진다(누르면 2px 내려앉는다). 도전의 문은 은은한 빛
+    drawFacility(ctx, b) {
+        const f = b.facility;
+        const img = Assets.get(f.sprite);
+        const st = this.btnState(b);
+        const size = 64 * f.scale;
+        const cx = f.x + size / 2;
+        const foot = f.y + size;
+        ctx.save();
+        ctx.fillStyle = 'rgba(20,10,4,0.28)';
+        ctx.beginPath();
+        ctx.ellipse(cx, foot - 8, size * 0.4, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (f.main) {
+            // 도전의 문: 문 안쪽에서 새는 붉은 빛(숨쉬듯)
+            const a = 0.22 + Math.sin(Game.time * 2.2) * 0.08;
+            ctx.fillStyle = `rgba(255,120,60,${a})`;
+            ctx.beginPath();
+            ctx.ellipse(cx, foot - 10, size * 0.5, 30, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+        if (!img) return;
+        const k = st.hover ? HQ_HOVER_GROW : 1;
+        const w = Math.round(size * k);
+        const x = Math.round(cx - w / 2);
+        const y = Math.round(foot - w + (st.pressed ? 2 : 0));
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, x, y, w, w);
+        if (st.hover) {
+            const lit = Assets.tinted(f.sprite, '#fff1d6', 0.22);
+            if (lit) ctx.drawImage(lit, x, y, w, w);
+        }
+    },
+
+    // 나무 이름표(번호 키와 이름)와 새 소식 느낌표
+    drawFacilityPlate(ctx, b) {
+        const T = UI_THEME;
+        const f = b.facility;
+        const size = 64 * f.scale;
+        const hover = this.hoverButton === b;
+        const fs = f.main ? 30 : 24;
+        ctx.font = `${fs}px ${UI_FONT}`;
+        const w = Math.ceil(ctx.measureText(f.name).width) + 92;
+        const x = Math.round(f.x + size / 2 - w / 2);
+        const y = f.y + size + 4;
+        UIKit.plank(ctx, x, y, w, HQ_PLATE_H, hover ? { tint: 'hover' } : null);
+        this.drawStageBadge(ctx, b.key, x + 26, y + HQ_PLATE_H / 2, 14);
+        UIKit.text(ctx, f.name, x + 50 + (w - 64) / 2, y + HQ_PLATE_H / 2 + 1, fs, f.main ? T.gold : T.cream, 'center');
+        if (this.hqHasNews(f)) {
+            const bob = Math.round(Math.sin(Game.time * 4) * 3);
+            const sx = f.x + size - 34;
+            const sy = f.y + 28 + bob;
+            this.drawWaxSeal(ctx, sx, sy, 22);
+            UIKit.text(ctx, '!', sx, sy + 1, 30, T.cream, 'center');
+        }
+    },
+
+    // 마우스를 올린 시설의 짧은 설명(그림 위 양피지 쪽지)
+    drawFacilityTip(ctx, b) {
+        const f = b.facility;
+        ctx.font = `21px ${UI_FONT}`;
+        const w = Math.ceil((ctx.measureText(f.desc).width + 44) / 4) * 4;
+        const x = clamp(f.x + 32 * f.scale - w / 2, 8, GAME_WIDTH - w - 8);
+        const y = Math.max(104, f.y - 34);
+        UIKit.note(ctx, x, y, w, 44, { pin: true });
+        UIKit.ink(ctx, f.desc, x + w / 2, y + 24, 21, UI_THEME.ink, 'center');
+    },
+
+    // 고블린 비서의 말풍선: 책상 왼쪽 양피지 쪽지와 꼬리
+    drawGoblinBubble(ctx) {
+        const f = HQ_FACILITIES.find(x => x.view === 'record');
+        if (!f) return;
+        const text = hqGoblinLine();
+        ctx.font = `22px ${UI_FONT}`;
+        const lines = this.wrapLines(ctx, text, 460);
+        const w = Math.ceil(Math.max(...lines.map(l => ctx.measureText(l).width)) + 56);
+        const h = 30 + lines.length * 30;
+        const x = f.x - w - 14;
+        const y = f.y + 70 - h / 2;
+        UIKit.note(ctx, x, y, w, h);
+        ctx.fillStyle = UI_THEME.outline;
+        ctx.beginPath();
+        ctx.moveTo(x + w - 2, y + h / 2 - 12);
+        ctx.lineTo(x + w + 18, y + h / 2 + 4);
+        ctx.lineTo(x + w - 2, y + h / 2 + 12);
+        ctx.fill();
+        ctx.fillStyle = UI_THEME.parchment;
+        ctx.beginPath();
+        ctx.moveTo(x + w - 4, y + h / 2 - 7);
+        ctx.lineTo(x + w + 10, y + h / 2 + 4);
+        ctx.lineTo(x + w - 4, y + h / 2 + 7);
+        ctx.fill();
+        lines.forEach((l, i) => UIKit.ink(ctx, l, x + 28, y + 30 + i * 30, 22, UI_THEME.ink));
+    },
+
+    drawHqSettings(ctx) {
+        ctx.fillStyle = UI_THEME.dim;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, 210, 520, 560, { seal: true });
+        UIKit.ink(ctx, '설정', GAME_WIDTH / 2, 280, 44, UI_THEME.ink, 'center', 'bold');
+    },
+
+    // 안 화면 제목(왼쪽 위 나무 표지판)
+    drawHqTitle(ctx, sprite, title, sub) {
+        const T = UI_THEME;
+        this.drawHqSprite(ctx, sprite, 40, 14, 1);
+        UIKit.text(ctx, title, 118, 52, 44, T.cream);
+        if (sub) UIKit.text(ctx, sub, 118, 96, 21, T.creamSoft);
+    },
+
+    // 카드 격자 i번 자리(진열장 유물, 무기고 장비)
+    hqGridRect(i) {
+        const G = HQ_GRID;
+        return { x: G.x + (i % G.cols) * (G.w + G.gapX), y: G.y + Math.floor(i / G.cols) * (G.h + G.gapY), w: G.w, h: G.h };
+    },
+
+    // 그림자(못 얻은 것): 그림 모양만 진한 갈색
+    drawShadowIcon(ctx, name, x, y, size) {
+        const img = Assets.get(name);
+        if (!img) return;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.silhouette(img), Math.round(x), Math.round(y), size, size);
+    },
+
+    // 보물 진열장: 마왕 3명(초상, 효과, 설명)과 유물 16종(효과). 잠긴 것은 그림자와 "스테이지 N에서 해금"
+    drawHqRelics(ctx) {
+        const T = UI_THEME;
+        const relicIds = Object.keys(RELICS);
+        this.drawHqTitle(ctx, 'hq_relic_case', '보물 진열장', `마왕 ${Meta.lordsOwned().length}/${Object.keys(DEMON_LORDS).length} · 유물 ${Meta.relicsOwned().length}/${relicIds.length} · 유물 칸 ${Meta.relicSlots()}/${Meta.maxSlots()}`);
+        const L = HQ_LORD_CARD;
+        const ids = Object.keys(DEMON_LORDS);
+        const x0 = (GAME_WIDTH - (ids.length * L.w + (ids.length - 1) * L.gap)) / 2;
+        ids.forEach((id, i) => {
+            const lord = DEMON_LORDS[id];
+            const x = x0 + i * (L.w + L.gap);
+            const owned = Meta.hasLord(id);
+            UIKit.note(ctx, x, L.y, L.w, L.h, { pin: true, tint: owned ? null : 'shade' });
+            UIKit.waxFrame(ctx, x + 18, L.y + 22, 152);
+            if (owned) this.drawLordPortrait(ctx, lord, x + 26, L.y + 30, 136);
+            else {
+                ctx.save();
+                ctx.fillStyle = '#b89a6c';
+                ctx.fillRect(x + 26, L.y + 30, 136, 136);
+                ctx.beginPath();
+                ctx.rect(x + 26, L.y + 30, 136, 136);
+                ctx.clip();
+                const p = lord.portrait;
+                const img = Assets.get(p.sprite);
+                if (img) {
+                    const k = Math.max(1, Math.floor(136 / p.crop[2]));
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(this.silhouette(img), p.crop[0], p.crop[1], p.crop[2], p.crop[2], x + 26, L.y + 30, p.crop[2] * k, p.crop[2] * k);
+                }
+                ctx.restore();
+            }
+            const tx = x + 190;
+            UIKit.ink(ctx, lord.name, tx, L.y + 46, 30, owned ? T.ink : '#2a180c', 'left', 'bold');
+            if (owned) {
+                const y = this.drawEffectLines(ctx, lord.effects, tx, L.y + 86, 20, 27);
+                ctx.font = `17px ${UI_FONT}`;
+                this.wrapLines(ctx, lord.desc, L.w - 210).slice(0, Math.max(1, Math.floor((L.y + L.h - 14 - y) / 22))).forEach((t, j) => UIKit.ink(ctx, t, tx, y + 4 + j * 22, 17, T.inkSoft));
+            } else {
+                const st = unlockStage('lord', id);
+                if (st) this.drawStageBadge(ctx, st.no, tx + 22, L.y + 110, 22);
+                UIKit.ink(ctx, st ? `스테이지 ${st.no}에서 해금` : '처음부터', tx + 56, L.y + 112, 24, '#2a180c', 'left', 'bold');
+            }
+        });
+        UIKit.text(ctx, '유물', HQ_GRID.x, HQ_GRID.y - 26, 30, T.cream);
+        UIKit.text(ctx, '판을 시작할 때 유물 칸에 넣어 씁니다', HQ_GRID.x + 80, HQ_GRID.y - 24, 19, T.creamSoft);
+        relicIds.forEach((id, i) => {
+            const r = this.hqGridRect(i);
+            const owned = Meta.hasRelic(id);
+            UIKit.note(ctx, r.x, r.y, r.w, r.h, { tint: owned ? null : 'shade' });
+            if (owned) this.drawUnlockIcon(ctx, { kind: 'relic', id }, r.x + 12, r.y + 12, 104);
+            else {
+                UIKit.slot(ctx, r.x + 12, r.y + 12, 104, 104, 'light');
+                this.drawShadowIcon(ctx, `relic_${id}`, r.x + 16, r.y + 16, 96);
+            }
+            const tx = r.x + 132;
+            if (owned) {
+                UIKit.ink(ctx, RELICS[id].name, tx, r.y + 36, 24, T.ink, 'left', 'bold');
+                this.drawEffectLines(ctx, RELICS[id].effects, tx, r.y + 72, 18, 24);
+            } else {
+                const st = unlockStage('relic', id);
+                UIKit.ink(ctx, '???', tx, r.y + 36, 24, '#2a180c', 'left', 'bold');
+                if (st) {
+                    this.drawStageBadge(ctx, st.no, tx + 14, r.y + 82, 15);
+                    UIKit.ink(ctx, `스테이지 ${st.no}에서 해금`, tx + 38, r.y + 84, 19, '#2a180c', 'left', 'bold');
+                }
+            }
+        });
+        const nextSlot = Meta.relicSlots() < Meta.maxSlots() ? unlockStage('slot', Meta.relicSlots() + 1) : null;
+        UIKit.text(ctx, `유물 칸 ${Meta.relicSlots()} / ${Meta.maxSlots()}${nextSlot ? ` · 다음 칸은 스테이지 ${nextSlot.no}에서 해금` : ''}`, GAME_WIDTH / 2, 1000, 24, T.gold, 'center');
+        UIKit.text(ctx, '판 중에는 유물을 얻지 않습니다 · Esc 본부로', GAME_WIDTH / 2, 1040, 19, T.creamSoft, 'center');
+    },
+
+    // 무기고: 장비 16종(등급, 효과, 얻는 법). 얻은 적 없는 것은 그림자와 ???
+    drawHqArmory(ctx) {
+        const T = UI_THEME;
+        const ids = Object.keys(EQUIPMENT);
+        this.drawHqTitle(ctx, 'hq_weapon_rack', '무기고', `얻은 장비 ${ids.filter(id => Meta.hasEquip(id)).length} / ${ids.length} · 판에서 얻은 장비가 기록됩니다`);
+        // 얻는 법 요약(나무판)
+        UIKit.plank(ctx, 70, 150, GAME_WIDTH - 140, 200);
+        const grades = ['common', 'rare', 'epic'];
+        grades.forEach((g, i) => {
+            const x = 120 + i * 590;
+            const grade = MONSTER_GRADES[g];
+            const cw = this.drawGradeChip(ctx, g, x, 214, 24);
+            UIKit.text(ctx, `${equipPool(g).length}종`, x + cw + 16, 216, 24, T.creamSoft);
+            UIKit.text(ctx, equipSources(g), x, 274, 24, grade.light);
+        });
+        UIKit.text(ctx, `정예 용사 처치 ${Math.round(EQUIP_RULES.eliteDrop * 100)}% · 보스 보상의 장비 카드 · 맵의 몬스터 위로 끌어 끼웁니다`, 120, 324, 19, T.creamSoft);
+        ids.forEach((id, i) => {
+            const r = this.hqGridRect(i);
+            const def = EQUIPMENT[id];
+            const grade = MONSTER_GRADES[def.grade];
+            const known = Meta.hasEquip(id);
+            UIKit.note(ctx, r.x, r.y, r.w, r.h, { tint: known ? null : 'shade' });
+            UIKit.slot(ctx, r.x + 12, r.y + 12, 104, 104, known ? 'iron' : 'light');
+            if (known) this.drawEquipIcon(ctx, id, r.x + 16, r.y + 16, 2);
+            else this.drawShadowIcon(ctx, `equip_${id}`, r.x + 16, r.y + 16, 96);
+            UIKit.gradeFrame(ctx, r.x + 8, r.y + 8, 112, 112, known ? grade.color : UI_THEME.inkFaint, 4);
+            const tx = r.x + 134;
+            UIKit.ink(ctx, known ? def.name : '???', tx, r.y + 32, 23, known ? grade.ink : '#2a180c', 'left', 'bold');
+            // 등급 칩 옆에 얻는 법, 아래에 효과(두 줄까지)
+            const cw = this.drawGradeChip(ctx, def.grade, tx, r.y + 62, 15);
+            UIKit.ink(ctx, equipSources(def.grade), tx + cw + 8, r.y + 63, 16, T.inkSoft);
+            if (known) {
+                ctx.font = `bold 17px ${UI_FONT}`;
+                this.wrapLines(ctx, equipEffectText(id), r.w - 150).slice(0, 2).forEach((t, j) => UIKit.ink(ctx, t, tx, r.y + 92 + j * 22, 17, T.inkGood, 'left', 'bold'));
+            }
+        });
+    },
+
+    // 고블린 비서의 장부: 판 수, 승리 수, 진행 스테이지, 도감 진행률. 기록 지우기 버튼은 layoutHqView가 놓는다
+    drawHqRecord(ctx) {
+        const T = UI_THEME;
+        const d = Meta.data;
+        const cx = GAME_WIDTH / 2;
+        this.drawHqTitle(ctx, 'hq_goblin_desk', '고블린 비서의 장부', '"사장님 기록은 제가 다 적어 두었습니다."');
+        const hidden = MONSTER_RECIPES.filter(r => r.hidden);
+        const pct = (a, b) => `${a} / ${b} (${b ? Math.floor(a / b * 100) : 0}%)`;
+        const next = hqNextStage();
+        UIKit.panel(ctx, cx - 460, 150, 920, 740, { seal: true });
+        const rows = [
+            ['판 수', `${d.runs}판`],
+            ['승리 수', `${d.wins}번`],
+            ['진행 스테이지', `${d.cleared.length} / ${STAGES.length}`],
+            ['다음 스테이지', next ? `${next.no}. ${next.name}` : '모두 깸'],
+            ['마왕 · 유물 · 유물 칸', `${Meta.lordsOwned().length} · ${Meta.relicsOwned().length} · ${Meta.relicSlots()}`],
+            ['본 몬스터', pct(d.seen.length, Object.keys(MONSTERS).length)],
+            ['찾은 조합식', pct(d.recipes.length, MONSTER_RECIPES.length)],
+            ['찾은 히든 조합식', `${hidden.filter(r => Meta.hasRecipe(r)).length} / ${hidden.length}`],
+            ['얻은 장비', pct(d.equips.length, Object.keys(EQUIPMENT).length)]
+        ];
+        rows.forEach(([k, v], i) => {
+            const y = 230 + i * 70;
+            UIKit.ink(ctx, k, cx - 390, y, 28, T.inkSoft);
+            UIKit.ink(ctx, v, cx + 390, y, 32, T.ink, 'right', 'bold');
+        });
+    },
+
+    // 도전의 문: 콘텐츠 목록. 비어 있으면 준비 중 안내
+    drawHqPortal(ctx) {
+        const T = UI_THEME;
+        const cx = GAME_WIDTH / 2;
+        this.drawHqTitle(ctx, 'hq_portal', '도전의 문', '스토리를 다 깨지 않아도 들어올 수 있습니다');
+        if (!HQ_CONTENTS.length) {
+            UIKit.panel(ctx, cx - 520, 260, 1040, 520, { seal: true });
+            this.drawHqSprite(ctx, 'hq_portal', cx - 128, 300, 4);
+            UIKit.ink(ctx, '새로운 도전 준비 중', cx, 610, 52, T.inkWax, 'center', 'bold');
+            UIKit.ink(ctx, '문 너머에서 공사 소리가 납니다. 곧 열립니다!', cx, 672, 24, T.inkSoft, 'center');
+            UIKit.ink(ctx, '"사장님, 랭킹 게시판도 걸어 둘게요." - 고블린 비서', cx, 720, 21, T.inkFaint, 'center');
+            return;
+        }
+        for (const b of this.buttons) {
+            if (!b.content) continue;
+            const c = b.content;
+            const hover = this.hoverButton === b;
+            UIKit.note(ctx, b.x, b.y, b.w, b.h, { pin: true, tint: b.locked ? 'shade' : (hover ? 'hover' : null) });
+            UIKit.ink(ctx, c.name, b.x + 40, b.y + 48, 34, b.locked ? '#2a180c' : T.inkWax, 'left', 'bold');
+            UIKit.ink(ctx, c.desc || '', b.x + 40, b.y + 92, 21, b.locked ? '#2a180c' : T.inkSoft);
+            if (b.locked) {
+                UIKit.icon(ctx, 'lock', b.x + b.w - 300, b.y + 42);
+                this.drawStageBadge(ctx, c.unlockStage, b.x + b.w - 222, b.y + 66, 18);
+                UIKit.ink(ctx, `스테이지 ${c.unlockStage} 깨면 열림`, b.x + b.w - 196, b.y + 68, 20, '#2a180c', 'left', 'bold');
+            } else {
+                UIKit.ink(ctx, '열림', b.x + b.w - 40, b.y + 68, 26, T.inkGood, 'right', 'bold');
+            }
+        }
+    }
+});

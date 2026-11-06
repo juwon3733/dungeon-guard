@@ -20,12 +20,12 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
-    // 고르기 화면(스테이지 8까지 깸, 9번 앞): 마왕 3장(황금 마왕을 고름), 유물 격자(잠긴 유물은 자물쇠와 풀리는 스테이지 도장),
-    // 고른 유물 2칸(마녀의 눈)과 잠긴 3번째 칸, 이번 판 효과. 잠긴 금 간 거울에 마우스를 올려 "스테이지 11에서 해금"을 띄운다
+    // 고르기 화면(스테이지 5까지 깸, 6번 앞): 마왕 3장(황금 마왕을 고름), 유물 격자(잠긴 유물은 자물쇠와 풀리는 스테이지 도장),
+    // 고른 유물 2칸(마녀의 눈)과 잠긴 3번째 칸, 이번 판 효과. 잠긴 금 간 거울에 마우스를 올려 "스테이지 6에서 해금"을 띄운다
     select: {
         setup: () => {
-            storyProgress(8);
-            UI.openSelect('s9');
+            storyProgress(5);
+            UI.openSelect('s6');
             pressButton('lord_gold_king');
             pressButton('relic_eye');
             const b = UI.buttons.find(x => x.id === 'relic_mirror');
@@ -57,7 +57,7 @@ const SCENES = {
     },
 
     // 막 시작한 고르기 화면(스테이지 1만 깸, 2번 앞): 균열의 군주만 쓰고 잠긴 마왕은 "스테이지 N에서 해금", 유물은 황금 주머니만,
-    // 유물 칸 1개와 잠긴 칸 둘(7, 11). 잠긴 모래시계에 마우스를 올려 설명을 띄운다
+    // 유물 칸 1개와 잠긴 칸 둘(4, 6). 잠긴 모래시계에 마우스를 올려 설명을 띄운다
     selectLocked: {
         setup: () => {
             storyProgress(1);
@@ -68,40 +68,76 @@ const SCENES = {
         }
     },
 
-    // 도감 몬스터 탭: 본 몬스터 4종은 그림과 이름, 등급, 역할, 능력. 나머지는 검은 실루엣과 ???
+    // 도감 몬스터 탭(본부 서재): 본 몬스터 4종은 그림과 이름, 등급, 역할, 능력. 나머지는 검은 실루엣과 ???
     collection: {
         setup: () => {
-            Meta.data = Meta.sanitize({ version: 2, cleared: ['s1', 's2', 's3'], runs: 4, wins: 3, bestStage: 3,
+            Meta.data = Meta.sanitize({ version: META_VERSION, cleared: ['s1', 's2'], runs: 4, wins: 3, bestStage: 2,
                 seen: ['orc_guard', 'skeleton_archer', 'dark_mage', 'orc_berserker', 'bone_knight'],
                 recipes: ['orc_berserker+skeleton_archer', 'dark_mage+orc_guard'] });
-            pressButton('collection');
+            pressButton('start');
+            pressButton('hq_bookshelf');
         }
     },
 
-    // 스토리 지도(스테이지 5까지 깸): 깬 도장은 붉은 밀랍, 다음(6)은 밝게 숨쉬는 고리, 나머지는 자물쇠. 아래 판에 6번의 웨이브 수와
-    // 처음 깰 때 보상(전쟁 북, 마녀의 눈)
+    // 본부(스테이지 2까지 깸): 벽과 나무 바닥, 붉은 카펫, 왕좌와 균열의 군주, 가운데 큰 도전의 문, 시설 6개와 이름표,
+    // 새로 볼 것이 있는 시설의 밀랍 느낌표, 고블린 비서 말풍선. 스테이지 2를 깨 벽난로가 놓였다. 서재에 마우스를 올려 설명을 띄운다
+    hq: {
+        setup: () => {
+            storyProgress(2);
+            Meta.data.seen = ['orc_guard', 'dark_mage'];
+            pressButton('start');
+            UI.update(0);
+            const b = UI.buttons.find(x => x.id === 'hq_bookshelf');
+            UI.onMove(b.x + 100, b.y + 100);
+        },
+        afterFreeze: () => { Game.time = 0.3; }
+    },
+
+    // 보물 진열장(스테이지 3까지 깸): 균열의 군주와 뼈의 여왕은 초상과 효과, 황금 마왕은 그림자와 "스테이지 5에서 해금",
+    // 유물 16종 중 풀린 11종은 효과, 나머지는 그림자와 풀리는 스테이지
+    hqRelics: {
+        setup: () => {
+            storyProgress(3);
+            pressButton('start');
+            pressButton('hq_relic_case');
+        }
+    },
+
+    // 무기고: 등급별 얻는 법과 장비 16종. 얻은 장비 5종은 그림, 이름, 효과. 나머지는 그림자와 ???
+    hqArmory: {
+        setup: () => {
+            storyProgress(4);
+            for (const id of ['sword', 'ring', 'axe', 'helmet', 'crown']) Meta.seeEquip(id);
+            pressButton('start');
+            pressButton('hq_weapon_rack');
+        }
+    },
+
+    // 스토리 지도(스테이지 3까지 깸, 본부의 작전 테이블로): 깬 도장은 붉은 밀랍, 다음(4)은 밝게 숨쉬는 고리, 나머지는 자물쇠.
+    // 아래 판에 4번의 웨이브 수와 처음 깰 때 보상(유물 칸, 해골 손, 모래시계, 열쇠)
     storyMap: {
         setup: () => {
-            storyProgress(5);
+            storyProgress(3);
             pressButton('start');
+            pressButton('hq_wartable');
         },
         afterFreeze: () => { Game.time = 0.5; }
     },
 
-    // 시작 전 대화(4번 건너편 세입자): 어두워진 맵 위 양피지 대화창, 뼈의 여왕 초상과 이름표, 한 글자씩 나오는 중인 대사
+    // 시작 전 대화(3번 건너편 세입자): 어두워진 맵 위 양피지 대화창, 뼈의 여왕 초상과 이름표, 한 글자씩 나오는 중인 대사
     dialogue: {
         setup: () => {
-            storyProgress(3);
-            UI.enterStage('s4');
+            storyProgress(2);
+            UI.enterStage('s3');
         },
         afterFreeze: () => { UI.dialogue.index = 0; UI.dialogue.chars = 18; }
     },
 
-    // 4번을 처음 깬 뒤 해금 카드: 뼈의 여왕(효과와 설명) 1/2
+    // 3번을 처음 깬 뒤 해금 카드: 뼈의 여왕(효과와 설명) 1/4
     unlockCard: {
         setup: () => {
-            storyProgress(3);
-            UI.enterStage('s4');
+            storyProgress(2);
+            UI.enterStage('s3');
             UI.endDialogue();
             pressButton('begin');
             winStage();
@@ -109,12 +145,12 @@ const SCENES = {
         }
     },
 
-    // 스테이지 승리 결과 화면(4번을 처음 깸): 스테이지 이름, 처음 깸과 풀린 것(뼈의 여왕, 푸른 족쇄), 다음 스테이지와 지도 버튼
+    // 스테이지 승리 결과 화면(3번을 처음 깸): 스테이지 이름, 처음 깸과 풀린 것(뼈의 여왕, 족쇄, 북, 눈), 다음 스테이지와 본부 버튼
     resultSouls: {
         setup: () => {
-            storyProgress(3);
+            storyProgress(2);
             Meta.data.runs = 5;
-            UI.enterStage('s4');
+            UI.enterStage('s3');
             UI.endDialogue();
             pressButton('begin');
             Game.place('orc_guard', 7, 6);
@@ -750,7 +786,7 @@ const PAGE_HELPERS = () => {
     window.startRun = () => { UI.openSelect(null); pressButton('begin'); };
     // 기록을 스토리 스테이지 앞에서부터 n개 깬 상태로. 페이지마다 저장소를 비우고 시작해 사용자의 저장과 상관없다
     window.storyProgress = n => {
-        Meta.data = Meta.sanitize({ version: 2, cleared: STAGES.slice(0, n).map(s => s.id) });
+        Meta.data = Meta.sanitize({ version: META_VERSION, cleared: STAGES.slice(0, n).map(s => s.id) });
     };
     // 스토리를 모두 깬 기록(마왕 3명, 유물 16종, 칸 3개)
     window.unlockAll = () => storyProgress(STAGES.length);
