@@ -8,6 +8,7 @@ const BENCH_X = BAR_SLOT_X + SUMMON_BTN_W + 12; // 첫 대기 칸
 const BENCH_CELL = 104; // 대기 칸 한 변
 const BENCH_GAP = 8;
 const NEXT_BTN_X = 1132;
+const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
 const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
 
 const UI = {
@@ -133,7 +134,7 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = f && MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = 166 + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
+        const h = 166 + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
         let o;
         if (f) {
             o = this.popupOrigin(f.x, f.y, w, h);
@@ -823,8 +824,17 @@ const UI = {
         UIKit.plain(ctx, line1, p.x + 20, p.y + 108, 19, '#ffffff');
         UIKit.plain(ctx, line2, p.x + 20, p.y + 138, 18, '#d8ccef');
 
-        // 함께 합칠 수 있는 몬스터
+        // 능력: 한 줄에 하나. 이름과 설명은 ABILITY_KINDS에서 온다
         let y = p.y + 166;
+        for (const a of def.abilities) {
+            const kind = ABILITY_KINDS[a.kind];
+            UIKit.plain(ctx, kind.name, p.x + 20, y + 12, 18, '#ffb0e8');
+            const nameW = ctx.measureText(kind.name).width;
+            UIKit.plain(ctx, kind.desc(a), p.x + 32 + nameW, y + 12, 17, '#f2e6ff');
+            y += POPUP_ABILITY_H;
+        }
+
+        // 함께 합칠 수 있는 몬스터
         ctx.fillStyle = 'rgba(216,169,79,0.45)';
         ctx.fillRect(p.x + 16, y, p.w - 32, 2);
         UIKit.plain(ctx, '함께 합칠 수 있는 몬스터', p.x + 20, y + 18, 18, '#ffd76a');

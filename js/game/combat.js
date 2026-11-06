@@ -3,7 +3,8 @@
 function damageHero(hero, amount, fromX, fromY, color) {
     if (hero.dead) return;
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
-    const dealt = Math.max(1, amount - (hero.armor || 0));
+    // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
+    const dealt = Math.max(1, amount - (hero.armor || 0)) * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
     hero.flash = 0.09;
     const p = heroWorld(hero);
@@ -72,13 +73,15 @@ function foremostHero(x, y, rangePx) {
     return best;
 }
 
-function splashDamage(x, y, radiusPx, damage, color) {
+// onHit(hero)은 피해를 준 뒤 맞은 용사마다 부른다(몬스터 능력)
+function splashDamage(x, y, radiusPx, damage, color, onHit) {
     let hits = 0;
     for (const h of Game.heroes.slice()) {
         if (h.dead || h.waiting) continue;
         const p = heroWorld(h);
         if (distance(x, y, p.x, p.y) <= radiusPx) {
             damageHero(h, damage, x, y, color);
+            if (onHit) onHit(h);
             hits++;
         }
     }
@@ -174,6 +177,12 @@ function stunTargets(x, y, rangePx) {
     for (const m of Game.monsters) if (!(m.down > 0) && distance(x, y, m.x, m.y) <= rangePx) list.push(m);
     for (const u of Game.units) if (!u.removed && distance(x, y, u.x, u.y) <= rangePx) list.push(u);
     return list;
+}
+
+// 저주: 받는 피해 x mul. 겹치지 않고 남은 시간만 seconds로 다시 채운다
+function curseHero(hero, seconds, mul) {
+    hero.curse = seconds;
+    hero.curseMul = mul;
 }
 
 // 더 긴 쪽 정지를 남긴다

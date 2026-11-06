@@ -1,4 +1,4 @@
-// 몬스터 표. 한 줄을 추가하면 몬스터가 들어간다. 코드는 id가 아니라 역할(role)과 수치(stats)로 동작을 정한다.
+// 몬스터 표. 한 줄을 추가하면 몬스터가 들어간다. 코드는 id가 아니라 역할(role), 수치(stats), 능력 종류(abilities)로 동작을 정한다.
 // 설계: docs/MONSTER_DESIGN.md. 수치는 플레이 후 고칠 초안이다. 거리는 타일 단위, 시간은 초 단위다.
 
 // 등급: 낮은 등급부터 적는다. 등급 합치기는 같은 등급 2마리를 바로 다음 등급의 무작위 1마리로 바꾼다.
@@ -36,6 +36,17 @@ const MONSTER_ROLES = {
 
 // 계열: 함께 놓으면 효과(다음 작업). 지금은 이름만 쓴다
 const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', beast: '야수', spirit: '정령' };
+
+// 능력 종류: 몬스터 abilities에 { kind, ...값 }으로 적는다. 코드는 몬스터 id가 아니라 kind로 동작한다(js/game/monster.js).
+// 같은 능력을 다른 몬스터에 주려면 abilities에 한 줄을 넣으면 된다. desc는 팝업에 보이는 한 줄 설명이다
+//   enrage: 체력 비율이 below 이하면 공격 간격 x intervalMul. 다시 나오면(체력 회복) 풀린다
+//   curseShot: 이 몬스터의 공격에 맞은 용사가 duration초 동안 받는 피해 x takenMul. 겹치지 않고 남은 시간만 다시 채운다
+//   deathStun: 쓰러질 때 반경 radius칸 안 용사를 duration초 기절시킨다. 보스는 걸리지 않는다
+const ABILITY_KINDS = {
+    enrage: { name: '광폭화', desc: a => `체력 ${Math.round(a.below * 100)}% 이하면 공격 간격 x${a.intervalMul}` },
+    curseShot: { name: '저주', desc: a => `맞은 용사가 ${a.duration}초간 받는 피해 +${Math.round((a.takenMul - 1) * 100)}%` },
+    deathStun: { name: '단말마', desc: a => `쓰러지면 ${a.radius}칸 안 용사 ${a.duration}초 기절(보스 제외)` }
+};
 
 // stats
 //   hp, damage, interval(공격 간격), range(사거리. 근접은 용사를 붙잡는 거리)
@@ -101,7 +112,7 @@ const MONSTERS = {
         id: 'orc_berserker', name: '오크 광전사', role: 'melee', family: 'orc', grade: 'rare',
         sprite: 'pl_mon_orc_berserker', cost: 120,
         stats: { hp: 180, damage: 22, interval: 0.7, range: 0.8, block: 2, respawn: 8 },
-        abilities: [], unlock: 'start',
+        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.5 }], unlock: 'start',
         desc: '길로 걸어 나가 용사 2명을 붙잡고 빠르게 벱니다.',
         art: {
             scale: 2, barY: 92, idleFps: 0, glow: '255,110,60',
@@ -116,7 +127,7 @@ const MONSTERS = {
         id: 'curse_shooter', name: '저주 사수', role: 'ranged', family: 'undead', grade: 'rare',
         sprite: 'pl_mon_curse_shooter', cost: 120,
         stats: { hp: 50, damage: 22, interval: 1.0, range: 4 },
-        abilities: [], unlock: 'start',
+        abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
         desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏩니다.',
         art: {
             scale: 2, barY: 96, idleFps: 3, glow: '170,90,255', hand: { x: 34, y: 50 },
@@ -130,7 +141,7 @@ const MONSTERS = {
         id: 'bone_knight', name: '해골 기사', role: 'tank', family: 'undead', grade: 'epic',
         sprite: 'pl_mon_bone_knight', cost: 250,
         stats: { hp: 500, damage: 30, interval: 1.0, range: 0.9, block: 5, respawn: 6 },
-        abilities: [], unlock: 'start',
+        abilities: [{ kind: 'deathStun', radius: 2, duration: 1.5 }], unlock: 'start',
         desc: '길로 걸어 나가 용사를 5명까지 붙잡고 오래 버팁니다.',
         art: {
             scale: 2, barY: 100, idleFps: 0, glow: '170,120,255',
@@ -185,6 +196,11 @@ function mergePlan(a, b) {
 function publicRecipesFor(type) {
     return MONSTER_RECIPES.filter(r => !r.hidden && (r.a === type || r.b === type))
         .map(r => ({ partner: r.a === type ? r.b : r.a, result: r.result }));
+}
+
+// 몬스터의 kind 능력(없으면 null)
+function monsterAbility(type, kind) {
+    return MONSTERS[type].abilities.find(a => a.kind === kind) || null;
 }
 
 function monsterBlocks(type) { return MONSTER_ROLES[MONSTERS[type].role].blocks; }

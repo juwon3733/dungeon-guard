@@ -650,6 +650,122 @@ const clearBoard = () => { Game.heroes = []; Game.units = []; Game.monsters = []
     last.boss = 'fallen_knight';
 }
 
+// 몬스터 능력: 표의 abilities(종류와 값)로 동작한다. 일반 3종은 능력이 없다
+assert.strictEqual(gradePool('common').map(t => MONSTERS[t].abilities.length).join(), '0,0,0', 'common monsters have no ability');
+for (const t of Object.keys(MONSTERS)) for (const a of MONSTERS[t].abilities) {
+    assert(ABILITY_KINDS[a.kind], 'known ability kind ' + a.kind);
+    assert(ABILITY_KINDS[a.kind].desc(a).length > 0, 'popup line for ' + a.kind);
+}
+assert.strictEqual(monsterAbility('orc_berserker', 'enrage').below, 0.5);
+assert.strictEqual(monsterAbility('curse_shooter', 'curseShot').duration, 3);
+assert.strictEqual(monsterAbility('bone_knight', 'deathStun').radius, 2);
+// 몬스터 하나를 길 위 거리 d에 세운다(발끝이 길 선 위)
+const putMonster = (type, d) => {
+    const p = pathAt(d);
+    const m = createMonster(type, 1, 1);
+    const y = p.y - MONSTER_FOOT;
+    Object.assign(m, { x: p.x, y, homeX: p.x, homeY: y, rally: m.blocks ? { d, x: p.x, y } : null });
+    Game.monsters.push(m);
+    return m;
+};
+const tough = h => { h.hp = h.maxHp = 9999; return h; };
+{
+    // 광폭화: 체력 50% 이하면 공격 간격 절반, 다시 나오면 풀린다
+    clearBoard();
+    const bz = putMonster('orc_berserker', 900);
+    assert.strictEqual(monsterStats(bz).interval, 0.7);
+    assert.strictEqual(monsterStats({ type: 'orc_berserker', tier: 1, branch: null }).interval, 0.7, 'popup preview not enraged');
+    bz.hp = bz.maxHp * 0.51;
+    assert(!monsterEnrage(bz) && monsterStats(bz).interval === 0.7, 'not enraged above half');
+    bz.hp = bz.maxHp * 0.5;
+    assert(monsterEnrage(bz), 'enraged at half');
+    assert(Math.abs(monsterStats(bz).interval - 0.35) < 1e-9, 'interval halved');
+    // 실제 공격 간격도 짧아진다
+    const foe = tough(place('warrior', 900));
+    bz.atk = 0;
+    updateMonster(bz, 1 / 30);
+    assert.strictEqual(foe.blocker, bz);
+    assert(Math.abs(bz.atk - 0.35) < 1e-9, 'enraged attack timer ' + bz.atk);
+    // 쓰러지면 풀리고, 다시 나오면(체력 가득) 원래 간격
+    damageUnit(bz, 9999);
+    assert(bz.down > 0 && !monsterEnrage(bz));
+    assert.strictEqual(foe.stun, 0, 'berserker has no death stun');
+    updateMonster(bz, MONSTERS.orc_berserker.stats.respawn + 0.1);
+    assert(bz.hp === bz.maxHp && !monsterEnrage(bz) && monsterStats(bz).interval === 0.7, 'enrage released after revive');
+}
+{
+    // 저주: 맞은 용사는 3초 동안 받는 피해 +25%. 다시 맞으면 겹치지 않고 시간만 3초로 돌아간다
+    clearBoard();
+    Game.projectiles = [];
+    const cs = putMonster('curse_shooter', 700);
+    const h = tough(place('warrior', 700 + TILE));
+    assert(h.curse === 0 && h.curseMul === 1);
+    const shoot = (m, target) => {
+        fireMonsterShot(m, monsterStats(m), target);
+        const p = Game.projectiles[Game.projectiles.length - 1];
+        for (let i = 0; i < 120 && !p.done; i++) updateProjectile(p, 1 / 60);
+        assert(p.done, 'arrow landed');
+    };
+    shoot(cs, h);
+    assert.strictEqual(h.hp, 9999 - (22 - h.armor), 'cursing arrow itself is not amplified');
+    assert.strictEqual(h.curse, 3);
+    assert.strictEqual(h.curseMul, 1.25);
+    let hp0 = h.hp;
+    damageHero(h, 10);
+    assert(Math.abs(hp0 - h.hp - (10 - h.armor) * 1.25) < 1e-9, 'cursed hero takes +25%');
+    updateHero(h, 1);
+    assert(Math.abs(h.curse - 2) < 1e-9, 'curse ticks down');
+    shoot(cs, h);
+    assert.strictEqual(h.curse, 3, 'refreshed to full duration');
+    assert.strictEqual(h.curseMul, 1.25, 'does not stack');
+    hp0 = h.hp;
+    damageHero(h, 10);
+    assert(Math.abs(hp0 - h.hp - (10 - h.armor) * 1.25) < 1e-9, 'still +25% after refresh, not +56%');
+    for (let i = 0; i < 31; i++) updateHero(h, 0.1);
+    assert.strictEqual(h.curse, 0, 'curse expired');
+    hp0 = h.hp;
+    damageHero(h, 10);
+    assert.strictEqual(hp0 - h.hp, 10 - h.armor, 'normal damage after expiry');
+    // 능력 없는 궁수의 화살과 암흑 마법사의 구체는 저주를 걸지 않는다
+    const archer = putMonster('skeleton_archer', 700);
+    const h2 = tough(place('warrior', 700 + TILE));
+    shoot(archer, h2);
+    assert.strictEqual(h2.curse, 0, 'plain arrow no curse');
+    assert.strictEqual(h2.hp, 9999 - (MONSTERS.skeleton_archer.stats.damage - h2.armor), 'plain arrow damage unchanged');
+    const mage = putMonster('dark_mage', 700);
+    shoot(mage, h2);
+    assert.strictEqual(h2.curse, 0, 'orb no curse');
+}
+{
+    // 해골 기사가 쓰러지면 반경 2칸 안 용사 1.5초 기절. 보스와 반경 밖은 제외
+    clearBoard();
+    const bk = putMonster('bone_knight', 1200);
+    const near = tough(place('warrior', 1200 + 1.2 * TILE));
+    const far = tough(place('warrior', 1200 + 8 * TILE));
+    const boss = place(null, 1200 + 0.5 * TILE, 'fallen_knight');
+    const gap = h => distance(bk.x, bk.y + MONSTER_FOOT, heroWorld(h).x, heroWorld(h).y) / TILE;
+    assert(gap(near) < 2 && gap(boss) < 2 && gap(far) > 2.5, 'test layout');
+    damageUnit(bk, 9999);
+    assert(bk.down > 0);
+    assert.strictEqual(near.stun, 1.5, 'near hero stunned');
+    assert.strictEqual(boss.stun, 0, 'boss not stunned');
+    assert.strictEqual(far.stun, 0, 'far hero not stunned');
+    const d0 = near.d;
+    updateHero(near, 1.4);
+    assert.strictEqual(near.d, d0, 'stunned hero stands');
+    updateHero(near, 0.2);
+    updateHero(near, 0.1);
+    assert(near.d > d0, 'walks after stun');
+    // 능력 없는 오크 경비병은 쓰러져도 기절시키지 않는다. 광폭화도 없다
+    clearBoard();
+    const og = putMonster('orc_guard', 1200);
+    const h = tough(place('warrior', 1200 + 0.5 * TILE));
+    og.hp = og.maxHp * 0.2;
+    assert(!monsterEnrage(og) && monsterStats(og).interval === MONSTERS.orc_guard.stats.interval, 'orc guard no enrage');
+    damageUnit(og, 9999);
+    assert.strictEqual(h.stun, 0, 'orc guard no death stun');
+}
+
 // 패배 후 다시 시작하면 모두 초기화
 Game.hp = 1;
 damageThrone(1);

@@ -37,6 +37,7 @@ function createHero(type, waveIndex, delay, bossKey) {
         atkPoseMax: ATTACK_POSE_TIME,
         flash: 0,
         stun: 0,
+        curse: 0, curseMul: 1, // 저주(curseShot): 남은 초와 받는 피해 배율
         cast: !bossDef && def.stunEvery ? randRange(1.5, def.stunEvery) : 0,
         song: !bossDef && def.song ? randRange(1, def.song.every) : 0,
         haste: 0, hasteMul: 1, // 음유시인 노래로 받은 가속: 남은 초와 배율
@@ -87,6 +88,7 @@ function updateHero(h, dt) {
     h.atkPose = Math.max(0, h.atkPose - dt);
     h.haste = Math.max(0, h.haste - dt);
     h.slip = Math.max(0, h.slip - dt);
+    h.curse = Math.max(0, h.curse - dt);
     h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1);
 
     if (h.boss) updateBossPatterns(h, dt);
