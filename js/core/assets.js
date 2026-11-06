@@ -4,6 +4,9 @@ const UI_ICONS = ['summon', 'lord', 'attack', 'gold', 'soul', 'lock', 'book', 'b
 const UI_SHEETS = ['ui_kit', 'ui_buttons'];
 // 맵 바닥 타일셋. 칸 정보(corners, bounding_box)는 js/data/map.js의 WANG_TILES
 const MAP_TILESETS = ['tileset_path', 'tileset_water'];
+// 본부(js/ui/hq.js): 물건 그림(64px)과 바닥 타일셋(tileset_hq, 칸 정보는 맵과 같은 WANG_TILES)
+const HQ_SPRITES = ['hq_wartable', 'hq_bookshelf', 'hq_relic_case', 'hq_portal', 'hq_weapon_rack', 'hq_dummy', 'hq_vault', 'hq_throne', 'hq_fireplace',
+    'hq_notice_board', 'hq_plant', 'hq_window', 'hq_wall_banner', 'hq_crates', 'hq_tea_table', 'hq_goblin_desk', 'tileset_hq'];
 const Assets = {
     images: {},
     tintCache: {},
@@ -31,7 +34,7 @@ const Assets = {
         list.push(...MAP_TILESETS, ...DECOR.map(p => p.sprite), 'prop2_throne');
         // 전투 효과는 모두 pixelfx 시트(assets/fx/)다
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
-        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS);
+        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HQ_SPRITES);
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 

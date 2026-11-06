@@ -92,7 +92,8 @@ function remainingDistance(h) { return ROUTES[h.route || 'north'].length - h.d; 
 
 function isPathCell(col, row) { return PATH_CELLS.has(col + ',' + row); }
 
-// Wang 타일(tileset_path, tileset_water 공통 배치). 열쇠는 꼭짓점 NW, NE, SW, SE가 upper면 1, lower면 0.
+// Wang 타일(tileset_path, tileset_water, 본부 바닥 tileset_hq 공통 배치). 열쇠는 꼭짓점 NW, NE, SW, SE가 upper면 1, lower면 0.
+// tileset_hq는 그림에서 upper가 나무 바닥, lower가 붉은 카펫이다(js/ui/hq.js의 HQ_ROOM.carpet).
 // 값은 타일셋 안의 bounding_box [x, y, 너비, 높이](32px)다. 두 타일셋의 lower(이끼 바닥)는 같은 그림이라 이어진다.
 // upper는 tileset_path에서 벽돌 길, tileset_water에서 물가다
 const WANG_TILES = {
