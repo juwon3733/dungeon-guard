@@ -361,6 +361,10 @@ const Render = {
             const clip = art.anim.attack;
             return { clip, name: this.plFrame(def, clip, m.dir, this.attackFrame(m.atkPose, m.atkPoseMax, clip.frames)) };
         }
+        if (m.moving && art.anim.walk) {
+            const walk = art.anim.walk;
+            return { clip: walk, name: this.plFrame(def, walk, m.dir, Math.floor(m.anim * MONSTER_WALK_FPS) % walk.frames) };
+        }
         const clip = art.anim.idle;
         const i = art.idleFps ? Math.floor(m.anim * art.idleFps) % clip.frames : 0;
         return { clip, name: this.plFrame(def, clip, m.dir, i) };
@@ -416,39 +420,55 @@ const Render = {
             ctx.fillStyle = m.tier >= 3 ? '#ffd76a' : '#c8a6ff';
             ctx.fillRect(sx - 5, sy - 5, 10, 10);
         }
-        if (m.place === 'path') this.healthBar(ctx, m.x, footY - def.art.barY, m.hp / m.maxHp, 40, '#74d65a');
+        if (m.blocks) this.healthBar(ctx, m.x, footY - def.art.barY, m.hp / m.maxHp, 40, '#74d65a');
         if (stunned) {
             this.stunStars(ctx, m.x, footY - def.art.barY - 14);
             UIKit.text(ctx, '정지', m.x, footY - def.art.barY - 40, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
         }
     },
 
-    // 쓰러진 길 몬스터: 그 칸에 흐린 그림과 다시 일어날 때까지 남은 시간 고리
+    // 막는 몬스터가 놓인 칸: 길로 나간 동안 칸이 비어 보이지 않게 바닥에 표식을 남긴다
+    drawMonsterHome(ctx, m) {
+        if (!m.blocks || m.down > 0) return;
+        const x = m.homeX;
+        const y = m.homeY + MONSTER_FOOT;
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = `rgba(255,183,107,${0.35 + Math.sin(Game.time * 2 + x) * 0.08})`;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.ellipse(x, y, 30, 11, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    },
+
+    // 쓰러진 막는 몬스터: 놓은 칸에 흐린 그림과 다시 나올 때까지 남은 시간 고리
     drawRespawn(ctx, def, m) {
         const left = clamp(m.down / monsterStats(m).respawn, 0, 1);
-        const footY = m.y + MONSTER_FOOT;
+        const x = m.homeX;
+        const footY = m.homeY + MONSTER_FOOT;
         ctx.save();
         ctx.globalAlpha = 0.35;
-        const name = this.plFrame(def, def.art.anim.idle, m.dir, 0);
-        this.plSprite(ctx, Assets.tinted(name, '#1b1030', 0.6), def.art, def.art.anim.idle, m.dir, m.x, footY);
+        const name = this.plFrame(def, def.art.anim.idle, 'down', 0);
+        this.plSprite(ctx, Assets.tinted(name, '#1b1030', 0.6), def.art, def.art.anim.idle, 'down', x, footY);
         ctx.restore();
         const cy = footY - 40;
         ctx.save();
         ctx.fillStyle = 'rgba(10,6,20,0.7)';
         ctx.beginPath();
-        ctx.arc(m.x, cy, 22, 0, Math.PI * 2);
+        ctx.arc(x, cy, 22, 0, Math.PI * 2);
         ctx.fill();
         ctx.lineWidth = 6;
         ctx.strokeStyle = '#3a2f4c';
         ctx.beginPath();
-        ctx.arc(m.x, cy, 20, 0, Math.PI * 2);
+        ctx.arc(x, cy, 20, 0, Math.PI * 2);
         ctx.stroke();
         ctx.strokeStyle = '#ffb76b';
         ctx.beginPath();
-        ctx.arc(m.x, cy, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
+        ctx.arc(x, cy, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
         ctx.stroke();
         ctx.restore();
-        UIKit.text(ctx, String(Math.ceil(m.down)), m.x, cy, Math.round(22 / WORLD_ZOOM), '#ffe0c0', 'center');
+        UIKit.text(ctx, String(Math.ceil(m.down)), x, cy, Math.round(22 / WORLD_ZOOM), '#ffe0c0', 'center');
     },
 
     drawThrone(ctx) {
@@ -540,27 +560,24 @@ const Render = {
         }
     },
 
-    // 건설 모드에서는 고른 몬스터가 놓일 수 있는 칸(근접은 길, 원거리는 길 옆)만 밝게, 준비 시간에는 두 종류 모두 흐리게 보여 준다
+    // 몬스터를 놓을 수 있는 길 옆 칸: 건설 모드에서는 밝게, 준비 시간에는 흐리게 보여 준다. 길 칸에는 놓을 수 없다
     drawBuildPads(ctx) {
         const placing = UI.placing;
         if (!placing && Game.state !== 'prep') return;
         const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
-        const kinds = placing ? [monsterPlace(placing)] : ['side', 'path'];
+        const color = '190,150,255';
         ctx.lineWidth = 3;
-        for (const kind of kinds) {
-            const color = kind === 'path' ? '255,180,110' : '190,150,255';
-            for (const key of kind === 'path' ? PATH_SLOT_CELLS : BUILD_CELLS) {
-                const [c, r] = key.split(',').map(Number);
-                if (Game.monsterAt(c, r)) continue;
-                const x = c * TILE;
-                const y = MAP_TOP + r * TILE;
-                if (placing) {
-                    ctx.fillStyle = `rgba(${color},${pulse * 0.15})`;
-                    ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
-                }
-                ctx.strokeStyle = `rgba(${color},${pulse})`;
-                ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
+        for (const key of BUILD_CELLS) {
+            const [c, r] = key.split(',').map(Number);
+            if (Game.monsterAt(c, r)) continue;
+            const x = c * TILE;
+            const y = MAP_TOP + r * TILE;
+            if (placing) {
+                ctx.fillStyle = `rgba(${color},${pulse * 0.15})`;
+                ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
             }
+            ctx.strokeStyle = `rgba(${color},${pulse})`;
+            ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
         }
     },
 
@@ -796,7 +813,11 @@ const Render = {
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다
         const entities = [];
         for (const p of DECOR) entities.push({ y: tileY(p.row) + 30, draw: () => this.sprite(ctx, Assets.get(p.sprite), tileX(p.col), tileY(p.row) + 30, 2, 74) });
-        for (const m of Game.monsters) entities.push({ y: m.y + MONSTER_FOOT, draw: () => this.drawMonster(ctx, m) });
+        for (const m of Game.monsters) {
+            if (m.blocks) entities.push({ y: m.homeY - TILE / 2, draw: () => this.drawMonsterHome(ctx, m) });
+            const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
+            entities.push({ y: footY, draw: () => this.drawMonster(ctx, m) });
+        }
         for (const u of Game.units) entities.push({ y: u.y + 12, draw: () => this.drawUnit(ctx, u) });
         for (const h of Game.heroes) {
             if (h.waiting) continue;

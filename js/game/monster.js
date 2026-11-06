@@ -1,9 +1,12 @@
-// 배치한 몬스터와 몬스터가 쏜 투사체. 동작은 몬스터 id가 아니라 역할의 설치 위치(place)와 수치로 정한다.
-//   path: 길 칸에 서서 용사를 붙잡고 싸운다. 쓰러지면 respawn초 뒤 같은 자리에서 다시 일어난다.
-//   side: 길 옆 칸에서 사거리 안의 가장 앞선 용사를 공격한다. 공격받지 않는다.
+// 배치한 몬스터와 몬스터가 쏜 투사체. 동작은 몬스터 id가 아니라 역할(blocks)과 수치로 정한다.
+// 모든 몬스터는 길 옆 칸(col, row, 곧 homeX, homeY)에 놓는다. x, y는 지금 서 있는 곳이다.
+//   막는 몬스터: 가장 가까운 길 지점(rally)으로 걸어 나가 용사를 붙잡고 싸운다. 쓰러지면 respawn초 뒤 놓은 칸에서 다시 나온다.
+//   그 밖: 놓은 칸에서 사거리 안의 가장 앞선 용사를 공격한다. 공격받지 않는다.
 
 const MONSTER_FOOT = 14; // 칸 가운데에서 발끝까지 아래로 내린 거리(세계 px)
 const MONSTER_RELEASE = 0.5; // 공격 동작의 이 비율 지점에서 화살과 구체가 손을 떠난다
+const MONSTER_WALK_SPEED = 170; // 길로 걸어 나가는 속도(세계 px/초). 예전 오크 초소의 오크와 같다
+const MONSTER_WALK_FPS = 8;
 
 function monsterStats(m) {
     const def = MONSTERS[m.type];
@@ -31,11 +34,17 @@ function monsterStats(m) {
 
 function createMonster(type, col, row) {
     const m = {
-        kind: 'monster', type, place: monsterPlace(type), col, row, x: tileX(col), y: tileY(row),
+        kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: tileX(col), y: tileY(row),
+        homeX: tileX(col), homeY: tileY(row), rally: null, moving: false,
         tier: 1, branch: null, invested: MONSTERS[type].cost,
         atk: 0.2, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, shot: null, anim: Math.random() * 4,
         dir: 'down', flash: 0, stun: 0, down: 0, target: null, hp: 0, maxHp: 0, armor: 0
     };
+    // 발끝이 용사가 걷는 길 선에 오도록 칸 가운데 기준 위치를 발 높이만큼 올려 둔다
+    if (m.blocks) {
+        const r = rallyPoint(col, row);
+        m.rally = { d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
+    }
     applyMonsterStats(m, true);
     return m;
 }
@@ -61,6 +70,7 @@ function updateMonster(m, dt) {
     m.flash = Math.max(0, m.flash - dt);
     m.atkPose = Math.max(0, m.atkPose - dt);
     if (m.down > 0) {
+        m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;
         if (m.down <= 0) reviveMonster(m);
         return;
@@ -70,11 +80,22 @@ function updateMonster(m, dt) {
         m.shot = null;
         return;
     }
-    if (m.place === 'path') updatePathMonster(m, dt);
+    if (m.blocks) updateBlockMonster(m, dt);
     else updateSideMonster(m, dt);
 }
 
-function updatePathMonster(m, dt) {
+// 막는 몬스터: 집결점까지 걸어 나간 뒤에야 용사를 붙잡는다
+function updateBlockMonster(m, dt) {
+    const toRally = distance(m.x, m.y, m.rally.x, m.rally.y);
+    if (toRally > 6) {
+        const step = Math.min(MONSTER_WALK_SPEED * dt, toRally);
+        m.dir = dirFromVector(m.rally.x - m.x, m.rally.y - m.y);
+        m.x += (m.rally.x - m.x) / toRally * step;
+        m.y += (m.rally.y - m.y) / toRally * step;
+        m.moving = true;
+        return;
+    }
+    m.moving = false;
     const stats = monsterStats(m);
     const target = holdHeroes(m, stats.block, stats.range);
     if (!target) return;
@@ -154,7 +175,7 @@ function fireBeam(ox, oy, stats, tp) {
     Sfx.play('beam');
 }
 
-// 길 몬스터가 쓰러짐: 붙잡던 용사를 놓고 재생성을 기다린다. damageUnit이 부른다
+// 막는 몬스터가 쓰러짐: 붙잡던 용사를 놓고 놓은 칸에서 재생성을 기다린다. damageUnit이 부른다
 function knockDownMonster(m) {
     const stats = monsterStats(m);
     m.hp = 0;
@@ -165,12 +186,17 @@ function knockDownMonster(m) {
     Fx.anim('fx_explosion', m.x, m.y - 30, 150, 0.4);
     Fx.burst(m.x, m.y - 40, '#d59560', 14, 320, 0.45, 7);
     Sfx.play('unitDown');
+    m.x = m.homeX;
+    m.y = m.homeY;
+    m.moving = false;
 }
 
 function reviveMonster(m) {
     m.down = 0;
     m.hp = m.maxHp;
     m.atk = 0.3;
+    m.x = m.homeX;
+    m.y = m.homeY;
     Fx.ring(m.x, m.y + MONSTER_FOOT, 70, '#ffb76b', 0.35);
     Fx.rise(m.x, m.y + MONSTER_FOOT, '#ffb76b', 14, 30, 0.5);
 }

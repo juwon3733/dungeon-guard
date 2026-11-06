@@ -9,13 +9,15 @@ const MONSTER_GRADES = {
     legendary: { name: '전설', color: '#ffc63d' }
 };
 
-// 역할: place가 'path'면 길 칸에 서서 용사를 막고(쓰러지면 재생성), 'side'면 길 옆 칸에서 사거리 안을 공격한다
+// 역할: 모든 몬스터는 길 옆 칸(BUILD_CELLS)에 놓는다.
+//   blocks가 true면 놓은 칸에서 가장 가까운 길 지점으로 걸어 나가 용사를 막고, 쓰러지면 놓은 칸에서 다시 나온다.
+//   false면 놓은 칸에 서서 사거리 안을 공격한다
 const MONSTER_ROLES = {
-    tank: { name: '탱커', place: 'path' },
-    melee: { name: '근접 공격', place: 'path' },
-    ranged: { name: '원거리 단일', place: 'side' },
-    area: { name: '원거리 광역', place: 'side' },
-    support: { name: '지원', place: 'side' }
+    tank: { name: '탱커', blocks: true },
+    melee: { name: '근접 공격', blocks: true },
+    ranged: { name: '원거리 단일', blocks: false },
+    area: { name: '원거리 광역', blocks: false },
+    support: { name: '지원', blocks: false }
 };
 
 // 계열: 함께 놓으면 효과(다음 작업). 지금은 이름만 쓴다
@@ -23,10 +25,11 @@ const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', 
 
 // stats
 //   hp, damage, interval(공격 간격), range(사거리. 근접은 용사를 붙잡는 거리)
-//   block: 붙잡는 용사 수(길 몬스터), respawn: 쓰러진 뒤 다시 일어나는 시간(길 몬스터)
+//   block: 붙잡는 용사 수(막는 몬스터), respawn: 쓰러진 뒤 놓은 칸에서 다시 나오는 시간(막는 몬스터)
 //   splash: 광역 반경, 있으면 마력 구체를 던진다. 없으면 가장 앞선 용사에게 화살을 쏜다
 // branches: 3단계 갈래. damageMul, interval, range, splash, armor(받는 피해 감소), beam(일직선 빔), heavy(큰 화살)
 // art: 그림. anim.idle은 서 있을 때 반복(idleFps가 0이면 0번 프레임 고정), anim.attack은 공격 때 한 번 재생한다.
+//   anim.walk가 있으면 길로 걸어 나갈 때 반복한다
 //   hand는 투사체가 나가는 손 위치(발끝 기준 위쪽 y, 동서 방향일 때 앞쪽 x, 세계 px), barY는 체력바 높이, glow는 뒤쪽 빛 색
 // 원거리 몬스터는 아직 공격받지 않아 hp를 쓰지 않는다
 const MONSTERS = {
@@ -35,12 +38,12 @@ const MONSTERS = {
         sprite: 'pl_orc_guard', cost: 70,
         stats: { hp: 120, damage: 8, interval: 1.0, range: 0.8, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
-        desc: '길을 막고 용사를 3명까지 붙잡습니다.',
+        desc: '길로 걸어 나가 용사를 3명까지 붙잡습니다.',
         branches: {
             A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
             B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
         },
-        art: { scale: 2, barY: 84, idleFps: 0, glow: '255,130,70', anim: { idle: ORC_ART.anim.walk, attack: ORC_ART.anim.attack } }
+        art: { scale: 2, barY: 84, idleFps: 0, glow: '255,130,70', anim: { idle: ORC_ART.anim.walk, walk: ORC_ART.anim.walk, attack: ORC_ART.anim.attack } }
     },
     skeleton_archer: {
         id: 'skeleton_archer', name: '스켈레톤 궁수', role: 'ranged', family: 'undead', grade: 'common',
@@ -83,7 +86,7 @@ const MONSTERS = {
 // 하단 몬스터 탭의 슬롯 순서이자 단축키 1~9. 지금은 기본 제공(unlock: 'start')만 나온다
 const MONSTER_SLOTS = Object.keys(MONSTERS).filter(id => MONSTERS[id].unlock === 'start');
 
-function monsterPlace(type) { return MONSTER_ROLES[MONSTERS[type].role].place; }
+function monsterBlocks(type) { return MONSTER_ROLES[MONSTERS[type].role].blocks; }
 
 // 2단계 비용은 배치 비용의 80%, 3단계는 150%
 function upgradeCost(type, nextTier) {

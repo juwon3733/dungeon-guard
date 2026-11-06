@@ -32,12 +32,25 @@ const Game = {
 
     currentWave() { return WAVES[Math.min(this.waveIndex, WAVES.length - 1)]; },
 
+    // 놓은 칸으로 찾는다. 길로 걸어 나간 몬스터도 놓은 칸을 차지한다
     monsterAt(col, row) { return this.monsters.find(m => m.col === col && m.row === row) || null; },
 
-    // 근접(길) 몬스터는 길 칸에, 원거리(길 옆) 몬스터는 건설 칸에 놓는다. 칸 하나에 하나만
+    // 세계 좌표 근처에 서 있는 몬스터(길로 나간 막는 몬스터를 누를 때)
+    monsterNear(x, y) {
+        let best = null;
+        let bestDist = 44;
+        for (const m of this.monsters) {
+            if (m.down > 0) continue;
+            const dd = distance(x, y, m.x, m.y - 10);
+            if (dd < bestDist) { bestDist = dd; best = m; }
+        }
+        return best;
+    },
+
+    // 모든 몬스터는 길 옆 칸(BUILD_CELLS)에만 놓는다. 길 칸은 막는 몬스터도 안 된다. 칸 하나에 하나만
     canPlace(type, col, row) {
         if (!MONSTERS[type] || this.monsterAt(col, row)) return false;
-        return monsterPlace(type) === 'path' ? isPathSlot(col, row) : isBuildCell(col, row);
+        return isBuildCell(col, row);
     },
 
     place(type, col, row) {

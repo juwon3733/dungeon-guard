@@ -95,18 +95,9 @@ const BUILD_CELLS = (function findBuildCells() {
 
 function isBuildCell(col, row) { return BUILD_CELLS.has(col + ',' + row); }
 
-// 근접 몬스터를 놓는 길 칸. 입구 칸과 왕좌 단상(왕좌 바로 앞 칸 포함)은 뺀다.
-// Why: 입구에 세우면 용사가 들어오자마자 붙잡혀 길 전체를 쓰지 않고, 왕좌 앞은 마지막 방어선이라 설치를 막는다.
-const PATH_SLOT_CELLS = (function findPathSlots() {
-    const result = new Set();
-    const [ec, er] = PATH_TILES[0];
-    for (const key of PATH.cells) {
-        const [c, r] = key.split(',').map(Number);
-        if (c === ec && r === er) continue;
-        if (Math.abs(c - THRONE_TILE.col) <= 1 && Math.abs(r - THRONE_TILE.row) <= 1) continue;
-        result.add(key);
-    }
-    return result;
-})();
-
-function isPathSlot(col, row) { return PATH_SLOT_CELLS.has(col + ',' + row); }
+// 막는 몬스터가 놓인 칸에서 걸어 나가 설 길 지점(d: 입구로부터 거리)
+function rallyPoint(col, row) {
+    const d = nearestPathDistance(tileX(col), tileY(row));
+    const p = pathAt(d);
+    return { d, x: p.x, y: p.y };
+}
