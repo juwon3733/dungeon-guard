@@ -1,18 +1,23 @@
 // 피해, 처치, 타락처럼 여러 객체가 함께 쓰는 전투 규칙.
 
 // attacker: 피해를 준 몬스터. 이 피해로 쓰러지면 그 몬스터가 처치 경험치를 받는다(번개, 타락 유닛은 넘기지 않는다)
-function damageHero(hero, amount, fromX, fromY, color, attacker) {
-    if (hero.dead) return;
+// dot이 true면 지속 피해(화상, 불 장판): 방어력을 무시하고 타격 섬광 없이 숫자만 띄운다. 실제로 준 피해를 돌려준다(흡혈)
+function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
+    if (hero.dead) return 0;
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
-    const dealt = Math.max(1, amount - (hero.armor || 0)) * (hero.curse > 0 ? hero.curseMul : 1);
+    const base = dot ? amount : Math.max(1, amount - (hero.armor || 0));
+    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
-    hero.flash = 0.09;
     const p = heroWorld(hero);
     Fx.number(hero, p.x, p.y - (hero.boss || hero.elite ? 130 : 74), Math.round(dealt), color || '#ffe36b', dealt >= 30);
-    Fx.burst(p.x, p.y - (hero.boss ? 70 : 30), color || '#ffd26a', 2, 200, 0.28, 5);
-    Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-14, 14), p.y - (hero.boss ? 70 : 32) + randRange(-12, 12), dealt >= 20 ? 150 : 90, 0.26);
+    if (!dot) {
+        hero.flash = 0.09;
+        Fx.burst(p.x, p.y - (hero.boss ? 70 : 30), color || '#ffd26a', 2, 200, 0.28, 5);
+        Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-14, 14), p.y - (hero.boss ? 70 : 32) + randRange(-12, 12), dealt >= 20 ? 150 : 90, 0.26);
+    }
     if (hero.hp <= 0) killHero(hero, p, attacker);
+    return dealt;
 }
 
 function killHero(hero, pos, attacker) {
@@ -83,14 +88,15 @@ function foremostHero(x, y, rangePx) {
     return best;
 }
 
-// onHit(hero)은 피해를 준 뒤 맞은 용사마다 부른다(몬스터 능력). attacker는 damageHero로 넘긴다
-function splashDamage(x, y, radiusPx, damage, color, onHit, attacker) {
+// onHit(hero)은 피해를 준 뒤 맞은 용사마다 부른다(몬스터 능력). attacker는 damageHero로 넘긴다. onDealt(준 피해)는 흡혈용
+function splashDamage(x, y, radiusPx, damage, color, onHit, attacker, onDealt) {
     let hits = 0;
     for (const h of Game.heroes.slice()) {
         if (h.dead || h.waiting) continue;
         const p = heroWorld(h);
         if (distance(x, y, p.x, p.y) <= radiusPx) {
-            damageHero(h, damage, x, y, color, attacker);
+            const dealt = damageHero(h, damage, x, y, color, attacker);
+            if (onDealt) onDealt(dealt);
             if (onHit) onHit(h);
             hits++;
         }
@@ -194,6 +200,22 @@ function stunTargets(x, y, rangePx) {
 function curseHero(hero, seconds, mul) {
     hero.curse = seconds;
     hero.curseMul = mul;
+}
+
+// 화상: 초당 dps 지속 피해. 겹치지 않고 남은 시간만 seconds로 다시 채운다(피해는 마지막에 건 값). owner는 처치 경험치를 받는 몬스터
+function burnHero(hero, seconds, dps, owner) {
+    if (!(hero.burn > 0)) hero.burnTick = 0.5; // 새로 붙으면 0.5초 뒤 첫 피해
+    hero.burn = seconds;
+    hero.burnDps = dps;
+    hero.burnOwner = owner || null;
+}
+
+// 빙결: 이동 속도 x mul. 겹치지 않고 남은 시간만 다시 채운다(배율은 더 느린 쪽)
+function slowHero(hero, seconds, mul) {
+    hero.slowMul = hero.slow > 0 ? Math.min(hero.slowMul, mul) : mul;
+    hero.slow = seconds;
+    const p = heroWorld(hero);
+    Fx.anim('fx_snowflake', p.x, p.y - 40, 90);
 }
 
 // 더 긴 쪽 정지를 남긴다

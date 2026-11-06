@@ -14,6 +14,7 @@ const Game = {
     bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'equip', id } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
+    hazards: [], // 땅에 남는 장판(불 장판 burnGround): { kind, x, y, radius(px), dps, life, age, tick, owner }
     skills: { lightning: 0, roar: 0 },
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0, throneBless: 0, // throneBless: 제물을 받은 마왕이 빛나는 남은 시간
     stats: { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 },
@@ -51,6 +52,7 @@ const Game = {
         this.projectiles = [];
         this.telegraphs = [];
         this.pendingStrikes = [];
+        this.hazards = [];
         this.skills = { lightning: 0, roar: 0 };
         this.streak = 0;
         this.streakTimer = 0;
@@ -617,15 +619,18 @@ const Game = {
         for (const s of this.pendingStrikes.filter(x => x.t <= 0)) resolveStrike(s);
         this.pendingStrikes = this.pendingStrikes.filter(s => s.t > 0);
 
+        updateAuras(this.monsters); // 지원 몬스터의 오라를 먼저 정한다(같은 프레임의 공격 속도와 피해에 쓴다)
         for (const m of this.monsters) updateMonster(m, dt);
         for (const u of this.units) updateUnit(u, dt);
         for (const h of this.heroes) if (!h.dead) updateHero(h, dt);
         for (const p of this.projectiles) updateProjectile(p, dt);
+        for (const z of this.hazards) updateHazard(z, dt);
         for (const t of this.telegraphs) t.age += dt;
         for (const c of this.corpses) c.age += dt;
 
         this.projectiles = this.projectiles.filter(p => !p.done);
         this.telegraphs = this.telegraphs.filter(t => t.age < t.life);
+        this.hazards = this.hazards.filter(z => z.age < z.life);
         this.corpses = this.corpses.filter(c => c.age < c.life);
         this.units = this.units.filter(u => !u.removed);
         this.heroes = this.heroes.filter(h => !h.dead);

@@ -276,8 +276,32 @@ const Render = {
         }
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 1.4 : 1);
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : (HEROES[h.type].barY || 64) + 8);
-        if (h.stun > 0) this.stunStars(ctx, p.x, headY);
+        // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
+        if (h.stun > 0) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 100 : 60, h.lane * 0.1);
+        if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 130 : 70, h.lane * 0.07, Math.min(1, h.burn * 2));
+        if (h.slow > 0) this.frostAura(ctx, p.x, p.y + 9, headY, Math.min(1, h.slow * 2));
         if (h.curse > 0) this.curseMark(ctx, p.x, headY - 30, h.curse);
+    },
+
+    // 빙결된 용사: 발밑 서리 고리와 몸을 덮는 푸른 빛, 떨어지는 얼음 조각
+    frostAura(ctx, x, footY, headY, a) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(120,200,255,${0.35 * a})`;
+        ctx.beginPath();
+        ctx.ellipse(x, footY, 34, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+        const g = ctx.createLinearGradient(0, headY, 0, footY);
+        g.addColorStop(0, 'rgba(140,210,255,0)');
+        g.addColorStop(1, `rgba(140,210,255,${0.3 * a})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 26, headY, 52, footY - headY);
+        for (let i = 0; i < 4; i++) {
+            const k = (Game.time * 0.8 + i / 4 + x * 0.003) % 1;
+            ctx.fillStyle = `rgba(220,245,255,${(1 - k) * a})`;
+            ctx.fillRect(Math.round(x + Math.sin(i * 2.3 + x) * 22) - 3, Math.round(headY + k * (footY - headY)) - 3, 6, 6);
+        }
+        ctx.restore();
     },
 
     // 직업 그림 보스(대마도사): Asteria 직업 그림을 크게 그린다. 경고(windup) 동안은 주문 동작, 공격은 공격 동작이다
@@ -525,6 +549,7 @@ const Render = {
             ctx.fill();
             ctx.restore();
         }
+        this.drawAuraRunes(ctx, m, footY);
         const enraged = !!monsterEnrage(m);
         if (enraged) this.enrageAura(ctx, m.x, footY, m.x * 0.01);
         const { clip, name } = this.monsterFrame(def, m);
@@ -1057,26 +1082,24 @@ const Render = {
     },
 
     drawProjectile(ctx, p) {
-        if (p.kind === 'arrow') {
-            const img = Assets.get(p.big ? 'fx_arrowBig' : 'fx_arrowPoison');
-            const size = p.big ? 170 : 120;
-            const frame = Math.floor(Game.time * 18) % 4;
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate(p.angle || 0);
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.imageSmoothingEnabled = false;
-            if (img) ctx.drawImage(img, frame * 128, 0, 128, 128, -size / 2, -size / 2, size, size);
-            ctx.restore();
+        // 투사체 모양: 몬스터 표의 art.shot(시트 또는 'bolt'). 없으면 화살(무거운 화살은 2배)과 보라 마력 구체
+        const shot = p.shot || (p.kind === 'arrow' ? (p.big ? 'fx_arrowBig' : 'fx_arrowPoison') : null);
+        if (shot && FX_SHEETS[shot]) {
+            const sheet = FX_SHEETS[shot];
+            const frame = Math.floor(Game.time / sheet.life * sheet.frames) % sheet.frames;
+            this.drawSheetFrame(ctx, shot, frame, p.x, p.y, p.big ? sheet.fit * 2.67 : sheet.fit * 1.33, p.angle || 0);
         } else {
+            // 'bolt'은 몬스터 빛 색(glow)으로, 마력 구체는 보라로
+            const rgb = shot === 'bolt' && p.glow ? p.glow : '180,100,255';
+            const r = p.kind === 'arrow' ? 22 : 32;
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 32);
+            const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r);
             g.addColorStop(0, 'rgba(255,245,255,1)');
-            g.addColorStop(0.4, 'rgba(180,100,255,0.9)');
-            g.addColorStop(1, 'rgba(120,40,220,0)');
+            g.addColorStop(0.4, `rgba(${rgb},0.9)`);
+            g.addColorStop(1, `rgba(${rgb},0)`);
             ctx.fillStyle = g;
-            ctx.fillRect(p.x - 32, p.y - 32, 64, 64);
+            ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
             ctx.restore();
         }
     },
@@ -1159,6 +1182,62 @@ const Render = {
             ctx.fillRect(x - 8, y - 12 - f * 2, 16, 16 + f * 2);
             ctx.fillStyle = '#ffc94d';
             ctx.fillRect(x - 4, y - 8 - f, 8, 10 + f);
+        }
+    },
+
+    // pixelfx 시트 한 칸을 그린다: (x, y)에 기준점을 맞추고 angle만큼 돌린다. 배율은 drawSheetEffects와 같은 정수 배율
+    drawSheetFrame(ctx, key, frame, x, y, size, angle, alpha) {
+        const sheet = FX_SHEETS[key];
+        const img = sheet && Assets.get(sheet.image);
+        if (!img) return;
+        const f = clamp(frame, 0, sheet.frames - 1);
+        const s = Math.max(1, Math.round(size * WORLD_ZOOM / sheet.fit)) / WORLD_ZOOM;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        if (alpha !== undefined) ctx.globalAlpha *= alpha;
+        if (angle) {
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.drawImage(img, (f % sheet.cols) * sheet.w, Math.floor(f / sheet.cols) * sheet.h, sheet.w, sheet.h,
+                -sheet.pivotX * s, -sheet.pivotY * s, sheet.w * s, sheet.h * s);
+        } else {
+            const dx = Math.round((x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            const dy = Math.round((y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            ctx.drawImage(img, (f % sheet.cols) * sheet.w, Math.floor(f / sheet.cols) * sheet.h, sheet.w, sheet.h, dx, dy, sheet.w * s, sheet.h * s);
+        }
+        ctx.restore();
+    },
+
+    // 반복 시트(상태 표시, 장판, 오라 고리): Game.time과 seed로 프레임을 고른다
+    drawLoopSheet(ctx, key, x, y, size, seed, alpha) {
+        const sheet = FX_SHEETS[key];
+        if (!sheet) return;
+        const k = (((Game.time + (seed || 0)) / sheet.life) % 1 + 1) % 1;
+        this.drawSheetFrame(ctx, key, Math.floor(k * sheet.frames), x, y, size, 0, alpha);
+    },
+
+    // 땅에 남은 장판(불 장판): 바닥 빛과 불꽃 고리. 사라지기 0.5초 전부터 흐려진다
+    drawHazards(ctx) {
+        for (const z of Game.hazards) {
+            const a = clamp((z.life - z.age) / 0.5, 0, 1) * clamp(z.age / 0.15, 0, 1);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(z.x, z.y, 4, z.x, z.y, z.radius);
+            g.addColorStop(0, `rgba(255,110,30,${0.35 * a})`);
+            g.addColorStop(1, 'rgba(255,60,10,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(z.x, z.y, z.radius, z.radius * 0.55, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            this.drawLoopSheet(ctx, 'fx_fire_ground', z.x, z.y, z.radius * 2, z.x * 0.01, a);
+        }
+    },
+
+    // 지원 몬스터 발밑의 오라 고리(오라 종류 색). 작고 흐리게 그려 맵을 덮지 않는다. 범위 원은 고를 때만 UI가 그린다
+    drawAuraRunes(ctx, m, footY) {
+        for (const a of monsterAbilities(m.type, 'aura')) {
+            this.drawLoopSheet(ctx, `fx_rune_${a.stat}`, m.x, footY + 4, 110, m.x * 0.013, 0.75);
         }
     },
 
@@ -1331,6 +1410,7 @@ const Render = {
             this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, rule.radius * TILE, 'rgba(160,220,255,1)');
         }
 
+        this.drawHazards(ctx);
         for (const c of Game.corpses) this.drawCorpse(ctx, c);
 
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다

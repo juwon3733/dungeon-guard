@@ -33,9 +33,8 @@ const Assets = {
         for (const id of Object.keys(RELICS)) list.push(`relic_${id}`);
         for (const id of Object.keys(EQUIPMENT)) list.push(`equip_${id}`); // 장비 그림(48px)
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
-        for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
-            'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison']) list.push(`fx_${fx}`);
-        for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image); // pixelfx 시트, assets/fx/
+        // 전투 효과는 모두 pixelfx 시트(assets/fx/)다. 옛 Asteria fx_ 그림은 더 불러오지 않는다
+        for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
         list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
             'tile_shadow_detailB', 'tile_shadow_rare', 'ui_skillSlot', 'icon_power_thunderStrike');
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다

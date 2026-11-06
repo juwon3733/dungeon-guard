@@ -46,9 +46,125 @@ function monsterStats(m) {
     stats.range *= 1 + mods.range;
     stats.interval /= 1 + mods.attackSpeed;
     stats.respawn *= mods.respawn;
+    // 오라(지원 몬스터): updateAuras가 매 프레임 정해 둔 값. 피해와 공격 속도만 바꾸고 최대 체력은 건드리지 않아
+    // 오라 안팎을 오가도 체력 비율이 흔들리지 않는다. 팝업 미리보기처럼 aura가 없는 개체는 그대로다
+    if (m.aura) {
+        stats.damage *= 1 + m.aura.damage;
+        stats.interval /= 1 + m.aura.attackSpeed;
+    }
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
     return stats;
+}
+
+// 같은 몬스터의 kind 능력 전부(오라처럼 여러 개를 가질 수 있는 능력)
+function monsterAbilities(type, kind) {
+    return MONSTERS[type].abilities.filter(a => a.kind === kind);
+}
+
+// 오라: 쓰러지지 않은 몬스터의 aura 능력이 반경 안 몬스터(자신 포함)에게 닿는다. 같은 stat은 가장 큰 값 하나만 받는다.
+// 결과는 m.aura = { heal, damage, attackSpeed }(없으면 0). Game.update가 몬스터를 움직이기 전에 한 번 부른다
+function updateAuras(monsters) {
+    const sources = [];
+    for (const m of monsters) {
+        if (m.down > 0) continue;
+        for (const a of monsterAbilities(m.type, 'aura')) sources.push({ m, a });
+    }
+    for (const m of monsters) {
+        const aura = { heal: 0, damage: 0, attackSpeed: 0 };
+        if (!(m.down > 0)) {
+            for (const { m: src, a } of sources) {
+                if (distance(src.x, src.y, m.x, m.y) > a.radius * TILE) continue;
+                aura[a.stat] = Math.max(aura[a.stat], a.value);
+            }
+        }
+        m.aura = aura;
+    }
+}
+
+// 체력 회복(재생, 오라, 흡혈). 최대 체력을 넘지 않고, 쓰러진 몬스터는 회복하지 않는다. 실제로 오른 양을 돌려준다
+function healMonster(m, amount) {
+    if (!(amount > 0) || m.down > 0 || !(m.maxHp > 0)) return 0;
+    const before = m.hp;
+    m.hp = Math.min(m.maxHp, m.hp + amount);
+    return m.hp - before;
+}
+
+// 몬스터가 용사에게 실제로 준 피해(dealt)에 따라 붙는 능력: 흡혈
+function monsterDealt(m, dealt) {
+    if (!m || m.kind !== 'monster' || m.removed || !(dealt > 0)) return;
+    const a = monsterAbility(m.type, 'lifesteal');
+    if (!a) return;
+    if (healMonster(m, dealt * a.ratio) > 0 && (m.healFx || 0) <= 0) {
+        m.healFx = 0.5;
+        Fx.anim('fx_lifesteal', m.x, m.y - 30, 80);
+    }
+}
+
+// 가르기: 대상 둘레 radius칸 안의 다른 용사에게 피해의 ratio
+function monsterCleave(m, target, damage) {
+    const a = monsterAbility(m.type, 'cleave');
+    if (!a) return;
+    const c = heroWorld(target);
+    Fx.anim('fx_cleave', c.x, c.y + 6, a.radius * TILE * 1.2);
+    for (const h of Game.heroes.slice()) {
+        if (h === target || h.dead || h.waiting) continue;
+        const p = heroWorld(h);
+        if (distance(c.x, c.y, p.x, p.y) > a.radius * TILE) continue;
+        monsterDealt(m, damageHero(h, damage * a.ratio, c.x, c.y, '#ffb36b', m));
+    }
+}
+
+// 연쇄 번개: 맞은 용사(first)에서 jump칸 안의 가장 가까운 다음 용사로 count번 이어진다. 이미 맞은 용사는 건너뛴다
+function monsterChain(m, first, damage) {
+    const a = m && monsterAbility(m.type, 'chain');
+    if (!a || !first) return;
+    const hit = [first];
+    let from = heroWorld(first);
+    for (let i = 0; i < a.count; i++) {
+        const next = nearestHero(from.x, from.y, a.jump * TILE, h => !hit.includes(h));
+        if (!next) break;
+        hit.push(next);
+        const p = heroWorld(next);
+        Fx.beam(from.x, from.y - 40, p.x, p.y - 40, '#7dffb4', 10, 0.22);
+        Fx.beam(from.x, from.y - 40, p.x, p.y - 40, '#ffffff', 3, 0.16);
+        Fx.anim('fx_hit_lightning', p.x, p.y - 40, 130);
+        damageHero(next, damage * a.ratio, from.x, from.y, '#9dffc8', m);
+        monsterHitHero(m.type, next, m);
+        from = p;
+    }
+}
+
+// 가시: 막는 몬스터가 용사에게 맞으면 받은 피해의 ratio를 그 용사에게 돌려준다(이 반사로 쓰러뜨리면 처치 경험치)
+function monsterThorns(m, taken, attacker) {
+    const a = monsterAbility(m.type, 'thorns');
+    if (!a || !attacker || attacker.dead || !(taken > 0)) return;
+    damageHero(attacker, taken * a.ratio, m.x, m.y, '#b8ff8a', m);
+    if (m.thornsFx <= 0) {
+        m.thornsFx = 0.8; // 자주 맞으므로 효과는 0.8초에 한 번
+        Fx.anim('fx_thorns', m.x, m.y + MONSTER_FOOT, 160);
+    }
+}
+
+// 불 장판: 광역 공격이 떨어진 자리에 남는다(Game.hazards). 0.5초마다 안의 용사에게 방어력을 무시한 피해
+const HAZARD_TICK = 0.5;
+function dropBurnGround(m, x, y) {
+    const a = m && monsterAbility(m.type, 'burnGround');
+    if (!a) return;
+    Game.hazards.push({ kind: 'fire', x, y, radius: a.radius * TILE, dps: a.dps, life: a.duration, age: 0, tick: HAZARD_TICK, owner: m });
+}
+
+function updateHazard(z, dt) {
+    z.age += dt;
+    z.tick -= dt;
+    if (z.tick > 1e-6) return;
+    z.tick += HAZARD_TICK;
+    for (const h of Game.heroes.slice()) {
+        if (h.dead || h.waiting) continue;
+        const p = heroWorld(h);
+        if (distance(z.x, z.y, p.x, p.y) > z.radius) continue;
+        damageHero(h, z.dps * HAZARD_TICK, z.x, z.y, '#ff9d4d', z.owner, true);
+    }
 }
 
 // 광폭화 중이면 그 능력을, 아니면 null. 체력이 없는 몬스터(팝업 미리보기, 원거리)와 쓰러진 몬스터는 걸리지 않는다
@@ -58,11 +174,23 @@ function monsterEnrage(m) {
     return m.hp / m.maxHp <= a.below ? a : null;
 }
 
-// 몬스터의 공격이 용사에게 맞음: 맞은 뒤 걸리는 능력(저주)을 적용한다. 피해를 준 다음에 부른다
-function monsterHitHero(type, hero) {
+// 몬스터의 공격이 용사에게 맞음: 맞은 뒤 걸리는 능력(저주, 화상, 빙결, 악몽)을 적용한다. 피해를 준 다음에 부른다.
+// owner는 쏜 몬스터(화상 피해로 쓰러뜨리면 처치 경험치를 받는다. 없어도 된다)
+function monsterHitHero(type, hero, owner) {
     if (hero.dead) return;
     const curse = monsterAbility(type, 'curseShot');
     if (curse) curseHero(hero, curse.duration, curse.takenMul);
+    const burn = monsterAbility(type, 'burnShot');
+    if (burn) burnHero(hero, burn.duration, burn.dps, owner);
+    const slow = monsterAbility(type, 'slowShot');
+    if (slow) slowHero(hero, slow.duration, slow.speedMul);
+    const stun = monsterAbility(type, 'stunShot');
+    // 보스는 걸리지 않는다(난수도 쓰지 않는다)
+    if (stun && !hero.boss && Math.random() < stun.chance) {
+        applyStun(hero, stun.duration);
+        const p = heroWorld(hero);
+        Fx.ring(p.x, p.y - 20, 60, '#ff9cf2', 0.35);
+    }
 }
 
 // 쓰러질 때 능력: 반경 안 용사 기절(보스 제외)
@@ -133,6 +261,14 @@ function monsterXpToNext(m) {
 // 합쳐지거나 팔려 사라진 몬스터의 투사체가 마무리했으면 아무도 받지 않는다
 function monsterKilledHero(m, hero) {
     if (!m || m.kind !== 'monster' || m.removed) return;
+    // 약탈(goldOnKill): 처치 골드와 따로 더 받는다
+    const loot = monsterAbility(m.type, 'goldOnKill');
+    if (loot) {
+        Game.gold += loot.gold;
+        const p = heroWorld(hero);
+        Fx.anim('fx_gold', p.x, p.y - 50, 80);
+        Fx.number(hero, p.x, p.y - 110, `+${loot.gold}G`, '#ffd76a', false);
+    }
     const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
     m.xp += gain * (1 + equipEffect(m.equip, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
     const before = m.rank;
@@ -162,11 +298,29 @@ function updateMonster(m, dt) {
     m.flash = Math.max(0, m.flash - dt);
     m.atkPose = Math.max(0, m.atkPose - dt);
     m.rankUp = Math.max(0, (m.rankUp || 0) - dt);
+    m.healFx = Math.max(0, (m.healFx || 0) - dt);
+    m.thornsFx = Math.max(0, (m.thornsFx || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;
         if (m.down <= 0) reviveMonster(m);
         return;
+    }
+    // 재생과 오라 회복: 정지 중에도 아문다. 회복 효과는 1.5초에 한 번만 보여 화면을 덮지 않는다
+    const regen = monsterAbility(m.type, 'regen');
+    const perSec = (regen ? regen.perSec : 0) + (m.aura ? m.aura.heal : 0);
+    if (healMonster(m, perSec * dt) > 0 && m.healFx <= 0) {
+        m.healFx = 1.5;
+        Fx.anim('fx_heal', m.x, m.y - 30, 80);
+    }
+    // 회복 오라를 내는 지원 몬스터: 다친 몬스터가 반경 안에 있으면 3초마다 바닥에 회복 물결
+    m.auraFx = Math.max(0, (m.auraFx || 0) - dt);
+    if (m.auraFx <= 0) {
+        const heal = monsterAbilities(m.type, 'aura').find(a => a.stat === 'heal');
+        if (heal && Game.monsters.some(o => o.blocks && !(o.down > 0) && o.hp < o.maxHp && distance(m.x, m.y, o.x, o.y) <= heal.radius * TILE)) {
+            m.auraFx = 3;
+            Fx.anim('fx_heal_aoe', m.x, m.y + MONSTER_FOOT, heal.radius * TILE * 2);
+        }
     }
     if (m.stun > 0) {
         m.stun -= dt;
@@ -198,8 +352,9 @@ function updateBlockMonster(m, dt) {
     if (m.atk > 0) return;
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
-    damageHero(target, stats.damage, m.x, m.y, '#ffb76b', m);
-    monsterHitHero(m.type, target);
+    monsterDealt(m, damageHero(target, stats.damage, m.x, m.y, '#ffb76b', m));
+    monsterHitHero(m.type, target, m);
+    monsterCleave(m, target, stats.damage);
     Sfx.play('slash');
 }
 
@@ -233,18 +388,22 @@ function fireMonsterShot(m, stats, target) {
     if (stats.beam) {
         fireBeam(hand.x, hand.y, stats, tp, m);
     } else if (stats.splash > 0) {
+        const art = MONSTERS[m.type].art;
         Game.projectiles.push({
-            kind: 'orb', x: hand.x, y: hand.y, tx: tp.x, ty: tp.y - 30, sx: hand.x, sy: hand.y,
+            kind: 'orb', x: hand.x, y: hand.y, tx: tp.x, ty: tp.y - 30, sx: hand.x, sy: hand.y, target,
             age: 0, time: clamp(distance(hand.x, hand.y, tp.x, tp.y) / 760, 0.25, 0.6),
-            damage: stats.damage, splash: stats.splash * TILE, src: m.type, owner: m
+            damage: stats.damage, splash: stats.splash * TILE, src: m.type, owner: m,
+            shot: art.shot || null, impact: art.impact || null, glow: art.glow
         });
-        Fx.glow(hand.x, hand.y, 50, 'rgba(190,110,255,1)', 0.18);
+        Fx.glow(hand.x, hand.y, 50, `rgba(${art.shot ? art.glow : '190,110,255'},1)`, 0.18);
         Sfx.play('orb');
     } else {
+        const art = MONSTERS[m.type].art;
+        const curse = !!monsterAbility(m.type, 'curseShot'); // 저주 화살은 보랏빛 화살과 꼬리
         Game.projectiles.push({
             kind: 'arrow', x: hand.x, y: hand.y, target, damage: stats.damage, src: m.type, owner: m,
-            speed: stats.heavy ? 2200 : 1300, big: stats.heavy, trail: 0,
-            curse: !!monsterAbility(m.type, 'curseShot') // 저주 화살은 보랏빛 꼬리를 남긴다
+            speed: stats.heavy ? 2200 : 1300, big: stats.heavy, trail: 0, curse,
+            shot: art.shot || (curse ? 'fx_shot_curse' : null), glow: art.glow
         });
         Sfx.play(stats.heavy ? 'snipe' : 'arrow');
     }
@@ -267,8 +426,8 @@ function fireBeam(ox, oy, stats, tp, owner) {
         if (along < 0 || along > reach) continue;
         const off = Math.abs((p.x - ox) * dy - (p.y - 30 - oy) * dx);
         if (off < 42) {
-            damageHero(h, stats.damage, ox, oy, '#d7a8ff', owner);
-            monsterHitHero(owner.type, h);
+            monsterDealt(owner, damageHero(h, stats.damage, ox, oy, '#d7a8ff', owner));
+            monsterHitHero(owner.type, h, owner);
         }
     }
     Sfx.play('beam');
@@ -312,9 +471,10 @@ function updateProjectile(p, dt) {
         const step = p.speed * dt;
         p.angle = Math.atan2(ty - p.y, tx - p.x);
         if (len <= step + 8) {
-            damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'), p.owner);
+            monsterDealt(p.owner, damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'), p.owner));
             // 타락 유닛의 화살에는 src와 owner가 없다
-            if (p.src) monsterHitHero(p.src, t);
+            if (p.src) monsterHitHero(p.src, t, p.owner);
+            if (p.owner && !p.owner.removed) monsterChain(p.owner, t, p.damage);
             if (p.big) Fx.addShake(5);
             Sfx.play('hit');
             p.done = true;
@@ -323,7 +483,7 @@ function updateProjectile(p, dt) {
         p.x += (tx - p.x) / len * step;
         p.y += (ty - p.y) / len * step;
         p.trail += dt;
-        if (p.trail > 0.02) {
+        if (p.trail > 0.02 && !p.shot) { // 시트 투사체(불덩이, 도끼 등)는 그림에 꼬리가 있다
             p.trail = 0;
             Fx.particles.push({
                 x: p.x, y: p.y, vx: 0, vy: 0, life: 0.14, max: 0.14,
@@ -333,20 +493,30 @@ function updateProjectile(p, dt) {
     } else {
         p.age += dt;
         const t = clamp(p.age / p.time, 0, 1);
+        const px = p.x;
+        const py = p.y;
         p.x = p.sx + (p.tx - p.sx) * t;
         p.y = p.sy + (p.ty - p.sy) * t - Math.sin(t * Math.PI) * 90;
+        p.angle = Math.atan2(p.y - py, p.x - px); // 시트 투사체를 날아가는 방향으로 돌린다
+        const rgb = p.glow && p.shot ? p.glow : '169,107,255';
         if (Math.random() < 0.7) {
             Fx.particles.push({
                 x: p.x + randRange(-6, 6), y: p.y + randRange(-6, 6), vx: 0, vy: -20,
-                life: 0.25, max: 0.25, size: 6, color: '#a96bff', gravity: 0
+                life: 0.25, max: 0.25, size: 6, color: `rgb(${rgb})`, gravity: 0
             });
         }
         if (t >= 1) {
-            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff', h => monsterHitHero(p.src, h), p.owner);
-            Fx.ring(p.tx, p.ty + 30, p.splash, '#c28bff', 0.3);
-            Fx.anim('fx_blastViolet', p.tx, p.ty + 10, p.splash * 2.8, 0.42);
-            Fx.glow(p.tx, p.ty, p.splash * 1.5, 'rgba(170,90,255,1)', 0.24);
-            Fx.burst(p.tx, p.ty, '#c28bff', 22, 420, 0.42, 7);
+            const owner = p.owner && !p.owner.removed ? p.owner : null;
+            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff', h => monsterHitHero(p.src, h, owner), owner,
+                dealt => monsterDealt(owner, dealt));
+            // 연쇄 번개는 노린 용사(쓰러졌으면 그 자리에서 가장 가까운 용사)에서 시작한다
+            const first = p.target && !p.target.dead ? p.target : nearestHero(p.tx, p.ty + 30, p.splash);
+            if (owner) monsterChain(owner, first, p.damage);
+            dropBurnGround(owner, p.tx, p.ty + 30);
+            Fx.ring(p.tx, p.ty + 30, p.splash, `rgb(${rgb})`, 0.3);
+            Fx.anim(p.impact || 'fx_blastViolet', p.tx, p.ty + 10, p.splash * 2.8, 0.42);
+            Fx.glow(p.tx, p.ty, p.splash * 1.5, `rgba(${rgb},1)`, 0.24);
+            Fx.burst(p.tx, p.ty, `rgb(${rgb})`, 22, 420, 0.42, 7);
             Fx.addShake(6);
             Sfx.play('blast');
             p.done = true;
