@@ -1,5 +1,12 @@
 // 계획서의 초기값. 거리는 타일 단위, 시간은 초 단위다. 몬스터 표는 js/data/monsters.js에 있다.
 
+// 타락(쓰러진 용사를 눌러 부하로 만들기): 사용자가 생각보다 별로라고 해 일단 끈다(2026-11-07).
+// 코드와 그림은 남겨 두었고 true로 바꾸면 그대로 되살아난다. smoke 시험이 잠시 켜 보므로 let으로 둔다.
+let CORRUPTION_ENABLED = false;
+// 타락이 꺼져 있을 때 시체: 쓰러지는 동작(초당 CORPSE_FALL_FPS 프레임)을 재생한 뒤 CORPSE_FADE_TIME초 동안 서서히 사라진다
+const CORPSE_FALL_FPS = 14;
+const CORPSE_FADE_TIME = 1;
+
 // PixelLab 동작 그림. dirs가 있으면 그 방향만 있고, 서쪽은 동쪽을 뒤집어 쓴다.
 // footPx는 캔버스 안의 발끝 높이다. 캔버스 크기가 방향마다 달라 방향별로 적기도 한다
 const PL_DIRS = ['south', 'east', 'north'];

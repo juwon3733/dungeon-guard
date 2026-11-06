@@ -855,12 +855,14 @@ const Render = {
     drawCorpse(ctx, c) {
         const def = HEROES[c.type];
         const fall = def.anim && def.anim.death; // 쓰러지는 동작을 재생한 뒤 마지막 프레임을 유지한다
-        const name = fall ? this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * 14))) : this.heroStandName(c.type, c.female, 'down');
+        const name = fall ? this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * CORPSE_FALL_FPS))) : this.heroStandName(c.type, c.female, 'down');
         const left = 1 - c.age / c.life;
-        const blink = left < 0.3 ? (Math.floor(Game.time * 8) % 2 === 0 ? 0.45 : 0.9) : 0.9;
+        // 타락이 꺼져 있으면 깜빡임 대신 마지막 CORPSE_FADE_TIME초 동안 서서히 사라진다
+        const blink = !CORRUPTION_ENABLED ? 0.9 * Math.min(1, (c.life - c.age) / CORPSE_FADE_TIME)
+            : left < 0.3 ? (Math.floor(Game.time * 8) % 2 === 0 ? 0.45 : 0.9) : 0.9;
         const hovered = UI.hoverCorpse === c;
         // 지금 클릭하면 바로 타락시킬 수 있는 시체만 고리와 윤곽선으로 부른다
-        const ready = Game.gold >= c.cost && Game.units.filter(u => u.kind === 'corrupt').length < COMBAT_RULES.corruptMax;
+        const ready = CORRUPTION_ENABLED && Game.gold >= c.cost && Game.units.filter(u => u.kind === 'corrupt').length < COMBAT_RULES.corruptMax;
         if (ready) this.drawCorruptAura(ctx, c.x, c.y + 10, hovered ? 1 : 0.8, c.x * 0.013, true);
         ctx.save();
         ctx.translate(c.x, c.y + 8);
@@ -879,6 +881,7 @@ const Render = {
             draw(img, 0, 0);
         }
         ctx.restore();
+        if (!CORRUPTION_ENABLED) return;
 
         // 남은 시간 고리
         ctx.save();
