@@ -161,6 +161,23 @@ const SCENES = {
         settleMs: 400
     },
 
+    // 몬스터 24마리에 랭크를 섞은 장면: 대부분 D(글자 없음), C·B·A 몇, S 둘. 하나는 랭크가 막 오른 연출 중이다
+    ranks: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 5000;
+            seededRandom(7, () => { for (let i = 0; i < 24; i++) pressButton('summon'); });
+            if (Game.monsters.length < 22) throw new Error(`몬스터가 ${Game.monsters.length}마리뿐입니다`);
+            const ranks = [4, 0, 1, 0, 0, 2, 0, 3, 0, 0, 1, 0, 4, 0, 0, 2, 0, 0, 1, 0, 0, 0, 3, 0];
+            Game.monsters.forEach((m, i) => setMonsterRank(m, ranks[i] || 0));
+            UI.onMove(GAME_WIDTH / 2, 600);
+            for (let i = 0; i < 60; i++) Game.update(1 / 30); // 막는 몬스터가 길로 걸어 나간다
+            Fx.reset();
+            Game.monsters[5].rankUp = 0.7;
+            freezeScene();
+        }
+    },
+
     // 몬스터 3종을 길 옆에 놓고 웨이브를 시작한 뒤, 오크가 길로 나가 용사를 붙잡을 때까지 시간을 빨리 돌린다
     combat: {
         setup: () => {

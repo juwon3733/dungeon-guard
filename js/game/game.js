@@ -211,6 +211,8 @@ const Game = {
         this.removeMonster(src.monster);
         const old = dst.monster;
         const monster = createMonster(type, old.col, old.row);
+        // 랭크는 재료 중 낮은 쪽을 이어받는다(합치기로 랭크가 오르지는 않는다)
+        setMonsterRank(monster, Math.min(src.monster.rank || 0, old.rank || 0));
         monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
         this.monsters[this.monsters.indexOf(old)] = monster;
         old.removed = true;

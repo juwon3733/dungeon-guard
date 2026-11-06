@@ -119,6 +119,11 @@ const Sfx = {
                 this.tone(110 - g * 15, 0.3 + g * 0.2, 'sawtooth', 0.12 + g * 0.04, 0.4, hit);
                 if (this.ctx) setTimeout(() => this.noise(0.25 + g * 0.2, 0.12 + g * 0.06, 2500 + g * 1500), 420);
             },
+            // 랭크 상승: 짧게 올라가는 두세 음. S(arg 4)는 한 음 더 높이 끝난다
+            rankUp: () => {
+                const notes = (arg || 0) >= 4 ? [659, 880, 1175, 1568] : [587, 784, 1047];
+                notes.forEach((f, i) => this.tone(f, 0.09, 'triangle', 0.07, 1, now + i * 0.05));
+            },
             // 히든 조합 발견: 합치기 소리 뒤에 이어지는 팡파르
             hidden: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.18, 'square', 0.09, 1, now + 0.5 + i * 0.1))
         }[name];

@@ -1,6 +1,7 @@
 // 피해, 처치, 타락처럼 여러 객체가 함께 쓰는 전투 규칙.
 
-function damageHero(hero, amount, fromX, fromY, color) {
+// attacker: 피해를 준 몬스터. 이 피해로 쓰러지면 그 몬스터가 처치 경험치를 받는다(번개, 타락 유닛은 넘기지 않는다)
+function damageHero(hero, amount, fromX, fromY, color, attacker) {
     if (hero.dead) return;
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
@@ -11,11 +12,12 @@ function damageHero(hero, amount, fromX, fromY, color) {
     Fx.number(hero, p.x, p.y - (hero.boss || hero.elite ? 130 : 74), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     Fx.burst(p.x, p.y - (hero.boss ? 70 : 30), color || '#ffd26a', 2, 200, 0.28, 5);
     Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-14, 14), p.y - (hero.boss ? 70 : 32) + randRange(-12, 12), dealt >= 20 ? 150 : 90, 0.26);
-    if (hero.hp <= 0) killHero(hero, p);
+    if (hero.hp <= 0) killHero(hero, p, attacker);
 }
 
-function killHero(hero, pos) {
+function killHero(hero, pos, attacker) {
     hero.dead = true;
+    if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
     const bounty = hero.bounty;
     G.gold += bounty;
@@ -73,14 +75,14 @@ function foremostHero(x, y, rangePx) {
     return best;
 }
 
-// onHit(hero)은 피해를 준 뒤 맞은 용사마다 부른다(몬스터 능력)
-function splashDamage(x, y, radiusPx, damage, color, onHit) {
+// onHit(hero)은 피해를 준 뒤 맞은 용사마다 부른다(몬스터 능력). attacker는 damageHero로 넘긴다
+function splashDamage(x, y, radiusPx, damage, color, onHit, attacker) {
     let hits = 0;
     for (const h of Game.heroes.slice()) {
         if (h.dead || h.waiting) continue;
         const p = heroWorld(h);
         if (distance(x, y, p.x, p.y) <= radiusPx) {
-            damageHero(h, damage, x, y, color);
+            damageHero(h, damage, x, y, color, attacker);
             if (onHit) onHit(h);
             hits++;
         }
