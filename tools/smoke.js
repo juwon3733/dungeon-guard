@@ -136,10 +136,12 @@ assert.strictEqual(MONSTER_UPGRADE_ENABLED, false);
 // 고른 몬스터와 합칠 수 있는 대상: 조합식이면 결과, 같은 등급이면 다음 등급
 assert.strictEqual(UI.shownPlan('dark_mage', 'skeleton_archer').result, 'curse_shooter');
 assert.strictEqual(UI.shownPlan('dark_mage', 'dark_mage').grade, 'rare');
-// 히든 조합식은 미리 보이지 않는다: 공개 목록에 없고, 화면에는 등급 합치기로만 보인다
-assert(!publicRecipesFor('orc_guard').some(r => r.partner === 'skeleton_archer'), 'hidden recipe not listed');
-assert.strictEqual(UI.shownPlan('orc_guard', 'skeleton_archer').kind, 'grade');
-assert.strictEqual(mergePlan('orc_guard', 'skeleton_archer').kind, 'recipe');
+// 히든 조합식은 미리 보이지 않는다: 공개 목록에 없고, 화면에는 합칠 수 없는 쌍으로 보인다
+assert(!publicRecipesFor('orc_berserker').some(r => r.partner === 'skeleton_archer'), 'hidden recipe not listed');
+assert.notStrictEqual(UI.shownPlan('orc_berserker', 'skeleton_archer').kind, 'recipe');
+assert.strictEqual(mergePlan('orc_berserker', 'skeleton_archer').kind, 'recipe');
+// 서로 다른 일반 몬스터 중 조합식이 없는 쌍은 등급 합치기다
+assert.strictEqual(mergePlan('orc_guard', 'skeleton_archer').kind, 'grade');
 click(...benchXY(2)); // 같은 칸을 다시 누르면 닫는다
 assert.strictEqual(UI.selectedBench, null);
 
@@ -235,19 +237,20 @@ dragTo(monXY(Game.monsterAt(3, 4)), benchXY(2));
 assert.strictEqual(Game.bench[2], 'curse_shooter', 'reverse order recipe into bench');
 assert.strictEqual(Game.monsterAt(3, 4), null, 'field source freed');
 
-// 히든 조합식: 오크 경비병 + 스켈레톤 궁수 → 해골 기사. 처음이면 "히든 조합 발견!"
+// 히든 조합식: 오크 광전사 + 스켈레톤 궁수 → 해골 기사. 처음이면 "히든 조합 발견!"
+Game.bench[0] = 'orc_berserker';
 Game.bench[1] = 'skeleton_archer';
 dragTo(benchXY(0), benchXY(1));
 assert.strictEqual(Game.bench[1], 'bone_knight', 'hidden recipe result');
 assert.strictEqual(Game.bench[0], null);
 assert(Fx.discovery && Fx.discovery.type === 'bone_knight', 'hidden discovered');
-assert(Game.discovered.has('orc_guard+skeleton_archer'));
+assert(Game.discovered.has('orc_berserker+skeleton_archer'));
 assert(Fx.pops.some(p => p.kind === 'merge' && p.hidden && p.grade === 'epic'));
 tick(4.2);
 assert.strictEqual(Fx.discovery, null);
 // 두 번째부터는 발견 연출이 없다
 Game.bench[0] = 'skeleton_archer';
-Game.bench[4] = 'orc_guard';
+Game.bench[4] = 'orc_berserker';
 dragTo(benchXY(4), benchXY(0));
 assert.strictEqual(Game.bench[0], 'bone_knight');
 assert.strictEqual(Fx.discovery, null, 'discovered only once');

@@ -98,10 +98,11 @@ const SCENES = {
         }
     },
 
-    // 히든 조합 발견: 오크 경비병 + 스켈레톤 궁수 = 해골 기사
+    // 히든 조합 발견: 오크 광전사 + 스켈레톤 궁수 = 해골 기사
     hidden: {
         setup: () => {
             setupBoard();
+            Game.bench[1] = 'orc_berserker';
             const m = Game.monsterAt(6, 4);
             dragDrop(benchCenter(1), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.7);

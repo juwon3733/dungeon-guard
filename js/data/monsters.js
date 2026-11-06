@@ -149,7 +149,7 @@ const MONSTER_RECIPES = [
     { a: 'skeleton_archer', b: 'dark_mage', result: 'curse_shooter', hidden: false },
     { a: 'orc_guard', b: 'dark_mage', result: 'orc_berserker', hidden: false },
     { a: 'orc_berserker', b: 'curse_shooter', result: 'bone_knight', hidden: false },
-    { a: 'orc_guard', b: 'skeleton_archer', result: 'bone_knight', hidden: true }
+    { a: 'orc_berserker', b: 'skeleton_archer', result: 'bone_knight', hidden: true }
 ];
 
 // 등급별 소환·등급 합치기 후보. 표 순서를 따른다
