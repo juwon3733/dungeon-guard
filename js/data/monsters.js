@@ -100,7 +100,7 @@ const MONSTER_UPGRADE_ENABLED = false;
 
 // 역할: 모든 몬스터는 길 옆 칸(BUILD_CELLS)에 놓는다.
 //   blocks가 true면 놓은 칸에서 가장 가까운 길 지점으로 걸어 나가 용사를 막고, 쓰러지면 놓은 칸에서 다시 나온다.
-//   false면 놓은 칸에 서서 사거리 안을 공격한다
+//   false면 놓은 칸에 서서 사거리 안을 공격한다. 지원(support)도 그렇게 서서 약하게 공격하며 오라(aura 능력)를 낸다
 const MONSTER_ROLES = {
     tank: { name: '탱커', blocks: true },
     melee: { name: '근접 공격', blocks: true },
@@ -117,10 +117,37 @@ const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', 
 //   enrage: 체력 비율이 below 이하면 공격 간격 x intervalMul. 다시 나오면(체력 회복) 풀린다
 //   curseShot: 이 몬스터의 공격에 맞은 용사가 duration초 동안 받는 피해 x takenMul. 겹치지 않고 남은 시간만 다시 채운다
 //   deathStun: 쓰러질 때 반경 radius칸 안 용사를 duration초 기절시킨다. 보스는 걸리지 않는다
+//   burnShot: 맞은 용사가 duration초 동안 초당 dps 화상 피해(방어력 무시). 겹치지 않고 남은 시간만 다시 채운다
+//   slowShot: 맞은 용사가 duration초 동안 이동 속도 x speedMul. 겹치지 않고 남은 시간만 다시 채운다
+//   stunShot: 맞을 때 chance 확률로 duration초 기절. 보스는 걸리지 않는다
+//   lifesteal: 이 몬스터가 준 피해의 ratio만큼 체력을 회복한다(최대 체력까지)
+//   regen: 쓰러지지 않은 동안 초당 perSec 체력을 회복한다
+//   aura: 반경 radius칸 안 몬스터(자신 포함)에게 stat 효과. heal은 초당 체력 회복, damage는 피해 비율, attackSpeed는 공격 속도 비율.
+//     같은 stat의 오라가 여럿이면 가장 큰 값 하나만 받는다. 피해와 공격 속도는 monsterStats에서 곱하고, 최대 체력은 바꾸지 않는다
+//   cleave: 막는 몬스터가 때릴 때 대상 둘레 radius칸 안 다른 용사에게 피해의 ratio
+//   thorns: 막는 몬스터가 용사에게 맞으면 받은 피해의 ratio를 그 용사에게 돌려준다
+//   chain: 맞은 용사에서 jump칸 안 다음 용사로 count번 이어지며 피해의 ratio(이미 맞은 용사는 건너뛴다)
+//   goldOnKill: 이 몬스터가 용사를 쓰러뜨리면 골드 +gold(처치 골드와 따로)
+//   burnGround: 광역 공격이 떨어진 자리에 duration초 동안 반경 radius칸 불 장판(초당 dps, 방어력 무시)
+const AURA_STATS = { heal: '체력 회복', damage: '피해', attackSpeed: '공격 속도' };
 const ABILITY_KINDS = {
     enrage: { name: '광폭화', desc: a => `체력 ${Math.round(a.below * 100)}% 이하면 공격 간격 x${a.intervalMul}` },
     curseShot: { name: '저주', desc: a => `맞은 용사가 ${a.duration}초간 받는 피해 +${Math.round((a.takenMul - 1) * 100)}%` },
-    deathStun: { name: '단말마', desc: a => `쓰러지면 ${a.radius}칸 안 용사 ${a.duration}초 기절(보스 제외)` }
+    deathStun: { name: '단말마', desc: a => `쓰러지면 ${a.radius}칸 안 용사 ${a.duration}초 기절(보스 제외)` },
+    burnShot: { name: '화상', desc: a => `맞은 용사가 ${a.duration}초간 초당 ${a.dps} 화상 피해` },
+    slowShot: { name: '빙결', desc: a => `맞은 용사가 ${a.duration}초간 이동 속도 x${a.speedMul}` },
+    stunShot: { name: '악몽', desc: a => `맞으면 ${Math.round(a.chance * 100)}% 확률로 ${a.duration}초 기절(보스 제외)` },
+    lifesteal: { name: '흡혈', desc: a => `준 피해의 ${Math.round(a.ratio * 100)}%만큼 체력 회복` },
+    regen: { name: '재생', desc: a => `초당 체력 ${a.perSec} 회복` },
+    aura: {
+        name: '오라',
+        desc: a => `${a.radius}칸 안 몬스터 ${AURA_STATS[a.stat]} ${a.stat === 'heal' ? `초당 ${a.value}` : `+${Math.round(a.value * 100)}%`}(겹치지 않음)`
+    },
+    cleave: { name: '가르기', desc: a => `대상 둘레 ${a.radius}칸 용사에게 피해의 ${Math.round(a.ratio * 100)}%` },
+    thorns: { name: '가시', desc: a => `막다가 맞으면 받은 피해의 ${Math.round(a.ratio * 100)}% 반사` },
+    chain: { name: '연쇄 번개', desc: a => `다음 용사 ${a.count}명에게 이어지며 피해의 ${Math.round(a.ratio * 100)}%` },
+    goldOnKill: { name: '약탈', desc: a => `용사를 쓰러뜨리면 골드 +${a.gold}` },
+    burnGround: { name: '용암 장판', desc: a => `떨어진 자리 ${a.radius}칸에 ${a.duration}초간 초당 ${a.dps} 불 장판` }
 };
 
 // stats
@@ -134,6 +161,12 @@ const ABILITY_KINDS = {
 // 원거리 몬스터는 아직 공격받지 않아 hp를 쓰지 않는다
 // cost는 강화 비용 계산(upgradeCost)에만 쓴다. 소환 비용은 SUMMON_RULES로 등급과 관계없이 같다
 // summon이 false면 소환에서 나오지 않고 조합으로만 얻는다(히든 등급용)
+// art.shot: 투사체 모양. FX_SHEETS의 투사체 시트 열쇠(날아가는 방향으로 돌려 그린다)이거나 'bolt'(glow 색 빛 덩이). 없으면 화살과 마력 구체
+// art.impact: 광역 공격이 터질 때 효과(FX_SHEETS 열쇠). 없으면 보라 마력 폭발
+// PixelLab 동작 하나: 폴더, 프레임 수, 방향별 첫 프레임 발끝 높이(그림 px). 서쪽은 동쪽을 뒤집는다(PL_DIRS)
+function plClip(folder, frames, south, east, north) {
+    return { folder, frames, dirs: PL_DIRS, footPx: { south, east, north } };
+}
 const MONSTERS = {
     orc_guard: {
         id: 'orc_guard', name: '오크 경비병', role: 'tank', family: 'orc', grade: 'common',
@@ -241,6 +274,184 @@ const MONSTERS = {
                 attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 74, east: 75, north: 74 } }
             }
         }
+    },
+
+    // ----- 몬스터 확장 16종(2026-11-06, 수치 초안) -----
+    goblin_spearman: {
+        id: 'goblin_spearman', name: '고블린 창병', role: 'melee', family: 'orc', grade: 'common',
+        sprite: 'pl_mon_goblin_spearman', cost: 60,
+        stats: { hp: 70, damage: 12, interval: 0.7, range: 0.9, block: 1, respawn: 6 },
+        abilities: [], unlock: 'start',
+        desc: '길로 걸어 나가 용사 하나를 붙잡고 창으로 빠르게 찌릅니다.',
+        art: {
+            scale: 2, barY: 104, idleFps: 0, glow: '130,235,80',
+            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
+        }
+    },
+    zombie: {
+        id: 'zombie', name: '좀비', role: 'tank', family: 'undead', grade: 'common',
+        sprite: 'pl_mon_zombie', cost: 60,
+        stats: { hp: 170, damage: 6, interval: 1.2, range: 0.8, block: 3, respawn: 7 },
+        abilities: [{ kind: 'regen', perSec: 3 }], unlock: 'start',
+        desc: '느리게 때리지만 상처가 저절로 아물며 길을 오래 막습니다.',
+        art: {
+            scale: 2, barY: 94, idleFps: 0, glow: '150,220,120',
+            anim: { idle: plClip('walking', 6, 61, 54, 61), walk: plClip('walking', 6, 61, 54, 61), attack: plClip('slash', 6, 55, 54, 54) }
+        }
+    },
+    fire_imp: {
+        id: 'fire_imp', name: '불꽃 임프', role: 'ranged', family: 'demon', grade: 'common',
+        sprite: 'pl_mon_fire_imp', cost: 60,
+        stats: { hp: 30, damage: 7, interval: 1.0, range: 2.5 },
+        abilities: [{ kind: 'burnShot', dps: 3, duration: 2 }], unlock: 'start',
+        desc: '불덩이를 던져 맞은 용사를 잠시 태웁니다.',
+        art: {
+            scale: 2, barY: 92, idleFps: 3, glow: '255,110,40', hand: { x: 30, y: 32 }, shot: 'fx_shot_fire',
+            anim: { idle: plClip('idle', 4, 50, 51, 50), attack: plClip('cast', 6, 50, 51, 50) }
+        }
+    },
+    gnoll_hunter: {
+        id: 'gnoll_hunter', name: '그놀 사냥꾼', role: 'ranged', family: 'beast', grade: 'common',
+        sprite: 'pl_mon_gnoll_hunter', cost: 60,
+        stats: { hp: 40, damage: 14, interval: 1.3, range: 3 },
+        abilities: [], unlock: 'start',
+        desc: '무거운 손도끼를 던져 앞선 용사 하나를 세게 때립니다.',
+        art: {
+            scale: 2, barY: 88, idleFps: 3, glow: '255,180,70', hand: { x: 18, y: 52 }, shot: 'fx_shot_axe',
+            anim: { idle: plClip('idle', 4, 54, 54, 54), attack: plClip('throw', 6, 54, 54, 54) }
+        }
+    },
+    wisp_acolyte: {
+        id: 'wisp_acolyte', name: '도깨비불 수련사', role: 'support', family: 'spirit', grade: 'common',
+        sprite: 'pl_mon_wisp_acolyte', cost: 60,
+        stats: { hp: 30, damage: 3, interval: 1.5, range: 2 },
+        abilities: [{ kind: 'aura', stat: 'heal', radius: 2, value: 3 }], unlock: 'start',
+        desc: '등불을 들고 서서 둘레 몬스터의 상처를 천천히 낫게 합니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 3, glow: '90,240,255', hand: { x: 26, y: 56 }, shot: 'bolt',
+            anim: { idle: plClip('idle', 4, 54, 54, 53), attack: plClip('cast', 6, 54, 54, 53) }
+        }
+    },
+    werewolf: {
+        id: 'werewolf', name: '늑대인간', role: 'melee', family: 'beast', grade: 'rare',
+        sprite: 'pl_mon_werewolf', cost: 120,
+        stats: { hp: 170, damage: 24, interval: 0.6, range: 0.8, block: 2, respawn: 7 },
+        abilities: [{ kind: 'lifesteal', ratio: 0.3 }], unlock: 'start',
+        desc: '용사 2명을 붙잡고 물어뜯어 그 피로 버팁니다.',
+        art: {
+            scale: 2, barY: 94, idleFps: 0, glow: '140,160,255',
+            anim: { idle: plClip('walking', 6, 54, 63, 54), walk: plClip('walking', 6, 54, 63, 54), attack: plClip('slash', 6, 54, 57, 53) }
+        }
+    },
+    troll: {
+        id: 'troll', name: '동굴 트롤', role: 'tank', family: 'orc', grade: 'rare',
+        sprite: 'pl_mon_troll', cost: 120,
+        stats: { hp: 320, damage: 14, interval: 1.2, range: 0.8, block: 4, respawn: 7 },
+        abilities: [{ kind: 'regen', perSec: 10 }], unlock: 'start',
+        desc: '용사 4명을 붙잡고, 맞아도 금세 상처가 아뭅니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 0, glow: '70,230,180',
+            anim: { idle: plClip('walking', 6, 62, 63, 63), walk: plClip('walking', 6, 62, 63, 63), attack: plClip('slash', 6, 56, 57, 56) }
+        }
+    },
+    frost_witch: {
+        id: 'frost_witch', name: '서리 마녀', role: 'area', family: 'spirit', grade: 'rare',
+        sprite: 'pl_mon_frost_witch', cost: 120,
+        stats: { hp: 40, damage: 14, interval: 2.0, range: 3, splash: 1 },
+        abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
+        desc: '얼음 창을 던져 무리를 함께 얼리고 느리게 만듭니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 3, glow: '130,205,255', hand: { x: 40, y: 50 }, shot: 'fx_shot_ice', impact: 'fx_snowflake',
+            anim: { idle: plClip('idle', 4, 56, 56, 54), attack: plClip('cast', 6, 56, 56, 54) }
+        }
+    },
+    nightmare_jester: {
+        id: 'nightmare_jester', name: '악몽 광대', role: 'ranged', family: 'demon', grade: 'rare',
+        sprite: 'pl_mon_nightmare_jester', cost: 120,
+        stats: { hp: 40, damage: 12, interval: 1.2, range: 3.5 },
+        abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1 }], unlock: 'start',
+        desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세웁니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 3, glow: '235,110,255', hand: { x: 10, y: 44 }, shot: 'fx_shot_jester',
+            anim: { idle: plClip('idle', 4, 54, 54, 51), attack: plClip('cast', 6, 54, 54, 51) }
+        }
+    },
+    orc_shaman: {
+        id: 'orc_shaman', name: '오크 주술사', role: 'support', family: 'orc', grade: 'rare',
+        sprite: 'pl_mon_orc_shaman', cost: 120,
+        stats: { hp: 50, damage: 5, interval: 1.5, range: 2.5 },
+        abilities: [{ kind: 'aura', stat: 'damage', radius: 2.5, value: 0.2 }], unlock: 'start',
+        desc: '전쟁 주술로 둘레 몬스터의 공격을 더 아프게 합니다.',
+        art: {
+            scale: 2, barY: 98, idleFps: 3, glow: '110,240,130', hand: { x: 24, y: 44 }, shot: 'bolt',
+            anim: { idle: plClip('idle', 4, 57, 57, 57), attack: plClip('cast', 6, 57, 57, 57) }
+        }
+    },
+    minotaur: {
+        id: 'minotaur', name: '미노타우로스', role: 'melee', family: 'beast', grade: 'epic',
+        sprite: 'pl_mon_minotaur', cost: 250,
+        stats: { hp: 480, damage: 50, interval: 1.2, range: 1, block: 3, respawn: 6 },
+        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
+        desc: '큰 도끼를 휘둘러 붙잡은 용사와 그 둘레를 함께 벱니다.',
+        art: {
+            scale: 2, barY: 100, idleFps: 0, glow: '255,140,50',
+            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
+        }
+    },
+    vampire: {
+        id: 'vampire', name: '뱀파이어', role: 'ranged', family: 'undead', grade: 'epic',
+        sprite: 'pl_mon_vampire', cost: 250,
+        stats: { hp: 70, damage: 40, interval: 1.0, range: 4 },
+        abilities: [{ kind: 'goldOnKill', gold: 3 }], unlock: 'start',
+        desc: '먼 곳의 용사에게 핏빛 구슬을 쏘고, 쓰러뜨리면 금화를 챙깁니다.',
+        art: {
+            scale: 2, barY: 96, idleFps: 3, glow: '255,50,80', hand: { x: 26, y: 36 }, shot: 'fx_shot_blood',
+            anim: { idle: plClip('idle', 4, 56, 57, 53), attack: plClip('cast', 6, 56, 57, 53) }
+        }
+    },
+    flame_demon: {
+        id: 'flame_demon', name: '용암 악마', role: 'area', family: 'demon', grade: 'epic',
+        sprite: 'pl_mon_flame_demon', cost: 250,
+        stats: { hp: 80, damage: 45, interval: 2.2, range: 3, splash: 1.5 },
+        abilities: [{ kind: 'burnGround', radius: 1, dps: 10, duration: 3 }], unlock: 'start',
+        desc: '용암 덩이를 던져 무리를 태우고 그 자리에 불 장판을 남깁니다.',
+        art: {
+            scale: 2, barY: 92, idleFps: 3, glow: '255,90,20', hand: { x: 22, y: 30 }, shot: 'fx_shot_fire', impact: 'fx_hit_fire',
+            anim: { idle: plClip('idle', 4, 56, 54, 54), attack: plClip('cast', 6, 56, 54, 54) }
+        }
+    },
+    ancient_treant: {
+        id: 'ancient_treant', name: '고대 나무 정령', role: 'tank', family: 'spirit', grade: 'epic',
+        sprite: 'pl_mon_ancient_treant', cost: 250,
+        stats: { hp: 700, damage: 20, interval: 1.3, range: 0.9, block: 6, respawn: 6 },
+        abilities: [{ kind: 'thorns', ratio: 0.3 }], unlock: 'start',
+        desc: '용사 6명을 붙잡고, 때리는 용사는 가시에 찔립니다.',
+        art: {
+            scale: 2, barY: 102, idleFps: 0, glow: '140,255,100',
+            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
+        }
+    },
+    hell_general: {
+        id: 'hell_general', name: '지옥 대장군', role: 'melee', family: 'demon', grade: 'legendary',
+        sprite: 'pl_mon_hell_general', cost: 500, summon: false,
+        stats: { hp: 800, damage: 110, interval: 0.8, range: 1, block: 4, respawn: 5 },
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
+        desc: '불타는 대검으로 둘레를 쓸어 버리고, 다치면 더 빨라집니다.',
+        art: {
+            scale: 2, barY: 130, idleFps: 0, glow: '255,170,40',
+            anim: { idle: plClip('walking', 6, 79, 80, 77), walk: plClip('walking', 6, 79, 80, 77), attack: plClip('slash', 6, 75, 75, 73) }
+        }
+    },
+    archlich: {
+        id: 'archlich', name: '대리치', role: 'area', family: 'undead', grade: 'legendary',
+        sprite: 'pl_mon_archlich', cost: 500, summon: false,
+        stats: { hp: 120, damage: 100, interval: 1.8, range: 4.5, splash: 2 },
+        abilities: [{ kind: 'chain', count: 3, ratio: 0.6, jump: 2.5 }, { kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
+        desc: '죽음의 구체를 떨어뜨리고 번개로 잇습니다. 둘레 몬스터가 더 빨리 공격합니다.',
+        art: {
+            scale: 2, barY: 130, idleFps: 3, glow: '80,255,150', hand: { x: 36, y: 36 }, shot: 'bolt',
+            anim: { idle: plClip('idle', 4, 72, 72, 72), attack: plClip('cast', 6, 72, 72, 72) }
+        }
     }
 };
 
@@ -252,7 +463,19 @@ const MONSTER_RECIPES = [
     { a: 'orc_guard', b: 'dark_mage', result: 'orc_berserker', hidden: false },
     { a: 'orc_berserker', b: 'curse_shooter', result: 'bone_knight', hidden: false },
     { a: 'orc_berserker', b: 'skeleton_archer', result: 'bone_knight', hidden: true },
-    { a: 'bone_knight', aRank: 'A', b: 'curse_shooter', bRank: 'A', result: 'death_lord', hidden: true }
+    { a: 'bone_knight', aRank: 'A', b: 'curse_shooter', bRank: 'A', result: 'death_lord', hidden: true },
+    // 몬스터 확장 16종
+    { a: 'goblin_spearman', b: 'fire_imp', result: 'werewolf', hidden: false },
+    { a: 'zombie', b: 'wisp_acolyte', result: 'troll', hidden: false },
+    { a: 'gnoll_hunter', b: 'wisp_acolyte', result: 'frost_witch', hidden: false },
+    { a: 'fire_imp', b: 'dark_mage', result: 'nightmare_jester', hidden: false },
+    { a: 'goblin_spearman', b: 'dark_mage', result: 'orc_shaman', hidden: false },
+    { a: 'werewolf', b: 'troll', result: 'minotaur', hidden: false },
+    { a: 'frost_witch', b: 'nightmare_jester', result: 'flame_demon', hidden: false },
+    { a: 'orc_shaman', b: 'troll', result: 'ancient_treant', hidden: false },
+    { a: 'curse_shooter', b: 'nightmare_jester', result: 'vampire', hidden: true },
+    { a: 'flame_demon', aRank: 'A', b: 'minotaur', bRank: 'A', result: 'hell_general', hidden: true },
+    { a: 'vampire', aRank: 'A', b: 'bone_knight', bRank: 'A', result: 'archlich', hidden: true }
 ];
 
 // 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'

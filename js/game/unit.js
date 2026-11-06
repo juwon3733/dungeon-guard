@@ -28,13 +28,15 @@ function holdHeroes(u, capacity, range) {
     return u.target;
 }
 
-function damageUnit(u, amount) {
+// attacker: 때린 용사(가시 반사를 받는다. 없어도 된다)
+function damageUnit(u, amount, attacker) {
     if (u.removed || u.hp <= 0) return;
     const dealt = amount * (1 - (u.armor || 0));
     u.hp -= dealt;
     u.flash = 0.09;
     Fx.number(u, u.x, u.y - 74, Math.round(dealt), '#ff8f8f', false);
     Fx.burst(u.x, u.y - 30, '#ff8f8f', 2, 150, 0.24, 5);
+    if (u.kind === 'monster') monsterThorns(u, dealt, attacker);
     if (u.hp > 0) return;
     if (u.kind === 'monster') {
         knockDownMonster(u);

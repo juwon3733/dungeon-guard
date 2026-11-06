@@ -40,6 +40,8 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         flash: 0,
         stun: 0,
         curse: 0, curseMul: 1, // 저주(curseShot): 남은 초와 받는 피해 배율
+        burn: 0, burnDps: 0, burnTick: 0, burnOwner: null, // 화상(burnShot): 남은 초, 초당 피해, 다음 피해까지 초, 건 몬스터
+        slow: 0, slowMul: 1, // 빙결(slowShot): 남은 초와 이동 속도 배율
         cast: !bossDef && def.stunEvery ? randRange(1.5, def.stunEvery) : 0,
         song: !bossDef && def.song ? randRange(1, def.song.every) : 0,
         haste: 0, hasteMul: 1, // 음유시인 노래로 받은 가속: 남은 초와 배율
@@ -91,6 +93,20 @@ function updateHero(h, dt) {
     h.haste = Math.max(0, h.haste - dt);
     h.slip = Math.max(0, h.slip - dt);
     h.curse = Math.max(0, h.curse - dt);
+    h.slow = Math.max(0, h.slow - dt);
+    if (h.burn > 0) {
+        // 화상은 정지와 막힘 중에도 탄다. 0.5초마다 피해(방어력 무시)
+        h.burn -= dt;
+        h.burnTick -= dt;
+        if (h.burnTick <= 1e-6) { // 프레임 시간을 더해 생기는 오차로 마지막 피해를 놓치지 않게 한다
+            h.burnTick += 0.5;
+            const w = heroWorld(h);
+            const owner = h.burnOwner && !h.burnOwner.removed ? h.burnOwner : null;
+            damageHero(h, h.burnDps * 0.5, w.x, w.y, '#ff9d4d', owner, true);
+            if (h.dead) return;
+        }
+        if (h.burn <= 0) h.burn = 0;
+    }
     h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1);
 
     if (h.boss) updateBossPatterns(h, dt);
@@ -118,7 +134,7 @@ function updateHero(h, dt) {
         if (h.atk <= 0) {
             h.atk = h.interval;
             h.atkPose = h.atkPoseMax = ATTACK_POSE_TIME;
-            damageUnit(blocker, h.damage);
+            damageUnit(blocker, h.damage, h);
             Sfx.play('slash');
         }
         return;
@@ -128,7 +144,7 @@ function updateHero(h, dt) {
     if (def.stunEvery && !h.boss) updateMageCast(h, dt);
     if (h.windup > 0) return; // 뇌술사가 범위 감전 경고를 막 시작했다
 
-    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * (h.haste > 0 ? h.hasteMul : 1);
+    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
     h.d += speed * dt;
     const p = pathAt(h.d, h.route);
     h.dir = dirFromVector(p.dx, p.dy);

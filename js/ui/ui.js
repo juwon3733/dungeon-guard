@@ -963,6 +963,7 @@ const UI = {
             } else {
                 Render.rangeRing(ctx, ghost.x, ghost.y, def.stats.range * TILE, color);
             }
+            if (ok) this.drawAuraRanges(ctx, type, ghost.x, ghost.y);
             const { clip, name } = Render.monsterFrame(def, ghost);
             ctx.save();
             ctx.globalAlpha = ok ? 0.6 : 0.3;
@@ -992,7 +993,14 @@ const UI = {
             } else {
                 Render.rangeRing(ctx, f.x, f.y, monsterStats(f).range * TILE, 'rgba(255,224,138,1)');
             }
+            this.drawAuraRanges(ctx, f.type, f.x, f.y);
         }
+    },
+
+    // 오라 범위: 고른 몬스터(또는 끄는 몬스터)에만 오라 종류 색의 원을 그린다
+    drawAuraRanges(ctx, type, x, y) {
+        const colors = { heal: 'rgba(120,255,150,1)', damage: 'rgba(255,110,90,1)', attackSpeed: 'rgba(255,220,90,1)' };
+        for (const a of monsterAbilities(type, 'aura')) Render.rangeRing(ctx, x, y, a.radius * TILE, colors[a.stat]);
     },
 
     // 놓은 칸에서 걸어 나갈 길 지점까지 점선과, 그 지점의 깃발 표시

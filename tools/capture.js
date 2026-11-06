@@ -606,6 +606,95 @@ const SCENES = {
             Game.startWave();
             for (let i = 0; i < 30; i++) { UI.update(1 / 30); Game.update(1 / 30); }
         }
+    },
+
+    // 몬스터 23종을 모두 맵에 올린 모습(준비 단계). 막는 11종은 서로 다른 길 지점으로 걸어 나가 서고,
+    // 원거리·지원 12종은 길에서 떨어진 칸에 선다. 발이 떠 있거나 잘린 몬스터가 없는지 본다
+    roster: {
+        setup: () => {
+            startRun();
+            const blockers = ['orc_guard', 'orc_berserker', 'bone_knight', 'death_lord', 'goblin_spearman', 'zombie', 'werewolf', 'troll',
+                'minotaur', 'ancient_treant', 'hell_general'];
+            const others = ['skeleton_archer', 'dark_mage', 'curse_shooter', 'fire_imp', 'gnoll_hunter', 'wisp_acolyte', 'frost_witch',
+                'nightmare_jester', 'orc_shaman', 'vampire', 'flame_demon', 'archlich'];
+            const blockCells = [[3, 2], [5, 6], [9, 5], [11, 6], [13, 4], [15, 7], [17, 5], [19, 6], [21, 8], [14, 9], [7, 10]];
+            const otherCells = [[2, 5], [6, 4], [10, 7], [14, 6], [18, 7], [11, 10], [1, 7], [2, 8], [6, 8], [19, 10], [24, 5], [22, 9]];
+            const all = Object.keys(MONSTERS);
+            if (blockers.length + others.length !== all.length || !all.every(id => blockers.includes(id) || others.includes(id))) {
+                throw new Error('roster 장면의 몬스터 목록이 표와 다릅니다');
+            }
+            blockers.forEach((id, i) => { if (!Game.place(id, ...blockCells[i])) throw new Error(`${id}를 놓지 못했습니다`); });
+            others.forEach((id, i) => { if (!Game.place(id, ...otherCells[i])) throw new Error(`${id}를 놓지 못했습니다`); });
+            advance(2); // 막는 몬스터가 길로 걸어 나가 선다
+            Fx.reset();
+            UI.onMove(GAME_WIDTH / 2, 600);
+            freezeScene();
+        }
+    },
+
+    // 확장 능력: 화상(불꽃 임프), 빙결(서리 마녀), 악몽 기절(악몽 광대), 흡혈(늑대인간), 재생과 회복 오라(좀비, 도깨비불 수련사),
+    // 피해 오라(오크 주술사), 가르기(미노타우로스), 가시(고대 나무 정령), 연쇄 번개와 공격 속도 오라(대리치), 용암 장판(용암 악마), 약탈 골드(뱀파이어)
+    abilities2: {
+        setup: () => {
+            startRun();
+            const at = (id, c, r) => { const m = Game.place(id, c, r); if (!m) throw new Error(`${id}를 놓지 못했습니다`); return m; };
+            const imp = at('fire_imp', 2, 5);
+            const shaman = at('orc_shaman', 6, 4);
+            const mino = at('minotaur', 9, 5);
+            const wolf = at('werewolf', 13, 4);
+            const witch = at('frost_witch', 14, 6);
+            const tree = at('ancient_treant', 15, 7);
+            const jester = at('nightmare_jester', 18, 7);
+            const lich = at('archlich', 17, 2);
+            const demon = at('flame_demon', 11, 10);
+            const zombie = at('zombie', 21, 8);
+            const wisp = at('wisp_acolyte', 21, 6);
+            const vamp = at('vampire', 22, 9);
+            advance(1.6); // 막는 몬스터가 길로 걸어 나간다
+            Game.waveIndex = 6;
+            Game.startWave();
+            // 몬스터 칸에서 가장 가까운 길 지점 기준으로 용사를 세운다(off: 길 따라 칸, lane: 길과 수직 px)
+            const put = (m, off, lane, type) => {
+                const p = m.rally || nearestPathPoint(m.x, m.y);
+                const h = createHero(type || 'warrior', Game.waveIndex, 0, false, p.route);
+                // 장면 동안 용사도 몬스터도 쓰러지지 않게 한다(용사 피해 1)
+                Object.assign(h, { waiting: false, d: p.d + off * TILE, lane, cast: 99, song: 99, speed: 0, damage: 1, interval: 99 });
+                h.hp = h.maxHp = 99999;
+                return h;
+            };
+            Game.heroes = [
+                put(imp, 0.6, 10), put(imp, -0.8, -20, 'rogue'),
+                put(mino, 0.55, -20), put(mino, 1.1, 20, 'rogue'), put(mino, 1.5, -10, 'mage'),
+                put(wolf, 0.55, -20, 'rogue'), put(wolf, 1.2, 15),
+                put(witch, 0.3, 10, 'mage'), put(witch, 0.6, -25),
+                put(tree, 0.55, -20), put(tree, 1.0, 20, 'rogue'), put(tree, 1.45, 0),
+                put(jester, 0.5, 10, 'rogue'), put(jester, -0.4, -20),
+                put(lich, 0.4, 0), put(lich, 2.2, 10, 'rogue'), put(lich, 4.3, -10, 'mage'),
+                put(demon, 0.2, 0), put(demon, 0.7, -25, 'rogue'),
+                put(zombie, 0.55, -15), put(zombie, 1.1, 20, 'rogue'),
+                put(vamp, 1.4, 0, 'mage')
+            ];
+            seededRandom(5, () => advance(1.5));
+            // 한순간에 보이도록 능력마다 실제 경로를 한 번 더 부른다
+            zombie.hp = zombie.maxHp * 0.6; // 재생과 회복 오라
+            wolf.hp = wolf.maxHp * 0.5; // 흡혈
+            const near = m => Game.heroes.find(h => h.blocker === m) || Game.heroes[0];
+            const prey = Game.heroes[21];
+            prey.hp = 1;
+            seededRandom(9, () => advance(0.3)); // 뱀파이어가 쓰러뜨려 약탈 골드
+            if (!prey.dead) monsterKilledHero(vamp, prey);
+            withRandom(0, () => monsterHitHero(jester.type, Game.heroes[12], jester)); // 악몽 기절(난수 0)
+            monsterCleave(mino, near(mino), monsterStats(mino).damage);
+            tree.thornsFx = 0;
+            damageUnit(tree, 40, near(tree));
+            monsterChain(lich, Game.heroes[14], monsterStats(lich).damage);
+            advance(0.1);
+            for (const x of [...Game.heroes, ...Game.monsters]) x.flash = 0;
+            Fx.numbers = [];
+            Fx.shake = 0;
+            UI.onMove(GAME_WIDTH / 2, 600);
+            freezeScene();
+        }
     }
 };
 

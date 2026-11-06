@@ -6,7 +6,9 @@
 pixelfx(https://github.com/patch-gg/pixelfx, 커밋 `a841596`)의 효과를 렌더링해 프레임을 솎고 잘라 만든 것입니다.
 pixelfx 소스 코드는 이 저장소에 들어 있지 않습니다. 사용한 효과와 옵션은 `docs/PIXELLAB_ASSETS.md`에 있습니다.
 
-- `impacts/hit-spark`, `impacts/crit-hit`, `spawn/poof`, `arcane/mana-burst`
+- `arcane/mana-burst`, `arcane/rune-circle`, `explosions/plasma-explosion`, `fire/fire-ring`, `fire/fireball`, `fire/spirit-flame`, `holy/heal-aoe`, `ice/ice-lance`, `ice/snowflake-burst`, `impacts/crit-hit`, `impacts/hit-spark`, `lightning/lightning-strike`, `lightning/thunderclap`, `lightning/zap-hit`, `melee/spin-slash`, `nature/thorns`, `pickups/collect-burst`, `projectiles/arrow`, `projectiles/energy-disc`, `scifi/emp-blast`, `spawn/poof`, `spawn/soul-rise`, `status/stunned`
+
+시트를 다시 만드는 도구는 `tools/pfx_sheets.mjs`(pixelfx를 저장소 밖에서 불러 쓴다)입니다.
 
 pixelfx의 NOTICE에 따라, 위 효과는 Hugo Duprez의 Sprite Fusion 오픈소스 픽셀 아트 VFX
 (https://www.spritefusion.com/pixel-art-vfx, Copyright (c) 2026 Hugo Duprez, MIT License)를 바탕으로 합니다.
