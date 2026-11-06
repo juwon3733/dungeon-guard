@@ -2,10 +2,10 @@
 const Game = {
     state: 'title', // title | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
-    facilities: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
+    monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0,
-    stats: { kills: 0, corrupted: 0, built: 0, time: 0 },
+    stats: { kills: 0, corrupted: 0, placed: 0, time: 0 },
     time: 0,
 
     reset() {
@@ -14,7 +14,7 @@ const Game = {
         this.waveIndex = 0;
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
-        this.facilities = [];
+        this.monsters = [];
         this.heroes = [];
         this.units = [];
         this.corpses = [];
@@ -25,65 +25,60 @@ const Game = {
         this.streak = 0;
         this.streakTimer = 0;
         this.throneFlash = 0;
-        this.stats = { kills: 0, corrupted: 0, built: 0, time: 0 };
+        this.stats = { kills: 0, corrupted: 0, placed: 0, time: 0 };
         Fx.reset();
         this.state = 'prep';
     },
 
     currentWave() { return WAVES[Math.min(this.waveIndex, WAVES.length - 1)]; },
 
-    facilityAt(col, row) { return this.facilities.find(f => f.col === col && f.row === row) || null; },
+    monsterAt(col, row) { return this.monsters.find(m => m.col === col && m.row === row) || null; },
 
-    build(type, col, row) {
-        const def = FACILITIES[type];
-        if (!isBuildCell(col, row) || this.facilityAt(col, row)) return false;
-        if (this.gold < def.cost) return false;
-        this.gold -= def.cost;
-        const f = createFacility(type, col, row);
-        this.facilities.push(f);
-        this.stats.built++;
-        Fx.ring(f.x, f.y, 76, '#c79bff', 0.35);
-        Fx.anim('fx_blastCyan', f.x, f.y - 20, 260, 0.45);
-        Fx.burst(f.x, f.y, '#c79bff', 18, 300, 0.4, 6);
-        Sfx.play('build');
-        return f;
+    // 근접(길) 몬스터는 길 칸에, 원거리(길 옆) 몬스터는 건설 칸에 놓는다. 칸 하나에 하나만
+    canPlace(type, col, row) {
+        if (!MONSTERS[type] || this.monsterAt(col, row)) return false;
+        return monsterPlace(type) === 'path' ? isPathSlot(col, row) : isBuildCell(col, row);
     },
 
-    upgrade(f, branch) {
-        const nextTier = f.tier + 1;
+    place(type, col, row) {
+        const def = MONSTERS[type];
+        if (!this.canPlace(type, col, row)) return false;
+        if (this.gold < def.cost) return false;
+        this.gold -= def.cost;
+        const m = createMonster(type, col, row);
+        this.monsters.push(m);
+        this.stats.placed++;
+        Fx.ring(m.x, m.y + MONSTER_FOOT, 76, '#c79bff', 0.35);
+        Fx.anim('fx_blastCyan', m.x, m.y - 20, 260, 0.45);
+        Fx.burst(m.x, m.y, '#c79bff', 18, 300, 0.4, 6);
+        Sfx.play('build');
+        return m;
+    },
+
+    upgrade(m, branch) {
+        const nextTier = m.tier + 1;
         if (nextTier > 3) return false;
         if (nextTier === 3 && !branch) return false;
-        const cost = upgradeCost(f.type, nextTier);
+        const cost = upgradeCost(m.type, nextTier);
         if (this.gold < cost) return false;
         this.gold -= cost;
-        f.tier = nextTier;
-        f.invested += cost;
-        if (branch) f.branch = branch;
-        if (f.type === 'barracks') {
-            const stats = facilityStats(f);
-            for (const u of this.units) {
-                if (u.owner !== f) continue;
-                const ratio = u.hp / u.maxHp;
-                u.maxHp = stats.unitHp;
-                u.hp = stats.unitHp * ratio;
-                u.damage = stats.damage;
-                u.interval = stats.interval;
-                u.armor = stats.armor;
-            }
-        }
-        Fx.ring(f.x, f.y, 110, '#ffe08a', 0.4);
-        Fx.anim('fx_blastGold', f.x, f.y - 30, 320, 0.5);
-        Fx.rise(f.x, f.y, '#ffe08a', 26, 34, 0.7);
+        m.tier = nextTier;
+        m.invested += cost;
+        if (branch) m.branch = branch;
+        applyMonsterStats(m);
+        Fx.ring(m.x, m.y, 110, '#ffe08a', 0.4);
+        Fx.anim('fx_blastGold', m.x, m.y - 30, 320, 0.5);
+        Fx.rise(m.x, m.y, '#ffe08a', 26, 34, 0.7);
         Sfx.play('upgrade');
         return true;
     },
 
-    sell(f) {
-        this.gold += Math.floor(f.invested * COMBAT_RULES.sellRefund);
-        this.facilities = this.facilities.filter(x => x !== f);
-        for (const u of this.units) if (u.owner === f) { u.removed = true; }
-        for (const h of this.heroes) if (h.blocker && h.blocker.owner === f) h.blocker = null;
-        Fx.burst(f.x, f.y, '#a9a2c4', 16, 280, 0.4, 6);
+    sell(m) {
+        this.gold += Math.floor(m.invested * COMBAT_RULES.sellRefund);
+        this.monsters = this.monsters.filter(x => x !== m);
+        m.removed = true;
+        for (const h of this.heroes) if (h.blocker === m) h.blocker = null;
+        Fx.burst(m.x, m.y, '#a9a2c4', 16, 280, 0.4, 6);
         Sfx.play('sell');
     },
 
@@ -145,7 +140,7 @@ const Game = {
         for (const s of this.pendingStrikes.filter(x => x.t <= 0)) resolveStrike(s);
         this.pendingStrikes = this.pendingStrikes.filter(s => s.t > 0);
 
-        for (const f of this.facilities) updateFacility(f, dt);
+        for (const m of this.monsters) updateMonster(m, dt);
         for (const u of this.units) updateUnit(u, dt);
         for (const h of this.heroes) if (!h.dead) updateHero(h, dt);
         for (const p of this.projectiles) updateProjectile(p, dt);
