@@ -154,4 +154,4 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 ## 진행 순서
 
 1. 용사 3종, 오크, 몬스터 23종, 정예 4종, 보스 2종, 마왕 3명, 맵 타일, 소품, 장비, 유물, UI 아이콘을 만들어 연결했다.
-2. 다음: UI 틀과 체력 구슬 같은 UI 모양 교체(`ui_kit.png`, `ui_buttons.png`, `uiicon_*`).
+2. UI 모양 교체는 했다(`ui_kit.png`, `ui_buttons.png`, `uiicon_*`, 규칙은 `docs/ART_BIBLE.md`).

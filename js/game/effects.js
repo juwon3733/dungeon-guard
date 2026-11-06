@@ -19,7 +19,7 @@ const Fx = {
     banner: null,
     pops: [], // 소환과 합치기 연출. 다른 몬스터와 HUD 위에도 보이도록 UI가 화면 맨 위에 그린다
     discovery: null, // "히든 조합 발견!" 연출
-    hpGlow: 0, // 제물로 체력 구슬이 차오를 때 구슬 빛(1에서 0으로)
+    hpGlow: 0, // 제물로 체력 막대가 차오를 때 막대와 초상 액자 빛(1에서 0으로)
     drops: [], // 장비를 얻은 자리에서 떠오르는 장비 그림: { id, x, y(세계 좌표), age, life }
     notice: null, // 화면 아래에 띄울 알림 글자(장비 획득, 보관함 가득). UI가 가져가 비운다
 
@@ -51,7 +51,7 @@ const Fx = {
     },
     pendingBursts: [],
     pendingShakes: [],
-    pendingSacrifices: [], // 제물이 왕좌에 닿는 순간: 마왕이 빛나고 회복 숫자가 뜨고 체력 구슬이 빛난다
+    pendingSacrifices: [], // 제물이 왕좌에 닿는 순간: 마왕이 빛나고 회복 숫자가 뜨고 체력 막대가 빛난다
 
     // 효과 시트(FX_SHEETS)를 재생한다. size는 세계 px 기준 크기다
     // 시트에 정한 길이만큼 재생한다. 그림만 바뀌고 전투 계산과는 무관하다
@@ -216,4 +216,4 @@ const Fx = {
     }
 };
 
-const HUD_GOLD = { x: 1708, y: 1020 };
+const HUD_GOLD = { x: 1384, y: 1018 }; // 하단 바 골드 아이콘 가운데(js/ui/ui.js가 여기에 그린다)

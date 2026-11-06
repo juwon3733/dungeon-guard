@@ -6,7 +6,7 @@
 - 타락: 사용자가 생각보다 별로라고 해 꺼 두었다(2026-11-07). `js/data/balance.js`의 `CORRUPTION_ENABLED = false`. 코드와 그림은 남아 있어 `true`로 바꾸면 되살아난다. 꺼져 있으면 시체는 쓰러지는 동작 뒤 1초 동안 사라지는 장식이고 클릭을 막지 않는다.
 - 그림 목록과 규격: `docs/PIXELLAB_ASSETS.md`.
 - 정예몹(D) 초안: `js/data/balance.js`의 `ELITE_RULES`, `ELITES`, `ELITE_ART`와 `WAVES[..].elites`. 수치는 플레이 후 고친다.
-- 새 그림(2026-11): 다른 게임에서 가져온 이전 그림을 모두 지우고 PixelLab 그림만 남겼다. 이 게임이 그 게임의 후속처럼 보이면 안 된다. 칸 64px(`WORLD_ZOOM` 2/3), 30x15칸, 도트 1칸 = 화면 2픽셀(세계 배율 3). 새 맵, 정예 4종과 보스 2종, `lord_rift`, 타일 바닥과 소품은 `docs/PIXELLAB_ASSETS.md`와 `docs/MULTI_PATH.md`. UI 모양(체력 구슬, 틀) 교체는 다음 작업이다.
+- 새 그림(2026-11): 다른 게임에서 가져온 이전 그림을 모두 지우고 PixelLab 그림만 남겼다. 이 게임이 그 게임의 후속처럼 보이면 안 된다. 칸 64px(`WORLD_ZOOM` 2/3), 30x15칸, 도트 1칸 = 화면 2픽셀(세계 배율 3). 새 맵, 정예 4종과 보스 2종, `lord_rift`, 타일 바닥과 소품은 `docs/PIXELLAB_ASSETS.md`와 `docs/MULTI_PATH.md`. UI 모양 교체는 했다(아래 현재 상태의 UI 재질).
 - 작업 방식: 그림은 메인 세션이 만든다. 코드는 작업관제소의 주니어에게 맡길 수 있다.
 
 ## 다음 작업 계획
@@ -53,6 +53,7 @@
 
 ## 현재 상태
 
+- UI 재질(2026-11, "UI도 AI티가 심하다"는 요청): 콘셉트는 마왕군 작전 테이블. 창은 `ui_kit.png` 양피지를 9칸으로 잘라 2배로, 하단 바와 위 표지판은 `ui_buttons.png` 호두나무 판, 주요 행동 하나만 붉은 옻칠 버튼(소환, 웨이브 시작, 시작, 보상 고르기), 켜진 탭은 양피지 쪽지. 색과 잘라 쓸 좌표는 `js/ui/uikit.js`의 `UI_THEME`, `UI_SLICES`, `UI_HP_BAR`에만 있고 규칙은 `docs/ART_BIBLE.md`. 체력 구슬 대신 왼쪽 아래 밀랍 액자 초상과 하트 막대(`UI.hpShown`), 위쪽은 쇠사슬 표지판, 다음 파티는 양피지 수배서(설명은 마우스를 올릴 때만), 오른쪽 위는 아이콘 버튼(`uiicon_*` 16개 모두 불러온다). 등급은 굵은 등급 테두리(`MONSTER_GRADES[].color`, 양피지 위 글자는 `.ink`). 안내는 쪽지 한 줄로 종류마다 처음 3번(`HINT_SHOWS`), 단축키 줄은 일시정지 창으로 옮겼다. 하단 바 배치가 바뀌어 골드는 `HUD_GOLD`(1384), 보관함은 `BAG_X` 1140, 다음 웨이브는 오른쪽 끝(1556)이다. 기능, 수치, 단축키, 저장은 그대로다. `node tools/smoke.js`의 마지막 묶음이 모든 화면과 탭에서 버튼이 화면 안에 있고 겹치지 않는지, 체력 막대가 값을 따라가는지 본다.
 - 품질 시험판이 동작한다. `index.html`을 바로 열면 실행된다.
 - 몬스터 확장(만드는 순서 6번, 2026-11-06): 16종을 더해 23종(일반 8, 희귀 7, 영웅 5, 전설 3)이다. 그림은 PixelLab(`assets/sprites/pl_mon_<id>/`), 표는 `js/data/monsters.js`의 `MONSTERS`(동작은 `plClip`, 발끝은 첫 프레임 기준), 능력 종류는 `ABILITY_KINDS` 14개(새로 화상 `burnShot`, 빙결 `slowShot`, 악몽 `stunShot`, 흡혈 `lifesteal`, 재생 `regen`, 오라 `aura`, 가르기 `cleave`, 가시 `thorns`, 연쇄 번개 `chain`, 약탈 `goldOnKill`, 용암 장판 `burnGround`). 지원 역할은 놓은 칸에서 약하게 쏘고 오라를 낸다(`updateAuras`가 매 프레임 정하고 `monsterStats`에서 피해와 공격 속도에만 곱해 최대 체력은 건드리지 않는다. 범위 원은 고를 때만). 땅에 남는 장판은 `Game.hazards`. 조합식은 16개(공개 11, 히든 5. 대장군과 대리치는 재료 랭크 A). 전설은 소환되지 않는다. 수치는 초안이고 승률은 재지 않았다. 다음: 사용자 플레이 뒤 수치, 마왕 전용 몬스터.
 - 전투 효과: 이전 `fx_` 그림은 모두 pixelfx 시트로 바꿨고 파일도 지웠다. 시트 28장, 약 4MB. 재현은 `node tools/pfx_sheets.mjs <pixelfx 폴더>`, 표는 `docs/PIXELLAB_ASSETS.md`.

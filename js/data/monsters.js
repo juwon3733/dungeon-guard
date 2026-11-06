@@ -6,10 +6,11 @@
 // glow는 소환·합치기 연출의 빛 색(r,g,b), light는 어두운 바탕 위 글자 색이다
 // fieldMax가 있으면 그 등급 몬스터를 맵에 그 수까지만 둔다(넘게 되는 합치기는 막는다)
 const MONSTER_GRADES = {
-    common: { name: '일반', color: '#9a96a8', glow: '200,196,220', light: '#e8e4f2' },
-    rare: { name: '희귀', color: '#4f8cff', glow: '90,150,255', light: '#9cc2ff' },
-    epic: { name: '영웅', color: '#b25cff', glow: '190,100,255', light: '#dfa8ff' },
-    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', fieldMax: 1 }
+    // color: 굵은 등급 테두리와 맵 표시, light: 나무·지도 위 글자, ink: 양피지 위 글자
+    common: { name: '일반', color: '#e4dfd2', glow: '220,214,200', light: '#f6f2e8', ink: '#5c534a' },
+    rare: { name: '희귀', color: '#3d8bff', glow: '90,150,255', light: '#a8ccff', ink: '#1d4fae' },
+    epic: { name: '영웅', color: '#b45cff', glow: '190,100,255', light: '#e2b0ff', ink: '#6b2596' },
+    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', ink: '#94600a', fieldMax: 1 }
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 

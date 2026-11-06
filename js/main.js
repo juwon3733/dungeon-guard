@@ -61,11 +61,11 @@ function frame(now) {
 }
 
 function drawLoading() {
-    ctx.fillStyle = '#07060f';
+    ctx.fillStyle = UI_THEME.walnutDark;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     const ratio = Assets.total ? Assets.loaded / Assets.total : 0;
-    UIKit.text(ctx, '던전 수호대', GAME_WIDTH / 2, 470, 80, '#ffc95a', 'center');
-    UIKit.bar(ctx, GAME_WIDTH / 2 - 300, 560, 600, 24, ratio, '#a56bff', '#5a2fb0');
+    UIKit.text(ctx, '던전 수호대', GAME_WIDTH / 2, 470, 80, UI_THEME.cream, 'center');
+    UIKit.bar(ctx, GAME_WIDTH / 2 - 300, 560, 600, 24, ratio, UI_THEME.wax);
 }
 
 window.addEventListener('resize', fitCanvas);
