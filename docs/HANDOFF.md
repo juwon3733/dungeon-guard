@@ -3,6 +3,7 @@
 - 계획서: https://claude.ai/artifact/FwzVME8xY65Ht3bVfHACMM
 - 지금까지: 타워(시설) 설치를 몬스터 설치로 바꿨다(`docs/MONSTER_DESIGN.md` 만드는 순서 1·2번). 몬스터 3종(`js/data/monsters.js`)은 모두 길 옆 칸에 놓고, 근접은 길로 걸어 나가 막는다. 부대장과 마왕은 Asteria 그림을 유지한다.
 - 다음 작업: 아래 "다음 작업 계획"을 이어 간다. 사용자가 품질 작업은 일단 미루라고 했다(2026-11-06). 품질 진단과 회복 계획은 `docs/QUALITY_PLAN.md`에 보류 상태로 남겼고, 칸 72px는 유지한다.
+- 타락: 사용자가 생각보다 별로라고 해 꺼 두었다(2026-11-07). `js/data/balance.js`의 `CORRUPTION_ENABLED = false`. 코드와 그림은 남아 있어 `true`로 바꾸면 되살아난다. 꺼져 있으면 시체는 쓰러지는 동작 뒤 1초 동안 사라지는 장식이고 클릭을 막지 않는다.
 - 그림 목록과 규격: `docs/PIXELLAB_ASSETS.md`.
 - 정예몹(D) 초안: `js/data/balance.js`의 `ELITE_RULES`, `ELITES`, `ELITE_ART`와 `WAVES[..].elites`. 수치는 플레이 후 고친다.
 - 작업 방식: 그림은 메인 세션이 만든다. 코드는 작업관제소의 주니어에게 맡길 수 있다.

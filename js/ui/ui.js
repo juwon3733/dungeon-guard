@@ -340,7 +340,9 @@ const UI = {
         if (!castRoar()) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
     },
 
+    // 타락이 꺼져 있으면 시체는 누를 수 없는 장식이라 클릭과 끌기를 가로막지 않는다
     corpseAt(x, y) {
+        if (!CORRUPTION_ENABLED) return null;
         for (const c of Game.corpses) {
             if (distance(x, y, c.x, c.y - 20) < 52) return c;
         }
@@ -560,7 +562,7 @@ const UI = {
             ctx.fillStyle = 'rgba(4,2,14,0.45)';
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             UIKit.text(ctx, '일시정지', GAME_WIDTH / 2, 330, 62, '#ffe08a', 'center');
-            UIKit.text(ctx, '멈춘 상태에서도 소환, 배치, 합치기, 타락을 할 수 있습니다.', GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
+            UIKit.text(ctx, `멈춘 상태에서도 소환, 배치, 합치기${CORRUPTION_ENABLED ? ', 타락' : ''}을 할 수 있습니다.`, GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
         }
         if (G.state === 'victory' || G.state === 'defeat') {
             this.drawResult(ctx);
@@ -594,8 +596,10 @@ const UI = {
         UIKit.plain(ctx, '지하 감옥', cx - w / 2 + 24, y + h / 2, 22, '#c9b6ea');
         UIKit.text(ctx, '1층', cx - 66, y + h / 2, 32, '#ffffff', 'center');
         UIKit.text(ctx, `웨이브 ${Math.min(G.waveIndex + 1, WAVES.length)}/${WAVES.length}`, cx + w / 2 - 22, y + h / 2, 28, '#7fe3ff', 'right');
-        const corrupt = G.units.filter(u => u.kind === 'corrupt').length;
-        UIKit.text(ctx, `타락 ${corrupt}/${COMBAT_RULES.corruptMax}`, 22, 40, 26, '#d7a8ff');
+        if (CORRUPTION_ENABLED) {
+            const corrupt = G.units.filter(u => u.kind === 'corrupt').length;
+            UIKit.text(ctx, `타락 ${corrupt}/${COMBAT_RULES.corruptMax}`, 22, 40, 26, '#d7a8ff');
+        }
     },
 
     // Asteria 구성의 하단 바: 왼쪽 체력 구슬, 탭과 슬롯, 오른쪽 재화
@@ -933,7 +937,7 @@ const UI = {
         else if (this.drag) hint = '빈 길 옆 칸으로 옮기거나, 다른 몬스터 위에 놓아 합치세요.';
         else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = `아래 소환 버튼(S)을 누르면 몬스터가 길 옆에 바로 나옵니다. 지금 ${G.summonCost()}골드입니다.`;
         else if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) hint = '몬스터를 끌어 다른 몬스터 위에 놓으면 합칩니다. 빈 칸으로 옮길 수도 있습니다.';
-        else if (G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
+        else if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
         if (hint) {
             const pulse = 1 + Math.sin(G.time * 5) * 0.03;
             UIKit.text(ctx, hint, GAME_WIDTH / 2, 196, Math.round(32 * pulse), '#ffe08a', 'center');
@@ -1158,9 +1162,9 @@ const UI = {
             `소환(S)하면 몬스터가 길 옆 칸에 바로 나옵니다. 맵에 ${SUMMON_RULES.maxField}마리까지 둡니다.`,
             '몬스터를 다른 몬스터 위에 놓으면 합쳐 더 강한 몬스터가 됩니다.',
             '같은 등급 2마리는 상위 등급으로, 조합식은 정해진 몬스터로. 숨은 조합도 있습니다.',
-            '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
+            CORRUPTION_ENABLED && '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
             '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!'
-        ];
+        ].filter(Boolean);
         lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 530 + i * 42, 26, '#efe6ff', 'center'));
         UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층', cx, 900, 24, '#b8a9d0', 'center');
     },
@@ -1182,10 +1186,10 @@ const UI = {
         const rows = [
             ['남은 마왕 체력', `${G.hp} / ${COMBAT_RULES.maxHp}`],
             ['처치한 용사', `${G.stats.kills}명`],
-            ['타락시킨 용사', `${G.stats.corrupted}명`],
+            CORRUPTION_ENABLED && ['타락시킨 용사', `${G.stats.corrupted}명`],
             ['소환 / 합치기', `${G.stats.summoned}번 / ${G.stats.merged}번`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
-        ];
+        ].filter(Boolean);
         if (!win) rows.splice(0, 1, ['막아 낸 웨이브', `${G.waveIndex} / ${WAVES.length}`]);
         rows.forEach(([k, v], i) => {
             UIKit.plain(ctx, k, cx - 110, 408 + i * 50, 28, '#c9b6ea');

@@ -613,7 +613,45 @@ UI.onKey('KeyW');
 assert.strictEqual(Game.skills.roar, COMBAT_RULES.roar.cooldown);
 Game.hp = 20;
 
-// 타락: 비용 차감, 부하 생성, 최대 인원 제한
+// 타락은 꺼져 있다: 시체를 눌러도 아무 일이 없고, 시체는 쓰러지는 동작 뒤 1초쯤 사라지며, 몬스터 끌기를 가로막지 않는다
+assert.strictEqual(CORRUPTION_ENABLED, false);
+{
+    Game.corpses.length = 0;
+    const h = createHero('warrior', 0, 0, false);
+    h.waiting = false;
+    Game.heroes.push(h);
+    const goldBefore = Game.gold;
+    damageHero(h, 9999);
+    assert.strictEqual(Game.gold, goldBefore + h.bounty, 'bounty unchanged');
+    const c = Game.corpses[0];
+    assert(c && Math.abs(c.life - (HEROES.warrior.anim.death.frames / CORPSE_FALL_FPS + CORPSE_FADE_TIME)) < 1e-9, 'corpse fades after fall');
+    const gold = Game.gold, units = Game.units.length;
+    worldClick(c.x, c.y - 20);
+    assert.strictEqual(Game.gold, gold, 'corpse click ignored');
+    assert.strictEqual(Game.units.length, units);
+    assert.strictEqual(UI.corpseAt(c.x, c.y - 20), null);
+    assert.strictEqual(corruptCorpse(c).reason, 'disabled');
+    UI.clearSelection();
+    // 시체를 몬스터 바로 위에 두어도 몬스터를 끌 수 있다
+    const m = Game.monsters[0];
+    assert(m, 'a monster to drag');
+    const c2 = { ...c, x: m.x, y: m.y + 10, age: 0 };
+    Game.corpses.push(c2);
+    UI.update(0);
+    UI.onMove(...monXY(m));
+    UI.onDown(...monXY(m));
+    assert(UI.press && UI.press.src.monster === m, 'corpse does not block monster press');
+    UI.onMove(monXY(m)[0] + 200, monXY(m)[1]);
+    assert(UI.drag, 'drag starts over corpse');
+    UI.cancelDrag();
+    UI.press = null;
+    UI.update(0);
+    tick(c.life + 0.2);
+    assert(!Game.corpses.includes(c) && !Game.corpses.includes(c2), 'corpses fade out'); // 전투 중이라 새 시체는 생길 수 있다
+}
+
+// 타락: 비용 차감, 부하 생성, 최대 인원 제한. 꺼 둔 기능도 계속 검증하도록 잠시 켠다
+CORRUPTION_ENABLED = true;
 Game.corpses.length = 0; // 전투로 생긴 시체가 클릭 위치에 겹치면 그쪽이 먼저 선택된다
 Game.corpses.push({ type: 'warrior', female: false, x: tileX(4), y: tileY(5), d: 800, dir: 'down', age: 0, life: 5, cost: 15 });
 const goldBefore = Game.gold;
@@ -623,6 +661,7 @@ assert.strictEqual(Game.units.filter(u => u.kind === 'corrupt').length, 1);
 for (let i = 0; i < 2; i++) corruptCorpse({ type: 'rogue', female: true, x: 400, y: 300, d: 300, dir: 'down', cost: 18 });
 assert.strictEqual(Game.units.filter(u => u.kind === 'corrupt').length, 3);
 assert.strictEqual(corruptCorpse({ type: 'mage', female: true, x: 400, y: 300, d: 300, dir: 'down', cost: 24 }).reason, 'limit');
+CORRUPTION_ENABLED = false;
 
 // 정예: 같은 직업 기준 배율, 왕좌 피해 3, 시체와 타락
 const ew = HEROES.elite_swordsman, et = HEROES.elite_tamer, es = HEROES.elite_stormcaller;
@@ -652,6 +691,7 @@ assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
     const k = createHero('elite_stormcaller', 4, 0, false);
     k.waiting = false;
     Game.heroes.push(k);
+    CORRUPTION_ENABLED = true;
     const corpsesBefore = Game.corpses.length;
     damageHero(k, 9999);
     const corpse = Game.corpses[Game.corpses.length - 1];
@@ -663,6 +703,7 @@ assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
     const cu = Game.units.find(u => u.heroType === 'elite_stormcaller');
     assert.strictEqual(cu.maxHp, CORRUPTED.mage.hp * 2);
     assert(cu.ranged);
+    CORRUPTION_ENABLED = false;
 }
 
 // 정예 직업 능력. 아래 블록은 Game 목록을 직접 바꾸고, 다음 '다시 시작'에서 모두 초기화된다.

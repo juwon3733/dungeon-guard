@@ -43,9 +43,12 @@ function killHero(hero, pos, attacker) {
     Sfx.play('kill', G.streak);
 
     if (!hero.boss) {
+        // 타락이 꺼져 있으면 시체는 쓰러지는 동작과 짧은 사라짐만 보여 주는 장식이다
+        const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
+        const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
         G.corpses.push({
             type: hero.type, female: hero.female, x: pos.x, y: pos.y, d: hero.d, dir: hero.dir,
-            age: 0, life: COMBAT_RULES.corpseTime, cost: bounty * COMBAT_RULES.corruptCostMul
+            age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul
         });
     }
 }
@@ -107,6 +110,7 @@ function damageThrone(amount, heroName) {
 
 function corruptCorpse(corpse) {
     const G = Game;
+    if (!CORRUPTION_ENABLED) return { ok: false, reason: 'disabled' };
     if (G.gold < corpse.cost) return { ok: false, reason: 'gold' };
     const alive = G.units.filter(u => u.kind === 'corrupt').length;
     if (alive >= COMBAT_RULES.corruptMax) return { ok: false, reason: 'limit' };
