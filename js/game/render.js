@@ -1,56 +1,252 @@
 // 게임 세계 그리기. 상태를 읽기만 하고 바꾸지 않는다(UI 버튼 제외).
 const HP_BAR_W = 60; // 머리 위 체력바 너비(세계 px, 화면 40px)
 const HP_BAR_H = 9; // 체력바 높이(세계 px, 화면 6px)
+const DECK_W = 132; // 다리 길 폭(세계 px, 화면 88px). 칸(96)보다 조금 넓다
+const ISLAND_RECT = [-70, -36, 2060, 1430]; // 섬 그림을 그릴 화면 네모 [x, y, 너비, 높이]. 윗면이 0~12줄을 덮고 절벽은 하단 바 뒤로
 const THRONE_BACK = 180; // 왕좌 의자의 발끝을 왕좌 칸 가운데에서 위로 올린 거리(세계 px). 왕좌 둘레 뒷줄에 서서 등받이가 마왕 머리 위로 보인다
 
 const Render = {
     mapLayer: null,
 
-    // 바닥 층: 이끼 바닥, 벽돌 길, 물가를 Wang 타일로 깔고 아주 약한 비네트를 덮는다. 소품은 y 순서로 world에서 그린다
-    buildMap() {
+    // 바닥 층(지역마다 한 번 그린다): 우주 배경 위에 떠 있는 섬, 다리 길, 왕좌 받침, 은은한 빛과 지역 색 비네트.
+    // 소품과 입구 소용돌이 문은 world에서 그린다(문은 돌아가고, 소품은 y 순서로 캐릭터와 섞인다)
+    mapZone: null,
+    buildMap(zoneId) {
+        const id = ZONES[zoneId] ? zoneId : DEFAULT_ZONE;
+        const zone = ZONES[id];
         const c = document.createElement('canvas');
         c.width = Math.round(WORLD_WIDTH);
         c.height = Math.round(WORLD_HEIGHT);
         const g = c.getContext('2d');
         g.imageSmoothingEnabled = false;
-        this.drawGround(g);
-        const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 700 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 1250 / WORLD_ZOOM);
-        v.addColorStop(0, 'rgba(0,12,8,0)');
-        v.addColorStop(1, 'rgba(0,12,8,0.12)');
+        const space = Assets.get(`void_${id}`);
+        if (space) g.drawImage(space, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        // Why: 섬 원본은 정사각형이라 윗면이 전장(0~12줄)을 덮도록 가로로 더 늘린다. 절벽은 하단 바 뒤로 이어진다
+        const island = Assets.get(`island_${id}`);
+        const [ix, iy, iw, ih] = zone.island || ISLAND_RECT;
+        if (island) g.drawImage(island, ix / WORLD_ZOOM, iy / WORLD_ZOOM, iw / WORLD_ZOOM, ih / WORLD_ZOOM);
+        // 섬 가운데를 지역 빛으로 살짝 밝힌다(어둡게 덮지 않는다)
+        const [lr, lg, lb, la] = zone.light;
+        g.save();
+        g.globalCompositeOperation = 'lighter';
+        const lift = g.createRadialGradient(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, 60, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, 1100 / WORLD_ZOOM);
+        lift.addColorStop(0, `rgba(${lr},${lg},${lb},${la})`);
+        lift.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
+        g.fillStyle = lift;
+        g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        g.restore();
+        this.drawDeck(g, id);
+        this.drawThroneDais(g, id);
+        // 비네트: 가장자리에 지역 색을 얹는다(검게 덮지 않는다)
+        const [vr, vg, vb, va] = zone.vignette;
+        const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 760 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 1260 / WORLD_ZOOM);
+        v.addColorStop(0, `rgba(${vr},${vg},${vb},0)`);
+        v.addColorStop(1, `rgba(${vr},${vg},${vb},${va})`);
         g.fillStyle = v;
         g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         this.mapLayer = c;
+        this.mapZone = id;
     },
 
-    // 꼭짓점 (col, row)의 땅: 길 칸과 왕좌 둘레는 'path', 물가는 'water', 나머지는 'floor'. 맵 밖은 가장 가까운 칸을 따른다
-    terrainAt(col, row) {
-        const c = clamp(col, 0, MAP_COLS - 1);
-        const r = clamp(row, 0, MAP_ROWS - 1);
-        if (isPathCell(c, r) || isThroneArea(c, r)) return 'path';
-        return isWaterCell(c, r) ? 'water' : 'floor';
-    },
-
-    // Why: 타일 층을 반 칸 어긋나게 깔아 꼭짓점이 게임 칸의 가운데에 오게 한다. 그러면 길 칸을 이은 벽돌 띠가
-    // 약 한 칸 폭으로 경로 중심선을 따라가고(용사 lane ±34px 안), 칸마다 땅 종류가 하나로 정해진다.
-    // 타일 32px을 세계 96px(화면 64px, 2배)로 그린다
-    drawGround(g) {
-        const sets = { path: Assets.get('tileset_path'), water: Assets.get('tileset_water') };
-        const rows = Math.ceil(WORLD_HEIGHT / TILE);
-        for (let r = -1; r <= rows; r++) {
-            for (let c = -1; c < MAP_COLS; c++) {
-                const corners = [this.terrainAt(c, r), this.terrainAt(c + 1, r), this.terrainAt(c, r + 1), this.terrainAt(c + 1, r + 1)];
-                const kind = corners.includes('water') && !corners.includes('path') ? 'water' : 'path';
-                const img = sets[kind];
-                if (!img) continue;
-                const [bx, by, bw, bh] = WANG_TILES[corners.map(t => (t === kind ? '1' : '0')).join('')];
-                g.drawImage(img, bx, by, bw, bh, tileX(c), tileY(r), TILE, TILE);
-            }
-        }
+    // 지금 보이는 맵의 지역: 판 중과 결과는 이번 판의 지역, 그 밖(타이틀, 시작 전 대화)은 고른 스테이지의 지역
+    zoneNow() {
+        const inRun = Game.inPlay() || Game.state === 'victory' || Game.state === 'defeat';
+        return inRun ? Game.zone || DEFAULT_ZONE : zoneOf(UI.stageId);
     },
 
     // 입구 문 위치(세계 좌표): 길마다 첫 칸(맵 왼쪽 끝)
     gates() {
         return ROUTE_IDS.map(route => ({ route, x: tileX(0), y: tileY(ROUTES[route].tiles[0][1]) }));
+    },
+
+    // 다리 그림의 돌바닥 띠(난간 없이 가운데 60%)를 네모 (x, y, w, h)에 길과 같은 배율로 반복해 깐다
+    deckFloor(g, deck, zone, x, y, w, h) {
+        const [top, bottom] = zone.deck;
+        const k = DECK_W / (bottom - top);
+        const by = top + (bottom - top) * 0.2;
+        const bh = (bottom - top) * 0.6;
+        g.save();
+        g.beginPath();
+        g.rect(x, y, w, h);
+        g.clip();
+        for (let ty = y; ty < y + h; ty += bh * k - 1) {
+            for (let tx = x; tx < x + w; tx += 400 * k - 1) g.drawImage(deck, 500, by, 400, bh, tx, ty, 400 * k, bh * k);
+        }
+        g.restore();
+    },
+
+    // 길: 지역 다리 그림에서 난간과 돌바닥을 잘라 경로를 따라 깐다. 폭은 칸보다 조금 넓다(DECK_W)
+    drawDeck(g, id) {
+        const deck = Assets.get(`bridgedeck_${id}`);
+        if (!deck) return;
+        const zone = ZONES[id];
+        const [top, bottom] = zone.deck;
+        const srcH = bottom - top;
+        const unit = deck.width * DECK_W / srcH;
+        const half = DECK_W / 2;
+        // 두 길이 같이 지나는 구간(합류 뒤)은 한 번만 그린다(두 번 그리면 난간이 진해진다)
+        const seen = new Map();
+        for (const rid of ROUTE_IDS) {
+            for (const s of ROUTES[rid].segments) {
+                const key = [s.ax, s.ay, s.dx, s.dy, s.len].map(v => Math.round(v * 100)).join(',');
+                if (!seen.has(key)) seen.set(key, s);
+            }
+        }
+        // 구간 끝을 반 폭씩 늘려 꺾이는 곳의 바깥 난간이 ㄱ자로 맞물리게 한다
+        for (const s of seen.values()) {
+            g.save();
+            g.translate(s.ax - s.dx * half, s.ay - s.dy * half);
+            g.rotate(Math.atan2(s.dy, s.dx));
+            const len = s.len + DECK_W;
+            for (let x = 0; x < len; x += unit - 1) {
+                const w = Math.min(unit, len - x);
+                g.drawImage(deck, 0, top, deck.width * (w / unit), srcH, x, -half, w, DECK_W);
+            }
+            g.restore();
+        }
+        // 꺾이는 곳과 합류점(T자): 길이 이어지는 쪽은 난간을 지우고 돌바닥으로 잇는다. 네 귀퉁이에 기둥
+        const rail = Math.round(DECK_W * 0.2);
+        for (const { x, y, open } of this.deckCorners()) {
+            const x0 = x - half + (open.has('-1,0') ? 0 : rail);
+            const x1 = x + half - (open.has('1,0') ? 0 : rail);
+            const y0 = y - half + (open.has('0,-1') ? 0 : rail);
+            const y1 = y + half - (open.has('0,1') ? 0 : rail);
+            this.deckFloor(g, deck, zone, x0, y0, x1 - x0, y1 - y0);
+            for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.deckPost(g, zone, x + sx * (half - rail / 2), y + sy * (half - rail / 2));
+        }
+    },
+
+    // 꺾이는 곳 목록: { x, y, open }. open은 길이 이어지는 방향('dx,dy')의 모음
+    deckCorners() {
+        const map = new Map();
+        for (const rid of ROUTE_IDS) {
+            const tiles = ROUTES[rid].tiles;
+            for (let i = 1; i < tiles.length - 1; i++) {
+                const [c, r] = tiles[i];
+                const key = c + ',' + r;
+                if (!map.has(key)) map.set(key, { x: tileX(c), y: tileY(r), open: new Set() });
+                const e = map.get(key);
+                for (const [oc, or] of [tiles[i - 1], tiles[i + 1]]) e.open.add(Math.sign(oc - c) + ',' + Math.sign(or - r));
+            }
+        }
+        return [...map.values()];
+    },
+
+    // 다리 기둥 하나(지역 기둥 색): 진한 테, 몸, 위쪽 빛나는 보석
+    deckPost(g, zone, cx, cy) {
+        const [rim, body, glow] = zone.post;
+        const x = Math.round(cx);
+        const y = Math.round(cy);
+        g.fillStyle = rim;
+        g.fillRect(x - 14, y - 14, 28, 28);
+        g.fillStyle = body;
+        g.fillRect(x - 10, y - 12, 20, 20);
+        g.fillStyle = glow;
+        g.fillRect(x - 4, y - 7, 8, 8);
+        g.fillStyle = 'rgba(255,255,255,0.6)';
+        g.fillRect(x - 4, y - 7, 4, 3);
+    },
+
+    // 왕좌 받침: 왕좌 둘레(3x4칸)에 지역 다리 돌바닥을 깔고, 지역 기둥 색 테와 금선, 네 귀퉁이 기둥
+    drawThroneDais(g, id) {
+        const deck = Assets.get(`bridgedeck_${id}`);
+        const zone = ZONES[id];
+        const x = (THRONE_TILE.col - 1) * TILE;
+        const y = MAP_TOP + (THRONE_TILE.row - 2) * TILE;
+        const w = TILE * 3;
+        const h = TILE * 4;
+        const [rim, body, glow] = zone.post;
+        g.fillStyle = rim;
+        g.fillRect(x - 14, y - 14, w + 28, h + 28);
+        g.fillStyle = body;
+        g.fillRect(x - 8, y - 8, w + 16, h + 16);
+        if (deck) this.deckFloor(g, deck, zone, x, y, w, h);
+        g.lineWidth = 4;
+        g.strokeStyle = '#e9b949';
+        g.strokeRect(x + 8, y + 8, w - 16, h - 16);
+        g.save();
+        g.globalAlpha = 0.7;
+        g.lineWidth = 2;
+        g.strokeStyle = glow;
+        g.strokeRect(x + 16, y + 16, w - 32, h - 32);
+        g.restore();
+        for (const [sx, sy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.deckPost(g, zone, x - 6 + sx * (w + 12), y - 6 + sy * (h + 12));
+    },
+
+    // 입구 소용돌이 문(지역 색): 돌 테두리 타원 안에서 도트 나선이 돌고, 바닥에 룬 고리(pixelfx)가 돈다
+    drawGate(ctx, gate, zone) {
+        const t = Game.time;
+        const [outer, inner, glow] = zone.gate;
+        const [rim, body, gem] = zone.post;
+        const cx = gate.x + 8;
+        const cy = gate.y - 34;
+        const rx = 54;
+        const ry = 88;
+        this.drawLoopSheet(ctx, 'fx_rune_attackSpeed', cx + 6, gate.y + 34, 210, gate.y, 0.55);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, ry * 1.7);
+        halo.addColorStop(0, `rgba(${glow},0.5)`);
+        halo.addColorStop(1, `rgba(${glow},0)`);
+        ctx.fillStyle = halo;
+        ctx.fillRect(cx - ry * 1.7, cy - ry * 1.7, ry * 3.4, ry * 3.4);
+        ctx.restore();
+        // 테두리: 진한 테, 돌, 안쪽 테
+        const ring = (r1, r2, color) => {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, r1, r2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        };
+        ring(rx + 20, ry + 20, rim);
+        ring(rx + 14, ry + 14, body);
+        ring(rx + 4, ry + 4, rim);
+        ring(rx, ry, outer);
+        // 나선: 세 갈래 팔을 작은 네모로 찍어 도트처럼 보이게 한다
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.clip();
+        const dot = 4.5;
+        for (let arm = 0; arm < 3; arm++) {
+            for (let i = 0; i < 46; i++) {
+                const k = i / 46;
+                const ang = t * 2.4 + arm * (Math.PI * 2 / 3) + k * 5.2;
+                const px = cx + Math.cos(ang) * rx * (1 - k) * 0.98;
+                const py = cy + Math.sin(ang) * ry * (1 - k) * 0.98;
+                ctx.fillStyle = k > 0.55 ? '#ffffff' : (i % 3 ? inner : `rgb(${glow})`);
+                ctx.fillRect(Math.round(px / dot) * dot, Math.round(py / dot) * dot, dot * (k > 0.7 ? 2 : 1), dot);
+            }
+        }
+        ctx.globalCompositeOperation = 'lighter';
+        const core = ctx.createRadialGradient(cx, cy, 2, cx, cy, rx * 0.8);
+        core.addColorStop(0, 'rgba(255,255,255,0.85)');
+        core.addColorStop(0.4, `rgba(${glow},0.35)`);
+        core.addColorStop(1, `rgba(${glow},0)`);
+        ctx.fillStyle = core;
+        ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+        ctx.restore();
+        // 테두리의 보석 넷
+        for (const [gx, gy] of [[cx, cy - ry - 16], [cx - rx - 14, cy], [cx + rx + 14, cy], [cx, cy + ry + 16]]) {
+            const x = Math.round(gx);
+            const y = Math.round(gy);
+            ctx.fillStyle = rim;
+            ctx.fillRect(x - 12, y - 12, 24, 24);
+            ctx.fillStyle = gem;
+            ctx.fillRect(x - 8, y - 8, 16, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x - 8, y - 8, 6, 4);
+        }
+        // 빨려 드는 반짝이
+        for (let i = 0; i < 10; i++) {
+            const k = (t * 0.8 + i / 10) % 1;
+            const ang = i * 2.4 + t;
+            const r = (1 - k) * ry * 1.5;
+            ctx.globalAlpha = k;
+            ctx.fillStyle = i % 2 ? inner : '#ffffff';
+            ctx.fillRect(Math.round(cx + Math.cos(ang) * r * 0.8), Math.round(cy + Math.sin(ang) * r), 6, 6);
+        }
+        ctx.globalAlpha = 1;
     },
 
     // 그림 한 장: 발끝(footPx, 캔버스 안 높이)을 footY에 맞춘다. 왼쪽 위 모서리를 화면 정수 픽셀에 맞춰 도트가 고르게 보인다
@@ -614,7 +810,8 @@ const Render = {
             const lift = (1 - up) * 40;
             ctx.save();
             ctx.globalAlpha = Math.min(1, up * 2.5);
-            UIKit.text(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(24 / WORLD_ZOOM), r.color, 'center', 'bold');
+            const pop = up > 0.8 ? 1 + (up - 0.8) * 2.5 : 1;
+            UIKit.bigText(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(34 * pop / WORLD_ZOOM), r.color, 'center', 'rgba(255,255,255,0.5)');
             ctx.restore();
         }
     },
@@ -807,15 +1004,15 @@ const Render = {
             const a = clamp(Math.min(t / 0.12, (T + 0.4 - t) / 0.3), 0, 1);
             const popK = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
             const label = p.kind === 'summon' ? `${MONSTER_GRADES[p.grade].name} 등장!` : MONSTERS[p.type].name;
-            const size = Math.round((big ? 44 : 32) * popK / WORLD_ZOOM);
+            const size = Math.round((p.grade === 'legendary' ? 64 : big ? 52 : 38) * popK / WORLD_ZOOM);
             const ly = to.y - 200 - t * 30;
             const lx = clamp(to.x, 220, WORLD_WIDTH - 220);
             ctx.save();
             ctx.globalAlpha = a;
-            UIKit.text(ctx, label, lx, ly, size, MONSTER_GRADES[p.grade].light, 'center');
+            UIKit.bigText(ctx, label, lx, ly, size, MONSTER_GRADES[p.grade].light, 'center', 'rgba(255,255,255,0.5)');
             if (p.kind === 'summon' || p.grade !== 'common') {
                 const sub = p.kind === 'summon' ? MONSTERS[p.type].name : `${MONSTER_GRADES[p.grade].name}!`;
-                UIKit.text(ctx, sub, lx, ly + size * 0.95, Math.round(22 / WORLD_ZOOM), '#ffffff', 'center');
+                UIKit.text(ctx, sub, lx, ly + size * 0.95, Math.round(26 / WORLD_ZOOM), '#ffffff', 'center', 'bold');
             }
             ctx.restore();
         }
@@ -1063,13 +1260,14 @@ const Render = {
     // 화로 소품(prop2_brazier) 둘레의 따뜻한 빛. 불꽃은 그림에 있다
     drawTorches(ctx) {
         const t = Game.time;
+        const zone = ZONES[this.mapZone] || ZONES[DEFAULT_ZONE];
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        for (const p of DECOR) {
-            if (p.sprite !== 'prop2_brazier') continue;
-            const x = tileX(p.col);
-            const y = tileY(p.row) + PROP_FOOT_Y - 120;
-            const flick = 0.82 + Math.sin(t * 9 + p.col) * 0.09 + Math.sin(t * 23 + p.row * 5) * 0.05;
+        for (const [sprite, col, row] of zone.props) {
+            if (sprite !== 'prop2_brazier') continue;
+            const x = tileX(col);
+            const y = tileY(row) + PROP_FOOT_Y - 120;
+            const flick = 0.82 + Math.sin(t * 9 + col) * 0.09 + Math.sin(t * 23 + row * 5) * 0.05;
             const radius = 220 * flick;
             const g = ctx.createRadialGradient(x, y, 8, x, y, radius);
             g.addColorStop(0, `rgba(255,170,80,${0.3 * flick})`);
@@ -1212,12 +1410,12 @@ const Render = {
 
     drawNumbers(ctx) {
         for (const n of Fx.numbers) {
-            // 처음 120ms는 크게 튀어나온다
-            const pop = n.age < 0.12 ? 1.55 - (n.age / 0.12) * 0.55 : 1;
-            const size = Math.round((n.big ? 50 : 26) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
+            // 처음 150ms는 크게 튀어나온다. 굵은 글자에 두꺼운 외곽선, 위쪽 반은 밝게(Asteria 피해 숫자처럼)
+            const pop = n.age < 0.15 ? 1.8 - (n.age / 0.15) * 0.8 : 1;
+            const size = Math.round((n.big ? 60 : 34) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
             ctx.save();
             ctx.globalAlpha = clamp((n.life - n.age) / 0.25, 0, 1);
-            UIKit.text(ctx, String(n.amount), n.x, n.y, size, n.color, 'center');
+            UIKit.bigText(ctx, String(n.amount), n.x, n.y, size, n.color, 'center', 'rgba(255,255,255,0.55)');
             ctx.restore();
         }
     },
@@ -1231,7 +1429,7 @@ const Render = {
             const w = ctx.measureText(s.text).width + 42;
             const x = clamp(s.x, w / 2 + 8, WORLD_WIDTH - w / 2 - 8);
             const y = s.y - (1 - a) * 8;
-            // 마왕 대사는 양피지 쪽지, 보스 대사는 붉은 밀랍 쪽지
+            // 마왕 대사는 남색 말풍선, 보스 대사는 빨간 말풍선
             UIKit.note(ctx, x - w / 2, y - 34, w, 64, { red: !!s.boss });
             ctx.fillStyle = s.boss ? UI_THEME.cream : UI_THEME.ink;
             ctx.textAlign = 'center';
@@ -1242,13 +1440,25 @@ const Render = {
     },
 
     drawCoins(ctx) {
+        // 금화(화면 좌표): 진한 테, 금, 안쪽 무늬와 반짝임. 돌면서 날아가도록 너비가 줄었다 는다
         for (const c of Fx.coins) {
-            ctx.fillStyle = '#6b3f0a';
-            ctx.fillRect(c.x - 9, c.y - 9, 18, 18);
-            ctx.fillStyle = '#ffd24d';
-            ctx.fillRect(c.x - 7, c.y - 7, 14, 14);
-            ctx.fillStyle = '#fff2b0';
-            ctx.fillRect(c.x - 5, c.y - 5, 5, 5);
+            const spin = Math.abs(Math.cos(c.age * 9 + c.vx));
+            const w = Math.max(4, Math.round(12 * spin)) * 2;
+            const x = Math.round(c.x - w / 2);
+            const y = Math.round(c.y - 12);
+            ctx.fillStyle = '#3a2004';
+            ctx.fillRect(x - 2, y, w + 4, 24);
+            ctx.fillRect(x, y - 2, w, 28);
+            ctx.fillStyle = '#e8a020';
+            ctx.fillRect(x, y, w, 24);
+            ctx.fillStyle = '#ffd84d';
+            ctx.fillRect(x + 2, y + 2, w - 4, 18);
+            if (w > 12) {
+                ctx.fillStyle = '#c47a10';
+                ctx.fillRect(x + w / 2 - 2, y + 6, 4, 12);
+            }
+            ctx.fillStyle = '#fff6c8';
+            ctx.fillRect(x + 2, y + 2, Math.max(2, w / 4), 6);
         }
     },
 
@@ -1259,6 +1469,8 @@ const Render = {
             ctx.translate(Math.round(randRange(-Fx.shake, Fx.shake)), Math.round(randRange(-Fx.shake, Fx.shake)));
         }
         ctx.scale(WORLD_ZOOM, WORLD_ZOOM);
+        const zoneId = this.zoneNow();
+        if (zoneId !== this.mapZone) this.buildMap(zoneId); // 판을 시작하면 이번 지역으로 다시 그린다
         if (this.mapLayer) ctx.drawImage(this.mapLayer, 0, 0);
 
         for (const d of Fx.decals) {
@@ -1303,10 +1515,12 @@ const Render = {
 
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다
         const entities = [];
-        for (const p of DECOR) {
-            const footY = tileY(p.row) + PROP_FOOT_Y;
-            entities.push({ y: footY, draw: () => this.sprite(ctx, Assets.get(p.sprite), tileX(p.col), footY, PIXEL_SCALE, propFootPx(p.sprite)) });
+        const zone = ZONES[this.mapZone] || ZONES[DEFAULT_ZONE];
+        for (const [sprite, col, row] of zone.props) {
+            const footY = tileY(row) + PROP_FOOT_Y;
+            entities.push({ y: footY, draw: () => this.sprite(ctx, Assets.get(sprite), tileX(col), footY, PIXEL_SCALE, propFootPx(sprite)) });
         }
+        for (const gate of this.gates()) entities.push({ y: gate.y + 40, draw: () => this.drawGate(ctx, gate, zone) });
         for (const m of Game.monsters) {
             if (m.blocks) entities.push({ y: m.homeY - TILE / 2, draw: () => this.drawMonsterHome(ctx, m) });
             const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;

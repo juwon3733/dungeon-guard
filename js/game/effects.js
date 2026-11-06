@@ -4,10 +4,10 @@
 const MERGE_REVEAL = 0.42;
 // 등급별 연출 세기. pop은 소환·합치기 뒤 결과가 커졌다 돌아오는 시간, rays는 빛줄기 수, shake는 화면 흔들림
 const GRADE_FX = {
-    common: { pop: 0.55, rays: 0, sparks: 10, shake: 0, sheet: 'fx_explosion', size: 225 },
-    rare: { pop: 0.85, rays: 8, sparks: 22, shake: 4, sheet: 'fx_blastViolet', size: 330 },
-    epic: { pop: 1.35, rays: 16, sparks: 40, shake: 10, sheet: 'fx_hit_crit', size: 450 },
-    legendary: { pop: 1.8, rays: 24, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 540 }
+    common: { pop: 0.6, rays: 0, sparks: 16, shake: 2, sheet: 'fx_explosion', size: 300 },
+    rare: { pop: 0.95, rays: 10, sparks: 34, shake: 7, sheet: 'fx_blastViolet', size: 450 },
+    epic: { pop: 1.5, rays: 18, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 600 },
+    legendary: { pop: 2.2, rays: 30, sparks: 96, shake: 22, sheet: 'fx_hit_crit', size: 760 }
 };
 
 const Fx = {
@@ -93,7 +93,8 @@ const Fx = {
             recent.age = 0;
             return;
         }
-        this.numbers.push({ target, x: x + randRange(-14, 14), y, amount, color, big: !!big, age: 0, life: 0.8 });
+        // 옆으로 조금 튀었다가 떠오른다(vx). 큰 숫자는 더 오래 남는다
+        this.numbers.push({ target, x: x + randRange(-18, 18), y, vx: randRange(-40, 40), amount, color, big: !!big, age: 0, life: big ? 1 : 0.85 });
     },
 
     ring(x, y, radius, color, life) { this.rings.push({ x, y, radius, color, age: 0, life }); },
@@ -115,7 +116,7 @@ const Fx = {
     },
 
     coin(x, y, amount) {
-        const n = Math.min(6, Math.max(2, Math.round(amount / 3)));
+        const n = Math.min(9, Math.max(3, Math.round(amount / 2)));
         for (let i = 0; i < n; i++) {
             // 동전은 HUD로 날아가므로 화면 좌표로 바꿔 둔다
             this.coins.push({ x: x * WORLD_ZOOM, y: y * WORLD_ZOOM, vx: randRange(-170, 170), vy: randRange(-420, -220), age: 0, delay: 0.42 + i * 0.03 });
@@ -140,7 +141,10 @@ const Fx = {
         for (const list of [this.numbers, this.rings, this.beams, this.bolts, this.speech, this.glows, this.anims, this.drops]) {
             for (const item of list) item.age += dt;
         }
-        for (const n of this.numbers) n.y -= 52 * dt;
+        for (const n of this.numbers) {
+            n.y -= (n.age < 0.15 ? 220 : 52) * dt;
+            n.x += (n.vx || 0) * dt;
+        }
         this.numbers = this.numbers.filter(n => n.age < n.life);
         this.rings = this.rings.filter(r => r.age < r.life);
         this.beams = this.beams.filter(b => b.age < b.life);
@@ -188,9 +192,13 @@ const Fx = {
             const g = GRADE_FX[b.grade] || GRADE_FX.common;
             const color = MONSTER_GRADES[b.grade].color;
             this.anim(g.sheet, b.x, b.y - 30, g.size, 0.5);
-            this.ring(b.x, b.y + MONSTER_FOOT, 60 + g.rays * 8, color, 0.5);
-            this.burst(b.x, b.y - 30, color, g.sparks, 360 + g.rays * 20, 0.6, 7);
-            this.rise(b.x, b.y + MONSTER_FOOT, '#ffffff', 6 + g.rays, 40, 0.8);
+            if (g.rays) this.anim('fx_blastGold', b.x, b.y - 40, g.size * 0.8, 0.5);
+            this.ring(b.x, b.y + MONSTER_FOOT, 80 + g.rays * 10, color, 0.55);
+            this.ring(b.x, b.y + MONSTER_FOOT, 40 + g.rays * 6, '#ffffff', 0.4);
+            this.burst(b.x, b.y - 30, color, g.sparks, 420 + g.rays * 24, 0.7, 8);
+            this.burst(b.x, b.y - 30, '#ffffff', Math.round(g.sparks / 2), 300 + g.rays * 16, 0.5, 6);
+            this.rise(b.x, b.y + MONSTER_FOOT, '#ffffff', 10 + g.rays * 2, 50, 0.9);
+            this.glow(b.x, b.y - 40, 160 + g.rays * 10, `rgba(${MONSTER_GRADES[b.grade].glow},1)`, 0.45);
         }
         this.pendingBursts = this.pendingBursts.filter(b => b.t > 0);
         for (const s of this.pendingShakes) {
@@ -216,4 +224,4 @@ const Fx = {
     }
 };
 
-const HUD_GOLD = { x: 1384, y: 1018 }; // 하단 바 골드 아이콘 가운데(js/ui/ui.js가 여기에 그린다)
+const HUD_GOLD = { x: 1490, y: 1006 }; // 하단 바 골드 아이콘 가운데(js/ui/ui.js가 여기에 그린다)

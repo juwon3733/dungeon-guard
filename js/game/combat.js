@@ -13,7 +13,7 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     if (!dot) {
         hero.flash = 0.09;
-        Fx.burst(p.x, p.y - (hero.boss ? 140 : 45), color || '#ffd26a', 2, 200, 0.28, 5);
+        Fx.burst(p.x, p.y - (hero.boss ? 140 : 45), color || '#ffd26a', 4, 260, 0.3, 6);
         Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-21, 21), p.y - (hero.boss ? 140 : 48) + randRange(-18, 18), dealt >= 20 ? 225 : 135, 0.26);
     }
     if (hero.hp <= 0) killHero(hero, p, attacker);
@@ -29,24 +29,31 @@ function killHero(hero, pos, attacker) {
     G.stats.kills++;
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
     Fx.coin(pos.x, pos.y - 60, bounty);
-    Fx.burst(pos.x, pos.y - (hero.boss ? 140 : 45), hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 56 : 10, hero.boss ? 620 : 300, 0.45, 6);
-    Fx.burst(pos.x, pos.y - (hero.boss ? 140 : 45), '#ff9d4d', hero.boss ? 28 : 5, 240, 0.4, 5);
-    Fx.ring(pos.x, pos.y - 36, hero.boss ? 285 : 69, '#ffe9b0', 0.26);
-    Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - (hero.boss ? 140 : 51), hero.boss ? 620 : 225, hero.boss ? 0.8 : 0.36);
-    Fx.glow(pos.x, pos.y - 45, hero.boss ? 420 : 120, 'rgba(255,190,110,1)', 0.2);
+    // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)
+    const cy = pos.y - (hero.boss ? 140 : 45);
+    Fx.burst(pos.x, cy, hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 70 : 20, hero.boss ? 680 : 380, 0.5, 7);
+    Fx.burst(pos.x, cy, '#ff9d4d', hero.boss ? 36 : 12, 300, 0.45, 6);
+    Fx.burst(pos.x, cy, '#ffd34d', hero.boss ? 24 : 8, 220, 0.6, 8);
+    Fx.ring(pos.x, pos.y - 36, hero.boss ? 320 : 110, '#ffe9b0', 0.3);
+    Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - (hero.boss ? 140 : 51), hero.boss ? 700 : 300, hero.boss ? 0.8 : 0.36);
+    if (hero.elite || hero.boss) Fx.anim('fx_blastGold', pos.x, pos.y - 60, hero.boss ? 600 : 360, 0.5);
+    Fx.glow(pos.x, pos.y - 45, hero.boss ? 480 : 170, 'rgba(255,190,110,1)', 0.25);
+    Fx.number({}, pos.x, pos.y - (hero.boss ? 360 : 200), `+${bounty}G`, '#ffd34d', hero.boss || hero.elite);
     if (hero.boss) {
         G.bossDefeated = true; // 웨이브가 끝나면 보스 보상 3택(마지막 웨이브는 승리로 끝난다)
         Fx.addShake(26);
         Sfx.play('bossDown');
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '고생했다. 다음엔 예약하고 와.', 3);
     } else {
-        Fx.addShake(1.5);
+        Fx.addShake(hero.elite ? 9 : 3);
     }
 
     // 연속 처치
     G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
     G.streakTimer = 2.4;
     if (G.streak >= 2) G.streakPop = 1;
+    // 연속 처치가 이어지면 처치 자리에 큰 글자(5, 10, 15...마다 더 크게)
+    if (G.streak >= 3) Fx.number({}, pos.x, pos.y - (hero.boss ? 420 : 250), `${G.streak} 연속!`, G.streak >= 10 ? '#ff7a5c' : '#9fe0ff', G.streak % 5 === 0);
     Sfx.play('kill', G.streak);
 
     if (!hero.boss) {

@@ -41,6 +41,7 @@ const Game = {
         }
         const stage = hasStage(stageId) ? stageDef(stageId) : null;
         this.stage = stage ? stage.id : null;
+        this.zone = zoneOf(this.stage); // 맵 지역(js/data/map.js의 ZONES). 그리기만 바뀐다
         this.waves = stage ? stageWaves(stage) : WAVES;
         this.heroHpMul = stage ? stage.hpMul : 1;
         this.gold = COMBAT_RULES.startGold + this.mods.startGold + (stage ? stage.goldBonus || 0 : 0);

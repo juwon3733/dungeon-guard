@@ -1,6 +1,6 @@
 # PixelLab 그림 목록 (품질 시험판)
 
-게임 그림은 모두 PixelLab으로 만든다. 다른 게임에서 가져온 이전 그림(맵, 배경, 정예와 보스 직업 그림, 마왕, UI 틀)은 2026-11에 모두 지웠다. 전투 효과는 pixelfx 시트다(아래).
+캐릭터, 마왕, 소품, 장비, 유물, UI 아이콘, 본부 그림은 PixelLab으로 만든다. 맵 지역(섬, 우주 배경, 다리)과 UI 틀(창, 버튼, 칸)은 사용자가 만든 게임 Asteria의 그림을 다시 쓴다(2026-11-07 사용자 결정, 아래 "Asteria 지역과 UI 틀"). 전투 효과는 pixelfx 시트다(아래).
 
 ## 공통 규격
 
@@ -10,7 +10,7 @@
 - 표시: 도트 1칸 = 화면 2픽셀. 세계를 `WORLD_ZOOM` 2/3로 그리고(칸 96 → 화면 64px) 캐릭터, 마왕, 소품은 세계 배율 3(`PIXEL_SCALE`)으로 그린다. 그림의 왼쪽 위를 화면 정수 픽셀에 맞춰(`snapWorld`) 도트가 흐려지지 않는다. 타일은 32px을 칸 하나(화면 64px)로 그린다.
 - 파일 위치: `assets/sprites/pl_<이름>/` (`rotations/`, `animations/<동작>/<방향>/frame_000.png`). 전사 폴더: 걷기 `walking`, 공격 `slash`, 사망 `falling_backward`
 - 동작 방식: 템플릿 모드는 들고 있는 무기와 방패가 사라진다. 걷기와 사망은 `mode=skeleton-v3`(프레임 캔버스 64px), 공격은 `mode=v3`와 `action_description`으로 만든다. 전사 기준 48px 캐릭터 하나에 4방향 28회다(걷기 12, 사망 12, 공격 4). 아래 표의 동작 이름과 예상 비용은 템플릿 기준으로 쓴 것이라 이 방식이면 더 든다
-- 분위기: 작고 귀여운 판타지 용사. 청록 이끼 바닥에서 눈에 띄도록 밝은 색을 쓴다.
+- 분위기: 작고 귀여운 판타지 용사. 지역마다 바닥 색이 달라(용암, 눈, 모래, 물) 어느 바닥에서도 눈에 띄도록 밝은 색과 검은 외곽선을 쓴다.
 
 ## 공통 스타일 문구
 
@@ -119,7 +119,7 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 
 ## 정예, 보스, 마왕, 맵, 소품, UI (2026-11)
 
-이전 그림을 모두 지우고 아래 그림으로 바꿨다. `assets/sprites`에는 `pl_*`, `equip_*`, `relic_*`, `lord_*`, `prop2_*`, `uiicon_*`, `tileset_*`, `ui_kit.png`, `ui_buttons.png`만 있다(`tools/smoke.js`가 확인한다). 시설 그림 `pl_fac_*`도 쓰지 않아 지웠다.
+이전 그림을 모두 지우고 아래 그림으로 바꿨다. 시설 그림 `pl_fac_*`도 쓰지 않아 지웠다. 2026-11-07에 맵 타일(`tileset_path`, `tileset_water`), 쓰지 않는 소품(`prop2_gate`, `cage`, `spikes`, `stairs`, `tree`), 양피지·나무판 UI(`ui_kit.png`, `ui_buttons.png`)를 지우고 Asteria 지역과 UI 틀로 바꿨다(아래).
 
 ### 정예와 보스
 
@@ -141,17 +141,18 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 
 - `lord_rift.png`(128px), `lord_bone_queen.png`, `lord_gold_king.png`. 화면 2배(256px)로 왕좌 앞에 선다. 주문 때는 세 마왕 모두 어두워진 화면 위로 빛과 함께 다시 그린다(`Render.drawLordCast`). 초상은 머리를 잘라 쓴다(`DEMON_LORDS[].portrait.crop`).
 
-### 맵 타일
+### Asteria 지역과 UI 틀 (2026-11-07)
 
-- `tileset_path.png`(lower 청록 이끼 바닥, upper 황토 벽돌 길)와 `tileset_water.png`(lower 같은 이끼 바닥, upper 물가)는 32px 타일 16장의 corners 기반 Wang 타일셋이다(128x128, 4x4). 두 타일셋의 배치가 같아 `js/data/map.js`의 `WANG_TILES` 하나에 꼭짓점(NW, NE, SW, SE)별 bounding_box를 적었다. 두 타일셋의 lower는 같은 그림이라 이어진다.
-- 타일 층을 반 칸 어긋나게 깔아 꼭짓점이 게임 칸 가운데에 온다(`Render.drawGround`). 꼭짓점이 길 칸이나 왕좌 둘레면 벽돌, 물가 칸이면 물가 upper, 나머지는 이끼다. 물가 칸은 길과 왕좌 둘레에 붙지 않는다(한 타일에 셋이 오면 이을 타일이 없다).
+- 지역 8곳(`moonGarden`, `coast`, `frost`, `skySea`, `sunForge`, `warTemple`, `starChoir`, `ember`)마다 `void_<지역>.webp`(우주 배경, 1672x941 또는 1920x1080), `island_<지역>.webp`(떠 있는 섬, 1254x1254), `bridgedeck_<지역>.webp`(다리, 1536x1024). webp라 `assetPath`가 확장자를 고른다.
+- 섬은 화면 네모 `ISLAND_RECT`(지역마다 `ZONES[].island`로 바꿀 수 있다)로 늘려 그린다. 다리는 `ZONES[].deck`(난간 포함 세로 범위, 원본 px)을 잘라 폭 `DECK_W`로 경로를 따라 깐다. 꺾이는 곳은 같은 그림의 가운데 돌바닥 띠(난간 없는 60%)로 잇는다(`Render.deckFloor`).
+- UI 틀은 48px 9칸 원본: `ui_window`(남색 창), `ui_button`·`ui_buttonHover`(은청색 버튼), `ui_itemSlot`(은테 칸), `ui_skillSlot`(금테 칸), `ui_closeButton`. 자르는 좌표는 `js/ui/uikit.js`의 `UI_SLICES`. 금색·빨강 버튼은 같은 모양을 코드로 칠한다(`UIKit.bevel`). `asteria_ui_kit.png`는 원본 키트로 남겨 둔다(코드에서 부르지 않는다).
 
 ### 소품과 UI 아이콘
 
-- `prop2_<mushrooms|crystal|boulder|brazier|bones|chest|obelisk|banner|pillar|spikes|cauldron|tree|cage|gate|throne|stairs>.png`(64px, 화면 2배). 배치는 `DECOR`, 발끝은 `PROP_FOOT`. 입구 문은 `prop2_gate`, 왕좌 의자는 `prop2_throne`(마왕 뒤).
-- `uiicon_*.png`(48px). 지금은 마왕 탭 번개 칸만 `uiicon_bolt`를 쓰고 칸은 코드로 그린다. 나머지 UI 모양 교체는 다음 작업이다.
+- `prop2_<mushrooms|crystal|boulder|brazier|bones|chest|obelisk|banner|pillar|cauldron|throne>.png`(64px, 화면 2배). 지역마다 2~3개(`ZONES[].props`), 발끝은 `PROP_FOOT`. 왕좌 의자는 `prop2_throne`(마왕 뒤). 입구 문은 그림 없이 코드로 그린 소용돌이 문이다(`Render.drawGate`).
+- `uiicon_*.png`(48px). 버튼, 탭, 칸, 재화에 쓴다.
 
 ## 진행 순서
 
 1. 용사 3종, 오크, 몬스터 23종, 정예 4종, 보스 2종, 마왕 3명, 맵 타일, 소품, 장비, 유물, UI 아이콘을 만들어 연결했다.
-2. UI 모양 교체는 했다(`ui_kit.png`, `ui_buttons.png`, `uiicon_*`, 규칙은 `docs/ART_BIBLE.md`).
+2. UI는 Asteria 구성(남색 창, 금선, 은청색 버튼, 금테 칸)으로 바꿨다(`ui_window` 등 48px 틀, `uiicon_*`, 규칙은 `docs/ART_BIBLE.md`).

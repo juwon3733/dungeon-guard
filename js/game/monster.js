@@ -279,9 +279,12 @@ function monsterKilledHero(m, hero) {
     const top = m.rank === MONSTER_RANKS.length - 1;
     const color = MONSTER_RANKS[m.rank].color;
     const footY = m.y + MONSTER_FOOT;
-    Fx.ring(m.x, footY, top ? 160 : 110, color, 0.45);
-    Fx.rise(m.x, footY, color, top ? 30 : 16, 34, 0.7);
-    if (top) Fx.glow(m.x, footY - 60, 200, 'rgba(255,210,70,1)', 0.4);
+    Fx.ring(m.x, footY, top ? 220 : 150, color, 0.5);
+    Fx.ring(m.x, footY, top ? 120 : 80, '#ffffff', 0.35);
+    Fx.rise(m.x, footY, color, top ? 50 : 26, 40, 0.9);
+    Fx.anim(top ? 'fx_blastGold' : 'fx_blastCyan', m.x, footY - 70, top ? 520 : 380, 0.5);
+    Fx.glow(m.x, footY - 60, top ? 280 : 180, top ? 'rgba(255,210,70,1)' : 'rgba(160,220,255,1)', 0.45);
+    Fx.addShake(top ? 10 : 4);
     Sfx.play('rankUp', m.rank);
 }
 
