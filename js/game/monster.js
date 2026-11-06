@@ -95,7 +95,7 @@ function createMonster(type, col, row) {
     // 발끝이 용사가 걷는 길 선에 오도록 칸 가운데 기준 위치를 발 높이만큼 올려 둔다
     if (m.blocks) {
         const r = rallyPoint(col, row);
-        m.rally = { d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
+        m.rally = { route: r.route, d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
     }
     applyMonsterStats(m, true);
     return m;

@@ -1,9 +1,20 @@
-// 1지역 지하 감옥의 경로. 꺾이는 지점만 적고, 거리 계산은 아래에서 만든다.
-const PATH_TILES = [[0, 3], [4, 3], [4, 7], [8, 7], [8, 3], [12, 3], [12, 8], [16, 8], [16, 4], [20, 4], [20, 10], [23, 10], [23, 7]];
+// 1지역 지하 감옥의 경로. 입구마다 왕좌까지 가는 꺾은선을 적고, 거리 계산은 아래에서 만든다.
+// 합류형: 남쪽 길은 합류점(8,7)에서 북쪽 길과 만나 그 뒤로는 같은 칸을 지난다(docs/MULTI_PATH.md 5절).
+// 합류 뒤 구간은 두 길에서 좌표와 남은 거리(length - d)가 같으므로 길이 달라도 남은 거리로 비교할 수 있다.
+const ROUTE_COMMON = [[8, 3], [12, 3], [12, 8], [16, 8], [16, 4], [20, 4], [20, 10], [23, 10], [23, 7]];
+const ROUTE_TILES = {
+    north: [[0, 3], [4, 3], [4, 7], [8, 7], ...ROUTE_COMMON],
+    south: [[0, 9], [8, 9], [8, 7], ...ROUTE_COMMON]
+};
+const ROUTE_IDS = ['north', 'south']; // 이 순서가 우선순위다(거리가 같으면 north)
+const ROUTE_NAMES = { north: '북', south: '남' };
+const MERGE_TILE = { col: 8, row: 7 };
+const PATH_TILES = ROUTE_TILES.north; // 예전 이름(북쪽 길)
 const THRONE_TILE = { col: 23, row: 7 };
 
-const PATH = (function buildPath() {
-    const points = PATH_TILES.map(([c, r]) => ({ x: tileX(c), y: tileY(r), c, r }));
+// 꺾이는 칸 목록으로 길 하나를 만든다: 구간(segments), 전체 길이(length), 지나는 칸(cells)
+function buildPath(tiles) {
+    const points = tiles.map(([c, r]) => ({ x: tileX(c), y: tileY(r), c, r }));
     points[0].x = -60; // 문 밖에서 걸어 들어오게 한다
     const segments = [];
     let total = 0;
@@ -15,9 +26,9 @@ const PATH = (function buildPath() {
         total += len;
     }
     const cells = new Set();
-    for (let i = 0; i < PATH_TILES.length - 1; i++) {
-        let [c, r] = PATH_TILES[i];
-        const [ec, er] = PATH_TILES[i + 1];
+    for (let i = 0; i < tiles.length - 1; i++) {
+        let [c, r] = tiles[i];
+        const [ec, er] = tiles[i + 1];
         while (c !== ec || r !== er) {
             cells.add(c + ',' + r);
             c += Math.sign(ec - c);
@@ -25,41 +36,60 @@ const PATH = (function buildPath() {
         }
         cells.add(ec + ',' + er);
     }
-    return { segments, length: total, cells };
-})();
+    return { tiles, segments, length: total, cells };
+}
 
-// d: 입구로부터 이동한 거리(px)
-function pathAt(d) {
-    const dist = clamp(d, 0, PATH.length);
-    for (const s of PATH.segments) {
+const ROUTES = {};
+for (const id of ROUTE_IDS) ROUTES[id] = buildPath(ROUTE_TILES[id]);
+const PATH = ROUTES.north; // 예전 이름. 새 코드는 ROUTES[route]를 쓴다
+const PATH_CELLS = new Set(ROUTE_IDS.flatMap(id => [...ROUTES[id].cells])); // 모든 길 칸의 합집합
+
+// 입구에서 합류점까지 거리. 이 거리부터는 두 길의 좌표가 같다
+function mergeDistance(route) {
+    const s = ROUTES[route].segments.find(seg => seg.ax === tileX(MERGE_TILE.col) && seg.ay === tileY(MERGE_TILE.row));
+    return s ? s.start : 0;
+}
+
+// d: 입구로부터 이동한 거리(px). route가 없으면 북쪽 길
+function pathAt(d, route) {
+    const R = ROUTES[route || 'north'];
+    const dist = clamp(d, 0, R.length);
+    for (const s of R.segments) {
         if (dist <= s.start + s.len) {
             const t = dist - s.start;
             return { x: s.ax + s.dx * t, y: s.ay + s.dy * t, dx: s.dx, dy: s.dy };
         }
     }
-    const last = PATH.segments[PATH.segments.length - 1];
+    const last = R.segments[R.segments.length - 1];
     return { x: last.ax + last.dx * last.len, y: last.ay + last.dy * last.len, dx: last.dx, dy: last.dy };
 }
 
-function nearestPathDistance(x, y) {
-    let best = 0;
-    let bestDist = Infinity;
-    for (const s of PATH.segments) {
-        const t = clamp((x - s.ax) * s.dx + (y - s.ay) * s.dy, 0, s.len);
-        const dd = distance(x, y, s.ax + s.dx * t, s.ay + s.dy * t);
-        if (dd < bestDist) { bestDist = dd; best = s.start + t; }
+// 모든 길 가운데 (x, y)에서 가장 가까운 점: { route, d, x, y, gap }. 거리가 같으면 ROUTE_IDS 앞쪽(north)
+function nearestPathPoint(x, y) {
+    let best = null;
+    for (const route of ROUTE_IDS) {
+        for (const s of ROUTES[route].segments) {
+            const t = clamp((x - s.ax) * s.dx + (y - s.ay) * s.dy, 0, s.len);
+            const px = s.ax + s.dx * t;
+            const py = s.ay + s.dy * t;
+            const gap = distance(x, y, px, py);
+            if (!best || gap < best.gap - 1e-6) best = { route, d: s.start + t, x: px, y: py, gap };
+        }
     }
     return best;
 }
 
-function isPathCell(col, row) { return PATH.cells.has(col + ',' + row); }
+// 용사(또는 { route, d })가 왕좌까지 남은 거리(px)
+function remainingDistance(h) { return ROUTES[h.route || 'north'].length - h.d; }
 
-// 장식이 놓인 칸: 건설 불가
+function isPathCell(col, row) { return PATH_CELLS.has(col + ',' + row); }
+
+// 장식이 놓인 칸: 건설 불가. 수정 하나는 남쪽 길 난간에 걸쳐 보여 (2,10)에서 한 줄 아래 (2,11)로 옮겼다
 const DECOR = [
     { sprite: 'prop_pillarShadow', col: 22, row: 5 },
     { sprite: 'prop_pillarShadow', col: 25, row: 9 },
     { sprite: 'prop_shard', col: 10, row: 10 },
-    { sprite: 'prop_crystal', col: 2, row: 10 },
+    { sprite: 'prop_crystal', col: 2, row: 11 },
     { sprite: 'prop_shard', col: 6, row: 1 },
     { sprite: 'prop_crystal', col: 14, row: 1 },
     { sprite: 'prop_crystal', col: 15, row: 10 },
@@ -95,9 +125,9 @@ const BUILD_CELLS = (function findBuildCells() {
 
 function isBuildCell(col, row) { return BUILD_CELLS.has(col + ',' + row); }
 
-// 막는 몬스터가 놓인 칸에서 걸어 나가 설 길 지점(d: 입구로부터 거리)
+// 막는 몬스터가 놓인 칸에서 걸어 나가 설 길 지점: { route, d, x, y }.
+// 합류 뒤 구간이면 어느 길이든 같은 좌표이고 route는 north다(nearestPathPoint)
 function rallyPoint(col, row) {
-    const d = nearestPathDistance(tileX(col), tileY(row));
-    const p = pathAt(d);
-    return { d, x: p.x, y: p.y };
+    const p = nearestPathPoint(tileX(col), tileY(row));
+    return { route: p.route, d: p.d, x: p.x, y: p.y };
 }

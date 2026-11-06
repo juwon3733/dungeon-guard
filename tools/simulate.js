@@ -68,8 +68,9 @@ const plans = {
         plans.balanced(G, o);
         // 번개는 가장 앞선 무리에, 쓰러진 용사는 여유 있으면 타락
         if (G.skills.lightning === 0 && G.state === 'wave') {
-            const h = G.heroes.filter(x => !x.waiting).sort((a, b) => b.d - a.d)[0];
-            if (h && h.d > PATH.length * 0.45) { const p = heroWorld(h); castLightning(p.x, p.y); }
+            // 길이 둘이라 d가 아니라 왕좌까지 남은 거리로 가장 앞선 용사를 고른다
+            const h = G.heroes.filter(x => !x.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+            if (h && remainingDistance(h) < ROUTES.north.length * 0.55) { const p = heroWorld(h); castLightning(p.x, p.y); }
         }
         if (G.corpses.length && G.gold > 90) corruptCorpse(G.corpses[0]);
     }
@@ -84,6 +85,6 @@ for (const name of Object.keys(plans)) {
     out[name] = { wins: wins + '/12', wave: avg('wave'), hp: avg('hp'), built: avg('built'), corrupted: avg('corrupted'), time: avg('time') };
 }
 console.log(JSON.stringify(out, null, 1));
-console.log('build cells', BUILD_CELLS.size, 'path px', Math.round(PATH.length));
+console.log('build cells', BUILD_CELLS.size, 'path px', ROUTE_IDS.map(id => id + ' ' + Math.round(ROUTES[id].length)).join(', '));
 `;
 vm.runInContext(scenario, context, { filename: 'scenario' });

@@ -49,7 +49,7 @@ function killHero(hero, pos, attacker) {
         const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
         const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
         G.corpses.push({
-            type: hero.type, female: hero.female, x: pos.x, y: pos.y, d: hero.d, dir: hero.dir,
+            type: hero.type, female: hero.female, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir,
             age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul
         });
     }
@@ -68,14 +68,17 @@ function nearestHero(x, y, rangePx, predicate) {
     return best;
 }
 
-// 사거리 안에서 왕좌에 가장 가까이 간 용사를 고른다(타워 디펜스의 기본 조준)
+// 사거리 안에서 왕좌에 가장 가까이 간 용사를 고른다(타워 디펜스의 기본 조준).
+// 길이 여러 개라 d가 아니라 왕좌까지 남은 거리로 비교한다. 같으면 먼저 찾은 쪽
 function foremostHero(x, y, rangePx) {
     let best = null;
+    let bestLeft = Infinity;
     for (const h of Game.heroes) {
         if (h.dead || h.waiting) continue;
         const p = heroWorld(h);
         if (distance(x, y, p.x, p.y) > rangePx) continue;
-        if (!best || h.d > best.d) best = h;
+        const left = remainingDistance(h);
+        if (left < bestLeft) { best = h; bestLeft = left; }
     }
     return best;
 }

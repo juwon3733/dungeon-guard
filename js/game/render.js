@@ -29,8 +29,9 @@ const Render = {
         this.drawThroneDais(g);
         this.drawDeck(g);
 
+        // 입구마다 같은 문 그림을 쓴다(길의 첫 칸 줄)
         const portal = Assets.get('prop_fieldPortal');
-        if (portal) g.drawImage(portal, -28, tileY(3) - 112, 192, 192);
+        if (portal) for (const g0 of this.gates()) g.drawImage(portal, g0.x - 76, g0.y - 112, 192, 192);
 
         const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 560 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 1180 / WORLD_ZOOM);
         v.addColorStop(0, 'rgba(0,0,10,0)');
@@ -38,6 +39,11 @@ const Render = {
         g.fillStyle = v;
         g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         this.mapLayer = c;
+    },
+
+    // 입구 문 위치(세계 좌표): 길마다 첫 꺾은 점의 줄, 섬 왼쪽 가장자리. 북쪽은 예전 자리(x 48) 그대로
+    gates() {
+        return ROUTE_IDS.map(route => ({ route, x: tileX(0), y: tileY(ROUTES[route].tiles[0][1]) }));
     },
 
     // 원본 다리 그림에서 난간과 돌바닥을 잘라 길로 잇는다
@@ -48,7 +54,20 @@ const Render = {
         const srcH = DECK.bottom - DECK.top;
         const unit = deck.width * DECK.width / srcH;
         const half = DECK.width / 2;
-        for (const s of PATH.segments) {
+        // 길마다 구간을 모으되 합류 뒤처럼 두 길이 같이 지나는 구간은 한 번만 그린다(두 번 그리면 난간이 진해진다).
+        // 합류 전 구간을 먼저, 같이 쓰는 구간을 나중에 그려 합류점에서 뒤에 오는 길이 앞 길의 난간 끝을 덮게 한다
+        const seen = new Map();
+        for (const id of ROUTE_IDS) {
+            for (const s of ROUTES[id].segments) {
+                const key = [s.ax, s.ay, s.dx, s.dy, s.len].map(v => Math.round(v * 100)).join(',');
+                const e = seen.get(key);
+                if (e) e.shared = true;
+                else seen.set(key, { s, shared: false });
+            }
+        }
+        const list = [...seen.values()];
+        for (const e of [...list.filter(x => !x.shared), ...list.filter(x => x.shared)]) {
+            const s = e.s;
             g.save();
             g.translate(s.ax, s.ay);
             g.rotate(Math.atan2(s.dy, s.dx));
@@ -58,11 +77,17 @@ const Render = {
             }
             g.restore();
         }
-        // 꺾이는 곳은 난간 없는 돌바닥으로 덮고 네 귀퉁이에 기둥을 세운다
-        for (let i = 1; i < PATH_TILES.length - 1; i++) {
-            const x = tileX(PATH_TILES[i][0]);
-            const y = tileY(PATH_TILES[i][1]);
+        // 꺾이는 곳(모든 길의 중간 꺾은 점, 겹치면 한 번)은 난간 없는 돌바닥으로 덮고 네 귀퉁이에 기둥을 세운다
+        const corners = new Map();
+        for (const id of ROUTE_IDS) {
+            const tiles = ROUTES[id].tiles;
+            for (let i = 1; i < tiles.length - 1; i++) corners.set(tiles[i].join(','), tiles[i]);
+        }
+        for (const [c, r] of corners.values()) {
+            const x = tileX(c);
+            const y = tileY(r);
             g.drawImage(deck, 300, 400, 200, 200, x - half + 12, y - half + 12, DECK.width - 24, DECK.width - 24);
+            if (c === MERGE_TILE.col && r === MERGE_TILE.row) this.drawJunction(g, deck, x, y, half);
             for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
                 g.fillStyle = '#1a1626';
                 g.fillRect(x + sx * (half - 8) - 13, y + sy * (half - 8) - 13, 26, 26);
@@ -71,6 +96,25 @@ const Render = {
                 g.fillStyle = '#c56bff';
                 g.fillRect(x + sx * (half - 8) - 3, y + sy * (half - 8) - 5, 6, 6);
             }
+        }
+    },
+
+    // 합류점의 T자: 길이 들어오고 나가는 쪽마다 돌바닥을 그쪽으로 조금 밀어 한 번 더 깐다.
+    // 다른 갈래 구간의 난간 끝이 열린 쪽을 가로질러 길을 막는 것처럼 보이지 않게 덮는다. 막힌 쪽 난간은 남긴다
+    drawJunction(g, deck, x, y, half) {
+        const open = new Set();
+        for (const id of ROUTE_IDS) {
+            for (const s of ROUTES[id].segments) {
+                const ex = s.ax + s.dx * s.len;
+                const ey = s.ay + s.dy * s.len;
+                if (Math.abs(s.ax - x) < 1 && Math.abs(s.ay - y) < 1) open.add(Math.round(s.dx) + ',' + Math.round(s.dy));
+                if (Math.abs(ex - x) < 1 && Math.abs(ey - y) < 1) open.add(-Math.round(s.dx) + ',' + -Math.round(s.dy));
+            }
+        }
+        const size = half * 2 - 24; // 꺾이는 곳 돌바닥과 같은 크기
+        for (const key of open) {
+            const [ox, oy] = key.split(',').map(Number);
+            g.drawImage(deck, 300, 400, 200, 200, x - size / 2 + ox * 13, y - size / 2 + oy * 13, size, size);
         }
     },
 
@@ -208,7 +252,7 @@ const Render = {
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
                 ctx.globalAlpha = 0.4;
-                const back = pathAt(h.d - 36);
+                const back = pathAt(h.d - 36, h.route);
                 this.sprite(ctx, Assets.tinted(name, '#a56bff', 0.9), back.x, back.y + bob + 12, BOSS_SCALE, 118, flip);
                 ctx.restore();
             }
