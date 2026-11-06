@@ -19,6 +19,9 @@ function monsterStats(m) {
         stats.damage *= 1.5;
         stats.hp *= 1.5;
     }
+    const rankMul = MONSTER_RANKS[m.rank || 0].mul;
+    stats.damage *= rankMul;
+    stats.hp *= rankMul;
     if (m.tier >= 3 && m.branch) {
         const b = def.branches[m.branch];
         if (b.damageMul) stats.damage *= b.damageMul;
@@ -70,6 +73,7 @@ function createMonster(type, col, row) {
         kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: tileX(col), y: tileY(row),
         homeX: tileX(col), homeY: tileY(row), rally: null, moving: false,
         tier: 1, branch: null, invested: MONSTERS[type].cost,
+        rank: 0, xp: 0, rankUp: 0, // rank는 MONSTER_RANKS 번호, rankUp은 랭크가 오른 연출의 남은 초
         atk: 0.2, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, shot: null, anim: Math.random() * 4,
         dir: 'down', flash: 0, stun: 0, down: 0, target: null, hp: 0, maxHp: 0, armor: 0
     };
@@ -91,6 +95,38 @@ function applyMonsterStats(m, fresh) {
     m.armor = stats.armor;
 }
 
+// 랭크를 정한다. 경험치는 그 랭크의 시작값으로 맞춘다(합치기 승계, 시험 도구)
+function setMonsterRank(m, rank) {
+    m.rank = clamp(rank, 0, MONSTER_RANKS.length - 1);
+    m.xp = MONSTER_RANKS[m.rank].xp;
+    applyMonsterStats(m);
+}
+
+// 다음 랭크까지 남은 경험치(처치 수). 최고 랭크면 0
+function monsterXpToNext(m) {
+    const next = MONSTER_RANKS[(m.rank || 0) + 1];
+    return next ? Math.max(0, next.xp - (m.xp || 0)) : 0;
+}
+
+// 몬스터가 용사를 쓰러뜨림: 처치 경험치를 받고, 넘친 만큼 랭크를 올린다(체력은 비율을 유지한다).
+// 합쳐지거나 팔려 사라진 몬스터의 투사체가 마무리했으면 아무도 받지 않는다
+function monsterKilledHero(m, hero) {
+    if (!m || m.kind !== 'monster' || m.removed) return;
+    m.xp += hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
+    const before = m.rank;
+    while (MONSTER_RANKS[m.rank + 1] && m.xp >= MONSTER_RANKS[m.rank + 1].xp) m.rank++;
+    if (m.rank === before) return;
+    applyMonsterStats(m);
+    m.rankUp = 1.2;
+    const top = m.rank === MONSTER_RANKS.length - 1;
+    const color = MONSTER_RANKS[m.rank].color;
+    const footY = m.y + MONSTER_FOOT;
+    Fx.ring(m.x, footY, top ? 120 : 80, color, 0.45);
+    Fx.rise(m.x, footY, color, top ? 30 : 16, 34, 0.7);
+    if (top) Fx.glow(m.x, footY - 40, 140, 'rgba(255,210,70,1)', 0.4);
+    Sfx.play('rankUp', m.rank);
+}
+
 // 원거리 몬스터의 투사체가 나가는 위치: 발끝에서 손 높이만큼 위, 동서를 볼 때는 앞쪽으로
 function monsterHand(m) {
     const hand = MONSTERS[m.type].art.hand || { x: 0, y: 60 };
@@ -103,6 +139,7 @@ function updateMonster(m, dt) {
     if (m.reveal > 0) m.reveal -= dt; // 합치기 결과: 연출이 끝날 때까지 그림을 숨긴다
     m.flash = Math.max(0, m.flash - dt);
     m.atkPose = Math.max(0, m.atkPose - dt);
+    m.rankUp = Math.max(0, (m.rankUp || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;
@@ -139,7 +176,7 @@ function updateBlockMonster(m, dt) {
     if (m.atk > 0) return;
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
-    damageHero(target, stats.damage, m.x, m.y, '#ffb76b');
+    damageHero(target, stats.damage, m.x, m.y, '#ffb76b', m);
     monsterHitHero(m.type, target);
     Sfx.play('slash');
 }
@@ -172,18 +209,18 @@ function fireMonsterShot(m, stats, target) {
     const tp = heroWorld(target);
     const hand = monsterHand(m);
     if (stats.beam) {
-        fireBeam(hand.x, hand.y, stats, tp, m.type);
+        fireBeam(hand.x, hand.y, stats, tp, m);
     } else if (stats.splash > 0) {
         Game.projectiles.push({
             kind: 'orb', x: hand.x, y: hand.y, tx: tp.x, ty: tp.y - 30, sx: hand.x, sy: hand.y,
             age: 0, time: clamp(distance(hand.x, hand.y, tp.x, tp.y) / 760, 0.25, 0.6),
-            damage: stats.damage, splash: stats.splash * TILE, src: m.type
+            damage: stats.damage, splash: stats.splash * TILE, src: m.type, owner: m
         });
         Fx.glow(hand.x, hand.y, 50, 'rgba(190,110,255,1)', 0.18);
         Sfx.play('orb');
     } else {
         Game.projectiles.push({
-            kind: 'arrow', x: hand.x, y: hand.y, target, damage: stats.damage, src: m.type,
+            kind: 'arrow', x: hand.x, y: hand.y, target, damage: stats.damage, src: m.type, owner: m,
             speed: stats.heavy ? 2200 : 1300, big: stats.heavy, trail: 0,
             curse: !!monsterAbility(m.type, 'curseShot') // 저주 화살은 보랏빛 꼬리를 남긴다
         });
@@ -191,7 +228,8 @@ function fireMonsterShot(m, stats, target) {
     }
 }
 
-function fireBeam(ox, oy, stats, tp, src) {
+// owner: 쏜 몬스터(처치 경험치를 받는다)
+function fireBeam(ox, oy, stats, tp, owner) {
     const len = distance(ox, oy, tp.x, tp.y - 30) || 1;
     const dx = (tp.x - ox) / len;
     const dy = (tp.y - 30 - oy) / len;
@@ -207,8 +245,8 @@ function fireBeam(ox, oy, stats, tp, src) {
         if (along < 0 || along > reach) continue;
         const off = Math.abs((p.x - ox) * dy - (p.y - 30 - oy) * dx);
         if (off < 42) {
-            damageHero(h, stats.damage, ox, oy, '#d7a8ff');
-            monsterHitHero(src, h);
+            damageHero(h, stats.damage, ox, oy, '#d7a8ff', owner);
+            monsterHitHero(owner.type, h);
         }
     }
     Sfx.play('beam');
@@ -252,8 +290,8 @@ function updateProjectile(p, dt) {
         const step = p.speed * dt;
         p.angle = Math.atan2(ty - p.y, tx - p.x);
         if (len <= step + 8) {
-            damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'));
-            // 타락 유닛의 화살에는 src가 없다
+            damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'), p.owner);
+            // 타락 유닛의 화살에는 src와 owner가 없다
             if (p.src) monsterHitHero(p.src, t);
             if (p.big) Fx.addShake(5);
             Sfx.play('hit');
@@ -282,7 +320,7 @@ function updateProjectile(p, dt) {
             });
         }
         if (t >= 1) {
-            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff', h => monsterHitHero(p.src, h));
+            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff', h => monsterHitHero(p.src, h), p.owner);
             Fx.ring(p.tx, p.ty + 30, p.splash, '#c28bff', 0.3);
             Fx.anim('fx_blastViolet', p.tx, p.ty + 10, p.splash * 2.8, 0.42);
             Fx.glow(p.tx, p.ty, p.splash * 1.5, 'rgba(170,90,255,1)', 0.24);

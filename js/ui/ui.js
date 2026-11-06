@@ -7,6 +7,7 @@ const SUMMON_BTN_W = 300; // 몬스터 탭의 소환 버튼
 const FIELD_COUNT_X = BAR_SLOT_X + SUMMON_BTN_W + 28; // 맵 몬스터 수 표시(현재 수/상한)
 const NEXT_BTN_X = 1132;
 const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
+const POPUP_RANK_H = 30; // 팝업의 랭크 줄 높이
 const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
 
 const UI = {
@@ -119,7 +120,7 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = 166 + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
+        const h = 166 + POPUP_RANK_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         let y = o.y + h - 64 - upgrades * 88;
@@ -771,11 +772,19 @@ const UI = {
             line1 = `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
             line2 = stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림';
         }
-        UIKit.plain(ctx, line1, p.x + 20, p.y + 108, 19, '#ffffff');
-        UIKit.plain(ctx, line2, p.x + 20, p.y + 138, 18, '#d8ccef');
+        // 랭크: 글자는 랭크 색, 옆에 다음 랭크까지 남은 처치 수(정예 3, 보스 10으로 센다)
+        const rank = f.rank || 0;
+        const rankDef = MONSTER_RANKS[rank];
+        const nextRank = MONSTER_RANKS[rank + 1];
+        UIKit.plain(ctx, '랭크', p.x + 20, p.y + 108, 19, '#d8ccef');
+        UIKit.text(ctx, rankDef.name, p.x + 70, p.y + 108, 24, rankDef.color, 'left', 'bold');
+        const rankLine = nextRank ? `다음 ${nextRank.name}까지 ${monsterXpToNext(f)}처치` : '최고 랭크';
+        UIKit.plain(ctx, rankLine, p.x + 100, p.y + 108, 17, nextRank ? '#f2e6ff' : '#ffe08a');
+        UIKit.plain(ctx, line1, p.x + 20, p.y + 108 + POPUP_RANK_H, 19, '#ffffff');
+        UIKit.plain(ctx, line2, p.x + 20, p.y + 138 + POPUP_RANK_H, 18, '#d8ccef');
 
         // 능력: 한 줄에 하나. 이름과 설명은 ABILITY_KINDS에서 온다
-        let y = p.y + 166;
+        let y = p.y + 166 + POPUP_RANK_H;
         for (const a of def.abilities) {
             const kind = ABILITY_KINDS[a.kind];
             UIKit.plain(ctx, kind.name, p.x + 20, y + 12, 18, '#ffb0e8');

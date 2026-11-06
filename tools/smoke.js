@@ -874,8 +874,130 @@ const tough = h => { h.hp = h.maxHp = 9999; return h; };
     assert.strictEqual(h.stun, 0, 'orc guard no death stun');
 }
 
+// 랭크: D~S, 처치 경험치로만 오른다. 마지막 공격을 넣은 몬스터가 받는다(번개, 타락 유닛 제외)
+assert.strictEqual(MONSTER_RANKS.map(r => r.name).join(), 'D,C,B,A,S');
+assert.strictEqual(MONSTER_RANKS.map(r => r.xp).join(), '0,5,15,35,70');
+assert.strictEqual(MONSTER_RANKS.map(r => r.mul).join(), '1,1.25,1.5,1.75,2');
+assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":10}');
+{
+    const frail = h => { h.hp = 1; h.armor = 0; return h; };
+    const land = () => { for (let i = 0; i < 180 && Game.projectiles.some(p => !p.done); i++) for (const p of Game.projectiles) if (!p.done) updateProjectile(p, 1 / 60); };
+    // 원거리 화살
+    clearBoard();
+    Game.projectiles = [];
+    const archer = putMonster('skeleton_archer', 700);
+    assert(archer.rank === 0 && archer.xp === 0, 'summoned at D');
+    const h1 = frail(place('warrior', 700 + TILE));
+    fireMonsterShot(archer, monsterStats(archer), h1);
+    land();
+    assert(h1.dead && archer.xp === 1, 'arrow kill credited');
+    // 근접: 막는 몬스터가 붙잡고 때려 쓰러뜨린다
+    clearBoard();
+    const orc = putMonster('orc_guard', 900);
+    const h2 = frail(place('warrior', 900 + 0.3 * TILE));
+    for (let i = 0; i < 90 && !h2.dead; i++) updateMonster(orc, 1 / 30);
+    assert(h2.dead && orc.xp === 1, 'melee kill credited');
+    // 광역 구체: 맞아 쓰러진 용사마다 경험치
+    clearBoard();
+    Game.projectiles = [];
+    const mage = putMonster('dark_mage', 1100);
+    const group = [0, 0.2, 0.4].map(k => frail(place('warrior', 1100 + (1 + k) * TILE)));
+    fireMonsterShot(mage, monsterStats(mage), group[0]);
+    land();
+    assert(group.every(h => h.dead) && mage.xp === 3, 'orb splash kills credited: ' + mage.xp);
+    // 빔(관통 갈래)
+    clearBoard();
+    const beamer = putMonster('dark_mage', 1100);
+    Object.assign(beamer, { tier: 3, branch: 'B' });
+    const h3 = frail(place('warrior', 1100 + TILE));
+    fireMonsterShot(beamer, monsterStats(beamer), h3);
+    assert(h3.dead && beamer.xp === 1, 'beam kill credited');
+    // 처치는 마지막 공격을 넣은 몬스터만 받는다
+    clearBoard();
+    const a1 = putMonster('skeleton_archer', 700);
+    const a2 = putMonster('skeleton_archer', 700);
+    const h4 = tough(place('warrior', 700 + TILE));
+    h4.armor = 0;
+    damageHero(h4, 9000, 0, 0, null, a1);
+    damageHero(h4, 9000, 0, 0, null, a2);
+    assert(h4.dead && a1.xp === 0 && a2.xp === 1, 'last hit only');
+    // 정예 3, 보스 10
+    const elite = tough(place('elite_swordsman', 700 + TILE));
+    damageHero(elite, 99999, 0, 0, null, a1);
+    assert(elite.dead && a1.xp === 3, 'elite counts 3');
+    const boss = place(null, 700 + TILE, 'fallen_knight');
+    damageHero(boss, 1e7, 0, 0, null, a1);
+    assert(boss.dead && a1.xp === 13, 'boss counts 10');
+    assert.strictEqual(a1.rank, 1, 'C at 13 xp');
+    assert.strictEqual(monsterXpToNext(a1), 2, '2 kills to B');
+    // 번개와 타락 유닛의 처치는 몬스터 경험치가 아니다. 사라진 몬스터의 투사체 처치도 아무도 받지 않는다
+    clearBoard();
+    Game.projectiles = [];
+    Game.pendingStrikes = [];
+    const watcher = putMonster('skeleton_archer', 700);
+    const h5 = frail(place('warrior', 700 + TILE));
+    const w5 = heroWorld(h5);
+    resolveStrike({ x: w5.x, y: w5.y });
+    const h6 = frail(place('warrior', 700 + TILE));
+    damageHero(h6, 5, 0, 0, '#ffb76b'); // 타락 유닛은 공격자를 넘기지 않는다
+    const h7 = frail(place('warrior', 700 + TILE));
+    fireMonsterShot(watcher, monsterStats(watcher), h7);
+    Game.removeMonster(watcher);
+    land();
+    assert(h5.dead && h6.dead && h7.dead && watcher.xp === 0, 'lightning, corrupt, removed shooter give no xp');
+}
+{
+    // 랭크 상승과 수치: 랭크마다 체력과 피해 25%씩(S는 2배). 체력은 비율을 유지한다
+    clearBoard();
+    const og = putMonster('orc_guard', 900);
+    const base = MONSTERS.orc_guard.stats;
+    og.hp = og.maxHp * 0.5;
+    og.xp = 4;
+    const kill = (m, type, bossKey) => { const h = tough(place(type || 'warrior', 900 + TILE, bossKey)); damageHero(h, 1e7, 0, 0, null, m); };
+    kill(og);
+    assert.strictEqual(og.rank, 1, 'C at 5 kills');
+    assert(og.rankUp > 0, 'rank up effect');
+    assert(Math.abs(monsterStats(og).damage - base.damage * 1.25) < 1e-9 && og.maxHp === base.hp * 1.25, 'C stats +25%');
+    assert(Math.abs(og.hp / og.maxHp - 0.5) < 1e-9, 'hp ratio kept on rank up');
+    // 경험치가 넘치면 여러 단계를 한 번에 오른다. S에서 멈춘다
+    og.xp = 30;
+    kill(og, null, 'fallen_knight');
+    assert.strictEqual(og.rank, 3, 'A at 40');
+    og.xp = 69;
+    kill(og);
+    assert.strictEqual(og.rank, 4, 'S at 70');
+    assert(Math.abs(monsterStats(og).damage - base.damage * 2) < 1e-9 && og.maxHp === base.hp * 2, 'S doubles');
+    assert.strictEqual(monsterXpToNext(og), 0, 'S is top');
+    kill(og, null, 'fallen_knight');
+    assert.strictEqual(og.rank, 4, 'stays S');
+    // 쓰러졌다 다시 나와도 랭크 유지, 체력은 랭크 기준 최대치로
+    damageUnit(og, 1e6);
+    assert(og.down > 0);
+    for (let i = 0; i < 40 && og.down > 0; i++) updateMonster(og, 0.25);
+    assert(og.down <= 0 && og.rank === 4 && og.hp === base.hp * 2, 'rank kept after respawn');
+    // 합치면 재료 중 낮은 랭크, 경험치는 그 랭크의 시작값
+    clearBoard();
+    const m1 = Game.place('orc_guard', 3, 6);
+    const m2 = Game.place('orc_guard', 3, 4) || Game.place('orc_guard', 5, 5);
+    assert(m1 && m2, 'merge test cells');
+    setMonsterRank(m1, 3);
+    m1.xp = 50;
+    setMonsterRank(m2, 1);
+    m2.xp = 12;
+    const res = Game.merge({ monster: m2 }, { monster: m1 });
+    assert(res.ok, 'merged');
+    assert.strictEqual(res.monster.rank, 1, 'lower rank inherited');
+    assert.strictEqual(res.monster.xp, 5, 'xp at rank start');
+    assert.strictEqual(res.monster.maxHp, MONSTERS[res.type].stats.hp * 1.25, 'inherited rank stats');
+    // 옮겨도 유지
+    const free = [[5, 5], [7, 6], [9, 5], [11, 4]].find(([c, r]) => Game.canPlace(res.type, c, r));
+    assert(Game.moveMonster(res.monster, free[0], free[1]) && res.monster.rank === 1, 'rank kept after move');
+    clearBoard();
+}
+
 // 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)
 assert(Game.summon().ok && Game.summonCost() > SUMMON_RULES.cost, 'cost rose before retry');
+setMonsterRank(Game.monsters[0], 4);
 Game.hp = 1;
 damageThrone(1);
 assert.strictEqual(Game.state, 'defeat');
@@ -886,6 +1008,14 @@ assert.strictEqual(Game.monsters.length, 0);
 assert.strictEqual(UI.tab, 'monster', 'retry starts on monster tab');
 assert(Game.summonCount === 0 && Game.summonCost() === SUMMON_RULES.cost, 'summon cost reset');
 assert.strictEqual(Game.units.length, 0);
+{
+    // 랭크도 처음으로: 다시 소환한 몬스터는 D
+    const r = Game.summon();
+    assert(r.ok && r.monster.rank === 0 && r.monster.xp === 0, 'rank reset on retry');
+    Game.removeMonster(r.monster);
+    Game.gold = COMBAT_RULES.startGold;
+    Game.summonCount = 0;
+}
 
 // 한 판 끝까지: 보스 패턴 포함, 예외 없이 승리 화면까지 간다
 Game.gold = 6000;

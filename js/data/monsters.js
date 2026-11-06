@@ -24,6 +24,19 @@ const SUMMON_RULES = {
     refund: { common: 20, rare: 60, epic: 150, legendary: 300 } // 판매 환불(등급별 고정)
 };
 
+// 랭크: 개체의 성장(등급은 종류에 고정). 소환하면 첫 단계(D)이고 처치 경험치로만 오른다(합치기로는 오르지 않는다).
+//   xp: 그 랭크가 되는 누적 처치 경험치, mul: 체력과 피해 배율(D 기준), color: 맵과 팝업의 글자 색
+//   killXp: 처치 하나의 경험치. 마지막 공격을 넣은 몬스터가 받는다(번개, 타락 유닛의 처치는 몬스터 경험치가 아니다)
+//   합치면 재료 중 낮은 랭크를 결과가 이어받고 경험치는 그 랭크의 시작값이 된다
+const MONSTER_RANKS = [
+    { name: 'D', xp: 0, mul: 1, color: '#c9c2d8' },
+    { name: 'C', xp: 5, mul: 1.25, color: '#9fe39a' },
+    { name: 'B', xp: 15, mul: 1.5, color: '#8cc4ff' },
+    { name: 'A', xp: 35, mul: 1.75, color: '#e0a8ff' },
+    { name: 'S', xp: 70, mul: 2, color: '#ffd23d' }
+];
+const RANK_KILL_XP = { normal: 1, elite: 3, boss: 10 };
+
 // 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
 const MONSTER_UPGRADE_ENABLED = false;
 

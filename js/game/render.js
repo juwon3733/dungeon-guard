@@ -497,6 +497,7 @@ const Render = {
 
         // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
         this.gradeMark(ctx, m.x, footY + 20, def.grade);
+        this.rankMark(ctx, m, footY);
         for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
             const sx = m.x - (m.tier - 1) * 11 + i * 22;
             const sy = footY + 40;
@@ -590,6 +591,38 @@ const Render = {
         ctx.closePath();
         ctx.fill();
         ctx.restore();
+    },
+
+    // 랭크 글자: 등급 마름모 오른쪽에 작게. D는 그리지 않아 몬스터가 많아도 맵이 어지럽지 않다. S는 금색으로 빛난다.
+    // 랭크가 오른 직후(rankUp)에는 글자가 커졌다 돌아오고 머리 위에 "랭크 업"이 떠오른다
+    rankMark(ctx, m, footY) {
+        const rank = m.rank || 0;
+        const r = MONSTER_RANKS[rank];
+        const top = rank === MONSTER_RANKS.length - 1;
+        const up = m.rankUp > 0 ? m.rankUp / 1.2 : 0;
+        if (rank > 0) {
+            const x = m.x + 26;
+            const y = footY + 20;
+            const size = Math.round((top ? 30 : 24) * (1 + up * 0.6));
+            if (top) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                const g = ctx.createRadialGradient(x, y, 2, x, y, 26);
+                g.addColorStop(0, `rgba(255,200,60,${0.5 + Math.sin(Game.time * 5 + m.x) * 0.15})`);
+                g.addColorStop(1, 'rgba(255,200,60,0)');
+                ctx.fillStyle = g;
+                ctx.fillRect(x - 26, y - 26, 52, 52);
+                ctx.restore();
+            }
+            UIKit.text(ctx, r.name, x, y + 1, size, r.color, 'center', 'bold');
+        }
+        if (up > 0) {
+            const lift = (1 - up) * 40;
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, up * 2.5);
+            UIKit.text(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(24 / WORLD_ZOOM), r.color, 'center', 'bold');
+            ctx.restore();
+        }
     },
 
     // 합칠 수 있는 몬스터 발밑의 고리. hot이면 지금 놓으려는 대상이다
