@@ -1,0 +1,62 @@
+{
+ "abyss_dragon_king": {
+  "slash": {
+   "frames": 6,
+   "size": 132,
+   "footPx": {
+    "north": 107,
+    "east": 113,
+    "south": 110
+   }
+  },
+  "walking": {
+   "frames": 6,
+   "size": 128,
+   "footPx": {
+    "south": 110,
+    "east": 118,
+    "north": 115
+   }
+  }
+ },
+ "time_witch": {
+  "idle": {
+   "frames": 4,
+   "size": 132,
+   "footPx": {
+    "east": 112,
+    "north": 113,
+    "south": 112
+   }
+  },
+  "cast": {
+   "frames": 6,
+   "size": 132,
+   "footPx": {
+    "south": 112,
+    "north": 111,
+    "east": 112
+   }
+  }
+ },
+ "soul_devourer": {
+  "cast": {
+   "frames": 6,
+   "size": 132,
+   "footPx": {
+    "south": 112,
+    "east": 113,
+    "north": 108
+   }
+  },
+  "idle": {
+   "frames": 4,
+   "size": 132,
+   "footPx": {
+    "south": 112,
+    "east": 113,
+    "north": 108
+   }
+  }
+ }
+}
