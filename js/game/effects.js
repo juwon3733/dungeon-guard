@@ -19,23 +19,26 @@ const Fx = {
     banner: null,
     pops: [], // 소환과 합치기 연출. 다른 몬스터와 HUD 위에도 보이도록 UI가 화면 맨 위에 그린다
     discovery: null, // "히든 조합 발견!" 연출
+    hpGlow: 0, // 제물로 체력 구슬이 차오를 때 구슬 빛(1에서 0으로)
 
     reset() {
         for (const key of ['particles', 'numbers', 'rings', 'beams', 'bolts', 'coins', 'decals', 'speech', 'glows', 'anims']) this[key] = [];
         this.shake = 0;
         this.dim = 0;
         this.goldPulse = 0;
+        this.hpGlow = 0;
         this.banner = null;
         this.pops = [];
         this.discovery = null;
         this.pendingBursts = [];
         this.pendingShakes = [];
+        this.pendingSacrifices = [];
     },
 
-    // kind: 'summon' | 'merge'. to와 from의 점은 세계 좌표 { x, y }(몬스터가 서 있는 곳)
+    // kind: 'summon' | 'merge' | 'sacrifice'(몬스터가 왕좌로 빨려 든다). to와 from의 점은 세계 좌표 { x, y }(몬스터가 서 있는 곳)
     pop(opts) {
         const g = GRADE_FX[opts.grade] || GRADE_FX.common;
-        const delay = opts.kind === 'merge' ? MERGE_REVEAL : 0;
+        const delay = opts.kind === 'summon' ? 0 : MERGE_REVEAL;
         this.pops.push(Object.assign({ age: 0, delay, life: delay + g.pop + 0.4, seed: Math.random() * 10 }, opts));
         // 결과 자리에는 세계 효과도 함께 남긴다(빛이 터지는 순간에 맞춘다)
         this.pendingBursts.push({ t: delay, x: opts.to.x, y: opts.to.y, grade: opts.grade });
@@ -44,6 +47,7 @@ const Fx = {
     },
     pendingBursts: [],
     pendingShakes: [],
+    pendingSacrifices: [], // 제물이 왕좌에 닿는 순간: 마왕이 빛나고 회복 숫자가 뜨고 체력 구슬이 빛난다
 
     // Asteria의 8프레임 효과 스트립을 재생한다. size는 화면에 그릴 한 변의 길이(px)
     // pixelfx 시트로 바꾼 효과(FX_SHEETS)는 시트에 정한 길이만큼 재생한다. 그림만 바뀌고 전투 계산과는 무관하다
@@ -166,6 +170,7 @@ const Fx = {
         this.shake = Math.max(0, this.shake - dt * 42);
         this.dim = Math.max(0, this.dim - dt * 1.8);
         this.goldPulse = Math.max(0, this.goldPulse - dt * 4);
+        this.hpGlow = Math.max(0, this.hpGlow - dt * 0.8);
         for (const p of this.pops) p.age += dt;
         this.pops = this.pops.filter(p => p.age < p.life);
         if (this.discovery) {
@@ -188,6 +193,17 @@ const Fx = {
             if (s.t <= 0) this.addShake(s.amount);
         }
         this.pendingShakes = this.pendingShakes.filter(s => s.t > 0);
+        for (const s of this.pendingSacrifices) {
+            s.t -= dt;
+            if (s.t > 0) continue;
+            this.glow(s.x, s.y - 60, 260, 'rgba(255,215,120,1)', 0.8);
+            this.anim('fx_blastGold', s.x, s.y - 60, 340, 0.55);
+            this.rise(s.x, s.y + 20, '#ffe08a', 30, 70, 1);
+            this.rise(s.x, s.y + 20, '#ff7a9a', 14, 50, 0.9);
+            if (s.heal > 0) this.number('throneHeal', s.x, s.y - 220, `+${s.heal}`, '#7dffa0', true);
+            this.hpGlow = 1;
+        }
+        this.pendingSacrifices = this.pendingSacrifices.filter(s => s.t > 0);
         if (this.banner) {
             this.banner.age += dt;
             if (this.banner.age > this.banner.life) this.banner = null;

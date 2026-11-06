@@ -38,6 +38,16 @@ const MONSTER_RANKS = [
 ];
 const RANK_KILL_XP = { normal: 1, elite: 3, boss: 10 };
 
+// 제물: 맵의 몬스터를 끌어 왕좌의 마왕 위에 놓으면 몬스터가 사라지고 마왕이 힘을 얻는다(웨이브 중에도, 준비 중에도). 판매 환불은 없다.
+//   heal: 마왕 체력 회복(COMBAT_RULES.maxHp를 넘지 않는다), lightning: 번개 재사용 대기 감소(초, 0 아래로 내려가지 않는다)
+//   랭크가 높으면 MONSTER_RANKS의 mul만큼 커진다(랭크마다 +25%, S는 2배). 체력은 내림으로 정수를 유지한다
+const SACRIFICE_RULES = {
+    common: { heal: 1, lightning: 2 },
+    rare: { heal: 2, lightning: 5 },
+    epic: { heal: 5, lightning: 10 },
+    legendary: { heal: 10, lightning: 30 }
+};
+
 // 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
 const MONSTER_UPGRADE_ENABLED = false;
 
@@ -259,6 +269,19 @@ function publicRecipesFor(type) {
 // 몬스터의 kind 능력(없으면 null)
 function monsterAbility(type, kind) {
     return MONSTERS[type].abilities.find(a => a.kind === kind) || null;
+}
+
+// 제물 효과: m은 { type, rank } 개체 또는 id 문자열(랭크 D). { heal, lightning }(최대치 제한 전 값)
+function sacrificeGain(m) {
+    const input = mergeInput(m);
+    const base = SACRIFICE_RULES[MONSTERS[input.type].grade];
+    const mul = MONSTER_RANKS[input.rank].mul;
+    return { heal: Math.floor(base.heal * mul), lightning: base.lightning * mul };
+}
+
+// "체력 +2, 번개 -5초". 6.25초처럼 소수도 그대로 적는다
+function sacrificeText(gain) {
+    return `체력 +${gain.heal}, 번개 -${Math.round(gain.lightning * 100) / 100}초`;
 }
 
 function monsterBlocks(type) { return MONSTER_ROLES[MONSTERS[type].role].blocks; }

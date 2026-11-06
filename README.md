@@ -4,7 +4,8 @@
 
 - 범위: 지하 감옥 1개 층, 웨이브 10개, 몬스터 6종(일반 3, 희귀 2, 영웅 1)의 소환과 합치기, 용사 3종과 층 보스, 마왕 스킬 2개, 파티 예고
 - 조작: 하단 몬스터 탭의 소환(S)을 누르면 무작위 몬스터 1마리가 맵의 빈 길 옆 칸에 바로 나옵니다(일반 70%, 희귀 25%, 영웅 5%). 비용은 25G에서 시작해 소환할 때마다 1G씩 올라 60G에서 멈추고, 다시 시작하면 처음으로 돌아갑니다. 맵에는 24마리까지 두며(하단에 `현재 수/24` 표시), 가득 차면 합쳐서 자리를 만듭니다. 나오는 칸은 길에 가까운 빈 칸 중 무작위이고, 원거리 몬스터는 사거리 안에 길이 있는 칸, 막는 몬스터는 다른 막는 몬스터와 길 지점이 겹치지 않는 칸을 먼저 고릅니다. 맵의 몬스터는 끌어 다른 칸으로 옮길 수 있습니다(비용 없음). 몬스터를 다른 몬스터 위에 놓으면 합칩니다: 조합식이면 정해진 몬스터, 같은 등급이면 상위 등급 무작위(영웅끼리는 불가). 숨은 조합식도 있습니다. 몬스터를 누르면 수치, 함께 합칠 수 있는 조합, 판매(일반 20G, 희귀 60G, 영웅 150G)가 나옵니다. 마우스와 터치 모두 됩니다. 마왕 탭의 Q 번개·W 호통, Tab 탭 전환, Space 다음 웨이브, F 배속, P 일시정지, M 소리, Esc·우클릭 취소
+- 제물: 맵의 몬스터를 끌어 왕좌의 마왕 위에 놓으면 몬스터가 사라지고 마왕 체력이 회복되며(최대 20) 번개 재사용 대기가 줄어듭니다. 일반 체력 +1·번개 -2초, 희귀 +2·-5초, 영웅 +5·-10초, 전설 +10·-30초이고 랭크마다 25%씩 커집니다(S는 2배). 웨이브 중에도 됩니다. 환불은 없습니다
 - 규칙 시험: `node tools/simulate.js` (전략별 승률. 뽑기 이전처럼 몬스터를 골라 고정 가격에 사는 기준), `node tools/smoke.js` (클릭 흐름)
-- 화면 캡처: `npm install` 후 `node tools/capture.js [장면 이름...]` → `captures/`에 PNG 저장, 평균 FPS 출력, 콘솔 오류·빠진 그림이 있으면 종료 코드 1 (Edge 또는 Chrome 필요). 장면: title, prep, summon, drag, dragMerge, mergeSuck, merge, mergeEpic, hidden, popup, popupField, crowded, combat, units, elites, archmage, archmageIntro
+- 화면 캡처: `npm install` 후 `node tools/capture.js [장면 이름...]` → `captures/`에 PNG 저장, 평균 FPS 출력, 콘솔 오류·빠진 그림이 있으면 종료 코드 1 (Edge 또는 Chrome 필요). 장면: title, prep, summon, drag, dragMerge, mergeSuck, merge, mergeEpic, hidden, sacrifice, popup, popupField, crowded, combat, units, elites, archmage, archmageIntro
 - 그림: 용사와 몬스터는 PixelLab 그림, 정예·부대장·마왕은 Asteria 원본 에셋입니다. 몬스터 표, 소환 확률, 조합식은 `js/data/monsters.js`, 설계는 `docs/MONSTER_DESIGN.md`.
 - 소리: Web Audio 합성음입니다. 3단계에서 음원으로 교체합니다.

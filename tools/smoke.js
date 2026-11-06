@@ -1120,6 +1120,98 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     clearBoard();
 }
 
+{
+    // 제물: 등급별 표(체력, 번개 감소)
+    assert.deepStrictEqual(sacrificeGain('orc_guard'), { heal: 1, lightning: 2 }, 'common');
+    assert.deepStrictEqual(sacrificeGain('curse_shooter'), { heal: 2, lightning: 5 }, 'rare');
+    assert.deepStrictEqual(sacrificeGain('bone_knight'), { heal: 5, lightning: 10 }, 'epic');
+    assert.deepStrictEqual(sacrificeGain('death_lord'), { heal: 10, lightning: 30 }, 'legendary');
+    // 랭크 보정: 랭크마다 +25%, S는 2배. 체력은 내림
+    assert.deepStrictEqual(sacrificeGain({ type: 'curse_shooter', rank: 1 }), { heal: 2, lightning: 6.25 }, 'rare C');
+    assert.deepStrictEqual(sacrificeGain({ type: 'curse_shooter', rank: 2 }), { heal: 3, lightning: 7.5 }, 'rare B');
+    assert.deepStrictEqual(sacrificeGain({ type: 'bone_knight', rank: 3 }), { heal: 8, lightning: 17.5 }, 'epic A');
+    assert.deepStrictEqual(sacrificeGain({ type: 'orc_guard', rank: 4 }), { heal: 2, lightning: 4 }, 'common S');
+    assert.deepStrictEqual(sacrificeGain({ type: 'death_lord', rank: 4 }), { heal: 20, lightning: 60 }, 'legendary S');
+    assert.strictEqual(sacrificeText(sacrificeGain('curse_shooter')), '체력 +2, 번개 -5초');
+    assert.strictEqual(sacrificeText({ heal: 2, lightning: 6.25 }), '체력 +2, 번개 -6.25초');
+
+    clearBoard();
+    Game.state = 'prep';
+    Game.prepTimer = 999;
+    // 직접 호출: 체력 회복, 번개 대기 감소, 칸이 빔
+    const k = Game.place('bone_knight', 3, 6);
+    setMonsterRank(k, 3);
+    Game.hp = 5;
+    Game.skills.lightning = 25;
+    const r1 = Game.sacrifice(k);
+    assert(r1.ok && Game.hp === 13 && Game.skills.lightning === 7.5, 'epic A sacrifice: hp ' + Game.hp + ' cd ' + Game.skills.lightning);
+    assert(!Game.monsters.includes(k) && k.removed && !Game.monsterAt(3, 6), 'cell freed');
+    assert(!Game.sacrifice(k).ok, 'cannot sacrifice twice');
+    // 다시 소환(놓기) 가능
+    assert(Game.canPlace('orc_guard', 3, 6), 'cell usable again');
+    assert(withRandom([0, 0, 0], () => Game.summon()).ok, 'summon after sacrifice');
+    // 체력 최대치를 넘지 않고, 번개 대기는 0 아래로 내려가지 않는다. 체력이 가득해도 바칠 수 있다
+    clearBoard();
+    const d1 = Game.place('death_lord', 3, 6);
+    Game.hp = COMBAT_RULES.maxHp - 3;
+    Game.skills.lightning = 4;
+    const r2 = Game.sacrifice(d1);
+    assert(r2.ok && r2.heal === 3 && Game.hp === COMBAT_RULES.maxHp && Game.skills.lightning === 0, 'clamped');
+    const c1 = Game.place('orc_guard', 3, 6);
+    Game.skills.lightning = 10;
+    assert(Game.sacrifice(c1).ok && Game.hp === COMBAT_RULES.maxHp && Game.skills.lightning === 8, 'full hp still cuts lightning');
+    // 판매 환불 없음
+    const g0 = Game.gold;
+    assert(Game.sacrifice(Game.place('skeleton_archer', 3, 4)).ok && Game.gold === g0, 'no gold from sacrifice');
+
+    // 웨이브 중, 막고 있던 용사가 풀린다
+    clearBoard();
+    Game.state = 'wave';
+    const blocker = putMonster('orc_guard', 900);
+    const held = tough(place('warrior', 900 + 10));
+    held.blocker = blocker;
+    blocker.target = held;
+    assert(Game.sacrifice(blocker).ok, 'sacrifice during wave');
+    assert(held.blocker === null, 'blocked hero released');
+    Game.update(1 / 30);
+    assert(held.blocker !== blocker, 'not re-blocked by sacrificed monster');
+
+    // 끌기로 바치기: 왕좌 위에 놓으면 제물, 왕좌 밖(길 등)에 놓으면 제물이 안 된다
+    clearBoard();
+    Game.state = 'prep';
+    Game.hp = 10;
+    Game.skills.lightning = 20;
+    const throneXY = [tileX(THRONE_TILE.col) * WORLD_ZOOM, (tileY(THRONE_TILE.row) - 40) * WORLD_ZOOM];
+    const a1 = Game.place('curse_shooter', 21, 5) || Game.place('curse_shooter', 19, 6);
+    assert(a1, 'archer near throne');
+    const sacBefore = Game.stats.sacrificed;
+    // 끄는 중 미리보기 동작
+    UI.update(0);
+    UI.onMove(...monXY(a1));
+    UI.onDown(...monXY(a1));
+    for (let i = 1; i <= 4; i++) UI.onMove(monXY(a1)[0] + (throneXY[0] - monXY(a1)[0]) * i / 4, monXY(a1)[1] + (throneXY[1] - monXY(a1)[1]) * i / 4);
+    assert(UI.dropTarget && UI.dropTarget.throne, 'throne is drop target');
+    assert.strictEqual(UI.dropAction(UI.dropTarget).action, 'sacrifice');
+    UI.onUp(...throneXY);
+    assert(!Game.monsters.includes(a1) && Game.hp === 12 && Game.skills.lightning === 15, 'drag sacrifice: hp ' + Game.hp);
+    assert.strictEqual(Game.stats.sacrificed, sacBefore + 1, 'sacrifice count');
+    // 왕좌 밖(왕좌에서 떨어진 길 칸)에 놓으면 그대로 남는다
+    const a2 = Game.place('curse_shooter', 3, 4);
+    const pathCell = [...Array(MAP_COLS).keys()].flatMap(c => [...Array(MAP_ROWS).keys()].map(r => [c, r]))
+        .find(([c, r]) => isPathCell(c, r) && Math.abs(c - THRONE_TILE.col) > 3);
+    dragTo(monXY(a2), cellXY(pathCell[0], pathCell[1]));
+    assert(Game.monsters.includes(a2) && Game.hp === 12 && Game.skills.lightning === 15, 'off-throne drop is not a sacrifice');
+    // 바로 옆 칸(왕좌 영역 밖)도 아니다
+    assert(!Game.onThrone(tileX(THRONE_TILE.col - 2), tileY(THRONE_TILE.row)), 'two tiles left is off throne');
+    assert(!Game.onThrone(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row + 2)), 'two tiles below is off throne');
+    assert(Game.onThrone(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row)), 'throne tile');
+    // 연출 진행 중 예외 없음
+    tick(1.5);
+    clearBoard();
+    Game.hp = COMBAT_RULES.maxHp;
+    Game.skills.lightning = 0;
+}
+
 // 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)
 assert(Game.summon().ok && Game.summonCost() > SUMMON_RULES.cost, 'cost rose before retry');
 setMonsterRank(Game.monsters[0], 4);

@@ -8,6 +8,7 @@ const FIELD_COUNT_X = BAR_SLOT_X + SUMMON_BTN_W + 28; // 맵 몬스터 수 표�
 const NEXT_BTN_X = 1132;
 const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
 const POPUP_RANK_H = 30; // 팝업의 랭크 줄 높이
+const POPUP_SACRIFICE_H = 30; // 팝업의 제물 안내 줄 높이
 const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
 
 const UI = {
@@ -22,6 +23,7 @@ const UI = {
     returning: [], // 놓지 못해 제자리로 날아가는 그림
     hoverCorpse: null,
     hoverButton: null,
+    orbHp: null, // 체력 구슬에 보이는 체력. 제물로 오를 때는 천천히 차오르고, 깎일 때는 바로 줄어든다
     targeting: false,
     toast: null,
     corruptHintShown: false,
@@ -122,7 +124,7 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = 166 + POPUP_RANK_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + upgrades * 88 + 64;
+        const h = 166 + POPUP_RANK_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         let y = o.y + h - 64 - upgrades * 88;
@@ -210,12 +212,13 @@ const UI = {
         return Game.canPlace(this.drag.type, col, row);
     },
 
-    // 화면 좌표 아래 놓을 곳: { monster } | { cell: {col, row} } | null(하단 바 등)
+    // 화면 좌표 아래 놓을 곳: { throne } | { monster } | { cell: {col, row} } | null(하단 바 등)
     dropAt(x, y) {
         const b = this.buttonAt(x, y);
         if (b || y > GAME_HEIGHT - BAR_H) return null;
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
+        if (Game.onThrone(wx, wy)) return { throne: true };
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
         const m = Game.monsterAt(col, row) || Game.monsterNear(wx, wy);
@@ -224,11 +227,12 @@ const UI = {
     },
 
     // 놓으면 일어날 일(미리보기와 실제 처리가 같이 쓴다)
-    //   merge: 합치기(plan은 화면용) / place: 칸으로 옮기기 / back: 제자리 / invalid: 놓을 수 없음(reason)
+    //   sacrifice: 왕좌에 바치기 / merge: 합치기(plan은 화면용) / place: 칸으로 옮기기 / back: 제자리 / invalid: 놓을 수 없음(reason)
     dropAction(t) {
         const d = this.drag;
         if (!d || !t) return { action: 'back' };
         const src = d.src;
+        if (t.throne) return { action: 'sacrifice', gain: sacrificeGain(src.monster) };
         if (t.monster) {
             const loc = { monster: t.monster };
             if (Game.sameLoc(src, loc)) return { action: 'back' };
@@ -290,6 +294,7 @@ const UI = {
     drop(t, x, y) {
         const d = this.drag;
         const act = this.dropAction(t);
+        if (act.action === 'sacrifice' && Game.sacrifice(d.src.monster).ok) return;
         if (act.action === 'merge') {
             const res = Game.merge(d.src, act.loc);
             if (res.ok) return;
@@ -444,6 +449,9 @@ const UI = {
         if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
         // 끄는 몬스터가 맵에서 사라지면(판 종료 등) 끌기를 그만둔다
         if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
+        // 체력 구슬: 오를 때는 초당 6씩 차오르고, 깎이면 바로 맞춘다
+        if (this.orbHp === null || Game.hp < this.orbHp || !Game.inPlay()) this.orbHp = Game.hp;
+        else this.orbHp = Math.min(Game.hp, this.orbHp + dt * 6);
         for (const r of this.returning) r.age += dt;
         this.returning = this.returning.filter(r => r.age < r.life);
         this.layout();
@@ -453,6 +461,8 @@ const UI = {
     // 세계 위에 깔리는 표시: 끄는 동안 놓을 칸 미리보기(반투명 그림, 사거리, 나갈 지점), 합칠 수 있는 몬스터 발밑 고리,
     // 고른 몬스터의 사거리
     drawRanges(ctx) {
+        // 끄는 동안 왕좌에 제물 표시
+        if (this.drag) Render.sacrificeMark(ctx, !!(this.dropTarget && this.dropTarget.throne));
         const cell = this.drag && this.hoverCell;
         if (cell) {
             const ok = this.canPlaceAt(cell.col, cell.row);
@@ -635,7 +645,8 @@ const UI = {
         ctx.clip();
         ctx.fillStyle = '#26101d';
         ctx.fillRect(ox - r, oy - r, r * 2, r * 2);
-        const ratio = clamp(G.hp / COMBAT_RULES.maxHp, 0, 1);
+        const shownHp = this.orbHp === null ? G.hp : this.orbHp;
+        const ratio = clamp(shownHp / COMBAT_RULES.maxHp, 0, 1);
         const top = oy + r - r * 2 * ratio;
         const liquid = ctx.createLinearGradient(0, top, 0, oy + r);
         liquid.addColorStop(0, '#ff5a7c');
@@ -646,8 +657,24 @@ const UI = {
         ctx.beginPath();
         ctx.ellipse(ox - 22, oy - 38, 26, 14, -0.5, 0, Math.PI * 2);
         ctx.fill();
+        // 제물로 차오를 때 구슬이 금빛으로 빛난다
+        if (Fx.hpGlow > 0) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(255,220,140,${0.45 * Fx.hpGlow})`;
+            ctx.fillRect(ox - r, oy - r, r * 2, r * 2);
+        }
         ctx.restore();
-        UIKit.text(ctx, String(G.hp), ox, oy - 8, 46, '#ffffff', 'center');
+        if (Fx.hpGlow > 0) {
+            ctx.save();
+            ctx.globalAlpha = Fx.hpGlow;
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#ffe08a';
+            ctx.beginPath();
+            ctx.arc(ox, oy, r + 14 + (1 - Fx.hpGlow) * 18, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+        UIKit.text(ctx, String(Math.floor(shownHp)), ox, oy - 8, 46, '#ffffff', 'center');
         UIKit.text(ctx, `/ ${COMBAT_RULES.maxHp}`, ox, oy + 30, 22, '#ffd9e2', 'center');
 
         // 골드: 코인이 도착하면 잠깐 커진다
@@ -819,6 +846,8 @@ const UI = {
         const gradeLine = next ? `같은 ${grade.name} 등급 아무나 → ${MONSTER_GRADES[next].name} 무작위 1마리`
             : `${grade.name}은 최고 등급이라 등급 합치기를 할 수 없습니다`;
         UIKit.plain(ctx, gradeLine, p.x + 20, y + 18, 17, next ? MONSTER_GRADES[next].light : '#a59db5');
+        // 제물: 이 몬스터(랭크 포함)를 바치면 얻는 것
+        UIKit.plain(ctx, `왕좌로 끌어 바치면 ${sacrificeText(sacrificeGain(f))}`, p.x + 20, y + 18 + POPUP_SACRIFICE_H, 17, '#ffd76a');
     },
 
     drawButtons(ctx) {
@@ -934,9 +963,10 @@ const UI = {
 
         let hint = null;
         if (this.targeting) hint = '번개를 떨어뜨릴 곳을 누르세요. Esc로 취소합니다.';
-        else if (this.drag) hint = '빈 길 옆 칸으로 옮기거나, 다른 몬스터 위에 놓아 합치세요.';
+        else if (this.drag) hint = '빈 칸으로 옮기거나 몬스터 위에 놓아 합치세요. 왕좌에 놓으면 제물입니다.';
         else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = `아래 소환 버튼(S)을 누르면 몬스터가 길 옆에 바로 나옵니다. 지금 ${G.summonCost()}골드입니다.`;
         else if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) hint = '몬스터를 끌어 다른 몬스터 위에 놓으면 합칩니다. 빈 칸으로 옮길 수도 있습니다.';
+        else if (G.state === 'prep' && G.hp < COMBAT_RULES.maxHp && G.stats.sacrificed === 0 && G.monsters.length > 0) hint = '몬스터를 왕좌의 마왕 위로 끌어 바치면 체력을 회복하고 번개가 빨리 돌아옵니다.';
         else if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
         if (hint) {
             const pulse = 1 + Math.sin(G.time * 5) * 0.03;
@@ -983,7 +1013,12 @@ const UI = {
         const act = this.dropAction(this.dropTarget);
         let text = null;
         let color = '#ffe08a';
-        if (act.action === 'merge') {
+        if (act.action === 'sacrifice') {
+            // 실제로 얻는 효과(체력은 최대치까지만)
+            const room = Math.max(0, COMBAT_RULES.maxHp - Game.hp);
+            const heal = Math.min(act.gain.heal, room);
+            text = `제물: ${sacrificeText({ heal, lightning: act.gain.lightning })}${room === 0 ? ' (체력 가득)' : ''}`;
+        } else if (act.action === 'merge') {
             text = act.plan.kind === 'recipe' ? `합치기 → ${MONSTERS[act.plan.result].name}`
                 : (act.plan.kind === 'grade' ? `합치기 → ${MONSTER_GRADES[act.plan.grade].name} 무작위` : '합치기 → ???');
             color = act.plan.kind === 'recipe' ? '#ffd76a' : (act.plan.kind === 'grade' ? MONSTER_GRADES[act.plan.grade].color : '#ffffff');
