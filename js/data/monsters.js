@@ -1,16 +1,27 @@
 // 몬스터 표. 한 줄을 추가하면 몬스터가 들어간다. 코드는 id가 아니라 역할(role), 수치(stats), 능력 종류(abilities)로 동작을 정한다.
 // 설계: docs/MONSTER_DESIGN.md. 수치는 플레이 후 고칠 초안이다. 거리는 타일 단위, 시간은 초 단위다.
 
-// 등급: 낮은 등급부터 적는다. 등급 합치기는 같은 등급 2마리를 바로 다음 등급의 무작위 1마리로 바꾼다.
-// 다음 등급에 소환되는 몬스터가 없으면 그 등급이 최고 등급이라 합칠 수 없다(지금은 영웅. 전설은 조합식으로만 나온다)
-// glow는 소환·합치기 연출의 빛 색(r,g,b), light는 어두운 바탕 위 글자 색이다
-// fieldMax가 있으면 그 등급 몬스터를 맵에 그 수까지만 둔다(넘게 되는 합치기는 막는다)
+// 등급: 낮은 등급부터 적는다(GRADE_ORDER). 소환 확률은 SUMMON_RULES.odds, 합치기 재료 수는 MERGE_RULES에 둔다.
+//   | 등급 | 소환 | 합치기로 얻기             | 맵 제한 |
+//   | 일반 | 70%  |                           | 없음    |
+//   | 희귀 | 25%  | 일반 3마리                | 없음    |
+//   | 영웅 | 5%   | 희귀 3마리                | 없음    |
+//   | 전설 | 없음 | 영웅 3마리, 조합식        | 없음    |
+//   | 신화 | 없음 | 전설 3마리, 히든 조합식   | 1마리   |
+// 다음 등급에 합치기 후보(mergePool)가 없으면 그 등급이 최고 등급이라 등급 합치기를 할 수 없다(신화 몬스터가 표에 들어오면 전설 3마리가 바로 신화가 된다)
+//   color: 굵은 등급 테두리와 맵 표시, glow: 소환·합치기 연출의 빛 색(r,g,b), light: 큰 글자(외곽선), ink: 남색 창 위 글자
+//   summon: false면 소환과 보스 보상에 나오지 않는다(합치기와 조합식으로만 얻는다)
+//   fieldMax: 그 등급 몬스터를 맵에 그 수까지만 둔다(넘게 되는 합치기는 막는다)
+//   secret: 도감 조합식 탭에서 결과를 찾기 전까지 '?'로 둔다
+//   fx: 등장 연출 단계(0 보통, 1 큰 글자, 2 전설, 3 신화). 소환·합치기 이름 크기, 맵 등급 표식, 히든 발견 연출 크기에 쓴다
+//   rainbow: 테두리를 등급 색 하나 대신 흐르는 무지개 빛으로 그린다(신화는 붉은 무지개)
 const MONSTER_GRADES = {
-    // color: 굵은 등급 테두리와 맵 표시, light: 큰 글자(외곽선), ink: 남색 창 위 글자
-    common: { name: '일반', color: '#e4dfd2', glow: '220,214,200', light: '#f6f2e8', ink: '#e8e4da' },
-    rare: { name: '희귀', color: '#3d8bff', glow: '90,150,255', light: '#a8ccff', ink: '#7fb6ff' },
-    epic: { name: '영웅', color: '#b45cff', glow: '190,100,255', light: '#e2b0ff', ink: '#d39bff' },
-    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', ink: '#ffd25a', fieldMax: 1 }
+    common: { name: '일반', color: '#e4dfd2', glow: '220,214,200', light: '#f6f2e8', ink: '#e8e4da', fx: 0 },
+    rare: { name: '희귀', color: '#3d8bff', glow: '90,150,255', light: '#a8ccff', ink: '#7fb6ff', fx: 0 },
+    epic: { name: '영웅', color: '#b45cff', glow: '190,100,255', light: '#e2b0ff', ink: '#d39bff', fx: 1 },
+    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', ink: '#ffd25a', summon: false, secret: true, fx: 2 },
+    mythic: { name: '신화', color: '#ff2d55', glow: '255,60,90', light: '#ff9cb0', ink: '#ff7a92', summon: false, secret: true, fx: 3, fieldMax: 1,
+        rainbow: ['#ff2d55', '#ff7a1a', '#ffd23d', '#ff3dd2', '#ff2d55'] }
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 
@@ -23,12 +34,18 @@ const SUMMON_RULES = {
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     odds: { common: 0.70, rare: 0.25, epic: 0.05 },
-    refund: { common: 20, rare: 60, epic: 150, legendary: 300 } // 판매 환불(등급별 고정)
+    refund: { common: 20, rare: 60, epic: 150, legendary: 300, mythic: 800 } // 판매 환불(등급별 고정)
+};
+
+// 합치기: 등급 합치기는 같은 등급 아무 gradeCount마리를 상위 등급 무작위 1마리로 바꾼다.
+// 조합식과 히든 조합식은 정해진 재료 2마리이고, 조합식이 맞으면 조합식이 먼저다
+const MERGE_RULES = {
+    gradeCount: 3
 };
 
 // 보스 보상 3택: 마지막 웨이브가 아닌 보스를 처치하면 그 웨이브가 끝나고 준비 단계에서 카드를 띄운다.
 //   monsterCards: 몬스터 카드 수(서로 다른 몬스터). 등급은 epicChance 확률로 영웅, 아니면 희귀.
-//   후보는 그 등급의 소환 후보(gradePool)라 전설과 히든 전용(summon: false)은 나오지 않는다.
+//   후보는 그 등급의 소환 후보(gradePool)라 전설, 신화와 summon: false 몬스터는 나오지 않는다.
 //   gold: 골드 카드의 골드(카드는 몬스터 카드 뒤에 하나)
 //   장비 카드는 몬스터 카드와 골드 카드 사이에 한 장(등급은 EQUIP_RULES.rewardEpicChance)
 const BOSS_REWARD_RULES = {
@@ -93,7 +110,8 @@ const SACRIFICE_RULES = {
     common: { heal: 1, lightning: 2 },
     rare: { heal: 2, lightning: 5 },
     epic: { heal: 5, lightning: 10 },
-    legendary: { heal: 10, lightning: 30 }
+    legendary: { heal: 10, lightning: 30 },
+    mythic: { heal: 20, lightning: 60 }
 };
 
 // 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
@@ -161,7 +179,8 @@ const ABILITY_KINDS = {
 //   hand는 투사체가 나가는 손 위치(발끝 기준 위쪽 y, 동서 방향일 때 앞쪽 x, 세계 px), barY는 체력바 높이, glow는 뒤쪽 빛 색
 // 원거리 몬스터는 아직 공격받지 않아 hp를 쓰지 않는다
 // cost는 강화 비용 계산(upgradeCost)에만 쓴다. 소환 비용은 SUMMON_RULES로 등급과 관계없이 같다
-// summon이 false면 소환에서 나오지 않고 조합으로만 얻는다(히든 등급용)
+// summon이 false면 소환에서 나오지 않는다(등급 표의 summon이 false인 전설과 신화는 적지 않아도 소환에서 빠진다).
+// gradeMerge가 false면 등급 합치기 결과로도 나오지 않고 조합식으로만 얻는다
 // art.shot: 투사체 모양. FX_SHEETS의 투사체 시트 열쇠(날아가는 방향으로 돌려 그린다)이거나 'bolt'(glow 색 빛 덩이). 없으면 화살과 마력 구체
 // art.impact: 광역 공격이 터질 때 효과(FX_SHEETS 열쇠). 없으면 보라 마력 폭발
 // PixelLab 동작 하나: 폴더, 프레임 수, 방향별 첫 프레임 발끝 높이(그림 px). 서쪽은 동쪽을 뒤집는다(PL_DIRS)
@@ -484,9 +503,15 @@ function recipeKey(r) {
     return [r.a + (r.aRank ? `:${r.aRank}` : ''), r.b + (r.bRank ? `:${r.bRank}` : '')].sort().join('+');
 }
 
-// 등급별 소환·등급 합치기 후보. 표 순서를 따른다
+// 등급별 소환 후보(소환, 보스 보상). 등급 표의 summon과 몬스터의 summon이 false가 아닌 것. 표 순서를 따른다
 function gradePool(grade) {
+    if (!MONSTER_GRADES[grade] || MONSTER_GRADES[grade].summon === false) return [];
     return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].summon !== false);
+}
+
+// 등급별 등급 합치기 결과 후보. 소환에 나오지 않는 전설과 신화도 들어간다(gradeMerge: false만 뺀다). 표 순서를 따른다
+function mergePool(grade) {
+    return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].gradeMerge !== false);
 }
 
 // 랭크 이름('A')의 MONSTER_RANKS 번호
@@ -511,24 +536,25 @@ function findRecipe(a, b) {
         (recipeSideOk(B, r.a, r.aRank) && recipeSideOk(A, r.b, r.bRank))) || null;
 }
 
-// 등급 합치기 결과 등급. 다음 등급에 몬스터가 없으면(최고 등급) null
+// 등급 합치기 결과 등급. 다음 등급에 합치기 후보가 없으면(최고 등급) null
 function nextGrade(grade) {
     const next = GRADE_ORDER[GRADE_ORDER.indexOf(grade) + 1];
-    return next && gradePool(next).length ? next : null;
+    return next && mergePool(next).length ? next : null;
 }
 
 // 두 몬스터를 합칠 수 있는지와 결과(무작위 없이). 위에서부터 먼저 적용한다
 //   a, b: 몬스터 개체 { type, rank } 또는 id 문자열(랭크 D). 랭크 조건이 있는 조합식은 개체를 넘겨야 맞을 수 있다
-//   { kind: 'recipe', recipe, result } 조합식 / { kind: 'grade', grade } 등급 합치기(결과는 grade 등급 무작위)
+//   { kind: 'recipe', recipe, result } 조합식(재료 2마리)
+//   { kind: 'grade', grade, count } 등급 합치기(같은 등급 count마리, 결과는 grade 등급 무작위). 나머지 재료는 맵 상태가 필요해 Game.mergePlanFor가 고른다
 //   { kind: 'none', reason: 'top' | 'mismatch' } 합칠 수 없음. top은 최고 등급끼리
-//   맵 수 제한(fieldMax)은 맵 상태가 필요해 Game.mergePlanFor가 더한다
-function mergePlan(a, b) {
-    const recipe = findRecipe(a, b);
+//   gradeOnly면 조합식을 보지 않는다(팝업의 합치기 버튼)
+function mergePlan(a, b, gradeOnly) {
+    const recipe = gradeOnly ? null : findRecipe(a, b);
     if (recipe) return { kind: 'recipe', recipe, result: recipe.result };
     const ga = MONSTERS[mergeInput(a).type].grade;
     if (ga === MONSTERS[mergeInput(b).type].grade) {
         const grade = nextGrade(ga);
-        return grade ? { kind: 'grade', grade } : { kind: 'none', reason: 'top' };
+        return grade ? { kind: 'grade', grade, count: MERGE_RULES.gradeCount } : { kind: 'none', reason: 'top' };
     }
     return { kind: 'none', reason: 'mismatch' };
 }
@@ -581,6 +607,23 @@ function equipEffectText(id) {
 function betterEquip(a, b) {
     if (!a || !b) return a || b || null;
     return GRADE_ORDER.indexOf(EQUIPMENT[b].grade) > GRADE_ORDER.indexOf(EQUIPMENT[a].grade) ? b : a;
+}
+
+// 여러 장비 중 가장 좋은 것(같으면 앞쪽). 없으면 null
+function bestEquip(list) {
+    return list.reduce((best, id) => betterEquip(best, id), null);
+}
+
+// '#ff2d55' → '255,45,85'(rgba에 넣는 꼴)
+function hexRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}
+
+// 등급 표의 값 하나(없으면 기본값)
+function gradeInfo(grade, key, fallback) {
+    const g = MONSTER_GRADES[grade];
+    return g && g[key] !== undefined ? g[key] : fallback;
 }
 
 function monsterBlocks(type) { return MONSTER_ROLES[MONSTERS[type].role].blocks; }

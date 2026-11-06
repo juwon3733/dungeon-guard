@@ -263,10 +263,23 @@ assert.strictEqual(SUMMON_RULES.odds.common, 0.70);
 assert.strictEqual(SUMMON_RULES.odds.rare, 0.25);
 assert.strictEqual(SUMMON_RULES.odds.epic, 0.05);
 assert(!SUMMON_RULES.odds.legendary && gradePool('legendary').length === 0, 'legendary not summoned');
+// 등급 표: 일반 < 희귀 < 영웅 < 전설 < 신화. 전설과 신화는 소환 없음, 신화만 맵에 1마리. 등급 합치기는 같은 등급 3마리
+assert.strictEqual(GRADE_ORDER.join(), 'common,rare,epic,legendary,mythic', 'grade order');
+assert.strictEqual(GRADE_ORDER.map(g => MONSTER_GRADES[g].name).join(), '일반,희귀,영웅,전설,신화');
+assert.strictEqual(GRADE_ORDER.filter(g => MONSTER_GRADES[g].summon === false).join(), 'legendary,mythic', 'not summoned grades');
+assert.strictEqual(GRADE_ORDER.filter(g => MONSTER_GRADES[g].fieldMax !== undefined).map(g => g + ':' + MONSTER_GRADES[g].fieldMax).join(), 'mythic:1', 'only mythic is limited');
+assert.strictEqual(MERGE_RULES.gradeCount, 3);
+assert(MONSTER_GRADES.mythic.color !== MONSTER_GRADES.legendary.color && MONSTER_GRADES.mythic.rainbow.length >= 3, 'mythic has its own rainbow color');
+assert.deepStrictEqual(SACRIFICE_RULES.mythic, { heal: 20, lightning: 60 });
+assert.strictEqual(SUMMON_RULES.refund.mythic, 800);
+assert.strictEqual(gradePool('mythic').length, 0);
+assert.strictEqual(mergePool('legendary').join(), 'death_lord,hell_general,archlich', 'legendary merge pool');
+assert.strictEqual(mergePool('mythic').length, 0, 'no mythic monster yet');
+assert.strictEqual(nextGrade('legendary'), null, 'legendary is the top grade until a mythic monster is in the table');
 for (const id of ['death_lord', 'hell_general', 'archlich']) {
     assert(MONSTERS[id].summon === false && MONSTERS[id].grade === 'legendary', id + ' legendary, not summoned');
 }
-assert.strictEqual(nextGrade('epic'), null, 'epic stays top grade for grade merge');
+assert.strictEqual(nextGrade('epic'), 'legendary', 'three epics make a legendary');
 for (let i = 0; i < 400; i++) {
     const t = Game.rollSummon();
     assert(MONSTERS[t].grade !== 'legendary' && MONSTERS[t].summon !== false, 'legendary never summoned: ' + t);
@@ -452,7 +465,11 @@ assert(UI.buttons.find(b => b.id === 'summon').full, 'summon button shows full')
         if (!pair && a !== b && plan.kind !== 'none' && !(plan.recipe && plan.recipe.hidden)) pair = [a, b];
     }
     assert(pair, 'some pair can merge among 24');
-    assert(Game.merge({ monster: pair[0] }, { monster: pair[1] }).ok);
+    const res = Game.merge({ monster: pair[0] }, { monster: pair[1] });
+    assert(res.ok);
+    assert.strictEqual(Game.monsters.length, 24 - res.materials.length + 1, 'merge frees a spot');
+    assert.strictEqual(res.materials.length, res.kind === 'grade' ? 3 : 2, 'grade merge uses 3, recipe 2');
+    while (Game.monsters.length < 23) Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r)));
 }
 assert.strictEqual(Game.monsters.length, 23, 'merge frees a spot');
 g0 = Game.gold;
@@ -597,13 +614,14 @@ assert.strictEqual(Fx.discovery, null, 'discovered only once');
 assert.strictEqual(Meta.data.recipes.filter(k => k === 'orc_berserker+skeleton_archer').length, 1, 'recorded once');
 tick(0.5);
 
-// 영웅끼리는 합칠 수 없다: 안내하고 둘 다 그대로
+// 같은 등급이 3마리 미만이면 합치지 않는다(영웅 2마리뿐): 안내하고 둘 다 그대로
 const kA = Game.monsterAt(3, 2), kB = Game.monsterAt(4, 4);
 UI.toast = null;
 dragTo(monXY(kA), [kB.homeX * WORLD_ZOOM, (kB.homeY - 10) * WORLD_ZOOM]);
-assert(Game.monsterAt(3, 2) === kA && Game.monsterAt(4, 4) === kB, 'epic + epic refused');
-assert(UI.toast && UI.toast.text.includes('최고 등급'));
-assert.strictEqual(mergePlan('bone_knight', 'bone_knight').reason, 'top');
+assert(Game.monsterAt(3, 2) === kA && Game.monsterAt(4, 4) === kB, 'two epics refused');
+assert(UI.toast && UI.toast.text.includes('3마리') && UI.toast.text.includes('2마리'), 'count toast: ' + (UI.toast && UI.toast.text));
+assert.strictEqual(Game.mergePlanFor(kA, kB).reason, 'count');
+assert.strictEqual(mergePlan('bone_knight', 'bone_knight').grade, 'legendary', 'epics now merge into legendary');
 
 // 합칠 수 없는 경우: 등급이 다르고 조합식도 없다
 UI.toast = null;
@@ -614,18 +632,21 @@ assert(UI.toast && UI.toast.text.includes('합칠 수 없'));
 assert.strictEqual(mergePlan('skeleton_archer', 'curse_shooter').reason, 'mismatch');
 Game.removeMonster(Game.monsterAt(7, 6));
 
-// 등급 합치기: 같은 등급 2마리(조합식 없음) → 상위 등급 중 무작위
+// 등급 합치기: 같은 등급 3마리(조합식 없음) → 상위 등급 중 무작위. 셋째 재료(9,4 오크 경비병)는 자동으로 정한다
 Game.place('orc_guard', 3, 6);
 Game.place('orc_guard', 9, 6);
 const orcGuard = Game.monsterAt(3, 6);
+const orc94 = Game.monsterAt(9, 4);
 withRandom(0.1, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(orcGuard)));
 const berserker = Game.monsterAt(3, 6);
 assert(berserker && berserker.type === 'orc_berserker', 'grade merge picks rare[0] with random 0.1');
+assert(orc94.removed && !Game.monsterAt(9, 4) && !Game.monsterAt(9, 6), 'three materials used, result on the dropped cell');
 assert(berserker.blocks && berserker.rally, 'berserker walks out to block');
 assert.strictEqual(monsterStats(berserker).block, 2);
 // 무작위 값이 크면 같은 등급의 다른 몬스터
 Game.place('dark_mage', 9, 6);
 Game.place('dark_mage', 9, 2);
+Game.place('zombie', 7, 6);
 withRandom(0.2, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(Game.monsterAt(9, 2))));
 assert.strictEqual(Game.monsterAt(9, 2).type, 'curse_shooter');
 tick(0.5);
@@ -701,24 +722,17 @@ tick(0.5);
     tick(5.5);
     assert.strictEqual(Fx.discovery, null);
 
-    // 전설은 맵에 1마리: 또 만들려 하면 막고 안내한다. 재료는 그대로
+    // 전설은 맵 제한이 없다(맵 제한은 신화 1마리뿐): 두 번째 죽음의 군주도 만든다. 두 번째부터는 발견 연출이 없다
     const k2 = put('bone_knight', 'A');
     const s2 = put('curse_shooter', 'A');
-    assert.strictEqual(Game.mergePlanFor(s2, k2).reason, 'unique');
-    assert.strictEqual(mergePlan(s2, k2).result, 'death_lord', 'pure plan still matches');
-    UI.toast = null;
-    dragTo(monXY(s2), monXY(k2));
-    assert(Game.monsterAt(k2.col, k2.row) === k2 && Game.monsterAt(s2.col, s2.row) === s2, 'second legend refused');
-    assert(UI.toast && UI.toast.text.includes('1마리'), 'unique toast');
-    assert.strictEqual(Game.merge({ monster: k2 }, { monster: s2 }).reason, 'unique');
-    assert.strictEqual(Game.monsters.filter(m => m.type === 'death_lord').length, 1);
-    // 군주가 사라지면 다시 만들 수 있다. 두 번째부터는 발견 연출이 없다
-    Game.removeMonster(lord);
+    assert.strictEqual(Game.mergePlanFor(s2, k2).kind, 'recipe');
     dragTo(monXY(k2), monXY(s2));
     assert.strictEqual(Game.monsterAt(s2.col, s2.row).type, 'death_lord');
+    assert.strictEqual(Game.monsters.filter(m => m.type === 'death_lord').length, 2, 'two legends allowed');
     assert.strictEqual(Fx.discovery, null, 'legend discovered only once');
     tick(0.5);
     Game.removeMonster(Game.monsterAt(s2.col, s2.row));
+    Game.removeMonster(lord);
 }
 
 // 판매: 등급별 고정 환불(일반 20, 희귀 60, 영웅 150)
@@ -733,7 +747,7 @@ click(...monXY(kA)); // 해골 기사(영웅)
 btn('sell');
 assert.strictEqual(Game.gold, g0 + 150);
 g0 = Game.gold;
-const orc9b = Game.monsterAt(9, 4);
+const orc9b = Game.monsterAt(9, 4) || Game.place('orc_guard', 9, 4); // 9,4 오크는 위 등급 합치기의 셋째 재료로 쓰였다
 click(...monXY(orc9b)); // 오크 경비병(일반)
 assert.strictEqual(UI.selectedMonster, orc9b);
 btn('sell');
@@ -1575,17 +1589,17 @@ Game.projectiles = [];
     const v = mergePlan('nightmare_jester', 'curse_shooter');
     assert(v.kind === 'recipe' && v.result === 'vampire' && v.recipe.hidden);
     assert(!publicRecipesFor('curse_shooter').some(p => p.result === 'vampire'), 'vampire recipe hidden');
-    // 랭크 조건: 용암 악마 A + 미노타우로스 A → 지옥 대장군. 하나라도 모자라면 영웅끼리라 합칠 수 없다(최고 등급)
+    // 랭크 조건: 용암 악마 A + 미노타우로스 A → 지옥 대장군. 하나라도 모자라면 영웅 등급 합치기(3마리 → 전설)로 본다
     const R = n => rankIndex(n);
     assert.strictEqual(mergePlan({ type: 'flame_demon', rank: R('A') }, { type: 'minotaur', rank: R('A') }).result, 'hell_general');
     assert.strictEqual(mergePlan({ type: 'minotaur', rank: R('S') }, { type: 'flame_demon', rank: R('A') }).result, 'hell_general', 'order free, S counts');
-    assert.strictEqual(mergePlan({ type: 'flame_demon', rank: R('B') }, { type: 'minotaur', rank: R('A') }).reason, 'top', 'B is not enough');
-    assert.strictEqual(mergePlan('flame_demon', 'minotaur').reason, 'top');
+    assert.strictEqual(mergePlan({ type: 'flame_demon', rank: R('B') }, { type: 'minotaur', rank: R('A') }).grade, 'legendary', 'B is not enough: grade merge');
+    assert.strictEqual(mergePlan('flame_demon', 'minotaur').kind, 'grade');
     // 뱀파이어 A + 해골 기사 A → 대리치. 해골 기사 A + 저주 사수 A(죽음의 군주)와는 다른 조합식
     assert.strictEqual(mergePlan({ type: 'vampire', rank: R('A') }, { type: 'bone_knight', rank: R('A') }).result, 'archlich');
-    assert.strictEqual(mergePlan({ type: 'vampire', rank: R('C') }, { type: 'bone_knight', rank: R('A') }).reason, 'top');
+    assert.strictEqual(mergePlan({ type: 'vampire', rank: R('C') }, { type: 'bone_knight', rank: R('A') }).kind, 'grade');
     assert.strictEqual(mergePlan({ type: 'bone_knight', rank: R('A') }, { type: 'curse_shooter', rank: R('A') }).result, 'death_lord');
-    // 실제 합치기: 결과 랭크는 낮은 쪽, 전설은 맵에 1마리(다른 전설이 있으면 막힌다)
+    // 실제 합치기: 결과 랭크는 낮은 쪽, 전설은 맵 제한이 없다
     clearBoard();
     const freeCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r));
     const put = (type, rank) => { const m = Game.place(type, ...freeCell()); setMonsterRank(m, R(rank)); return m; };
@@ -1593,13 +1607,13 @@ Game.projectiles = [];
     assert(res.ok && res.type === 'hell_general' && res.hidden && res.monster.rank === R('A'), 'hell general merged');
     const vp = put('vampire', 'A');
     const bk = put('bone_knight', 'A');
-    assert.strictEqual(Game.mergePlanFor(vp, bk).reason, 'unique', 'one legendary on the map');
-    Game.removeMonster(res.monster);
+    assert.strictEqual(Game.mergePlanFor(vp, bk).kind, 'recipe', 'legendary has no map limit');
     res = Game.merge({ monster: vp }, { monster: bk });
     assert(res.ok && res.type === 'archlich', 'archlich merged');
-    // 등급 합치기: 희귀 둘(조합식 없음) → 영웅 5종 중 하나, 영웅끼리는 전설로 가지 않는다
+    // 등급 합치기: 희귀(조합식 없음) → 영웅 5종 중 하나, 영웅 → 전설 3종 중 하나, 전설은 신화 몬스터가 없어 최고 등급
     assert.strictEqual(mergePlan('werewolf', 'orc_berserker').grade, 'epic');
-    assert.strictEqual(mergePlan('minotaur', 'vampire').reason, 'top');
+    assert.strictEqual(mergePlan('minotaur', 'vampire').grade, 'legendary');
+    assert.strictEqual(mergePlan('death_lord', 'archlich').reason, 'top');
     clearBoard();
 }
 
@@ -1731,6 +1745,8 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     m1.xp = 50;
     setMonsterRank(m2, 1);
     m2.xp = 12;
+    const m3 = Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r)));
+    setMonsterRank(m3, 2); // 등급 합치기 셋째 재료(랭크 B)
     const res = Game.merge({ monster: m2 }, { monster: m1 });
     assert(res.ok, 'merged');
     assert.strictEqual(res.monster.rank, 1, 'lower rank inherited');
@@ -2941,6 +2957,242 @@ for (const lord of Object.values(DEMON_LORDS)) {
 }
 console.log('smoke ok: demon lords and relics');
 }`, ctx, { filename: 'smoke-lords' });
+
+// 등급 틀과 3마리 합치기: 등급 순서, 자동 셋째 재료, 재료 교체, 3마리 미만 거절, 조합식 우선, 랭크와 장비 승계,
+// 영웅 3마리 → 전설, 전설 3마리 → 신화(시험용 신화 항목), 신화 1마리 제한, 소환에 안 나옴, 히든 조건, 팝업 합치기 버튼
+vm.runInContext(`{
+const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
+const btnOf = id => { UI.update(0); return UI.buttons.find(b => b.id === id); };
+const btn = id => { const b = btnOf(id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
+const tick = s => { for (let i = 0; i < s * 30; i++) { UI.update(1 / 30); Game.update(1 / 30); } };
+const monXY = m => [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM];
+const withRandom = (v, fn) => {
+    const old = Math.random;
+    const list = Array.isArray(v) ? v.slice() : null;
+    Math.random = () => (list ? (list.length ? list.shift() : 0) : v);
+    try { return fn(); } finally { Math.random = old; }
+};
+// 끌기를 시작해(끄는 몬스터 위에서 조금 움직임) 몬스터들 위를 차례로 지난다. 떼지는 않는다
+const dragOver = (src, ...over) => {
+    UI.update(0);
+    const [x, y] = monXY(src);
+    UI.onMove(x, y);
+    UI.onDown(x, y);
+    UI.onMove(x + 14, y);
+    assert(UI.drag && UI.drag.src.monster === src, 'drag started');
+    for (const m of over) UI.onMove(...monXY(m));
+};
+const release = m => UI.onUp(...monXY(m));
+const dragTo = (src, dst) => { dragOver(src, dst); release(dst); };
+const clear = () => { Game.monsters = []; Game.heroes = []; Game.units = []; Game.equipBag = []; UI.cancel(); UI.toast = null; Fx.pops = []; Fx.discovery = null; };
+const put = (type, col, row, rank, equip) => {
+    const m = Game.place(type, col, row);
+    assert(m, 'place ' + type + ' ' + col + ',' + row);
+    if (rank) setMonsterRank(m, rank);
+    if (equip) setMonsterEquip(m, equip);
+    return m;
+};
+Game.reset();
+Game.gold = 5000;
+
+// 셋째 재료 자동 선택: 랭크 낮은 순 → 장비 없는 쪽 → 끄는 몬스터와 가까운 순
+clear();
+const src = put('orc_guard', 3, 6);
+const dst = put('zombie', 9, 6);
+const near = put('gnoll_hunter', 3, 4);
+const far = put('fire_imp', 9, 2);
+assert.strictEqual(Game.mergeCandidates(src, [dst])[0], near, 'closest first');
+setMonsterEquip(near, 'sword');
+assert.strictEqual(Game.mergeCandidates(src, [dst])[0], far, 'no equipment first');
+setMonsterRank(far, 2);
+assert.strictEqual(Game.mergeCandidates(src, [dst])[0], near, 'low rank first');
+setMonsterEquip(near, null);
+setMonsterRank(far, 0);
+assert.strictEqual(Game.mergePlanFor(src, dst).extra[0], near, 'plan picks the third');
+
+// 끌기 시작하면 셋째 재료를 정해 강조하고, 놓을 몬스터 위에서는 재료 3마리와 결과를 미리 보여 준다
+dragOver(src);
+assert.strictEqual(UI.drag.extra.length, 1);
+assert.strictEqual(UI.drag.extra[0], near, 'third chosen at drag start');
+UI.onMove(...monXY(dst));
+let act = UI.dropAction(UI.dropTarget);
+assert(act.action === 'merge' && act.plan.kind === 'grade' && act.plan.grade === 'rare', 'grade merge preview');
+assert.strictEqual(act.materials.map(m => m.type).join(), 'orc_guard,zombie,gnoll_hunter', 'three materials shown');
+// 재료 교체: 셋째 재료(near) 위로 올리면 near가 놓을 대상이 되고 셋째는 다른 몬스터로 바뀐다
+UI.onMove(...monXY(near));
+assert(UI.drag.extra[0] !== near, 'hovered third is replaced');
+// 다른 몬스터(far) 위에 올렸다가 dst에 놓으면 먼저 올린 far가 셋째 재료가 된다
+UI.onMove(...monXY(far));
+UI.onMove(...monXY(dst));
+assert.strictEqual(UI.drag.extra[0], far, 'hovered monster becomes the material');
+act = UI.dropAction(UI.dropTarget);
+assert.strictEqual(act.materials.map(m => m.type).join(), 'orc_guard,zombie,fire_imp');
+withRandom(0, () => release(dst));
+let res = Game.monsterAt(9, 6);
+assert(res && res.type === mergePool('rare')[0], 'result on the dropped cell');
+assert(src.removed && far.removed && !near.removed && Game.monsterAt(3, 6) === null && Game.monsterAt(9, 2) === null, 'three used, near kept');
+assert(Fx.pops.some(p => p.kind === 'merge' && p.from.length === 3 && p.fromTypes.join() === 'orc_guard,zombie,fire_imp'), 'three monsters sucked in');
+tick(0.5);
+
+// 같은 등급이 3마리 미만이면 안내만 하고 합치지 않는다
+clear();
+const c1 = put('orc_guard', 3, 6);
+const c2 = put('zombie', 9, 6);
+put('orc_berserker', 3, 4); // 다른 등급은 세지 않는다
+dragOver(c1);
+assert.strictEqual(UI.drag.extra.length, 0, 'no third');
+UI.onMove(...monXY(c2));
+act = UI.dropAction(UI.dropTarget);
+assert(act.action === 'invalid' && act.reason === 'count' && act.real.have === 2 && act.real.count === 3, 'count preview');
+release(c2);
+assert(Game.monsterAt(3, 6) === c1 && Game.monsterAt(9, 6) === c2, 'two refused');
+assert(UI.toast && UI.toast.text.includes('3마리') && UI.toast.text.includes('2마리'), 'count toast');
+
+// 조합식이 맞으면 조합식이 먼저(재료 2마리, 셋째 후보는 그대로)
+clear();
+const archer = put('skeleton_archer', 3, 6);
+const mage = put('dark_mage', 9, 6);
+const spare = put('zombie', 3, 4);
+dragTo(archer, mage);
+assert.strictEqual(Game.monsterAt(9, 6).type, 'curse_shooter', 'recipe first');
+assert(!spare.removed && Game.monsterAt(3, 4) === spare, 'third not used by a recipe');
+tick(0.5);
+
+// 랭크는 재료 중 가장 낮은 값, 장비는 가장 좋은 것 하나(나머지는 보관함으로)
+clear();
+const r1 = put('orc_guard', 3, 6, 3, 'sword');
+const r2 = put('zombie', 9, 6, 2, 'axe');
+const r3 = put('fire_imp', 3, 4, 1, 'gauntlet');
+dragOver(r1, r2);
+act = UI.dropAction(UI.dropTarget);
+assert.strictEqual(Game.mergeEquipAll(act.materials).keep, 'gauntlet', 'preview keeps the best equipment');
+release(r2);
+res = Game.monsterAt(9, 6);
+assert(res && res.rank === 1 && res.equip === 'gauntlet', 'lowest rank, best equipment: ' + (res && res.rank + ' ' + res.equip));
+assert.strictEqual(Game.equipBag.slice().sort().join(), 'axe,sword', 'others returned');
+assert(r3.removed);
+tick(0.5);
+
+// 영웅 3마리 → 전설 3종 중 무작위(소환에 나오지 않는 전설도 합치기 결과가 된다. 겹쳐도 된다)
+clear();
+const e1 = put('minotaur', 3, 6);
+const e2 = put('ancient_treant', 9, 6);
+put('flame_demon', 3, 4);
+withRandom(0.5, () => dragTo(e1, e2));
+res = Game.monsterAt(9, 6);
+assert(res && res.type === 'hell_general' && MONSTERS[res.type].grade === 'legendary', 'three epics make a legendary');
+assert(Fx.pops.some(p => p.kind === 'merge' && p.grade === 'legendary'));
+tick(0.5);
+// 전설은 맵 제한이 없다
+put('vampire', 3, 6); put('bone_knight', 3, 4); put('minotaur', 9, 2);
+withRandom(0.5, () => dragTo(Game.monsterAt(3, 6), Game.monsterAt(3, 4)));
+assert.strictEqual(Game.monsters.filter(m => m.type === 'hell_general').length, 2, 'two legendaries allowed');
+tick(0.5);
+// 신화 몬스터가 표에 없으면 전설은 최고 등급
+clear();
+const l1 = put('death_lord', 3, 6);
+const l2 = put('archlich', 9, 6);
+put('hell_general', 3, 4);
+assert.strictEqual(Game.mergePlanFor(l1, l2).reason, 'top', 'no mythic yet');
+dragTo(l1, l2);
+assert(UI.toast && UI.toast.text.includes('최고 등급'), 'top toast');
+
+// ----- 시험용 신화 항목: 표에 넣으면 바로 동작한다(등급 표의 summon: false라 몬스터에 summon을 적지 않아도 소환에 안 나온다) -----
+const myth = Object.assign({}, MONSTERS.death_lord, { id: 'test_mythic', name: '시험 신화', grade: 'mythic' });
+delete myth.summon;
+MONSTERS.test_mythic = myth;
+try {
+    assert.strictEqual(nextGrade('legendary'), 'mythic', 'legendary merges into mythic');
+    assert.strictEqual(mergePool('mythic').join(), 'test_mythic');
+    // 소환과 보스 보상에 나오지 않는다
+    assert.strictEqual(gradePool('mythic').length, 0, 'mythic not in the summon pool');
+    for (let i = 0; i < 400; i++) assert(MONSTERS[Game.rollSummon()].grade !== 'mythic', 'mythic never summoned');
+    for (let i = 0; i < 100; i++) for (const c of Game.rollBossReward().cards) assert(c.kind !== 'monster' || MONSTERS[c.type].grade !== 'mythic', 'mythic never a reward');
+    // 전설 3마리 → 신화
+    clear();
+    const a1 = put('death_lord', 3, 6, 2);
+    const a2 = put('archlich', 9, 6, 4);
+    put('hell_general', 3, 4, 3);
+    dragOver(a1, a2);
+    act = UI.dropAction(UI.dropTarget);
+    assert(act.action === 'merge' && act.plan.grade === 'mythic', 'mythic preview');
+    release(a2);
+    const m1 = Game.monsterAt(9, 6);
+    assert(m1 && m1.type === 'test_mythic' && m1.rank === 2, 'three legendaries make a mythic');
+    assert(Fx.pops.some(p => p.kind === 'merge' && p.grade === 'mythic'), 'mythic pop');
+    assert(GRADE_FX.mythic.rays > GRADE_FX.legendary.rays && GRADE_FX.mythic.pop > GRADE_FX.legendary.pop, 'mythic show is bigger');
+    tick(0.5);
+    // 신화는 맵에 1마리: 또 만들려 하면 막고 안내한다. 재료는 그대로
+    const b1 = put('death_lord', 3, 6);
+    const b2 = put('archlich', 9, 2);
+    const b3 = put('hell_general', 3, 4);
+    assert.strictEqual(Game.mergePlanFor(b1, b2).reason, 'unique');
+    dragTo(b1, b2);
+    assert(!b1.removed && !b2.removed && !b3.removed, 'second mythic refused');
+    assert(UI.toast && UI.toast.text.includes('신화') && UI.toast.text.includes('1마리'), 'unique toast: ' + (UI.toast && UI.toast.text));
+    // 신화 3마리는 합칠 수 없다(최고 등급)
+    assert.strictEqual(mergePlan('test_mythic', 'test_mythic').reason, 'top');
+    // 신화가 사라지면 다시 만들 수 있다
+    Game.removeMonster(m1);
+    assert.strictEqual(Game.mergePlanFor(b1, b2).kind, 'grade');
+    // 판매와 제물은 표의 값
+    assert.strictEqual(Game.sellValue('test_mythic'), 800);
+    assert.deepStrictEqual(sacrificeGain('test_mythic'), { heal: 20, lightning: 60 });
+
+    // 히든 조합식(랭크 조건): 죽음의 군주 A + 대리치 A → 신화. 셋째 전설이 있어도 조합식이 먼저, 화면에는 드러나지 않는다
+    MONSTER_RECIPES.push({ a: 'death_lord', aRank: 'A', b: 'archlich', bRank: 'A', result: 'test_mythic', hidden: true });
+    clear();
+    const h1 = put('death_lord', 3, 6, rankIndex('B'));
+    const h2 = put('archlich', 9, 6, rankIndex('A'));
+    assert.strictEqual(Game.mergePlanFor(h1, h2).reason, 'count', 'below rank: grade merge needs three');
+    setMonsterRank(h1, rankIndex('A'));
+    const h3 = put('hell_general', 3, 4);
+    const plan = Game.mergePlanFor(h1, h2);
+    assert(plan.kind === 'recipe' && plan.result === 'test_mythic' && plan.recipe.hidden, 'hidden recipe first');
+    assert.strictEqual(UI.shownPlan(h1, h2).kind, 'grade', 'hidden shown as the grade merge');
+    assert(!publicRecipesFor('death_lord').some(r => r.result === 'test_mythic'), 'hidden not listed');
+    dragTo(h1, h2);
+    const hm = Game.monsterAt(9, 6);
+    assert(hm && hm.type === 'test_mythic' && !h3.removed, 'hidden mythic made with two');
+    assert(Fx.discovery && Fx.discovery.grade === 'mythic' && Fx.discovery.life > 4.6, 'mythic discovery is the longest');
+    tick(6);
+} finally {
+    delete MONSTERS.test_mythic;
+    const i = MONSTER_RECIPES.findIndex(r => r.result === 'test_mythic');
+    if (i >= 0) MONSTER_RECIPES.splice(i, 1);
+    Meta.data.seen = Meta.data.seen.filter(t => t !== 'test_mythic');
+    Meta.data.recipes = Meta.data.recipes.filter(k => k !== 'archlich:A+death_lord:A');
+}
+assert.strictEqual(nextGrade('legendary'), null, 'test entry removed');
+
+// 팝업 합치기 버튼: 같은 판단(랭크 낮음, 장비 없음, 가까움)으로 3마리를 골라 누른 몬스터 칸에서 합친다. 조합식은 보지 않는다
+clear();
+const p1 = put('dark_mage', 9, 6);
+const p2 = put('skeleton_archer', 9, 2); // 마법사와 조합식이 있지만 버튼은 등급 합치기
+const p3 = put('zombie', 3, 4, 0, 'sword'); // 장비가 있어 뒤로
+const p4 = put('fire_imp', 3, 6);
+click(...monXY(p1));
+assert.strictEqual(UI.selectedMonster, p1);
+let b = btnOf('quickMerge');
+assert(b && !b.disabled && b.label.includes('3마리') && b.label.includes('희귀'), 'merge button: ' + (b && b.label));
+const quick = Game.quickMergePlan(p1);
+assert.strictEqual([quick.src, ...quick.extra].map(m => m.type).sort().join(), 'fire_imp,skeleton_archer', 'no-equipment monsters first');
+withRandom(0, () => btn('quickMerge'));
+res = Game.monsterAt(9, 6);
+assert(res && res.type === mergePool('rare')[0], 'grade merge on the clicked cell, not the recipe');
+assert(p2.removed && p4.removed && !p3.removed && UI.selectedMonster === null, 'two picked, popup closed');
+tick(0.5);
+// 같은 등급이 모자라면 버튼은 꺼져 있고 누르면 안내만
+click(...monXY(p3));
+b = btnOf('quickMerge');
+assert(b && b.disabled, 'merge button disabled');
+UI.toast = null;
+click(b.x + 5, b.y + 5);
+assert(!p3.removed && UI.toast && UI.toast.text.includes('3마리'), 'count toast from the button');
+UI.clearSelection();
+clear();
+console.log('smoke ok: grades and three-monster merge');
+}`, ctx, { filename: 'smoke-grades' });
 
 // 판을 넘어 남는 기록(버전 2): 깬 스테이지에서 계산하는 해금, 저장과 다시 읽기, 버전 1 이전, 망가진 값, 도감 기록, 기록 지우기.
 // 블록마다 빈 저장소(memoryStorage)와 초기 기록에서 시작해 위 시험의 기록에 기대지 않는다

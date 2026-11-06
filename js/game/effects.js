@@ -7,7 +7,8 @@ const GRADE_FX = {
     common: { pop: 0.6, rays: 0, sparks: 16, shake: 2, sheet: 'fx_explosion', size: 300 },
     rare: { pop: 0.95, rays: 10, sparks: 34, shake: 7, sheet: 'fx_blastViolet', size: 450 },
     epic: { pop: 1.5, rays: 18, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 600 },
-    legendary: { pop: 2.2, rays: 30, sparks: 96, shake: 22, sheet: 'fx_hit_crit', size: 760 }
+    legendary: { pop: 2.2, rays: 30, sparks: 96, shake: 22, sheet: 'fx_hit_crit', size: 760 },
+    mythic: { pop: 3.0, rays: 44, sparks: 150, shake: 30, sheet: 'fx_hit_crit', size: 980 }
 };
 
 const Fx = {
