@@ -37,8 +37,8 @@ const LORD_EFFECTS = {
 const DEMON_LORDS = {
     rift: {
         id: 'rift', name: '균열의 군주', unlock: 0, desc: '번개로 직접 싸운다. 부하들은 박수만 친다.',
-        sprite: 'boss_rift_lord_down', cast: 'boss_rift_lord_cast', footPx: 118,
-        portrait: { sprite: 'portrait_riftLord' },
+        sprite: 'lord_rift', footPx: 120,
+        portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: { lightningDamage: 1.25, skillCooldown: 0.9 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],

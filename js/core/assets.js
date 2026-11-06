@@ -1,4 +1,8 @@
 // 그림 불러오기와 색 입힌 사본 캐시. 색 입히기는 픽셀을 읽지 않아 index.html을 바로 열어도 동작한다.
+// UI 아이콘(uiicon_<이름>, 48px). 지금은 마왕 탭의 스킬 칸만 쓴다
+const UI_ICONS = ['bolt'];
+// 맵 바닥 타일셋. 칸 정보(corners, bounding_box)는 js/data/map.js의 WANG_TILES
+const MAP_TILESETS = ['tileset_path', 'tileset_water'];
 const Assets = {
     images: {},
     tintCache: {},
@@ -7,18 +11,10 @@ const Assets = {
 
     names() {
         const list = [];
+        // 모든 캐릭터는 PixelLab 동작 그림이다: rotations/south 한 장과 동작(anim)마다 방향별 프레임
         const monsterArt = Object.values(MONSTERS).map(m => ({ sprite: m.sprite, anim: m.art.anim }));
-        for (const def of [...Object.values(HEROES), ...monsterArt]) {
-            if (!def.anim) {
-                // Asteria 직업 그림(정예 용사): 4방향 걷기 4장, 공격과 주문 2장씩, 남녀 두 벌
-                for (const base of [def.sprite, `${def.sprite}_female`]) {
-                    for (const dir of ['down', 'up', 'left', 'right']) {
-                        for (let i = 0; i < 4; i++) list.push(`${base}_walk_${dir}${i}`);
-                        for (let i = 0; i < 2; i++) list.push(`${base}_act_${dir}_atk${i}`, `${base}_act_${dir}_cast${i}`);
-                    }
-                }
-                continue;
-            }
+        const bossArt = Object.values(BOSSES).map(b => b.art);
+        for (const def of [...Object.values(HEROES), ...monsterArt, ...bossArt]) {
             list.push(`${def.sprite}/rotations/south`);
             for (const clip of Object.values(def.anim)) {
                 for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {
@@ -26,17 +22,15 @@ const Assets = {
                 }
             }
         }
-        for (const pose of ['down', 'left', 'slam', 'windup']) list.push(`boss_fallen_knight_${pose}`);
-        list.push('boss_rift_lord_down', 'boss_rift_lord_cast');
         // 마왕 그림(128px)과 초상, 유물 그림(48px)
-        for (const lord of Object.values(DEMON_LORDS)) list.push(lord.sprite, lord.cast || lord.sprite, lord.portrait.sprite);
+        for (const lord of Object.values(DEMON_LORDS)) list.push(lord.sprite, lord.portrait.sprite);
         for (const id of Object.keys(RELICS)) list.push(`relic_${id}`);
         for (const id of Object.keys(EQUIPMENT)) list.push(`equip_${id}`); // 장비 그림(48px)
-        list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
-        // 전투 효과는 모두 pixelfx 시트(assets/fx/)다. 옛 Asteria fx_ 그림은 더 불러오지 않는다
+        // 맵: 바닥 타일셋 둘(32px Wang 타일)과 소품(64px)
+        list.push(...MAP_TILESETS, ...DECOR.map(p => p.sprite), 'prop2_throne');
+        // 전투 효과는 모두 pixelfx 시트(assets/fx/)다
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
-        list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
-            'tile_shadow_detailB', 'tile_shadow_rare', 'ui_skillSlot', 'icon_power_thunderStrike');
+        list.push(...UI_ICONS.map(id => `uiicon_${id}`));
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 
@@ -53,7 +47,7 @@ const Assets = {
             };
             img.onload = () => { this.images[name] = img; done(); };
             img.onerror = () => { console.warn('그림을 찾지 못했습니다:', name); done(); };
-            img.src = name.startsWith('pfx_') ? `assets/fx/${name}.png` : `assets/sprites/${name}${/^(island|void|bridgedeck)_/.test(name) ? '.webp' : '.png'}`;
+            img.src = name.startsWith('pfx_') ? `assets/fx/${name}.png` : `assets/sprites/${name}.png`;
         }
     },
 

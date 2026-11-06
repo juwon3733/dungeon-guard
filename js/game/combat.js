@@ -10,11 +10,11 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
     const p = heroWorld(hero);
-    Fx.number(hero, p.x, p.y - (hero.boss || hero.elite ? 130 : 74), Math.round(dealt), color || '#ffe36b', dealt >= 30);
+    Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     if (!dot) {
         hero.flash = 0.09;
-        Fx.burst(p.x, p.y - (hero.boss ? 70 : 30), color || '#ffd26a', 2, 200, 0.28, 5);
-        Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-14, 14), p.y - (hero.boss ? 70 : 32) + randRange(-12, 12), dealt >= 20 ? 150 : 90, 0.26);
+        Fx.burst(p.x, p.y - (hero.boss ? 140 : 45), color || '#ffd26a', 2, 200, 0.28, 5);
+        Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-21, 21), p.y - (hero.boss ? 140 : 48) + randRange(-18, 18), dealt >= 20 ? 225 : 135, 0.26);
     }
     if (hero.hp <= 0) killHero(hero, p, attacker);
     return dealt;
@@ -28,17 +28,17 @@ function killHero(hero, pos, attacker) {
     G.gold += bounty;
     G.stats.kills++;
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
-    Fx.coin(pos.x, pos.y - 40, bounty);
-    Fx.burst(pos.x, pos.y - 30, hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 56 : 10, hero.boss ? 620 : 300, 0.45, 6);
-    Fx.burst(pos.x, pos.y - 30, '#ff9d4d', hero.boss ? 28 : 5, 240, 0.4, 5);
-    Fx.ring(pos.x, pos.y - 24, hero.boss ? 190 : 46, '#ffe9b0', 0.26);
-    Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - 34, hero.boss ? 620 : 150, hero.boss ? 0.8 : 0.36);
-    Fx.glow(pos.x, pos.y - 30, hero.boss ? 280 : 80, 'rgba(255,190,110,1)', 0.2);
+    Fx.coin(pos.x, pos.y - 60, bounty);
+    Fx.burst(pos.x, pos.y - (hero.boss ? 140 : 45), hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 56 : 10, hero.boss ? 620 : 300, 0.45, 6);
+    Fx.burst(pos.x, pos.y - (hero.boss ? 140 : 45), '#ff9d4d', hero.boss ? 28 : 5, 240, 0.4, 5);
+    Fx.ring(pos.x, pos.y - 36, hero.boss ? 285 : 69, '#ffe9b0', 0.26);
+    Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - (hero.boss ? 140 : 51), hero.boss ? 620 : 225, hero.boss ? 0.8 : 0.36);
+    Fx.glow(pos.x, pos.y - 45, hero.boss ? 420 : 120, 'rgba(255,190,110,1)', 0.2);
     if (hero.boss) {
         G.bossDefeated = true; // 웨이브가 끝나면 보스 보상 3택(마지막 웨이브는 승리로 끝난다)
         Fx.addShake(26);
         Sfx.play('bossDown');
-        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, '고생했다. 다음엔 예약하고 와.', 3);
+        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '고생했다. 다음엔 예약하고 와.', 3);
     } else {
         Fx.addShake(1.5);
     }
@@ -54,7 +54,7 @@ function killHero(hero, pos, attacker) {
         const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
         const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
         G.corpses.push({
-            type: hero.type, female: hero.female, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir,
+            type: hero.type, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir,
             age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul
         });
     }
@@ -112,10 +112,10 @@ function damageThrone(amount, heroName) {
     Sfx.play('throneHit');
     const tx = tileX(THRONE_TILE.col);
     const ty = tileY(THRONE_TILE.row);
-    Fx.number('throne', tx, ty - 200, amount, '#ff5e73', true);
-    Fx.burst(tx, ty - 60, '#ff5e73', 22, 420, 0.5, 7);
-    Fx.anim('fx_hit_fire', tx, ty - 60, 300, 0.4);
-    Fx.say(tx, ty - 190, lordLine('throneHit'), 1.8);
+    Fx.number('throne', tx, ty - 330, amount, '#ff5e73', true);
+    Fx.burst(tx, ty - 120, '#ff5e73', 22, 420, 0.5, 7);
+    Fx.anim('fx_hit_fire', tx, ty - 120, 400, 0.4);
+    Fx.say(tx, ty - LORD_SAY_Y, lordLine('throneHit'), 1.8);
     if (G.hp <= 0) G.finish(false);
 }
 
@@ -129,15 +129,15 @@ function corruptCorpse(corpse) {
     G.corpses = G.corpses.filter(c => c !== corpse);
     G.units.push(createCorruptUnit(corpse));
     G.stats.corrupted++;
-    Fx.ring(corpse.x, corpse.y - 20, 120, '#c56bff', 0.5);
-    Fx.anim('fx_adv_arcanist_lightning', corpse.x, corpse.y - 90, 360, 0.75);
+    Fx.ring(corpse.x, corpse.y - 30, 120, '#c56bff', 0.5);
+    Fx.anim('fx_adv_arcanist_lightning', corpse.x, corpse.y - 135, 360, 0.75);
     Fx.anim('fx_adv_doomMelody_requiem', corpse.x, corpse.y - 20, 260, 0.75);
     Fx.rise(corpse.x, corpse.y, '#c56bff', 46, 44, 0.9);
     Fx.rise(corpse.x, corpse.y, '#f1c8ff', 16, 26, 0.7);
-    Fx.glow(corpse.x, corpse.y - 60, 240, 'rgba(180,90,255,1)', 0.65);
+    Fx.glow(corpse.x, corpse.y - 90, 240, 'rgba(180,90,255,1)', 0.65);
     Fx.beam(corpse.x, corpse.y, corpse.x, corpse.y - 900, '#c56bff', 40, 0.45);
     Fx.addShake(7);
-    Fx.say(corpse.x, corpse.y - 100, randItem(SPEECH.corrupt), 2.2);
+    Fx.say(corpse.x, corpse.y - 150, randItem(SPEECH.corrupt), 2.2);
     Sfx.play('corrupt');
     return { ok: true };
 }
@@ -182,7 +182,7 @@ function castRoar() {
     Fx.ring(tx, ty, 900, '#ffd0db', 0.6);
     Fx.dim = 0.7;
     Fx.addShake(30);
-    Fx.say(tx, ty - 190, '조용히 해!!!', 2.4);
+    Fx.say(tx, ty - LORD_SAY_Y, '조용히 해!!!', 2.4);
     Sfx.play('roar');
     return true;
 }
@@ -215,7 +215,7 @@ function slowHero(hero, seconds, mul) {
     hero.slowMul = hero.slow > 0 ? Math.min(hero.slowMul, mul) : mul;
     hero.slow = seconds;
     const p = heroWorld(hero);
-    Fx.anim('fx_snowflake', p.x, p.y - 40, 90);
+    Fx.anim('fx_snowflake', p.x, p.y - 60, 135);
 }
 
 // 더 긴 쪽 정지를 남긴다

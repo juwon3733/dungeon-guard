@@ -41,14 +41,14 @@ const SCENES = {
             pressButton('lord_bone_queen');
             pressButton('relic_shackles');
             pressButton('begin');
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
-            Game.place('dark_mage', 10, 5);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
             advance(1.6);
             Fx.reset();
             Game.hp = 9; // 호통을 쓸 수 있는 체력
             pressButton('tab_demon');
-            Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, DEMON_LORDS.bone_queen.speech.waveStart[0], 30);
+            Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, DEMON_LORDS.bone_queen.speech.waveStart[0], 30);
             UI.update(0);
             const b = UI.buttons.find(x => x.id === 'barRelic0');
             UI.onMove(b.x + 20, b.y + 20);
@@ -84,9 +84,9 @@ const SCENES = {
         setup: () => {
             Meta.data = Meta.sanitize({ souls: 22, runs: 3, bestWave: 6 });
             startRun();
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
-            Game.place('dark_mage', 10, 5);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
             advance(1.6);
             Fx.reset();
             Game.stats.kills = 214;
@@ -136,7 +136,7 @@ const SCENES = {
     dragMerge: {
         setup: () => {
             setupBoard();
-            const m = Game.monsterAt(6, 4);
+            const m = Game.monsterAt(7, 4);
             dragHold(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             freezeScene();
         },
@@ -147,7 +147,7 @@ const SCENES = {
     mergeSuck: {
         setup: () => {
             setupBoard();
-            const m = Game.monsterAt(6, 4);
+            const m = Game.monsterAt(7, 4);
             dragDrop(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(0.28);
             freezeScene();
@@ -158,7 +158,7 @@ const SCENES = {
     merge: {
         setup: () => {
             setupBoard();
-            const m = Game.monsterAt(6, 4);
+            const m = Game.monsterAt(7, 4);
             dragDrop(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.12);
             freezeScene();
@@ -169,8 +169,8 @@ const SCENES = {
     mergeEpic: {
         setup: () => {
             setupBoard();
-            const b = Game.monsterAt(9, 2);
-            dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], cellCenter(11, 5));
+            const b = Game.monsterAt(8, 2);
+            dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], cellCenter(13, 5));
             advance(MERGE_REVEAL + 0.16);
             freezeScene();
         }
@@ -180,8 +180,8 @@ const SCENES = {
     hidden: {
         setup: () => {
             setupBoard();
-            const b = Game.monsterAt(9, 2);
-            const m = Game.monsterAt(6, 4);
+            const b = Game.monsterAt(8, 2);
+            const m = Game.monsterAt(7, 4);
             dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.7);
             freezeScene();
@@ -197,10 +197,10 @@ const SCENES = {
             Game.skills.lightning = 20;
             advance(0.1);
             const throne = [tileX(THRONE_TILE.col) * WORLD_ZOOM, (tileY(THRONE_TILE.row) - 40) * WORLD_ZOOM];
-            const b = Game.monsterAt(9, 2);
+            const b = Game.monsterAt(8, 2);
             dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], throne);
             advance(MERGE_REVEAL + 0.25);
-            const s = Game.monsterAt(11, 5);
+            const s = Game.monsterAt(13, 5);
             dragHold([s.x * WORLD_ZOOM, (s.y - 10) * WORLD_ZOOM], [throne[0] - 20, throne[1] + 10]);
             freezeScene();
         }
@@ -223,7 +223,7 @@ const SCENES = {
     popupField: {
         setup: () => {
             setupBoard();
-            const [c, r] = [[10, 7], [11, 6], [9, 6], [7, 5]].find(([x, y]) => Game.canPlace('bone_knight', x, y));
+            const [c, r] = [[12, 7], [11, 6], [9, 6], [7, 5]].find(([x, y]) => Game.canPlace('bone_knight', x, y));
             const m = Game.place('bone_knight', c, r);
             advance(1.5);
             // 길로 걸어 나간 해골 기사를 누른다(놓은 칸이 아니라 서 있는 곳)
@@ -281,9 +281,9 @@ const SCENES = {
             startRun();
             Game.gold = 2000; // 장면용: 세 몬스터를 모두 놓을 돈
             // 화면 가운데쯤(길이 ㄷ자로 꺾이는 곳)에 놓아 싸움이 입구 그림에 가리지 않게 한다
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
-            Game.place('dark_mage', 10, 5);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
             Fx.reset(); // 배치 효과를 지운다
             // Why: 첫 웨이브는 전사뿐이라 세 직업이 섞인 7번째 웨이브로 띄운다. 수치 확인용이 아니라 그림 확인용이다.
             Game.waveIndex = 6;
@@ -311,8 +311,8 @@ const SCENES = {
             const dirs = ['down', 'left', 'up', 'right'];
             const types = ['warrior', 'rogue', 'mage'];
             // 용사 그림 위치는 길 위 거리(d)와 길 폭 방향 어긋남(lane)으로 정해진다.
-            // 3행 가로 구간(8,3)~(12,3)을 골라 d로 가로, lane으로 세로 위치를 맞춘다.
-            const seg = PATH.segments.find(s => s.dy === 0 && s.dx > 0 && s.ax === tileX(8) && s.ay === tileY(3));
+            // 3행 가로 구간(10,3)~(15,3)을 골라 d로 가로, lane으로 세로 위치를 맞춘다.
+            const seg = PATH.segments.find(s => s.dy === 0 && s.dx > 0 && s.ax === tileX(10) && s.ay === tileY(3));
             // Why: d가 구간 양 끝과 같으면 이웃 구간(세로)으로 계산되어 lane이 가로로 붙는다. 양 끝을 비워 둔다.
             const margin = 48;
             const colX = i => seg.ax + margin + i * ((seg.len - margin * 2) / 3);
@@ -334,7 +334,7 @@ const SCENES = {
             types.forEach((type, j) => {
                 dirs.forEach((dir, i) => {
                     const h = createHero(type, 0, 0, false);
-                    Object.assign(h, { waiting: false, female: false, dir, anim: 0, d: seg.start + (colX(i) - seg.ax), lane: rowLane(j) });
+                    Object.assign(h, { waiting: false, dir, anim: 0, d: seg.start + (colX(i) - seg.ax), lane: rowLane(j) });
                     Game.heroes.push(h);
                 });
             });
@@ -352,7 +352,7 @@ const SCENES = {
             types.forEach((type, j) => {
                 const x = colX(3) + 260;
                 const y = footY(j);
-                Game.corpses.push({ type, female: false, x, y, d: 0, dir: 'down', age: 5, life: 60, cost: 15 });
+                Game.corpses.push({ type, x, y, d: 0, dir: 'down', age: 5, life: 60, cost: 15 });
                 labels.push([`${HEROES[type].name} 시체`, x, y + 24]);
             });
             // 이름표: 캔버스 위에 DOM으로 얹는다(게임 화면 좌표 = 세계 좌표 x WORLD_ZOOM)
@@ -374,8 +374,8 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
             Fx.reset();
             Game.waveIndex = 6;
             Game.startWave();
@@ -411,9 +411,9 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
-            Game.place('dark_mage', 10, 5);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
             Fx.reset();
             Game.waveIndex = 0;
             Game.startWave();
@@ -438,7 +438,7 @@ const SCENES = {
             startRun();
             Game.gold = 2000;
             // 셋을 서로 다른 길 옆에 떨어뜨려 놓아 효과가 겹치지 않게 한다
-            const bz = Game.place('orc_berserker', 6, 6);
+            const bz = Game.place('orc_berserker', 7, 6);
             const cs = Game.place('curse_shooter', 9, 5);
             const bk = Game.place('bone_knight', 14, 7);
             if (!bz || !cs || !bk) throw new Error('몬스터를 놓지 못했습니다');
@@ -515,15 +515,15 @@ const SCENES = {
         setup: () => {
             setupBoard();
             const on = (c, r, id) => setMonsterEquip(Game.monsterAt(c, r), id);
-            on(6, 6, 'shield');
-            on(6, 4, 'bow');
-            on(11, 5, 'crown');
-            on(10, 5, 'staff');
-            on(9, 2, 'gauntlet');
+            on(7, 6, 'shield');
+            on(7, 4, 'bow');
+            on(13, 5, 'crown');
+            on(12, 5, 'staff');
+            on(8, 2, 'gauntlet');
             Game.equipBag = ['sword', 'axe', 'cape', 'ring', 'elixir'];
             UI.update(0);
             const r = UI.bagRect(1);
-            const m = Game.monsterAt(6, 4);
+            const m = Game.monsterAt(7, 4);
             dragHold([r.x + r.w / 2, r.y + r.h / 2], [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             if (!UI.equipDrag || UI.equipTarget !== m) throw new Error('장비를 끌지 못했습니다');
             freezeScene();
@@ -536,9 +536,9 @@ const SCENES = {
     bossReward: {
         setup: () => {
             startRun();
-            Game.place('orc_guard', 6, 6);
-            Game.place('skeleton_archer', 6, 4);
-            Game.place('dark_mage', 10, 5);
+            Game.place('orc_guard', 7, 6);
+            Game.place('skeleton_archer', 7, 4);
+            Game.place('dark_mage', 12, 5);
             advance(1.6);
             Game.waveIndex = 4;
             Game.startWave();
@@ -558,37 +558,37 @@ const SCENES = {
 
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
     // 두 입구의 준비 화면: 5번째 웨이브(6:4, 대마도사)를 앞둔 준비 시간. 북쪽·남쪽 문 위에 올 인원(보스는 북쪽),
-    // 다음 파티 창의 입구별 인원 줄과 보스 줄의 입구, 남쪽 갈래 둘레의 건설 칸과 낀 칸(5..7,8)
+    // 다음 파티 창의 입구별 인원 줄과 보스 줄의 입구, 남쪽 갈래 둘레의 건설 칸과 낀 칸(9,9)
     twoGates: {
         setup: () => {
             startRun();
             Game.gold = 2000;
             Game.waveIndex = 4;
             Game.place('orc_guard', 3, 10);
-            Game.place('skeleton_archer', 6, 8);
-            Game.place('orc_guard', 9, 7);
+            Game.place('skeleton_archer', 9, 9);
+            Game.place('orc_guard', 11, 8);
             advance(1.6);
             Fx.reset();
         },
         afterFreeze: () => { Game.time = Math.PI / 6; }
     },
 
-    // 웨이브 중 합류점 근처: 8번째 웨이브(5:5). 남쪽 갈래 오크(3,10)와 합류점 오크(9,7), 낀 칸 궁수(6,8)·마법사(7,8),
-    // 두 갈래의 용사가 합류점 (8,7)의 T자에서 만나 붙잡힌 순간
+    // 웨이브 중 합류점 근처: 8번째 웨이브(5:5). 남쪽 갈래 오크(3,10)와 합류점 오크(11,8), 낀 칸 궁수(9,9)·마법사(8,9),
+    // 두 갈래의 용사가 합류점 (10,8)에서 만나 붙잡힌 순간
     merge2: {
         setup: () => {
             startRun();
             Game.gold = 2000;
             Game.place('orc_guard', 3, 10);
-            Game.place('orc_guard', 9, 7);
-            Game.place('skeleton_archer', 6, 8);
-            Game.place('dark_mage', 7, 8);
-            Game.place('skeleton_archer', 5, 5);
+            Game.place('orc_guard', 11, 8);
+            Game.place('skeleton_archer', 9, 9);
+            Game.place('dark_mage', 8, 9);
+            Game.place('skeleton_archer', 6, 5);
             advance(1.6);
             for (const m of Game.monsters) { m.hp = m.maxHp = 1e6; } // 장면 동안 쓰러지지 않게 한다
             Game.waveIndex = 7;
             seededRandom(7, () => Game.startWave());
-            const near = r => Game.heroes.some(h => !h.waiting && h.route === r && h.blocker && distance(heroWorld(h).x, heroWorld(h).y, tileX(8), tileY(7)) < TILE * 1.5);
+            const near = r => Game.heroes.some(h => !h.waiting && h.route === r && h.blocker && distance(heroWorld(h).x, heroWorld(h).y, tileX(MERGE_TILE.col), tileY(MERGE_TILE.row)) < TILE * 1.5);
             for (let i = 0; i < 60 * 30 && !(near('north') && near('south')); i++) { UI.update(1 / 60); Game.update(1 / 60); }
             if (!near('north') || !near('south')) throw new Error('합류점에서 두 갈래 용사가 만나지 않았습니다');
             advance(0.3);
@@ -608,6 +608,18 @@ const SCENES = {
         }
     },
 
+    // 빈 맵 전체: 바닥 타일(이끼, 벽돌 길, 물가), 소품, 입구 문, 왕좌와 마왕. 건설 칸 표시가 없도록 웨이브 상태로 둔다
+    mapOverview: {
+        setup: () => {
+            startRun();
+            Game.state = 'wave';
+            Game.heroes = [];
+            Fx.reset();
+            UI.onMove(GAME_WIDTH / 2, 600);
+            freezeScene();
+        }
+    },
+
     // 몬스터 23종을 모두 맵에 올린 모습(준비 단계). 막는 11종은 서로 다른 길 지점으로 걸어 나가 서고,
     // 원거리·지원 12종은 길에서 떨어진 칸에 선다. 발이 떠 있거나 잘린 몬스터가 없는지 본다
     roster: {
@@ -617,8 +629,8 @@ const SCENES = {
                 'minotaur', 'ancient_treant', 'hell_general'];
             const others = ['skeleton_archer', 'dark_mage', 'curse_shooter', 'fire_imp', 'gnoll_hunter', 'wisp_acolyte', 'frost_witch',
                 'nightmare_jester', 'orc_shaman', 'vampire', 'flame_demon', 'archlich'];
-            const blockCells = [[3, 2], [5, 6], [9, 5], [11, 6], [13, 4], [15, 7], [17, 5], [19, 6], [21, 8], [14, 9], [7, 10]];
-            const otherCells = [[2, 5], [6, 4], [10, 7], [14, 6], [18, 7], [11, 10], [1, 7], [2, 8], [6, 8], [19, 10], [24, 5], [22, 9]];
+            const blockCells = [[3, 2], [4, 6], [9, 5], [11, 6], [13, 4], [16, 7], [17, 10], [20, 9], [22, 8], [14, 9], [7, 10]];
+            const otherCells = [[2, 5], [7, 4], [12, 7], [14, 6], [19, 7], [11, 10], [3, 7], [4, 9], [8, 9], [19, 10], [24, 5], [23, 10]];
             const all = Object.keys(MONSTERS);
             if (blockers.length + others.length !== all.length || !all.every(id => blockers.includes(id) || others.includes(id))) {
                 throw new Error('roster 장면의 몬스터 목록이 표와 다릅니다');
@@ -643,11 +655,11 @@ const SCENES = {
             const mino = at('minotaur', 9, 5);
             const wolf = at('werewolf', 13, 4);
             const witch = at('frost_witch', 14, 6);
-            const tree = at('ancient_treant', 15, 7);
-            const jester = at('nightmare_jester', 18, 7);
+            const tree = at('ancient_treant', 16, 7);
+            const jester = at('nightmare_jester', 19, 7);
             const lich = at('archlich', 17, 2);
             const demon = at('flame_demon', 11, 10);
-            const zombie = at('zombie', 21, 8);
+            const zombie = at('zombie', 22, 8);
             const wisp = at('wisp_acolyte', 21, 6);
             const vamp = at('vampire', 22, 9);
             advance(1.6); // 막는 몬스터가 길로 걸어 나간다
@@ -736,18 +748,18 @@ const PAGE_HELPERS = () => {
         for (let i = 0; i < Math.round(seconds * 60); i++) { UI.update(1 / 60); Game.update(1 / 60); }
     };
     window.cellCenter = (c, r) => [tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM];
-    // 끌기 장면 공통 판: 오크 경비병(6,6)·스켈레톤 궁수(6,4)·암흑 마법사(10,5)와 끌어 쓸 암흑 마법사(3,5),
-    // 오크 경비병(13,6), 저주 사수(11,5), 오크 광전사(9,2)
+    // 끌기 장면 공통 판: 오크 경비병(7,6)·스켈레톤 궁수(7,4)·암흑 마법사(12,5)와 끌어 쓸 암흑 마법사(3,5),
+    // 오크 경비병(13,8), 저주 사수(13,5), 오크 광전사(8,2)
     window.setupBoard = () => {
         startRun();
         Game.gold = 300;
-        Game.place('orc_guard', 6, 6);
-        Game.place('skeleton_archer', 6, 4);
-        Game.place('dark_mage', 10, 5);
+        Game.place('orc_guard', 7, 6);
+        Game.place('skeleton_archer', 7, 4);
+        Game.place('dark_mage', 12, 5);
         Game.place('dark_mage', 3, 5);
-        Game.place('orc_guard', 13, 6);
-        Game.place('curse_shooter', 11, 5);
-        Game.place('orc_berserker', 9, 2);
+        Game.place('orc_guard', 13, 8);
+        Game.place('curse_shooter', 13, 5);
+        Game.place('orc_berserker', 8, 2);
         advance(1.6); // 오크가 길로 걸어 나가고 설치 효과가 사라진다
         Fx.reset();
     };

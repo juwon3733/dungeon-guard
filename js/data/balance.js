@@ -11,7 +11,7 @@ const CORPSE_FADE_TIME = 1;
 // footPx는 캔버스 안의 발끝 높이다. 캔버스 크기가 방향마다 달라 방향별로 적기도 한다
 const PL_DIRS = ['south', 'east', 'north'];
 const ORC_ART = {
-    sprite: 'pl_orc_guard', scale: 2, barY: 84,
+    sprite: 'pl_orc_guard', scale: PIXEL_SCALE, barY: 126,
     anim: {
         walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 58 } },
         attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 50, east: 52, north: 51 } }
@@ -27,7 +27,7 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, footPx: 53 },
             death: { folder: 'falling_backward', frames: 7, footPx: 55 }
         },
-        name: '전사', sprite: 'pl_hero_warrior', scale: 2, barY: 84, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
+        name: '전사', sprite: 'pl_hero_warrior', scale: HERO_SCALE, barY: 126, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
         counter: '갑옷, 강한 공격으로'
     },
     rogue: {
@@ -36,7 +36,7 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 53, north: 52 } },
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 55 }
         },
-        name: '도적', sprite: 'pl_hero_rogue', scale: 2, barY: 84, hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
+        name: '도적', sprite: 'pl_hero_rogue', scale: HERO_SCALE, barY: 126, hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
         counter: '빠름, 오크로 막기'
     },
     mage: {
@@ -46,15 +46,15 @@ const HEROES = {
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
         },
         atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
-        name: '마법사', sprite: 'pl_hero_mage', scale: 2, barY: 84, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
+        name: '마법사', sprite: 'pl_hero_mage', scale: HERO_SCALE, barY: 126, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
         counter: '몬스터 정지, 먼저 처치'
     }
 };
 
 // 정예 용사: 같은 직업(base)의 능력치를 물려받고 여기 적은 값만 바꾼다. 수치는 플레이 후 고칠 초안이다.
-// 그림은 Asteria 직업 그림(동작 정의 anim 없음)이다. sprite에 '_female'을 붙인 그림도 쓴다.
-// footPx는 64px 캔버스 안의 발끝 높이, barY는 체력바 높이(발 기준 위쪽 세계 px)다.
+// 그림은 PixelLab 동작 그림(64px 캐릭터)이다. 캔버스가 동작과 방향마다 달라(84, 96 등) footPx를 방향별로 적는다.
+// 사망 동작은 전사처럼 남쪽 하나다. barY는 체력바 높이(발 기준 위쪽 세계 px)다.
 const ELITE_RULES = {
     bountyMul: 3,     // 현상금: 같은 직업의 몇 배
     throneDamage: 3,  // 왕좌 도착 시 깎는 마왕 체력(일반 용사는 1)
@@ -69,60 +69,80 @@ const ELITE_RULES = {
 // - passOrcs: 조련사는 오크에게 막히지 않는다(타락 유닛에게는 막힌다)
 const ELITES = {
     elite_swordsman: {
-        base: 'warrior', name: '정예 검사', sprite: 'swordsman', hpMul: 4, armor: 4,
+        base: 'warrior', name: '정예 검사', sprite: 'pl_elite_duelist', anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 78, east: 78, north: 68 } },
+            attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 72, east: 72, north: 67 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 72 }
+        }, hpMul: 4, armor: 4,
         breakthrough: { after: 2, push: 0.7, stun: 0.8, free: 1.2 },
         counter: '막히면 돌파, 큰 한 방'
     },
     elite_tamer: {
-        base: 'rogue', name: '정예 조련사', sprite: 'beast_tamer', hpMul: 4, speed: 1.3, passOrcs: true,
+        base: 'rogue', name: '정예 조련사', sprite: 'pl_elite_tamer', anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 78, east: 78, north: 77 } },
+            attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 72, east: 74, north: 71 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 72 }
+        }, hpMul: 4, speed: 1.3, passOrcs: true,
         counter: '오크를 지나침, 탑으로'
     },
     elite_stormcaller: {
-        base: 'mage', name: '정예 뇌술사', sprite: 'stormcaller', hpMul: 4, stunEvery: 4, stunRange: 4, stunTime: 1.5,
+        base: 'mage', name: '정예 뇌술사', sprite: 'pl_elite_thunder_sage', anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 78, east: 79, north: 77 } },
+            attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 72, east: 72, north: 71 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 72 }
+        }, hpMul: 4, stunEvery: 4, stunRange: 4, stunTime: 1.5,
         stunArea: { warn: 0.5 },
         counter: '범위 감전, 먼저 처치'
     },
     elite_rhapsodist: {
         // 노래만 하고 정지 주문은 쓰지 않는다(stunEvery 0)
-        base: 'mage', name: '정예 음유시인', sprite: 'rhapsodist', hpMul: 4, stunEvery: 0,
+        base: 'mage', name: '정예 음유시인', sprite: 'pl_elite_bard', anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 78, east: 78, north: 77 } },
+            attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 72, east: 72, north: 71 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 72 }
+        }, hpMul: 4, stunEvery: 0,
         song: { every: 5, radius: 3, speedMul: 1.25, duration: 3 },
         counter: '주변 용사 가속, 먼저 처치'
     }
 };
-// Why: 세계 2배(scale 2)는 일반 용사보다 1.25배 정도라 구분이 안 됐다. 2 / WORLD_ZOOM이면 화면에서 원본 2배라 도트도 고르다.
-const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
+const ELITE_ART = { scale: HERO_SCALE, barY: 192 };
 
 // 층 보스. 웨이브 표의 boss 칸에 여기 열쇠를 적는다(예: boss: 'archmage').
 // 체력은 base 직업 체력 x hpMultiplier x 웨이브 배율이다. patterns는 체력 비율(at) 이하가 되면 한 번씩 쓴다.
 // - charge: time초 동안 speed칸/초로 돌진, 막힘 풀림
 // - stomp / shock: 멈춰서 windup초 동안 경고 원을 띄운 뒤 반경 range칸 안 방어 쪽 전부를 stun초 정지(stomp는 부대장, shock은 감전)
-// art가 없으면 부대장 전용 그림, 있으면 Asteria 직업 그림을 scale배로 그린다. starY는 정지 별 높이(발 기준 위쪽 세계 px)
-// art.footPx는 64px 캔버스 안의 발끝 높이다. 숫자 하나 또는 동작(walk, cast, atk)별 방향(down, left, right, up)별 표.
-//   Asteria 그림은 방향과 동작마다 발 높이가 달라(오른쪽 걷기 55, 오른쪽 공격 51, 아래 걷기 62) 하나로 적으면 떠 보인다
+// art는 PixelLab 동작 그림(96px 캐릭터)이다: walk와 attack 동작, footPx는 방향별 캔버스 안의 발끝 높이.
+//   windupLoop가 있으면 경고(windup) 중에 공격 동작을 반복하고, 없으면 공격 동작 첫 프레임으로 멈춰 선다.
+// portrait는 보스 초상: sprite에서 crop [x, y, 크기]를 잘라 쓴다(마왕 초상과 같은 형식). starY는 정지 별 높이(발 기준 위쪽 세계 px)
 // waveHpMul: 웨이브 배율까지 곱한 체력에 한 번 더 곱한다(중간 보스를 약하게. 없으면 1)
 // entry: 들어오는 입구(ROUTE_IDS). 없으면 north
 const BOSSES = {
     fallen_knight: {
-        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지', entry: 'north',
+        name: '용사단 부대장', portrait: { sprite: 'pl_boss_captain/rotations/south', crop: [31, 8, 28] }, note: '돌진, 주변 몬스터 정지', entry: 'north',
         hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
-        starY: 165,
+        art: {
+            sprite: 'pl_boss_captain', scale: BOSS_SCALE,
+            anim: {
+                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 120, east: 120, north: 121 } },
+                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 113, east: 116, north: 114 } }
+            }
+        }, starY: 300,
         patterns: [
             { at: 0.5, kind: 'charge', time: 3, speed: 2.2 },
             { at: 0.25, kind: 'stomp', windup: 1.2, range: 3, stun: 3 }
         ]
     },
     archmage: {
-        name: '용사단 대마도사', portrait: 'stormcaller_walk_down0', note: '체력 50%·25%에 범위 감전', entry: 'north',
+        name: '용사단 대마도사', portrait: { sprite: 'pl_boss_grand_wizard/rotations/south', crop: [31, 18, 28] }, note: '체력 50%·25%에 범위 감전', entry: 'north',
         // 체력 체계는 부대장과 같다(전사 체력 x 15). 5번째 웨이브 중간 보스라 waveHpMul로 낮춘다(초안)
         hpMultiplier: 15, waveHpMul: 0.6, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
         art: {
-            sprite: 'stormcaller', scale: 3 / WORLD_ZOOM,
-            footPx: {
-                walk: { down: 62, left: 57, right: 55, up: 60 },
-                cast: { down: 59, left: 55, right: 52, up: 55 },
-                atk: { down: 59, left: 53, right: 51, up: 55 }
+            sprite: 'pl_boss_grand_wizard', scale: BOSS_SCALE, windupLoop: true,
+            anim: {
+                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 119, east: 119, north: 110 } },
+                attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 111, east: 113, north: 109 } }
             }
-        }, starY: 225,
+        }, starY: 290,
         patterns: [
             { at: 0.5, kind: 'shock', windup: 1.0, range: 3, stun: 2.5 },
             { at: 0.25, kind: 'shock', windup: 1.6, range: 5, stun: 3 }
@@ -176,7 +196,7 @@ const WAVES = [
 // 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.
 for (const [type, elite] of Object.entries(ELITES)) {
     const base = HEROES[elite.base];
-    const { anim, atkTime, ...stats } = base; // Asteria 그림이라 PixelLab 동작 정의는 물려받지 않는다
+    const { anim, atkTime, ...stats } = base; // 정예는 자기 그림과 동작 정의(anim)를 쓴다
     const { base: baseType, hpMul, ...overrides } = elite;
     HEROES[type] = {
         ...stats, ...ELITE_ART, ...overrides,

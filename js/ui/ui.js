@@ -22,6 +22,7 @@ const BAG_SLOT = 52; // 칸 크기. 48px 장비 그림을 원래 크기로 넣�
 const BAG_GAP = 6;
 const POPUP_EQUIP_H = 70; // 팝업의 장비 줄 높이
 const EQUIP_MAP_ICON = 24;
+const PARTY_X = 1296; // 파티 창 왼쪽(너비 360). 오른쪽 위 설정 버튼(x 1668부터) 왼쪽
 // 선택 화면: 위쪽 마왕 카드, 아래쪽 유물 격자(48px 원래 크기)와 고른 유물 칸, 오른쪽 아래 시작 버튼
 const LORD_CARD_W = 500;
 const LORD_CARD_H = 470;
@@ -1094,14 +1095,23 @@ const UI = {
         ctx.restore();
     },
 
-    // 마왕 초상: portrait.crop이 있으면 그림의 머리 부분을 잘라 size 네모에 그린다(최근접 표본이라 도트가 흐려지지 않는다)
+    // 마왕 초상
     drawLordPortrait(ctx, lord, x, y, size) {
-        const p = lord.portrait;
-        const img = Assets.get(p.sprite);
+        this.drawPortrait(ctx, lord.portrait, x, y, size);
+    },
+
+    // 초상 { sprite, crop: [x, y, 크기] }을 size 네모에 그린다. 도트가 흐려지지 않게 정수 배율 k(size / 크기의 내림, 최소 1)로
+    // 그리고, 그 배율에서 네모를 채우도록 crop의 가운데를 기준으로 잘라 낸다(그림 밖으로 나가면 안쪽으로 민다)
+    drawPortrait(ctx, portrait, x, y, size) {
+        const img = Assets.get(portrait.sprite);
         if (!img) return;
+        const crop = portrait.crop || [0, 0, img.width];
+        const k = Math.max(1, Math.floor(size / crop[2]));
+        const src = Math.min(size / k, img.width, img.height);
+        const sx = clamp(crop[0] + crop[2] / 2 - src / 2, 0, img.width - src);
+        const sy = clamp(crop[1] + crop[2] / 2 - src / 2, 0, img.height - src);
         ctx.imageSmoothingEnabled = false;
-        if (p.crop) ctx.drawImage(img, p.crop[0], p.crop[1], p.crop[2], p.crop[2], Math.round(x), Math.round(y), size, size);
-        else ctx.drawImage(img, Math.round(x), Math.round(y), size, size);
+        ctx.drawImage(img, Math.round(sx), Math.round(sy), src, src, Math.round(x), Math.round(y), src * k, src * k);
     },
 
     // 유물 그림(48px)을 원래 크기로
@@ -1401,7 +1411,7 @@ const UI = {
         }
     },
 
-    // Asteria 구성의 하단 바: 왼쪽 체력 구슬, 탭과 슬롯, 오른쪽 재화
+    // 하단 바: 왼쪽 체력 구슬, 탭과 슬롯, 오른쪽 재화
     drawBottomBar(ctx) {
         const G = Game;
         const y = GAME_HEIGHT - BAR_H;
@@ -1548,14 +1558,15 @@ const UI = {
     drawParty(ctx) {
         const G = Game;
         const wave = G.currentWave();
-        const x = GAME_WIDTH - 372;
-        const y = 76;
+        // Why: 맵이 화면 위쪽까지 차서 오른쪽 위 설정 버튼 왼쪽, 건설 칸이 없는 물가(18~29열, 0~4줄) 위에 둔다.
+        // 아래로 왕좌의 마왕과 5줄의 건설 칸을 가리지 않게 y 320 위에서 끝난다
+        const x = PARTY_X;
+        const y = 10;
         const entries = Object.entries(wave.members);
         const elites = Object.entries(wave.elites || {});
-        // Why: 정예와 보스가 섞이면 줄이 6개까지 늘어난다. 줄을 낮게 잡아 왕좌의 마왕을 가리지 않게 한다.
-        // 입구별 인원 줄(ENTRY_H)이 더해져도 6줄이면 줄 높이를 38로 줄여 y 400 위에서 끝난다
+        // 정예와 보스가 섞이면 줄이 6개까지 늘어난다. 6줄이면 줄 높이를 36으로 줄인다
         const rows = entries.length + elites.length + (wave.boss ? 1 : 0);
-        const ROW_H = rows >= 6 ? 38 : 42;
+        const ROW_H = rows >= 6 ? 36 : 40;
         const ENTRY_H = 26;
         const h = 58 + ENTRY_H + rows * ROW_H;
         UIKit.frame(ctx, x, y, 360, h, 'panel', 8);
@@ -1566,19 +1577,11 @@ const UI = {
         UIKit.plain(ctx, '입구', x + 20, y + 56, 16, '#b8a9d0');
         UIKit.text(ctx, ROUTE_IDS.map(id => `${ROUTE_NAMES[id]} ${counts[id]}`).join(' · '), x + 340, y + 56, 20, '#ffffff', 'right');
         let ry = y + 54 + ENTRY_H;
-        const row = (img, name, note, count, elite) => {
+        // portrait: { sprite, crop }. 용사는 서 있는 그림의 윗부분(머리)을 원래 크기로 잘라 쓴다
+        const row = (portrait, name, note, count, elite) => {
             const box = ROW_H - 4;
             UIKit.frame(ctx, x + 14, ry - 2, box, box, elite ? 'gold' : 'dark', 4);
-            if (img) {
-                ctx.imageSmoothingEnabled = false;
-                const size = img.width * Math.max(1, Math.floor(44 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(x + 16, ry, box - 4, box - 4);
-                ctx.clip();
-                ctx.drawImage(img, x + 14 + box / 2 - size / 2, ry + box / 2 - 2 - size / 2, size, size);
-                ctx.restore();
-            }
+            this.drawPortrait(ctx, portrait, x + 16, ry, box - 4);
             UIKit.text(ctx, name, x + 62, ry + 9, 18, elite ? '#ffd76a' : '#ffffff');
             UIKit.plain(ctx, note, x + 62, ry + 28, 14, '#b8a9d0');
             if (count) UIKit.text(ctx, `x${count}`, x + 340, ry + 17, 24, '#ffffff', 'right');
@@ -1586,17 +1589,24 @@ const UI = {
         };
         for (const [type, count] of entries) {
             const def = HEROES[type];
-            row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count);
+            row(this.heroPortrait(type), def.name, def.counter, count);
         }
         for (const [type, count] of elites) {
             const def = HEROES[type];
-            row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count, true);
+            row(this.heroPortrait(type), def.name, def.counter, count, true);
         }
         if (wave.boss) {
             const def = BOSSES[wave.boss];
             // 보스가 오는 입구는 이름 줄에 적는다(설명 줄은 이미 길다)
-            row(Assets.get(def.portrait), `${def.name} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽`, def.note, 1);
+            row(def.portrait, `${def.name} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽`, def.note, 1);
         }
+    },
+
+    // 용사 초상: 서 있는 그림(정예 64px, 일반 48px)의 머리 쪽. 그림 위쪽 가운데에서 잘라 쓴다
+    heroPortrait(type) {
+        const img = Assets.get(Render.heroStandName(type));
+        const w = img ? img.width : 48;
+        return { sprite: Render.heroStandName(type), crop: [w / 2 - 12, w > 48 ? 6 : 2, 24] };
     },
 
     // 준비 시간: 각 입구 문 위에 이번에 올 인원을 작게 띄운다(보스가 오는 입구는 보스 표시를 더한다)
@@ -1610,8 +1620,10 @@ const UI = {
             const n = counts[gate.route];
             const boss = bossRoute === gate.route;
             if (!n && !boss) continue;
+            // 북쪽 입구는 문 위 두 칸(1줄), 남쪽 입구는 문 아래 두 칸(13줄): 건설 칸(2~12줄)과 길을 가리지 않는다
+            const above = gate.y < WORLD_HEIGHT / 2;
             const cx = Math.round((gate.x + 18) * WORLD_ZOOM);
-            const cy = Math.round((gate.y - 128) * WORLD_ZOOM);
+            const cy = Math.round((gate.y + (above ? -2 : 2) * TILE) * WORLD_ZOOM);
             const label = `${ROUTE_NAMES[gate.route]} ${n}명${boss ? ' +보스' : ''}`;
             ctx.font = `20px ${UI_FONT}`;
             const w = Math.ceil(ctx.measureText(label).width) + 24;
@@ -1624,16 +1636,11 @@ const UI = {
         const boss = Game.heroes.find(h => h.boss && !h.waiting);
         if (!boss) return;
         const cx = GAME_WIDTH / 2;
-        UIKit.frame(ctx, cx - 340, 82, 680, 62, 'danger', 8);
-        const p = Assets.get(BOSSES[boss.bossKey].portrait);
-        if (p) {
-            ctx.imageSmoothingEnabled = false;
-            // 64px 직업 그림은 줄이면 도트가 깨지므로 가운데 58px을 그대로 잘라 쓴다
-            if (p.width === 64) ctx.drawImage(p, 3, 0, 58, 58, cx - 332, 84, 58, 58);
-            else ctx.drawImage(p, cx - 332, 84, 58, 58);
-        }
-        UIKit.text(ctx, boss.name, cx - 262, 102, 22, '#ffe6ea');
-        UIKit.bar(ctx, cx - 262, 120, 590, 14, boss.hp / boss.maxHp, '#ff6e8a', '#a0233f');
+        // 상단 명판 바로 아래. 건설 칸(2줄, y 128부터)을 덮지 않게 y 128 위에서 끝난다
+        UIKit.frame(ctx, cx - 340, 76, 680, 52, 'danger', 8);
+        this.drawPortrait(ctx, BOSSES[boss.bossKey].portrait, cx - 334, 78, 48);
+        UIKit.text(ctx, boss.name, cx - 270, 92, 20, '#ffe6ea');
+        UIKit.bar(ctx, cx - 270, 108, 598, 12, boss.hp / boss.maxHp, '#ff6e8a', '#a0233f');
     },
 
     drawStreak(ctx) {
@@ -1940,14 +1947,16 @@ const UI = {
         const sx = b.x + 8;
         const sy = b.y + 8;
         const ss = b.h - 16;
-        const slot = Assets.get('ui_skillSlot');
+        // 스킬 칸은 코드로 그린다: 어두운 틀 안에 금색 테두리 한 줄
         ctx.imageSmoothingEnabled = false;
-        if (slot) ctx.drawImage(slot, sx, sy, ss, ss);
-        else UIKit.frame(ctx, sx, sy, ss, ss, 'dark', 6);
-        // 번개는 번개 아이콘, 호통은 고른 마왕의 초상
+        UIKit.frame(ctx, sx, sy, ss, ss, 'dark', 6);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(216,169,79,0.7)';
+        ctx.strokeRect(sx + 7, sy + 7, ss - 14, ss - 14);
+        // 번개는 번개 아이콘(48px 원래 크기), 호통은 고른 마왕의 초상
         if (lightning) {
-            const icon = Assets.get('icon_power_thunderStrike');
-            if (icon) ctx.drawImage(icon, sx + 14, sy + 14, ss - 28, ss - 28);
+            const icon = Assets.get('uiicon_bolt');
+            if (icon) ctx.drawImage(icon, Math.round(sx + (ss - icon.width) / 2), Math.round(sy + (ss - icon.height) / 2));
         } else {
             this.drawLordPortrait(ctx, Game.lordDef(), sx + 14, sy + 14, ss - 28);
         }
@@ -2220,11 +2229,7 @@ const UI = {
             ctx.fillStyle = '#d4354f';
             ctx.fillRect(0, 380, GAME_WIDTH, 6);
             ctx.fillRect(0, 614, GAME_WIDTH, 6);
-            const p = Assets.get(b.portrait || 'portrait_fallenKnight');
-            if (p) {
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(p, 420 - slide, 404, 192, 192);
-            }
+            if (b.portrait) this.drawPortrait(ctx, b.portrait, 420 - slide, 404, 192);
             UIKit.text(ctx, b.sub, 660 + slide, 450, 32, '#ff9daf');
             UIKit.text(ctx, b.name, 660 + slide, 530, 84, '#ffffff');
         }
@@ -2281,7 +2286,7 @@ const UI = {
         UIKit.frame(ctx, cx - 430, 150, 860, 700, 'panel', 10);
         UIKit.text(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 230, 62, win ? '#ffe08a' : '#ff8f9f', 'center');
         const lord = G.lordDef();
-        const portrait = Assets.get(win || !lord.cast ? lord.sprite : lord.cast);
+        const portrait = Assets.get(lord.sprite);
         if (portrait) {
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(portrait, cx - 390, 290, 256, 256);

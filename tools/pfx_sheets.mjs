@@ -27,7 +27,7 @@ const PAL = {
 
 // image: 시트 파일 이름, id: pixelfx 효과, options: 효과 옵션, from/to/step: 고를 프레임(30fps, to 포함), up: 기준점(origin 위 px)
 export const SHEETS = [
-    // 옛 Asteria 효과를 바꾼 것
+    // 이전 효과 그림을 바꾼 것
     { image: 'pfx_zap_hit', id: 'lightning/zap-hit', options: {}, from: 0, to: 26, step: 2, up: 0 },
     { image: 'pfx_fire_blast', id: 'explosions/plasma-explosion', options: { palette: ['#200806', '#5c1410', '#a8281a', '#f05a1d', '#ffa030', '#ffe080', '#ffffff'], accent: ['#2a0c06', '#7a2010', '#e0481c', '#ffb060', '#fff0c0'] }, from: 0, to: 38, step: 2, up: 0 },
     { image: 'pfx_gold_burst', id: 'arcane/mana-burst', options: { palette: PAL.gold }, from: 6, to: 36, step: 2, up: 28 },

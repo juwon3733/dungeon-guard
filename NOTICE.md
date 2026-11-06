@@ -1,5 +1,10 @@
 # Notices
 
+## 그림
+
+`assets/sprites/`의 그림(캐릭터, 마왕, 맵 타일, 소품, 장비, 유물, UI)은 모두 이 게임을 위해 PixelLab(https://www.pixellab.ai)으로 만든 것입니다.
+다른 게임에서 가져온 이전 그림은 모두 지웠습니다. 만든 그림의 목록과 규격은 `docs/PIXELLAB_ASSETS.md`에 있습니다.
+
 ## pixelfx
 
 `assets/fx/`의 전투 효과 시트(`pfx_*.png`)와 `js/data/fx_sheets.js`의 프레임 정보는

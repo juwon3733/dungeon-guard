@@ -1,16 +1,16 @@
 # PixelLab 그림 목록 (품질 시험판)
 
-맵과 배경, 전투 효과, UI는 Asteria 것을 유지하고, 아래 캐릭터와 시설만 새로 만든다.
+게임 그림은 모두 PixelLab으로 만든다. 다른 게임에서 가져온 이전 그림(맵, 배경, 정예와 보스 직업 그림, 마왕, UI 틀)은 2026-11에 모두 지웠다. 전투 효과는 pixelfx 시트다(아래).
 
 ## 공통 규격
 
 - 도구: PixelLab MCP. 만들기 전에 `get_balance`로 잔액을 확인한다.
 - 시점: `high top-down`. 맵의 3/4 시점에 가장 가까운 값이며, 첫 캐릭터를 맵에 올려 보고 확정한다.
 - 외곽선: `single color black outline`, 자세한 정도: `high detail`
-- 표시: 그림 자체는 2배로 두고 세계 전체를 0.75배로 그려 화면에서 1.5배로 보인다(칸 72px). 도트 크기가 조금 불균일한 것은 감수하기로 했다.
+- 표시: 도트 1칸 = 화면 2픽셀. 세계를 `WORLD_ZOOM` 2/3로 그리고(칸 96 → 화면 64px) 캐릭터, 마왕, 소품은 세계 배율 3(`PIXEL_SCALE`)으로 그린다. 그림의 왼쪽 위를 화면 정수 픽셀에 맞춰(`snapWorld`) 도트가 흐려지지 않는다. 타일은 32px을 칸 하나(화면 64px)로 그린다.
 - 파일 위치: `assets/sprites/pl_<이름>/` (`rotations/`, `animations/<동작>/<방향>/frame_000.png`). 전사 폴더: 걷기 `walking`, 공격 `slash`, 사망 `falling_backward`
 - 동작 방식: 템플릿 모드는 들고 있는 무기와 방패가 사라진다. 걷기와 사망은 `mode=skeleton-v3`(프레임 캔버스 64px), 공격은 `mode=v3`와 `action_description`으로 만든다. 전사 기준 48px 캐릭터 하나에 4방향 28회다(걷기 12, 사망 12, 공격 4). 아래 표의 동작 이름과 예상 비용은 템플릿 기준으로 쓴 것이라 이 방식이면 더 든다
-- 분위기: 작고 귀여운 판타지 용사. 어두운 보라색 맵에서 눈에 띄도록 밝은 색을 쓴다.
+- 분위기: 작고 귀여운 판타지 용사. 청록 이끼 바닥에서 눈에 띄도록 밝은 색을 쓴다.
 
 ## 공통 스타일 문구
 
@@ -56,7 +56,7 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 | 도적, 마법사 | 2개 × (만들기 2 + 걷기 9 + 공격 3 + 사망 1) | 실제 30 |
 | 오크 | 만들기 2 + 걷기 9 + 공격 3 | 실제 14 |
 | 시설 3개 | 96px 후보 4장, 개당 10 | 실제 30 |
-| 부대장 | 만들지 않음, Asteria `boss_fallen_knight` 사용 | 0 |
+| 부대장 | `pl_boss_captain`으로 만들었다(아래 2026-11 표) | - |
 | 96px 마왕 (만든다면 1종당) | 만들기 3 + 동작 3개, south만 8~11 | 약 11~14 (추정) |
 
 ## 전투 효과 (pixelfx)
@@ -73,11 +73,11 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 - 만드는 법: pixelfx를 저장소 밖에 clone하고 `tools/lib/fxlib.mjs`의 `renderFrames(fx, { bg: "none", actor: false, options })`로 렌더링한 뒤, 위 프레임만 골라 모든 프레임을 덮는 상자로 잘라 한 줄 8칸 시트로 붙인다. 결과 크기와 기준점은 `js/data/fx_sheets.js`에 적는다.
 - 기준점: 효과의 origin(바닥)에서 위로 hit-spark 20, crit-hit 26, poof 25, mana-burst 28px 올린 점을 `Fx.anim` 좌표에 맞춘다. 타격 섬광과 폭발 중심이 맞는 자리다.
 - 그리기: `Render.drawSheetEffects`가 보통 합성으로 그린다(빛이 시트에 이미 들어 있다). 화면 배율은 `round(size × WORLD_ZOOM / fit)`(최소 1)이라 대부분 1배, 수정 폭발 강화(반경 2칸)는 2배다.
-- 옛 Asteria `fx_` 그림은 모두 아래 시트로 바꿔 더 불러오지 않는다(파일은 `assets/sprites/`에 남아 있다).
+- 이전 `fx_` 그림은 모두 아래 시트로 바꿨고 파일도 지웠다.
 
 ### 바꾼 효과와 몬스터 능력 효과 (2026-11-06)
 
-옛 Asteria 효과 10개를 모두 pixelfx로 바꾸고, 새 능력마다 효과를 넣었다. 재현은 `node tools/pfx_sheets.mjs <pixelfx 폴더> [시트 이름...]`이다(pixelfx는 저장소 밖에 clone한다). 이 도구의 `SHEETS` 표에 효과, 옵션(팔레트 색값 포함), 고른 프레임, 기준점 높이(`up`)가 있고, 실행하면 시트를 쓰고 `js/data/fx_sheets.js`에 옮길 줄을 출력한다. 재생 시간은 화면이 효과로 덮이지 않게 원래보다 짧게 `fx_sheets.js`에 적었다.
+이전 효과 그림 10개를 모두 pixelfx로 바꾸고, 새 능력마다 효과를 넣었다. 재현은 `node tools/pfx_sheets.mjs <pixelfx 폴더> [시트 이름...]`이다(pixelfx는 저장소 밖에 clone한다). 이 도구의 `SHEETS` 표에 효과, 옵션(팔레트 색값 포함), 고른 프레임, 기준점 높이(`up`)가 있고, 실행하면 시트를 쓰고 `js/data/fx_sheets.js`에 옮길 줄을 출력한다. 재생 시간은 화면이 효과로 덮이지 않게 원래보다 짧게 `fx_sheets.js`에 적었다.
 
 | 쓰는 곳(코드 열쇠) | pixelfx id | 옵션 | 쓴 프레임 (30fps) | 재생 | 시트 |
 |---|---|---|---|---|---|
@@ -117,8 +117,41 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 - 기준점은 도구가 출력한 값을 쓰되 둘만 손으로 옮겼다: `fx_stunned`는 별이 도는 가운데(pivotY 20, 머리 위에 맞춤), `fx_thorns`는 가시 줄 가운데(pivotX 100, 몬스터 발밑에 맞춤).
 - 옛 효과 중 남긴 것은 없다.
 
+## 정예, 보스, 마왕, 맵, 소품, UI (2026-11)
+
+이전 그림을 모두 지우고 아래 그림으로 바꿨다. `assets/sprites`에는 `pl_*`, `equip_*`, `relic_*`, `lord_*`, `prop2_*`, `uiicon_*`, `tileset_*`, `ui_kit.png`, `ui_buttons.png`만 있다(`tools/smoke.js`가 확인한다). 시설 그림 `pl_fac_*`도 쓰지 않아 지웠다.
+
+### 정예와 보스
+
+동작 형식은 용사와 같다(`anim`, 방향 `PL_DIRS` = south, east, north, 서쪽은 동쪽 반전). 프레임은 모두 6장이다. 캔버스가 동작과 방향마다 달라 첫 프레임의 발끝 높이(`footPx`)를 방향별로 `js/data/balance.js`에 적었다. 사망 동작은 전사처럼 south 하나다.
+
+| 표 | 폴더(캐릭터 크기) | 걷기 `walking` 캔버스 / 발끝 | 공격 동작 캔버스 / 발끝 | 사망 `falling_backward` |
+|---|---|---|---|---|
+| elite_swordsman 정예 검사 | `pl_elite_duelist` (64) | S 96/78, E 96/78, N 80/68 | `slash` S 84/72, E 84/72, N 80/67 | 84/72 |
+| elite_tamer 정예 조련사 | `pl_elite_tamer` (64) | S 96/78, E 96/78, N 96/77 | `slash` S 84/72, E 88/74, N 84/71 | 84/72 |
+| elite_stormcaller 정예 뇌술사 | `pl_elite_thunder_sage` (64) | S 96/78, E 96/79, N 96/77 | `cast` S 84/72, E 84/72, N 84/71 | 84/72 |
+| elite_rhapsodist 정예 음유시인 | `pl_elite_bard` (64) | S 96/78, E 96/78, N 96/77 | `cast` S 84/72, E 84/72, N 84/71 | 84/72 |
+| 보스 fallen_knight 부대장 | `pl_boss_captain` (96) | S 144/120, E 144/120, N 144/121 | `slash` S 132/113, E 136/116, N 136/114 | 132/113 (쓰지 않음) |
+| 보스 archmage 대마도사 | `pl_boss_grand_wizard` (96) | S 144/119, E 144/119, N 128/110 | `cast` S 132/111, E 132/113, N 128/109 | 132/111 (쓰지 않음) |
+
+- 부대장은 경고(windup) 중에 `slash` 첫 프레임으로 멈춰 서고, 대마도사는 `cast`를 반복한다(`art.windupLoop`).
+- 보스 초상은 `rotations/south`의 얼굴을 잘라 쓴다(`BOSSES[].portrait.crop`). UI는 정수 배율로만 키운다(`UI.drawPortrait`).
+
+### 마왕
+
+- `lord_rift.png`(128px), `lord_bone_queen.png`, `lord_gold_king.png`. 화면 2배(256px)로 왕좌 앞에 선다. 주문 때는 세 마왕 모두 어두워진 화면 위로 빛과 함께 다시 그린다(`Render.drawLordCast`). 초상은 머리를 잘라 쓴다(`DEMON_LORDS[].portrait.crop`).
+
+### 맵 타일
+
+- `tileset_path.png`(lower 청록 이끼 바닥, upper 황토 벽돌 길)와 `tileset_water.png`(lower 같은 이끼 바닥, upper 물가)는 32px 타일 16장의 corners 기반 Wang 타일셋이다(128x128, 4x4). 두 타일셋의 배치가 같아 `js/data/map.js`의 `WANG_TILES` 하나에 꼭짓점(NW, NE, SW, SE)별 bounding_box를 적었다. 두 타일셋의 lower는 같은 그림이라 이어진다.
+- 타일 층을 반 칸 어긋나게 깔아 꼭짓점이 게임 칸 가운데에 온다(`Render.drawGround`). 꼭짓점이 길 칸이나 왕좌 둘레면 벽돌, 물가 칸이면 물가 upper, 나머지는 이끼다. 물가 칸은 길과 왕좌 둘레에 붙지 않는다(한 타일에 셋이 오면 이을 타일이 없다).
+
+### 소품과 UI 아이콘
+
+- `prop2_<mushrooms|crystal|boulder|brazier|bones|chest|obelisk|banner|pillar|spikes|cauldron|tree|cage|gate|throne|stairs>.png`(64px, 화면 2배). 배치는 `DECOR`, 발끝은 `PROP_FOOT`. 입구 문은 `prop2_gate`, 왕좌 의자는 `prop2_throne`(마왕 뒤).
+- `uiicon_*.png`(48px). 지금은 마왕 탭 번개 칸만 `uiicon_bolt`를 쓰고 칸은 코드로 그린다. 나머지 UI 모양 교체는 다음 작업이다.
+
 ## 진행 순서
 
-1. 용사 3종, 오크, 시설 3종은 만들어 연결했다(`boss_captain`은 만들지 않음).
-2. 마왕은 Asteria `boss_rift_lord`를 쓰고 있다. 마왕 선택 기능을 하면 그때 `demon_lord`를 몇 종 만들지 정한다.
-3. Asteria 캐릭터 그림은 정예몹과 보스에 쓸 수 있으니 지우지 않는다.
+1. 용사 3종, 오크, 몬스터 23종, 정예 4종, 보스 2종, 마왕 3명, 맵 타일, 소품, 장비, 유물, UI 아이콘을 만들어 연결했다.
+2. 다음: UI 틀과 체력 구슬 같은 UI 모양 교체(`ui_kit.png`, `ui_buttons.png`, `uiicon_*`).

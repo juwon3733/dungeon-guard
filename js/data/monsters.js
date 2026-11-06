@@ -178,7 +178,7 @@ const MONSTERS = {
             A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
             B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
         },
-        art: { scale: 2, barY: 84, idleFps: 0, glow: '255,130,70', anim: { idle: ORC_ART.anim.walk, walk: ORC_ART.anim.walk, attack: ORC_ART.anim.attack } }
+        art: { scale: PIXEL_SCALE, barY: 126, idleFps: 0, glow: '255,130,70', anim: { idle: ORC_ART.anim.walk, walk: ORC_ART.anim.walk, attack: ORC_ART.anim.attack } }
     },
     skeleton_archer: {
         id: 'skeleton_archer', name: '스켈레톤 궁수', role: 'ranged', family: 'undead', grade: 'common',
@@ -191,7 +191,7 @@ const MONSTERS = {
             B: { name: '저격', desc: '피해 3배, 사거리 5', damageMul: 3, range: 5, heavy: true }
         },
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '120,170,255', hand: { x: 40, y: 50 },
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '120,170,255', hand: { x: 60, y: 75 },
             anim: {
                 idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
                 attack: { folder: 'shoot', frames: 6, dirs: PL_DIRS, footPx: { south: 59, east: 56, north: 56 } }
@@ -209,7 +209,7 @@ const MONSTERS = {
             B: { name: '관통', desc: '일직선 빔으로 공격', beam: true }
         },
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '190,90,255', hand: { x: 34, y: 40 },
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '190,90,255', hand: { x: 51, y: 60 },
             anim: {
                 idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
                 attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 56, east: 57, north: 56 } }
@@ -223,7 +223,7 @@ const MONSTERS = {
         abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.5 }], unlock: 'start',
         desc: '길로 걸어 나가 용사 2명을 붙잡고 빠르게 벱니다.',
         art: {
-            scale: 2, barY: 92, idleFps: 0, glow: '255,110,60',
+            scale: PIXEL_SCALE, barY: 138, idleFps: 0, glow: '255,110,60',
             anim: {
                 idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
                 walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
@@ -238,7 +238,7 @@ const MONSTERS = {
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
         desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏩니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '170,90,255', hand: { x: 34, y: 50 },
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '170,90,255', hand: { x: 51, y: 75 },
             anim: {
                 idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 62, east: 64, north: 61 } },
                 attack: { folder: 'shoot', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 56, north: 55 } }
@@ -252,7 +252,7 @@ const MONSTERS = {
         abilities: [{ kind: 'deathStun', radius: 2, duration: 1.5 }], unlock: 'start',
         desc: '길로 걸어 나가 용사를 5명까지 붙잡고 오래 버팁니다.',
         art: {
-            scale: 2, barY: 100, idleFps: 0, glow: '170,120,255',
+            scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '170,120,255',
             anim: {
                 idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
                 walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
@@ -267,7 +267,7 @@ const MONSTERS = {
         abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
         desc: '길로 걸어 나가 용사를 8명까지 붙잡고, 쓰러지면 주변을 기절시킵니다.',
         art: {
-            scale: 2, barY: 136, idleFps: 0, glow: '255,200,90',
+            scale: PIXEL_SCALE, barY: 204, idleFps: 0, glow: '255,200,90',
             anim: {
                 idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
                 walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
@@ -284,7 +284,7 @@ const MONSTERS = {
         abilities: [], unlock: 'start',
         desc: '길로 걸어 나가 용사 하나를 붙잡고 창으로 빠르게 찌릅니다.',
         art: {
-            scale: 2, barY: 104, idleFps: 0, glow: '130,235,80',
+            scale: PIXEL_SCALE, barY: 156, idleFps: 0, glow: '130,235,80',
             anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
         }
     },
@@ -295,7 +295,7 @@ const MONSTERS = {
         abilities: [{ kind: 'regen', perSec: 3 }], unlock: 'start',
         desc: '느리게 때리지만 상처가 저절로 아물며 길을 오래 막습니다.',
         art: {
-            scale: 2, barY: 94, idleFps: 0, glow: '150,220,120',
+            scale: PIXEL_SCALE, barY: 141, idleFps: 0, glow: '150,220,120',
             anim: { idle: plClip('walking', 6, 61, 54, 61), walk: plClip('walking', 6, 61, 54, 61), attack: plClip('slash', 6, 55, 54, 54) }
         }
     },
@@ -306,7 +306,7 @@ const MONSTERS = {
         abilities: [{ kind: 'burnShot', dps: 3, duration: 2 }], unlock: 'start',
         desc: '불덩이를 던져 맞은 용사를 잠시 태웁니다.',
         art: {
-            scale: 2, barY: 92, idleFps: 3, glow: '255,110,40', hand: { x: 30, y: 32 }, shot: 'fx_shot_fire',
+            scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,110,40', hand: { x: 45, y: 48 }, shot: 'fx_shot_fire',
             anim: { idle: plClip('idle', 4, 50, 51, 50), attack: plClip('cast', 6, 50, 51, 50) }
         }
     },
@@ -317,7 +317,7 @@ const MONSTERS = {
         abilities: [], unlock: 'start',
         desc: '무거운 손도끼를 던져 앞선 용사 하나를 세게 때립니다.',
         art: {
-            scale: 2, barY: 88, idleFps: 3, glow: '255,180,70', hand: { x: 18, y: 52 }, shot: 'fx_shot_axe',
+            scale: PIXEL_SCALE, barY: 132, idleFps: 3, glow: '255,180,70', hand: { x: 27, y: 78 }, shot: 'fx_shot_axe',
             anim: { idle: plClip('idle', 4, 54, 54, 54), attack: plClip('throw', 6, 54, 54, 54) }
         }
     },
@@ -328,7 +328,7 @@ const MONSTERS = {
         abilities: [{ kind: 'aura', stat: 'heal', radius: 2, value: 3 }], unlock: 'start',
         desc: '등불을 들고 서서 둘레 몬스터의 상처를 천천히 낫게 합니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '90,240,255', hand: { x: 26, y: 56 }, shot: 'bolt',
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '90,240,255', hand: { x: 39, y: 84 }, shot: 'bolt',
             anim: { idle: plClip('idle', 4, 54, 54, 53), attack: plClip('cast', 6, 54, 54, 53) }
         }
     },
@@ -339,7 +339,7 @@ const MONSTERS = {
         abilities: [{ kind: 'lifesteal', ratio: 0.3 }], unlock: 'start',
         desc: '용사 2명을 붙잡고 물어뜯어 그 피로 버팁니다.',
         art: {
-            scale: 2, barY: 94, idleFps: 0, glow: '140,160,255',
+            scale: PIXEL_SCALE, barY: 141, idleFps: 0, glow: '140,160,255',
             anim: { idle: plClip('walking', 6, 54, 63, 54), walk: plClip('walking', 6, 54, 63, 54), attack: plClip('slash', 6, 54, 57, 53) }
         }
     },
@@ -350,7 +350,7 @@ const MONSTERS = {
         abilities: [{ kind: 'regen', perSec: 10 }], unlock: 'start',
         desc: '용사 4명을 붙잡고, 맞아도 금세 상처가 아뭅니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 0, glow: '70,230,180',
+            scale: PIXEL_SCALE, barY: 144, idleFps: 0, glow: '70,230,180',
             anim: { idle: plClip('walking', 6, 62, 63, 63), walk: plClip('walking', 6, 62, 63, 63), attack: plClip('slash', 6, 56, 57, 56) }
         }
     },
@@ -361,7 +361,7 @@ const MONSTERS = {
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
         desc: '얼음 창을 던져 무리를 함께 얼리고 느리게 만듭니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '130,205,255', hand: { x: 40, y: 50 }, shot: 'fx_shot_ice', impact: 'fx_snowflake',
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '130,205,255', hand: { x: 60, y: 75 }, shot: 'fx_shot_ice', impact: 'fx_snowflake',
             anim: { idle: plClip('idle', 4, 56, 56, 54), attack: plClip('cast', 6, 56, 56, 54) }
         }
     },
@@ -372,7 +372,7 @@ const MONSTERS = {
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1 }], unlock: 'start',
         desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세웁니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '235,110,255', hand: { x: 10, y: 44 }, shot: 'fx_shot_jester',
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '235,110,255', hand: { x: 15, y: 66 }, shot: 'fx_shot_jester',
             anim: { idle: plClip('idle', 4, 54, 54, 51), attack: plClip('cast', 6, 54, 54, 51) }
         }
     },
@@ -383,7 +383,7 @@ const MONSTERS = {
         abilities: [{ kind: 'aura', stat: 'damage', radius: 2.5, value: 0.2 }], unlock: 'start',
         desc: '전쟁 주술로 둘레 몬스터의 공격을 더 아프게 합니다.',
         art: {
-            scale: 2, barY: 98, idleFps: 3, glow: '110,240,130', hand: { x: 24, y: 44 }, shot: 'bolt',
+            scale: PIXEL_SCALE, barY: 147, idleFps: 3, glow: '110,240,130', hand: { x: 36, y: 66 }, shot: 'bolt',
             anim: { idle: plClip('idle', 4, 57, 57, 57), attack: plClip('cast', 6, 57, 57, 57) }
         }
     },
@@ -394,7 +394,7 @@ const MONSTERS = {
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
         desc: '큰 도끼를 휘둘러 붙잡은 용사와 그 둘레를 함께 벱니다.',
         art: {
-            scale: 2, barY: 100, idleFps: 0, glow: '255,140,50',
+            scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '255,140,50',
             anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
         }
     },
@@ -405,7 +405,7 @@ const MONSTERS = {
         abilities: [{ kind: 'goldOnKill', gold: 3 }], unlock: 'start',
         desc: '먼 곳의 용사에게 핏빛 구슬을 쏘고, 쓰러뜨리면 금화를 챙깁니다.',
         art: {
-            scale: 2, barY: 96, idleFps: 3, glow: '255,50,80', hand: { x: 26, y: 36 }, shot: 'fx_shot_blood',
+            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,50,80', hand: { x: 39, y: 54 }, shot: 'fx_shot_blood',
             anim: { idle: plClip('idle', 4, 56, 57, 53), attack: plClip('cast', 6, 56, 57, 53) }
         }
     },
@@ -416,7 +416,7 @@ const MONSTERS = {
         abilities: [{ kind: 'burnGround', radius: 1, dps: 10, duration: 3 }], unlock: 'start',
         desc: '용암 덩이를 던져 무리를 태우고 그 자리에 불 장판을 남깁니다.',
         art: {
-            scale: 2, barY: 92, idleFps: 3, glow: '255,90,20', hand: { x: 22, y: 30 }, shot: 'fx_shot_fire', impact: 'fx_hit_fire',
+            scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,90,20', hand: { x: 33, y: 45 }, shot: 'fx_shot_fire', impact: 'fx_hit_fire',
             anim: { idle: plClip('idle', 4, 56, 54, 54), attack: plClip('cast', 6, 56, 54, 54) }
         }
     },
@@ -427,7 +427,7 @@ const MONSTERS = {
         abilities: [{ kind: 'thorns', ratio: 0.3 }], unlock: 'start',
         desc: '용사 6명을 붙잡고, 때리는 용사는 가시에 찔립니다.',
         art: {
-            scale: 2, barY: 102, idleFps: 0, glow: '140,255,100',
+            scale: PIXEL_SCALE, barY: 153, idleFps: 0, glow: '140,255,100',
             anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
         }
     },
@@ -438,7 +438,7 @@ const MONSTERS = {
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
         desc: '불타는 대검으로 둘레를 쓸어 버리고, 다치면 더 빨라집니다.',
         art: {
-            scale: 2, barY: 130, idleFps: 0, glow: '255,170,40',
+            scale: PIXEL_SCALE, barY: 195, idleFps: 0, glow: '255,170,40',
             anim: { idle: plClip('walking', 6, 79, 80, 77), walk: plClip('walking', 6, 79, 80, 77), attack: plClip('slash', 6, 75, 75, 73) }
         }
     },
@@ -449,7 +449,7 @@ const MONSTERS = {
         abilities: [{ kind: 'chain', count: 3, ratio: 0.6, jump: 2.5 }, { kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
         desc: '죽음의 구체를 떨어뜨리고 번개로 잇습니다. 둘레 몬스터가 더 빨리 공격합니다.',
         art: {
-            scale: 2, barY: 130, idleFps: 3, glow: '80,255,150', hand: { x: 36, y: 36 }, shot: 'bolt',
+            scale: PIXEL_SCALE, barY: 195, idleFps: 3, glow: '80,255,150', hand: { x: 54, y: 54 }, shot: 'bolt',
             anim: { idle: plClip('idle', 4, 72, 72, 72), attack: plClip('cast', 6, 72, 72, 72) }
         }
     }

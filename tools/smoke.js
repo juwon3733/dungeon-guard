@@ -13,7 +13,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
     const actx = vm.createContext({ console });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
     }
     const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
@@ -85,7 +85,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         }
     }
     assert(!fs.existsSync(path.join(root, 'docs/monster_art_16.json')), 'art notes moved into the table');
-    // 전투 효과: 모두 pixelfx 시트. 시트 크기가 표와 맞고 합계 15MB 아래. 옛 Asteria fx_ 그림은 불러오지 않는다
+    // 전투 효과: 모두 pixelfx 시트. 시트 크기가 표와 맞고 합계 15MB 아래. 이전 fx_ 그림은 불러오지 않는다
     const sheets = vm.runInContext('FX_SHEETS', actx);
     let total = 0;
     const images = new Set();
@@ -101,7 +101,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     }
     for (const f of fs.readdirSync(path.join(root, 'assets/fx'))) assert(images.has(f.replace('.png', '')), 'unused sheet ' + f);
     assert(total < 15 * 1024 * 1024, 'fx sheets under 15MB: ' + total);
-    assert(!names.some(n => n.startsWith('fx_')), 'old Asteria fx not loaded');
+    assert(!names.some(n => n.startsWith('fx_')), 'old fx pictures not loaded');
     for (const key of ['fx_hit_fire', 'fx_hit_lightning', 'fx_blastGold', 'fx_blastPink', 'fx_blastCyan', 'fx_adv_arcanist_lightning',
         'fx_adv_arcanist_thunderGod', 'fx_adv_doomMelody_requiem', 'fx_arrowBig', 'fx_arrowPoison']) assert(sheets[key], key + ' replaced by pixelfx');
     // 능력 효과와 투사체 효과가 시트에 있다
@@ -110,6 +110,65 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     for (const def of Object.values(monsters)) {
         if (def.art.shot && def.art.shot !== 'bolt') assert(sheets[def.art.shot] && sheets[def.art.shot].shot, def.id + ' shot sheet');
         if (def.art.impact) assert(sheets[def.art.impact], def.id + ' impact sheet');
+    }
+
+    // 그림은 PixelLab으로 만든 것만 남긴다: assets/sprites에는 아래 이름만 있다
+    const KEEP = [/^pl_(?!fac_)/, /^equip_/, /^relic_/, /^lord_/, /^prop2_/, /^uiicon_/, /^tileset_/, /^ui_kit\.png$/, /^ui_buttons\.png$/];
+    for (const f of fs.readdirSync(path.join(root, 'assets/sprites'))) assert(KEEP.some(re => re.test(f)), 'only PixelLab art remains: ' + f);
+    // 불러오는 그림은 모두 파일이 있다(지운 그림을 부르는 곳이 없다)
+    for (const n of names) {
+        const file = n.startsWith('pfx_') ? path.join(root, 'assets/fx', n + '.png') : path.join(root, 'assets/sprites', n + '.png');
+        assert(fs.existsSync(file), 'loaded picture exists: ' + n);
+    }
+    // 코드에 지운 그림 이름이 남지 않는다
+    const GONE = /['"`](boss_|portrait_|island_|void_|bridgedeck_|tile_(shadow|void)|wall_|prop_|ui_(skillSlot|itemSlot|button|closeButton|window)|icon_|enemy_|object_|pl_fac_)|_female|_walk_|ELITE_ART\.footPx/;
+    const jsFiles = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? jsFiles(path.join(dir, e.name)) : (e.name.endsWith('.js') ? [path.join(dir, e.name)] : []));
+    for (const f of [...jsFiles(path.join(root, 'js')), path.join(root, 'tools/capture.js')]) {
+        fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => assert(!GONE.test(line), `removed art referenced: ${path.relative(root, f)}:${i + 1}`));
+    }
+    // 이전 그림의 출처 이름이 저장소 어디에도 없다(파일 이름 포함)
+    {
+        const word = new RegExp(['a', 's', 't', 'e', 'r', 'i', 'a'].join(''), 'i');
+        const { execFileSync } = require('child_process');
+        let tracked = [];
+        try { tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean); } catch (e) { tracked = []; }
+        for (const f of tracked) {
+            assert(!word.test(f), 'old source name in file name: ' + f);
+            if (!/\.(js|mjs|md|json|html|css|txt)$/.test(f) || !fs.existsSync(path.join(root, f))) continue;
+            assert(!word.test(fs.readFileSync(path.join(root, f), 'utf8')), 'old source name in ' + f);
+        }
+    }
+    // 용사, 정예, 보스: 동작마다 방향 폴더에 프레임 수만큼 그림이 있고 첫 프레임 발끝이 캔버스 안이다
+    const heroes = vm.runInContext('HEROES', actx);
+    const bosses = vm.runInContext('BOSSES', actx);
+    for (const def of [...Object.values(heroes), ...Object.values(bosses).map(b => b.art)]) {
+        assert.strictEqual(def.scale, 3, def.sprite + ' 1 dot = 2 screen px');
+        assert(names.includes(`${def.sprite}/rotations/south`), def.sprite + ' rotation');
+        for (const clip of Object.values(def.anim)) {
+            for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {
+                const dirPath = path.join(root, 'assets/sprites', def.sprite, 'animations', clip.folder, dir);
+                assert.strictEqual(fs.readdirSync(dirPath).filter(f => f.endsWith('.png')).length, clip.frames, `${def.sprite} ${clip.folder} ${dir} frames`);
+                const png = fs.readFileSync(path.join(dirPath, 'frame_000.png'));
+                const foot = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[dir];
+                assert(foot > 0 && foot <= png.readUInt32BE(20), `${def.sprite} ${clip.folder} ${dir} foot inside`);
+            }
+        }
+    }
+    for (const id of ['elite_swordsman', 'elite_tamer', 'elite_stormcaller', 'elite_rhapsodist']) {
+        assert(heroes[id].anim.death && heroes[id].anim.death.dirs.join() === 'south', id + ' dies facing south');
+    }
+    // 맵 그림: 타일셋은 128px(32px 타일 4x4), 소품은 64px, Wang 표는 꼭짓점 16가지를 모두 담는다
+    const wang = vm.runInContext('WANG_TILES', actx);
+    assert.strictEqual(Object.keys(wang).length, 16, 'sixteen wang tiles');
+    for (let k = 0; k < 16; k++) {
+        const key = k.toString(2).padStart(4, '0');
+        const [x, y, w, h] = wang[key];
+        assert(w === 32 && h === 32 && x % 32 === 0 && y % 32 === 0 && x < 128 && y < 128, 'wang tile ' + key);
+    }
+    for (const t of ['tileset_path', 'tileset_water']) assert.deepStrictEqual(pngSize(t), [128, 128], t);
+    for (const d of vm.runInContext('DECOR', actx)) {
+        assert.deepStrictEqual(pngSize(d.sprite), [64, 64], d.sprite + ' is 64px');
+        assert(typeof vm.runInContext(`propFootPx('${d.sprite}')`, actx) === 'number', d.sprite + ' foot');
     }
 }
 vm.runInContext(`
@@ -219,7 +278,7 @@ assert.strictEqual(MONSTERS.curse_shooter.stats.range, 4);
         const s = d.stats;
         assert.deepStrictEqual([d.grade, d.role, d.family, s.hp, s.damage, s.interval, s.range, s.block, s.respawn].slice(0, w.length), w, id);
         assert(MONSTER_FAMILIES[d.family] && MONSTER_ROLES[d.role], id + ' role and family');
-        assert.strictEqual(d.art.scale, 2, id + ' scale 2');
+        assert.strictEqual(d.art.scale, PIXEL_SCALE, id + ' scale: 1 dot = 2 screen px');
         assert(d.art.glow.split(',').length === 3 && d.art.glow.split(',').every(v => Number(v) >= 0 && Number(v) <= 255), id + ' glow');
         if (!monsterBlocks(id)) assert(d.art.hand && d.art.hand.x >= 0, id + ' hand');
     }
@@ -294,8 +353,8 @@ Game.summonCount = 200;
 assert.strictEqual(Game.summonCost(), 60, 'cost capped');
 
 // 원거리 몬스터는 사거리 안에 길이 들어오는 칸에만 나온다.
-// 남쪽 길이 생겨 모든 건설 칸이 어느 길에서든 2.5칸 안이라, 이 시험 동안만 암흑 마법사 사거리를 1.5칸으로 줄인다
-assert(![...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return pathGap(c, r) > 2.5 * TILE; }), 'every build cell within 2.5 tiles of a path');
+// 건설 칸은 길에서 가로세로 2칸 안이라 어느 길에서든 대각선 2칸(2.83칸) 안이다. 이 시험 동안만 암흑 마법사 사거리를 1.5칸으로 줄인다
+assert(![...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return pathGap(c, r) > 2 * Math.SQRT2 * TILE + 1e-6; }), 'every build cell within 2 diagonal tiles of a path');
 const mageRange = MONSTERS.dark_mage.stats.range;
 MONSTERS.dark_mage.stats.range = 1.5;
 const farCells = [...BUILD_CELLS].map(k => k.split(',').map(Number)).filter(([c, r]) => pathGap(c, r) > MONSTERS.dark_mage.stats.range * TILE);
@@ -426,15 +485,15 @@ UI.onMove(...cellXY(2, 3));
 assert(UI.drag && UI.drag.type === 'skeleton_archer', 'dragging');
 assert(UI.hoverCell && UI.hoverCell.col === 2 && UI.hoverCell.row === 3);
 assert(!UI.canPlaceAt(2, 3), 'path cell is red');
-UI.onMove(...cellXY(5, 4));
-assert(UI.canPlaceAt(5, 4), 'build cell ok');
+UI.onMove(...cellXY(4, 5));
+assert(UI.canPlaceAt(4, 5), 'build cell ok');
 assert.strictEqual(UI.dropAction(UI.dropTarget).action, 'place');
 // Esc로 끌기를 그만두면 제자리에 그대로 남는다
 UI.onKey('Escape');
 assert(!UI.drag);
-UI.onUp(...cellXY(5, 4));
+UI.onUp(...cellXY(4, 5));
 assert.strictEqual(Game.monsterAt(3, 4), archer1);
-assert.strictEqual(Game.monsterAt(5, 4), null);
+assert.strictEqual(Game.monsterAt(4, 5), null);
 
 // 놓을 수 없는 곳에 놓으면 안내하고 제자리로 돌아간다: 길 칸, 건설 칸이 아닌 곳, 하단 바
 UI.toast = null;
@@ -443,8 +502,8 @@ assert.strictEqual(Game.monsterAt(3, 4), archer1, 'not on path');
 assert(UI.toast && UI.toast.text.includes('길'), 'path toast');
 assert(UI.returning.length > 0, 'fly back effect');
 UI.toast = null;
-dragTo(monXY(archer1), cellXY(12, 12));
-assert(!isBuildCell(12, 12) && Game.monsterAt(3, 4) === archer1);
+dragTo(monXY(archer1), cellXY(12, 13));
+assert(!isBuildCell(12, 13) && Game.monsterAt(3, 4) === archer1);
 assert(UI.toast && UI.toast.text.includes('길 옆'), 'not build cell toast');
 dragTo(monXY(archer1), [BAR_SLOT_X + 20, GAME_HEIGHT - 40]);
 assert.strictEqual(Game.monsterAt(3, 4), archer1, 'dropped on bar');
@@ -460,15 +519,15 @@ assert(Game.monsterAt(9, 4) === orc9 && Game.monsterAt(3, 4) === archer1);
 
 // 끌어 옮기기: 맵의 몬스터를 다른 빈 길 옆 칸으로. 원래 칸은 빈다(비용 없음)
 const goldBeforeMove = Game.gold;
-dragTo(monXY(archer1), cellXY(5, 4));
-assert.strictEqual(Game.monsterAt(5, 4), archer1, 'moved');
+dragTo(monXY(archer1), cellXY(4, 5));
+assert.strictEqual(Game.monsterAt(4, 5), archer1, 'moved');
 assert.strictEqual(Game.monsterAt(3, 4), null, 'old cell freed');
-assert(archer1.x === tileX(5) && archer1.homeY === tileY(4));
+assert(archer1.x === tileX(4) && archer1.homeY === tileY(5));
 assert.strictEqual(Game.gold, goldBeforeMove, 'move is free');
 // 길로는 옮길 수 없고 제자리에 남는다
 UI.toast = null;
-dragTo(monXY(archer1), cellXY(6, 7));
-assert.strictEqual(Game.monsterAt(5, 4), archer1, 'stays');
+dragTo(monXY(archer1), cellXY(5, 7));
+assert.strictEqual(Game.monsterAt(4, 5), archer1, 'stays');
 assert(UI.toast && UI.toast.text.includes('길'));
 // 맵의 몬스터를 누르면 정보 팝업
 click(...monXY(archer1));
@@ -481,7 +540,7 @@ UI.clearSelection();
 Fx.pops = [];
 const mergedBefore = Game.stats.merged;
 dragTo(monXY(mage0), monXY(archer1));
-const shooter = Game.monsterAt(5, 4);
+const shooter = Game.monsterAt(4, 5);
 assert(shooter && shooter.type === 'curse_shooter', 'recipe result at target');
 assert(archer1.removed && !Game.monsters.includes(archer1));
 assert(mage0.removed && Game.monsterAt(7, 4) === null, 'source freed');
@@ -501,10 +560,10 @@ const shooter2 = Game.monsterAt(7, 4);
 
 // 히든 조합식: 오크 광전사 + 스켈레톤 궁수 → 해골 기사. 처음이면 "히든 조합 발견!"
 Game.place('orc_berserker', 3, 2);
-Game.place('skeleton_archer', 5, 3);
+Game.place('skeleton_archer', 4, 4);
 tick(0.1);
-dragTo(monXY(Game.monsterAt(3, 2)), monXY(Game.monsterAt(5, 3)));
-assert.strictEqual(Game.monsterAt(5, 3).type, 'bone_knight', 'hidden recipe result');
+dragTo(monXY(Game.monsterAt(3, 2)), monXY(Game.monsterAt(4, 4)));
+assert.strictEqual(Game.monsterAt(4, 4).type, 'bone_knight', 'hidden recipe result');
 assert.strictEqual(Game.monsterAt(3, 2), null);
 assert(Fx.discovery && Fx.discovery.type === 'bone_knight', 'hidden discovered');
 assert(Meta.data.recipes.includes('orc_berserker+skeleton_archer') && Meta.hasSeen('bone_knight'), 'hidden recipe and result kept in the meta record');
@@ -522,10 +581,10 @@ assert.strictEqual(Meta.data.recipes.filter(k => k === 'orc_berserker+skeleton_a
 tick(0.5);
 
 // 영웅끼리는 합칠 수 없다: 안내하고 둘 다 그대로
-const kA = Game.monsterAt(3, 2), kB = Game.monsterAt(5, 3);
+const kA = Game.monsterAt(3, 2), kB = Game.monsterAt(4, 4);
 UI.toast = null;
 dragTo(monXY(kA), [kB.homeX * WORLD_ZOOM, (kB.homeY - 10) * WORLD_ZOOM]);
-assert(Game.monsterAt(3, 2) === kA && Game.monsterAt(5, 3) === kB, 'epic + epic refused');
+assert(Game.monsterAt(3, 2) === kA && Game.monsterAt(4, 4) === kB, 'epic + epic refused');
 assert(UI.toast && UI.toast.text.includes('최고 등급'));
 assert.strictEqual(mergePlan('bone_knight', 'bone_knight').reason, 'top');
 
@@ -533,7 +592,7 @@ assert.strictEqual(mergePlan('bone_knight', 'bone_knight').reason, 'top');
 UI.toast = null;
 Game.place('skeleton_archer', 7, 6);
 dragTo(monXY(Game.monsterAt(7, 6)), [kB.homeX * WORLD_ZOOM, (kB.homeY - 10) * WORLD_ZOOM]);
-assert(Game.monsterAt(7, 6).type === 'skeleton_archer' && Game.monsterAt(5, 3) === kB, 'mismatch refused');
+assert(Game.monsterAt(7, 6).type === 'skeleton_archer' && Game.monsterAt(4, 4) === kB, 'mismatch refused');
 assert(UI.toast && UI.toast.text.includes('합칠 수 없'));
 assert.strictEqual(mergePlan('skeleton_archer', 'curse_shooter').reason, 'mismatch');
 Game.removeMonster(Game.monsterAt(7, 6));
@@ -557,7 +616,7 @@ tick(0.5);
 dragTo(monXY(shooter), [berserker.homeX * WORLD_ZOOM, (berserker.homeY - 10) * WORLD_ZOOM]);
 const knight = Game.monsterAt(3, 6);
 assert(knight && knight.type === 'bone_knight', 'field + field recipe');
-assert.strictEqual(Game.monsterAt(5, 4), null);
+assert.strictEqual(Game.monsterAt(4, 5), null);
 assert.strictEqual(monsterStats(knight).hp, 500);
 // 희귀 2마리, 조합식 없음 → 영웅 등급 합치기
 assert.strictEqual(mergePlan('curse_shooter', 'curse_shooter').kind, 'grade');
@@ -688,12 +747,12 @@ assert(!orc.moving && distance(orc.x, orc.y, orc.rally.x, orc.rally.y) <= 6, 'or
 assert.strictEqual(Game.monsterAt(3, 4), orc, 'home cell stays taken');
 assert(!Game.canPlace('skeleton_archer', 3, 4));
 // 원거리 몬스터는 놓은 칸에 그대로 선다
-Game.place('skeleton_archer', 5, 4);
+Game.place('skeleton_archer', 4, 5);
 Game.place('skeleton_archer', 5, 5);
 Game.place('dark_mage', 3, 6);
 tick(1);
-const archer = Game.monsterAt(5, 4);
-assert(!archer.blocks && archer.x === tileX(5) && archer.y === tileY(4), 'ranged stays on its cell');
+const archer = Game.monsterAt(4, 5);
+assert(!archer.blocks && archer.x === tileX(4) && archer.y === tileY(5), 'ranged stays on its cell');
 
 // 정보 창: 놓은 칸을 눌러도, 길로 나간 몬스터를 눌러도 뜬다
 UI.clearSelection();
@@ -743,7 +802,7 @@ UI.onKey('KeyQ');
 assert.strictEqual(UI.tab, 'demon');
 assert.strictEqual(UI.drag, null);
 UI.onUp(...cellXY(7, 5));
-assert.strictEqual(Game.monsterAt(5, 4), archer);
+assert.strictEqual(Game.monsterAt(4, 5), archer);
 assert.strictEqual(Game.monsterAt(7, 5), null);
 assert.strictEqual(UI.targeting, true);
 UI.onKey('KeyQ');
@@ -824,7 +883,7 @@ assert.strictEqual(et.speed, 1.3);
 assert.strictEqual(es.stunEvery, 4);
 assert.strictEqual(es.stunRange, 4);
 assert.strictEqual(es.bounty, HEROES.mage.bounty * 3);
-assert(!ew.anim && ew.sprite === 'swordsman', 'elite uses Asteria art');
+assert(ew.anim && ew.sprite === 'pl_elite_duelist' && ew.anim.attack.folder === 'slash' && ew.anim.death.dirs.join() === 'south', 'elite uses PixelLab art');
 assert.strictEqual(CORRUPTED.elite_tamer.hp, CORRUPTED.rogue.hp * 2);
 assert.strictEqual(CORRUPTED.elite_tamer.damage, CORRUPTED.rogue.damage * 2);
 assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
@@ -861,7 +920,7 @@ assert(!WAVES[0].elites && !WAVES[1].elites && WAVES.slice(2).every(w => {
 
 // 정예 직업 능력. 아래 블록은 Game 목록을 직접 바꾸고, 다음 '다시 시작'에서 모두 초기화된다.
 const er = HEROES.elite_rhapsodist;
-assert(!er.anim && er.sprite === 'rhapsodist' && er.song && !er.stunEvery, 'rhapsodist: Asteria art, song, no stun');
+assert(er.anim && er.sprite === 'pl_elite_bard' && er.anim.attack.folder === 'cast' && er.song && !er.stunEvery, 'rhapsodist: PixelLab art, song, no stun');
 assert(WAVES.some(w => w.elites && w.elites.elite_rhapsodist), 'rhapsodist appears in some wave');
 // 용사 하나를 길 위 거리 d, 길 한가운데(lane 0)에 세운다
 const place = (type, d, bossKey) => {
@@ -999,7 +1058,7 @@ const clearBoard = () => { Game.heroes = []; Game.units = []; Game.monsters = []
     assert(boss.boss && !boss.elite && boss.bossKey === 'archmage' && boss.name === def.name);
     assert.strictEqual(boss.maxHp, knight.maxHp * def.waveHpMul, 'fallen knight hp x waveHpMul');
     assert.strictEqual(boss.throneDamage, def.throneDamage);
-    assert(def.art.sprite === 'stormcaller' && Math.abs(def.art.scale - 3 / WORLD_ZOOM) < 1e-9);
+    assert(def.art.sprite === 'pl_boss_grand_wizard' && def.art.scale === BOSS_SCALE && def.art.anim.attack.folder === 'cast' && def.art.windupLoop);
     const [p1, p2] = def.patterns;
     assert(p1.at === 0.5 && p1.kind === 'shock' && p2.at === 0.25 && p2.kind === 'shock' && p2.range > p1.range);
     const w = heroWorld(boss);
@@ -1751,6 +1810,30 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(!Game.onThrone(tileX(THRONE_TILE.col - 2), tileY(THRONE_TILE.row)), 'two tiles left is off throne');
     assert(!Game.onThrone(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row + 2)), 'two tiles below is off throne');
     assert(Game.onThrone(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row)), 'throne tile');
+    // 새 맵: 30 x 15칸, 경로 칸 수(북 49, 남 47)와 합류점, 건설 칸 줄 2~12
+    assert(MAP_COLS === 30 && MAP_ROWS === 15 && TILE * WORLD_ZOOM === 64, '30 x 15 cells of 64px');
+    assert.strictEqual(JSON.stringify(ROUTE_TILES.north), '[[0,3],[5,3],[5,8],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
+    assert.strictEqual(JSON.stringify(ROUTE_TILES.south), '[[0,11],[10,11],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
+    assert(MERGE_TILE.col === 10 && MERGE_TILE.row === 8 && THRONE_TILE.col === 27 && THRONE_TILE.row === 7);
+    for (const key of BUILD_CELLS) { const r = Number(key.split(',')[1]); assert(r >= 2 && r <= 12, 'build rows 2..12: ' + key); }
+    // 물가는 건설 칸, 길, 왕좌 둘레에 들어가지 않고 길과 왕좌 둘레에 붙지 않는다. 소품은 건설 칸과 길(입구 문 제외)에 놓이지 않는다
+    assert(WATER_MAP.length === MAP_ROWS && WATER_MAP.every(line => line.length === MAP_COLS), 'water map size');
+    for (let c = 0; c < MAP_COLS; c++) for (let r = 0; r < MAP_ROWS; r++) {
+        if (!isWaterCell(c, r)) continue;
+        assert(!isBuildCell(c, r), 'water off build cells ' + c + ',' + r);
+        for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+            assert(!isPathCell(c + dc, r + dr) && !isThroneArea(c + dc, r + dr), 'water away from path ' + c + ',' + r);
+        }
+    }
+    for (const p of DECOR) {
+        assert(!isBuildCell(p.col, p.row) && !isWaterCell(p.col, p.row), 'decor on free land ' + p.sprite + ' ' + p.col + ',' + p.row);
+        assert(!isPathCell(p.col, p.row) || p.sprite === 'prop2_gate', 'only gates stand on the path');
+    }
+    for (const g of ROUTE_IDS.map(id => ROUTES[id].tiles[0])) assert(DECOR.some(p => p.sprite === 'prop2_gate' && p.col === g[0] && p.row === g[1]), 'gate at every entrance');
+    // 왕좌 둘레(제물 판정)는 건설 칸이 아니다
+    for (let c = 0; c < MAP_COLS; c++) for (let r = 0; r < MAP_ROWS; r++) {
+        if (isThroneArea(c, r)) assert(!isBuildCell(c, r) && Game.onThrone(tileX(c), tileY(r)), 'throne area ' + c + ',' + r);
+    }
     // 연출 진행 중 예외 없음
     tick(1.5);
     clearBoard();
@@ -1774,9 +1857,9 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert.strictEqual(BOSSES.archmage.waveHpMul, 0.6);
     assert(!BOSSES.fallen_knight.waveHpMul, 'fallen knight keeps full hp');
     assert(Math.abs(createHero(null, 4, 0, 'archmage').maxHp - createHero(null, 4, 0, 'fallen_knight').maxHp * 0.6) < 1e-9);
-    // 발끝: 동작과 방향마다 값이 있다
-    for (const pose of ['walk', 'cast', 'atk']) for (const dir of ['down', 'left', 'right', 'up']) {
-        assert(typeof BOSSES.archmage.art.footPx[pose][dir] === 'number', 'archmage foot ' + pose + ' ' + dir);
+    // 발끝: 보스마다 걷기와 공격 동작의 방향(PL_DIRS)마다 값이 있다
+    for (const boss of Object.values(BOSSES)) for (const clip of [boss.art.anim.walk, boss.art.anim.attack]) for (const dir of PL_DIRS) {
+        assert(typeof clip.footPx[dir] === 'number', boss.name + ' foot ' + clip.folder + ' ' + dir);
     }
 
     // 보상 표: 몬스터 1장(희귀 또는 영웅, 영웅 40%), 장비 1장(희귀 또는 영웅, 영웅 40%), 골드 300G 1장
@@ -1809,7 +1892,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert.strictEqual(Game.heroes.length, 15 + 3 + 1 + 1);
     assert(Math.abs(mb.maxHp - HEROES.warrior.hp * 15 * (1 + COMBAT_RULES.hpPerWave * 4) * 0.6) < 1e-9, 'wave 5 archmage hp');
     // 보스를 처치해도 전투 중에는 카드를 띄우지 않는다
-    const keep = Game.place('orc_guard', 3, 6);
+    const keep = Game.place('orc_guard', 1, 4); // 길로 나가도 보상 카드(x 346부터)에 가리지 않는 자리
     Game.heroes = [mb];
     mb.waiting = false;
     damageHero(mb, 1e9);
@@ -1933,7 +2016,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     const near = (a, b) => Math.abs(a - b) < 1e-9;
 
     // 끼우기: 보관함 칸을 몬스터 위로 끈다. 끄는 동안 몬스터 강조 대상과 놓을 몬스터가 잡힌다
-    const archer = Game.place('skeleton_archer', 5, 4);
+    const archer = Game.place('skeleton_archer', 4, 5);
     const base = monsterStats(archer);
     Game.equipBag = ['sword'];
     UI.update(0);
@@ -2020,19 +2103,19 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     setMonsterEquip(archer, 'axe');
     assert.strictEqual(Game.mergeEquip(mage, archer).keep, 'axe', 'preview: higher grade');
     dragTo(monXY(mage), monXY(archer));
-    let res = Game.monsterAt(5, 4);
+    let res = Game.monsterAt(4, 5);
     assert(res.type === 'curse_shooter' && res.equip === 'axe' && Game.equipBag.join() === 'sword', 'merge keeps higher grade, returns the other');
     assert(near(monsterStats(res).damage, MONSTERS.curse_shooter.stats.damage * 1.4), 'merged monster has the equipment effect');
     // 등급이 같으면 끌어온 쪽 것
     Game.monsters = [];
     Game.equipBag = [];
-    let a = Game.place('skeleton_archer', 5, 4);
+    let a = Game.place('skeleton_archer', 4, 5);
     mage = Game.place('dark_mage', 7, 4);
     setMonsterEquip(a, 'bow');
     setMonsterEquip(mage, 'armor');
     assert.strictEqual(Game.mergeEquip(mage, a).keep, 'armor', 'preview: tie keeps dragged');
     dragTo(monXY(mage), monXY(a));
-    res = Game.monsterAt(5, 4);
+    res = Game.monsterAt(4, 5);
     assert(res.equip === 'armor' && Game.equipBag.join() === 'bow', 'tie: dragged monster equipment');
     // 한쪽만 있으면 그것이 이어진다
     a = Game.place('skeleton_archer', 3, 4);
@@ -2042,7 +2125,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     // 보관함이 가득 차 있으면 나머지는 30G
     Game.monsters = [];
     Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
-    a = Game.place('skeleton_archer', 5, 4);
+    a = Game.place('skeleton_archer', 4, 5);
     mage = Game.place('dark_mage', 7, 4);
     setMonsterEquip(a, 'crown');
     setMonsterEquip(mage, 'sword');
@@ -2056,7 +2139,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
 
     // 제물과 판매: 장비는 보관함으로, 자리가 없으면 30G
     Game.equipBag = [];
-    const s1 = Game.monsterAt(5, 4);
+    const s1 = Game.monsterAt(4, 5);
     assert(Game.sacrifice(s1).ok && Game.equipBag.join() === 'crown', 'sacrifice returns equipment');
     const s2 = Game.place('orc_guard', 3, 4);
     setMonsterEquip(s2, 'axe');
@@ -2154,7 +2237,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     clearBoard();
     prep();
 
-    // 길: 합류점 (8,7)에서 만나고, 그 뒤로는 두 길의 좌표와 방향, 남은 거리가 같다. 남쪽이 2칸 짧다
+    // 길: 합류점 (10,8)에서 만나고, 그 뒤로는 두 길의 좌표와 방향, 남은 거리가 같다. 남쪽이 2칸 짧다
     assert.strictEqual(mN - mS, 2 * TILE, 'south is two tiles shorter');
     assert.strictEqual(ROUTES.north.length - mN, ROUTES.south.length - mS, 'same distance after the merge');
     for (let t = 0; t <= ROUTES.north.length - mN; t += TILE / 4) {
@@ -2164,15 +2247,15 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         assert(distance(a.x, a.y, b.x, b.y) < 1e-6 && (t === 0 || (a.dx === b.dx && a.dy === b.dy)), 'merged section coincides at ' + t);
     }
     const mp = pathAt(mS, 'south');
-    assert(mp.x === tileX(MERGE_TILE.col) && mp.y === tileY(MERGE_TILE.row), 'merge at (8,7)');
-    assert(pathAt(0, 'south').x < 0 && pathAt(0, 'south').y === tileY(9), 'south walks in from outside the gate');
+    assert(mp.x === tileX(MERGE_TILE.col) && mp.y === tileY(MERGE_TILE.row), 'merge at (10,8)');
+    assert(pathAt(0, 'south').x < 0 && pathAt(0, 'south').y === tileY(11), 'south walks in from outside the gate');
     assert(pathAt(500).x === pathAt(500, 'north').x && pathAt(500).y === pathAt(500, 'north').y, 'route defaults to north');
-    // 길 칸은 합집합: 남쪽 갈래 (0..8, 9), (8, 8)도 길이라 지을 수 없다
-    for (let c = 0; c <= 8; c++) assert(isPathCell(c, 9) && !isBuildCell(c, 9), 'south path cell ' + c);
-    assert(isPathCell(8, 8) && !Game.canPlace('orc_guard', 8, 8));
+    // 길 칸은 합집합: 남쪽 갈래 (0..10, 11), (10, 9..10)도 길이라 지을 수 없다
+    for (let c = 0; c <= 10; c++) assert(isPathCell(c, 11) && !isBuildCell(c, 11), 'south path cell ' + c);
+    assert(isPathCell(10, 9) && isPathCell(10, 10) && !Game.canPlace('orc_guard', 10, 10));
     for (const id of ROUTE_IDS) for (const k of ROUTES[id].cells) assert(PATH_CELLS.has(k), 'union has ' + k);
-    // 남쪽 갈래 아래 줄 10은 새 건설 칸이다
-    assert(isBuildCell(3, 10) && isBuildCell(2, 8), 'cells around the south branch');
+    // 남쪽 갈래 위아래 줄도 건설 칸이다(아래는 12줄까지)
+    assert(isBuildCell(3, 12) && isBuildCell(3, 10) && isBuildCell(7, 9), 'cells around the south branch');
 
     // 입구 배분: 일반과 정예를 비율대로 정확히 나눈다. 비율이 없으면 전부 북쪽
     for (const w of WAVES) {
@@ -2244,8 +2327,8 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         }
         assert(h.dead && h.arrived, 'south hero reached the throne');
         assert.strictEqual(Game.hp, 19, 'south hero hits the throne');
-        assert(cells.has('4,9') && cells.has('8,8') && cells.has('12,5') && cells.has('20,9'), 'walked the south branch and the shared path');
-        assert(!cells.has('4,5') && !cells.has('2,3'), 'never on the north branch');
+        assert(cells.has('4,11') && cells.has('10,10') && cells.has('12,3') && cells.has('21,9'), 'walked the south branch and the shared path');
+        assert(!cells.has('5,5') && !cells.has('2,3'), 'never on the north branch');
     }
 
     // 가장 앞선 용사: d가 아니라 왕좌까지 남은 거리로 비교한다
@@ -2261,7 +2344,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         // 낀 칸의 궁수도 같은 규칙으로 쏜다
         n.speed = s.speed = 0;
         s.d = mS - 0.5 * TILE;
-        const archer = Game.place('skeleton_archer', 6, 8);
+        const archer = Game.place('skeleton_archer', 8, 10);
         archer.atk = 0;
         for (let i = 0; i < 20 && !Game.projectiles.length; i++) Game.update(1 / 30);
         assert(Game.projectiles.length && Game.projectiles[0].target === s, 'archer shoots the foremost (south) hero');
@@ -2276,7 +2359,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         const oS = Game.place('orc_guard', 3, 10);
         assert.strictEqual(oN.rally.route, 'north');
         assert.strictEqual(oS.rally.route, 'south', 'rally on the south branch');
-        assert(Math.abs(oS.rally.y + MONSTER_FOOT - 10 - tileY(9)) < 1e-6 && oS.rally.x === tileX(3), 'south rally under the cell');
+        assert(Math.abs(oS.rally.y + MONSTER_FOOT - 10 - tileY(11)) < 1e-6 && oS.rally.x === tileX(3), 'south rally under the cell');
         for (const o of [oN, oS]) { o.hp = o.maxHp = 1e6; o.damage = 0; }
         tick(1.6);
         assert(!oN.moving && !oS.moving, 'both walked out');
@@ -2298,13 +2381,13 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         assert(hS.d > dS && hN.d > oN.rally.d - 1.5 * TILE, 'both walk on after release');
     }
 
-    // 합류점 근처: (9,7)의 오크는 합류점에 서서 두 갈래에서 오는 용사를 모두 붙잡는다.
-    // (9,8)의 오크는 남쪽 갈래 (8,8)에 서고 북쪽 용사는 붙잡지 않는다
+    // 합류점 근처: (11,8)의 오크는 합류점 (10,8)에 서서 두 갈래에서 오는 용사를 모두 붙잡는다.
+    // (11,9)의 오크는 남쪽 갈래 (10,9)에 서고 북쪽 용사는 붙잡지 않는다
     clearBoard();
     prep();
     {
-        const o = Game.place('orc_guard', 9, 7);
-        assert(o.rally.route === 'north' && o.rally.x === tileX(8) && Math.abs(o.rally.y + MONSTER_FOOT - 10 - tileY(7)) < 1e-6, 'rally on the merge point');
+        const o = Game.place('orc_guard', 11, 8);
+        assert(o.rally.route === 'north' && o.rally.x === tileX(10) && Math.abs(o.rally.y + MONSTER_FOOT - 10 - tileY(8)) < 1e-6, 'rally on the merge point');
         o.hp = o.maxHp = 1e6;
         o.damage = 0;
         tick(1.6);
@@ -2315,7 +2398,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         Game.removeMonster(o);
         assert(!hN.blocker && !hS.blocker);
         clearBoard();
-        const o2 = Game.place('orc_guard', 9, 8);
+        const o2 = Game.place('orc_guard', 11, 9);
         assert(o2.rally.route === 'south' && o2.rally.d < mS, 'rally on the south branch before the merge');
         o2.hp = o2.maxHp = 1e6;
         o2.damage = 0;
@@ -2323,11 +2406,11 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         const n2 = sturdy(placeOn('warrior', 'north', mN - 1.5 * TILE));
         const s2 = sturdy(placeOn('warrior', 'south', mS - 2 * TILE));
         tick(2);
-        assert.strictEqual(s2.blocker, o2, 'south hero held at (8,8)');
+        assert.strictEqual(s2.blocker, o2, 'south hero held at (10,9)');
         assert(n2.blocker !== o2 && n2.d > mN, 'north hero passes the merge');
     }
 
-    // 낀 칸 (5..7, 8): 두 갈래에서 모두 1칸. 소환과 끌기로 놓을 수 있다
+    // 낀 칸 (9,9): 북쪽 갈래 (9,8)와 남쪽 갈래 (10,9)에서 모두 1칸. 소환과 끌기로 놓을 수 있다
     clearBoard();
     prep();
     {
@@ -2335,35 +2418,33 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
             const t = clamp((tileX(c) - s.ax) * s.dx + (tileY(r) - s.ay) * s.dy, 0, s.len);
             return distance(tileX(c), tileY(r), s.ax + s.dx * t, s.ay + s.dy * t);
         }));
-        for (let c = 5; c <= 7; c++) {
-            assert(isBuildCell(c, 8), 'between cell ' + c);
-            assert(gapTo('north', c, 8) === TILE && gapTo('south', c, 8) === TILE, 'one tile from both branches ' + c);
-        }
+        assert(isBuildCell(9, 9), 'between cell');
+        assert(gapTo('north', 9, 9) === TILE && gapTo('south', 9, 9) === TILE, 'one tile from both branches');
         // 다른 빈 칸을 모두 채우면 소환은 낀 칸에 나온다(오크 경비병, 암흑 마법사)
         SUMMON_RULES.maxField = 999;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
-            if (key !== '6,8') Game.place('skeleton_archer', c, r);
+            if (key !== '9,9') Game.place('skeleton_archer', c, r);
         }
         Game.gold = 5000;
         const r1 = withRandom([0.1, 0.1], () => Game.summon());
-        assert(r1.ok && r1.type === 'orc_guard' && r1.monster.col === 6 && r1.monster.row === 8, 'blocker summoned into the between cell');
-        assert(r1.monster.rally.route === 'north' && Math.abs(r1.monster.rally.y + MONSTER_FOOT - 10 - tileY(7)) < 1e-6, 'tie goes to the north branch');
+        assert(r1.ok && r1.type === 'orc_guard' && r1.monster.col === 9 && r1.monster.row === 9, 'blocker summoned into the between cell');
+        assert(r1.monster.rally.route === 'north' && Math.abs(r1.monster.rally.y + MONSTER_FOOT - 10 - tileY(8)) < 1e-6, 'tie goes to the north branch');
         Game.removeMonster(r1.monster);
         const r2 = withRandom([0.69, 0.3], () => Game.summon());
-        assert(r2.ok && r2.type === 'dark_mage' && r2.monster.col === 6 && r2.monster.row === 8, 'ranged summoned into the between cell');
+        assert(r2.ok && r2.type === 'dark_mage' && r2.monster.col === 9 && r2.monster.row === 9, 'ranged summoned into the between cell');
         SUMMON_RULES.maxField = 24;
         // 끌기: 남쪽 갈래 아래 칸의 오크를 낀 칸으로 옮기면 집결 지점이 바뀐다
         Game.monsters = [];
         const o = Game.place('orc_guard', 3, 10);
         assert.strictEqual(o.rally.route, 'south');
         UI.clearSelection();
-        dragTo(monXY(o), cellXY(7, 8));
-        assert.strictEqual(Game.monsterAt(7, 8), o, 'dragged into the between cell');
-        assert(o.rally.route === 'north' && o.rally.x === tileX(7), 'rally moved to the north branch');
+        dragTo(monXY(o), cellXY(9, 9));
+        assert.strictEqual(Game.monsterAt(9, 9), o, 'dragged into the between cell');
+        assert(o.rally.route === 'north' && o.rally.x === tileX(9), 'rally moved to the north branch');
         // 남쪽 길 칸으로는 끌어 놓지 못한다
-        dragTo(monXY(o), cellXY(5, 9));
-        assert.strictEqual(Game.monsterAt(7, 8), o, 'south path cell rejected');
+        dragTo(monXY(o), cellXY(5, 11));
+        assert.strictEqual(Game.monsterAt(9, 9), o, 'south path cell rejected');
     }
 
     // 시체와 타락 유닛에도 길을 남긴다(타락은 꺼 두었지만 켰을 때를 위해)
@@ -2418,9 +2499,9 @@ assert.strictEqual(Game.units.length, 0);
 
 // 한 판 끝까지: 보스 패턴 포함, 예외 없이 승리 화면까지 간다
 Game.gold = 6000;
-[[3,4,'skeleton_archer'],[5,5,'dark_mage'],[3,6,'orc_guard'],[7,6,'skeleton_archer'],[9,5,'dark_mage'],[9,2,'skeleton_archer'],[11,4,'orc_guard'],[13,5,'dark_mage'],[13,7,'dark_mage'],[15,7,'skeleton_archer'],[11,6,'dark_mage'],[15,5,'dark_mage'],
+[[3,4,'skeleton_archer'],[4,5,'dark_mage'],[3,2,'orc_guard'],[7,5,'skeleton_archer'],[9,5,'dark_mage'],[6,10,'skeleton_archer'],[12,4,'orc_guard'],[13,5,'dark_mage'],[14,7,'dark_mage'],[16,7,'skeleton_archer'],[12,6,'dark_mage'],[16,5,'dark_mage'],
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
-    [17,6,'orc_guard'],[19,8,'orc_guard'],[21,8,'orc_guard'],[19,6,'skeleton_archer'],[18,7,'dark_mage'],[21,5,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
+    [17,10,'orc_guard'],[20,9,'orc_guard'],[22,8,'orc_guard'],[19,10,'skeleton_archer'],[20,6,'dark_mage'],[23,6,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
 let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false, equipped = 0;
 const eliteWaves = new Set();
