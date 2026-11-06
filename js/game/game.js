@@ -190,14 +190,26 @@ const Game = {
     // 연출 좌표: 세계 좌표(서 있는 곳)
     fxPoint(loc) { return { x: loc.monster.x, y: loc.monster.y }; },
 
+    // 맵의 두 몬스터(개체)를 합칠 때의 판단. mergePlan(랭크 조건 포함)에 맵 수 제한(등급 fieldMax)을 더한다.
+    // 조합식 결과가 제한을 넘으면 { kind: 'none', reason: 'unique', recipe, result }. 재료 두 마리는 사라지니 세지 않는다
+    mergePlanFor(a, b) {
+        const plan = mergePlan(a, b);
+        if (plan.kind !== 'recipe') return plan;
+        const grade = MONSTERS[plan.result].grade;
+        const max = MONSTER_GRADES[grade].fieldMax;
+        if (max === undefined) return plan;
+        const count = this.monsters.filter(m => m !== a && m !== b && !m.removed && MONSTERS[m.type].grade === grade).length;
+        return count >= max ? { kind: 'none', reason: 'unique', recipe: plan.recipe, result: plan.result } : plan;
+    },
+
     // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 src 자리는 빈다.
-    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' }
+    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' }
     merge(src, dst) {
         const a = this.typeAt(src);
         const b = this.typeAt(dst);
         if (!a || !b) return { ok: false, reason: 'empty' };
         if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
-        const plan = mergePlan(a, b);
+        const plan = this.mergePlanFor(src.monster, dst.monster);
         if (plan.kind === 'none') return { ok: false, reason: plan.reason };
         const type = plan.kind === 'recipe' ? plan.result : randItem(gradePool(plan.grade));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
@@ -223,7 +235,10 @@ const Game = {
         Fx.pop({ kind: 'merge', from, fromTypes: [a, b], to, type, grade, hidden });
         Sfx.play('merge', GRADE_ORDER.indexOf(grade));
         if (discovered) {
-            Fx.discovery = { a: plan.recipe.a, b: plan.recipe.b, type, age: -MERGE_REVEAL, life: 3.6 };
+            // 재료 줄에는 조합식의 랭크 조건도 적는다. 전설은 더 오래 보여 준다
+            const r = plan.recipe;
+            Fx.discovery = { a: r.a, aRank: r.aRank || null, b: r.b, bRank: r.bRank || null, type, grade,
+                age: -MERGE_REVEAL, life: grade === 'legendary' ? 4.6 : 3.6 };
             Sfx.play('hidden');
         }
         return { ok: true, type, kind: plan.kind, hidden, discovered, monster };

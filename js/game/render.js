@@ -567,16 +567,17 @@ const Render = {
         ctx.fillRect(x - s / 2, cy - s / 2, s, s);
     },
 
-    // 등급 마름모: 일반은 작고 흐리게, 희귀 이상은 크고 빛나게
+    // 등급 마름모: 일반은 작고 흐리게, 희귀 이상은 크고 빛나게. 전설은 더 큰 금색 마름모에 넓은 빛과 반짝이는 테두리
     gradeMark(ctx, x, y, grade) {
         const color = MONSTER_GRADES[grade].color;
-        const s = grade === 'common' ? 6 : 9;
+        const legend = grade === 'legendary';
+        const s = grade === 'common' ? 6 : (legend ? 13 : 9);
         ctx.save();
         if (grade !== 'common') {
             ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = `rgba(${MONSTER_GRADES[grade].glow},${0.25 + Math.sin(Game.time * 4 + x) * 0.08})`;
+            ctx.fillStyle = `rgba(${MONSTER_GRADES[grade].glow},${(legend ? 0.4 : 0.25) + Math.sin(Game.time * 4 + x) * 0.08})`;
             ctx.beginPath();
-            ctx.ellipse(x, y - 20, 42, 14, 0, 0, Math.PI * 2);
+            ctx.ellipse(x, y - 20, legend ? 60 : 42, legend ? 20 : 14, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -590,6 +591,13 @@ const Render = {
         ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
         ctx.closePath();
         ctx.fill();
+        if (legend) {
+            ctx.strokeStyle = `rgba(255,248,214,${0.6 + Math.sin(Game.time * 6) * 0.3})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff6d0';
+            ctx.fillRect(x - 2, y - 2, 4, 4);
+        }
         ctx.restore();
     },
 

@@ -2,13 +2,14 @@
 // 설계: docs/MONSTER_DESIGN.md. 수치는 플레이 후 고칠 초안이다. 거리는 타일 단위, 시간은 초 단위다.
 
 // 등급: 낮은 등급부터 적는다. 등급 합치기는 같은 등급 2마리를 바로 다음 등급의 무작위 1마리로 바꾼다.
-// 다음 등급에 몬스터가 없으면 그 등급이 최고 등급이라 합칠 수 없다(지금은 영웅. 전설 몬스터는 아직 없다)
+// 다음 등급에 소환되는 몬스터가 없으면 그 등급이 최고 등급이라 합칠 수 없다(지금은 영웅. 전설은 조합식으로만 나온다)
 // glow는 소환·합치기 연출의 빛 색(r,g,b), light는 어두운 바탕 위 글자 색이다
+// fieldMax가 있으면 그 등급 몬스터를 맵에 그 수까지만 둔다(넘게 되는 합치기는 막는다)
 const MONSTER_GRADES = {
     common: { name: '일반', color: '#9a96a8', glow: '200,196,220', light: '#e8e4f2' },
     rare: { name: '희귀', color: '#4f8cff', glow: '90,150,255', light: '#9cc2ff' },
     epic: { name: '영웅', color: '#b25cff', glow: '190,100,255', light: '#dfa8ff' },
-    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a' }
+    legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', fieldMax: 1 }
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 
@@ -168,16 +169,33 @@ const MONSTERS = {
                 attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 56, north: 54 } }
             }
         }
+    },
+    death_lord: {
+        id: 'death_lord', name: '죽음의 군주', role: 'tank', family: 'undead', grade: 'legendary',
+        sprite: 'pl_mon_death_lord', cost: 500, summon: false,
+        stats: { hp: 900, damage: 60, interval: 0.9, range: 0.9, block: 8, respawn: 5 },
+        abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
+        desc: '길로 걸어 나가 용사를 8명까지 붙잡고, 쓰러지면 주변을 기절시킵니다.',
+        art: {
+            scale: 2, barY: 136, idleFps: 0, glow: '255,200,90',
+            anim: {
+                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
+                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 79, east: 78, north: 77 } },
+                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 74, east: 75, north: 74 } }
+            }
+        }
     }
 };
 
 // 조합식: 두 재료(a, b)를 합치면 result가 나온다. 순서는 상관없다. 등급 합치기보다 먼저 적용한다.
+// aRank, bRank는 재료별 최소 랭크(MONSTER_RANKS의 name, 없으면 조건 없음). 조건이 안 맞으면 그 조합식이 없는 것처럼 판단한다.
 // hidden이면 미리 보여 주지 않고, 처음 만들면 "히든 조합 발견!" 연출을 한다(이번 시험판은 발견 기록을 저장하지 않는다)
 const MONSTER_RECIPES = [
     { a: 'skeleton_archer', b: 'dark_mage', result: 'curse_shooter', hidden: false },
     { a: 'orc_guard', b: 'dark_mage', result: 'orc_berserker', hidden: false },
     { a: 'orc_berserker', b: 'curse_shooter', result: 'bone_knight', hidden: false },
-    { a: 'orc_berserker', b: 'skeleton_archer', result: 'bone_knight', hidden: true }
+    { a: 'orc_berserker', b: 'skeleton_archer', result: 'bone_knight', hidden: true },
+    { a: 'bone_knight', aRank: 'A', b: 'curse_shooter', bRank: 'A', result: 'death_lord', hidden: true }
 ];
 
 // 등급별 소환·등급 합치기 후보. 표 순서를 따른다
@@ -185,8 +203,26 @@ function gradePool(grade) {
     return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].summon !== false);
 }
 
+// 랭크 이름('A')의 MONSTER_RANKS 번호
+function rankIndex(name) { return MONSTER_RANKS.findIndex(r => r.name === name); }
+
+// 합치기 재료: 몬스터 id 문자열(랭크 D로 본다) 또는 맵의 몬스터 개체 { type, rank }
+function mergeInput(x) {
+    return typeof x === 'string' ? { type: x, rank: 0 } : { type: x.type, rank: x.rank || 0 };
+}
+
+// 재료 하나가 조합식 한쪽(type, 최소 랭크 need)에 맞는지
+function recipeSideOk(input, type, need) {
+    return input.type === type && (!need || input.rank >= rankIndex(need));
+}
+
+// a, b: 재료(mergeInput). 순서를 바꿔도 재료별 랭크 조건으로 판단한다
 function findRecipe(a, b) {
-    return MONSTER_RECIPES.find(r => (r.a === a && r.b === b) || (r.a === b && r.b === a)) || null;
+    const A = mergeInput(a);
+    const B = mergeInput(b);
+    return MONSTER_RECIPES.find(r =>
+        (recipeSideOk(A, r.a, r.aRank) && recipeSideOk(B, r.b, r.bRank)) ||
+        (recipeSideOk(B, r.a, r.aRank) && recipeSideOk(A, r.b, r.bRank))) || null;
 }
 
 // 등급 합치기 결과 등급. 다음 등급에 몬스터가 없으면(최고 등급) null
@@ -196,13 +232,15 @@ function nextGrade(grade) {
 }
 
 // 두 몬스터를 합칠 수 있는지와 결과(무작위 없이). 위에서부터 먼저 적용한다
+//   a, b: 몬스터 개체 { type, rank } 또는 id 문자열(랭크 D). 랭크 조건이 있는 조합식은 개체를 넘겨야 맞을 수 있다
 //   { kind: 'recipe', recipe, result } 조합식 / { kind: 'grade', grade } 등급 합치기(결과는 grade 등급 무작위)
 //   { kind: 'none', reason: 'top' | 'mismatch' } 합칠 수 없음. top은 최고 등급끼리
+//   맵 수 제한(fieldMax)은 맵 상태가 필요해 Game.mergePlanFor가 더한다
 function mergePlan(a, b) {
     const recipe = findRecipe(a, b);
     if (recipe) return { kind: 'recipe', recipe, result: recipe.result };
-    const ga = MONSTERS[a].grade;
-    if (ga === MONSTERS[b].grade) {
+    const ga = MONSTERS[mergeInput(a).type].grade;
+    if (ga === MONSTERS[mergeInput(b).type].grade) {
         const grade = nextGrade(ga);
         return grade ? { kind: 'grade', grade } : { kind: 'none', reason: 'top' };
     }
@@ -210,9 +248,12 @@ function mergePlan(a, b) {
 }
 
 // 몬스터 하나로 만들 수 있는 공개 조합식(팝업과 끌기 표시용). 히든 조합식은 넣지 않는다
+// selfRank, partnerRank는 조합식의 최소 랭크 조건(없으면 null)
 function publicRecipesFor(type) {
     return MONSTER_RECIPES.filter(r => !r.hidden && (r.a === type || r.b === type))
-        .map(r => ({ partner: r.a === type ? r.b : r.a, result: r.result }));
+        .map(r => r.a === type
+            ? { partner: r.b, result: r.result, selfRank: r.aRank || null, partnerRank: r.bRank || null }
+            : { partner: r.a, result: r.result, selfRank: r.bRank || null, partnerRank: r.aRank || null });
 }
 
 // 몬스터의 kind 능력(없으면 null)
