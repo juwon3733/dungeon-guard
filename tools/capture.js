@@ -20,12 +20,12 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
-    // 선택 화면: 마왕 카드 3장(황금 마왕을 고름), 유물 격자와 고른 유물(마녀의 눈), 이번 판 효과. 금 간 거울에 마우스를 올려 설명을 띄운다
-    // (모두 해금한 기록으로)
+    // 고르기 화면(스테이지 8까지 깸, 9번 앞): 마왕 3장(황금 마왕을 고름), 유물 격자(잠긴 유물은 자물쇠와 풀리는 스테이지 도장),
+    // 고른 유물 2칸(마녀의 눈)과 잠긴 3번째 칸, 이번 판 효과. 잠긴 금 간 거울에 마우스를 올려 "스테이지 11에서 해금"을 띄운다
     select: {
         setup: () => {
-            unlockAll();
-            pressButton('start');
+            storyProgress(8);
+            UI.openSelect('s9');
             pressButton('lord_gold_king');
             pressButton('relic_eye');
             const b = UI.buttons.find(x => x.id === 'relic_mirror');
@@ -37,7 +37,7 @@ const SCENES = {
     lordQueen: {
         setup: () => {
             unlockAll();
-            pressButton('start');
+            UI.openSelect(null);
             pressButton('lord_bone_queen');
             pressButton('relic_shackles');
             pressButton('begin');
@@ -56,14 +56,13 @@ const SCENES = {
         afterFreeze: () => { Game.time = Math.PI / 6; }
     },
 
-    // 영구 수집이 거의 없는 선택 화면: 영혼석 26. 잠긴 마왕(뼈의 여왕)을 눌러 해금 버튼이 뜬 상태, 잠긴 유물은 어둡게 자물쇠와 가격,
-    // 2번째 유물 칸 자리의 칸 사기 버튼(30, 꺼짐, 4 더 필요). 잠긴 모래시계에 마우스를 올려 설명을 띄운다
+    // 막 시작한 고르기 화면(스테이지 1만 깸, 2번 앞): 균열의 군주만 쓰고 잠긴 마왕은 "스테이지 N에서 해금", 유물은 황금 주머니만,
+    // 유물 칸 1개와 잠긴 칸 둘(7, 11). 잠긴 모래시계에 마우스를 올려 설명을 띄운다
     selectLocked: {
         setup: () => {
-            Meta.data = Meta.sanitize({ souls: 26, relics: ['eye'], runs: 3, bestWave: 4 });
-            pressButton('start');
-            pressButton('relic_eye');
-            pressButton('lord_bone_queen');
+            storyProgress(1);
+            UI.openSelect('s2');
+            pressButton('relic_pouch');
             const b = UI.buttons.find(x => x.id === 'relic_hourglass');
             UI.onMove(b.x + 20, b.y + 20);
         }
@@ -72,18 +71,52 @@ const SCENES = {
     // 도감 몬스터 탭: 본 몬스터 4종은 그림과 이름, 등급, 역할, 능력. 나머지는 검은 실루엣과 ???
     collection: {
         setup: () => {
-            Meta.data = Meta.sanitize({ souls: 40, runs: 4, wins: 1, bestWave: 10,
+            Meta.data = Meta.sanitize({ version: 2, cleared: ['s1', 's2', 's3'], runs: 4, wins: 3, bestStage: 3,
                 seen: ['orc_guard', 'skeleton_archer', 'dark_mage', 'orc_berserker', 'bone_knight'],
                 recipes: ['orc_berserker+skeleton_archer', 'dark_mage+orc_guard'] });
             pressButton('collection');
         }
     },
 
-    // 승리 결과 화면: 영혼석 +35(웨이브 10 x 2 + 승리 15), 보유량, 새 기록(첫 승리, 최고 웨이브)
+    // 스토리 지도(스테이지 5까지 깸): 깬 도장은 붉은 밀랍, 다음(6)은 밝게 숨쉬는 고리, 나머지는 자물쇠. 아래 판에 6번의 웨이브 수와
+    // 처음 깰 때 보상(전쟁 북, 마녀의 눈)
+    storyMap: {
+        setup: () => {
+            storyProgress(5);
+            pressButton('start');
+        },
+        afterFreeze: () => { Game.time = 0.5; }
+    },
+
+    // 시작 전 대화(4번 건너편 세입자): 어두워진 맵 위 양피지 대화창, 뼈의 여왕 초상과 이름표, 한 글자씩 나오는 중인 대사
+    dialogue: {
+        setup: () => {
+            storyProgress(3);
+            UI.enterStage('s4');
+        },
+        afterFreeze: () => { UI.dialogue.index = 0; UI.dialogue.chars = 18; }
+    },
+
+    // 4번을 처음 깬 뒤 해금 카드: 뼈의 여왕(효과와 설명) 1/2
+    unlockCard: {
+        setup: () => {
+            storyProgress(3);
+            UI.enterStage('s4');
+            UI.endDialogue();
+            pressButton('begin');
+            winStage();
+            UI.endDialogue(); // 승리 대화를 넘기면 해금 카드
+        }
+    },
+
+    // 스테이지 승리 결과 화면(4번을 처음 깸): 스테이지 이름, 처음 깸과 풀린 것(뼈의 여왕, 푸른 족쇄), 다음 스테이지와 지도 버튼
     resultSouls: {
         setup: () => {
-            Meta.data = Meta.sanitize({ souls: 22, runs: 3, bestWave: 6 });
-            startRun();
+            storyProgress(3);
+            Meta.data.runs = 5;
+            UI.enterStage('s4');
+            UI.endDialogue();
+            pressButton('begin');
             Game.place('orc_guard', 7, 6);
             Game.place('skeleton_archer', 7, 4);
             Game.place('dark_mage', 12, 5);
@@ -93,8 +126,9 @@ const SCENES = {
             Game.stats.summoned = 31;
             Game.stats.merged = 12;
             Game.stats.time = 1043;
-            Game.waveIndex = WAVES.length - 1;
-            Game.finish(true);
+            winStage();
+            UI.endDialogue();
+            UI.unlockCards = null;
             UI.update(0);
         }
     },
@@ -712,11 +746,21 @@ const SCENES = {
 
 // 페이지 안에 넣는 도우미: 실제 입력 경로로 UI 버튼을 누른다(tools/smoke.js와 같은 방식)
 const PAGE_HELPERS = () => {
-    // 타이틀에서 선택 화면을 거쳐 기본 선택(균열의 군주, 유물 없음)으로 판을 시작한다
-    window.startRun = () => { pressButton('start'); pressButton('begin'); };
-    // 영구 수집 기록을 모든 마왕과 유물을 해금한 상태로(유물 칸 1개). 페이지마다 저장소를 비우고 시작해 사용자의 저장과 상관없다
-    window.unlockAll = () => {
-        Meta.data = Meta.sanitize({ lords: Object.keys(DEMON_LORDS), relics: Object.keys(RELICS) });
+    // 스토리 없는 판(WAVES 전부)을 고르기 화면을 거쳐 기본 선택(균열의 군주, 유물 없음)으로 시작한다(tools/smoke.js와 같은 시험용 판)
+    window.startRun = () => { UI.openSelect(null); pressButton('begin'); };
+    // 기록을 스토리 스테이지 앞에서부터 n개 깬 상태로. 페이지마다 저장소를 비우고 시작해 사용자의 저장과 상관없다
+    window.storyProgress = n => {
+        Meta.data = Meta.sanitize({ version: 2, cleared: STAGES.slice(0, n).map(s => s.id) });
+    };
+    // 스토리를 모두 깬 기록(마왕 3명, 유물 16종, 칸 3개)
+    window.unlockAll = () => storyProgress(STAGES.length);
+    // 이번 스테이지를 이긴다(마지막 웨이브를 막은 것처럼). 다음 UI.update에서 승리 대화가 뜬다
+    window.winStage = () => {
+        Game.waveIndex = Game.waves.length - 1;
+        Game.state = 'wave';
+        Game.heroes = [];
+        Game.update(1 / 60);
+        UI.update(0);
     };
     window.pressButton = id => {
         UI.update(0);

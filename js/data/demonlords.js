@@ -1,5 +1,5 @@
 // 마왕과 유물. 판을 시작하기 전에 마왕 1명과 유물(유물 칸 수 Meta.relicSlots()개까지)을 고른다. 판 중에는 유물을 얻지 않는다.
-// unlock은 해금 가격(영혼석)이다. 0이면 처음부터 쓸 수 있다. 영혼석과 유물 칸은 META_RULES, 저장은 js/game/meta.js
+// 마왕, 유물, 유물 칸은 메인 스토리 스테이지를 처음 깰 때 풀린다(js/data/story.js의 STAGES[].unlocks, 계산은 js/game/meta.js)
 // 마왕과 유물은 같은 효과 키(LORD_EFFECTS)를 쓴다. 코드는 마왕이나 유물 id가 아니라 효과 키로 동작한다.
 // 한 판의 효과는 buildMods로 합쳐 Game.mods에 두고, 각 계산 지점이 읽는다. 값이 없으면 효과가 없는 기본값이다.
 // 설계: docs/MONSTER_DESIGN.md. 수치는 플레이 후 고칠 초안이다.
@@ -36,7 +36,7 @@ const LORD_EFFECTS = {
 //   speech: SPEECH에 더해 이 마왕만 하는 대사
 const DEMON_LORDS = {
     rift: {
-        id: 'rift', name: '균열의 군주', unlock: 0, desc: '번개로 직접 싸운다. 부하들은 박수만 친다.',
+        id: 'rift', name: '균열의 군주', desc: '번개로 직접 싸운다. 부하들은 박수만 친다.',
         sprite: 'lord_rift', footPx: 120,
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: { lightningDamage: 1.25, skillCooldown: 0.9 },
@@ -47,7 +47,7 @@ const DEMON_LORDS = {
         }
     },
     bone_queen: {
-        id: 'bone_queen', name: '뼈의 여왕', unlock: 20, desc: '몬스터를 빨리 키운다. 쓰러져도 금방 일으킨다.',
+        id: 'bone_queen', name: '뼈의 여왕', desc: '몬스터를 빨리 키운다. 쓰러져도 금방 일으킨다.',
         sprite: 'lord_bone_queen', footPx: 119,
         portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
         effects: { respawn: 0.6, xp: 0.25, maxHp: -3 },
@@ -58,7 +58,7 @@ const DEMON_LORDS = {
         }
     },
     gold_king: {
-        id: 'gold_king', name: '황금 마왕', unlock: 20, desc: '돈으로 해결한다. 몸은 조금 약하다.',
+        id: 'gold_king', name: '황금 마왕', desc: '돈으로 해결한다. 몸은 조금 약하다.',
         sprite: 'lord_gold_king', footPx: 120,
         portrait: { sprite: 'lord_gold_king', crop: [40, 6, 44] },
         effects: { startGold: 100, bounty: 1.2, maxHp: -5 },
@@ -71,32 +71,24 @@ const DEMON_LORDS = {
 };
 const DEFAULT_LORD = 'rift';
 
-// 영구 수집(수치 초안). 판이 끝나면 막은 웨이브 수 x soulsPerWave, 승리하면 winBonus를 더 받는다.
-// 유물 칸은 relicSlots.start개로 시작해 prices 순서대로 산다(2번째 30, 3번째 80). 최대는 start + prices.length
-const META_RULES = {
-    soulsPerWave: 2,
-    winBonus: 15,
-    relicSlots: { start: 1, prices: [30, 80] }
-};
-
 // 유물: 시작할 때 유물 칸 수만큼 고른다. 그림은 assets/sprites/relic_<id>.png(48px)
 const RELICS = {
-    pouch: { id: 'pouch', name: '황금 주머니', unlock: 0, effects: { startGold: 100 } },
-    chalice: { id: 'chalice', name: '피의 성배', unlock: 0, effects: { maxHp: 5 } },
-    hourglass: { id: 'hourglass', name: '모래시계', unlock: 14, effects: { skillCooldown: 0.8 } },
-    candle: { id: 'candle', name: '푸른 촛불', unlock: 8, effects: { heroSpeed: 0.92 } },
-    tablet: { id: 'tablet', name: '룬 석판', unlock: 8, effects: { range: 0.1 } },
-    handgem: { id: 'handgem', name: '해골 손', unlock: 14, effects: { rareChance: 0.05 } },
-    drum: { id: 'drum', name: '전쟁 북', unlock: 8, effects: { attackSpeed: 0.1 } },
-    horn: { id: 'horn', name: '악마 뿔', unlock: 0, effects: { damage: 0.1 } },
-    key: { id: 'key', name: '박쥐 열쇠', unlock: 14, effects: { eliteDrop: 0.15 } },
-    heart: { id: 'heart', name: '갇힌 심장', unlock: 0, effects: { hp: 0.15 } },
-    bottle: { id: 'bottle', name: '번개 병', unlock: 14, effects: { lightningDamage: 1.5 } },
-    eye: { id: 'eye', name: '마녀의 눈', unlock: 8, effects: { xp: 0.5 } },
-    banner: { id: 'banner', name: '마왕군 깃발', unlock: 14, effects: { fieldMax: 4 } },
-    dice: { id: 'dice', name: '뼈 주사위', unlock: 8, effects: { summonBase: -5 } },
-    shackles: { id: 'shackles', name: '푸른 족쇄', unlock: 14, effects: { respawn: 0.7 } },
-    mirror: { id: 'mirror', name: '금 간 거울', unlock: 14, effects: { refund: 1.5, sacrifice: 1.5 } }
+    pouch: { id: 'pouch', name: '황금 주머니', effects: { startGold: 100 } },
+    chalice: { id: 'chalice', name: '피의 성배', effects: { maxHp: 5 } },
+    hourglass: { id: 'hourglass', name: '모래시계', effects: { skillCooldown: 0.8 } },
+    candle: { id: 'candle', name: '푸른 촛불', effects: { heroSpeed: 0.92 } },
+    tablet: { id: 'tablet', name: '룬 석판', effects: { range: 0.1 } },
+    handgem: { id: 'handgem', name: '해골 손', effects: { rareChance: 0.05 } },
+    drum: { id: 'drum', name: '전쟁 북', effects: { attackSpeed: 0.1 } },
+    horn: { id: 'horn', name: '악마 뿔', effects: { damage: 0.1 } },
+    key: { id: 'key', name: '박쥐 열쇠', effects: { eliteDrop: 0.15 } },
+    heart: { id: 'heart', name: '갇힌 심장', effects: { hp: 0.15 } },
+    bottle: { id: 'bottle', name: '번개 병', effects: { lightningDamage: 1.5 } },
+    eye: { id: 'eye', name: '마녀의 눈', effects: { xp: 0.5 } },
+    banner: { id: 'banner', name: '마왕군 깃발', effects: { fieldMax: 4 } },
+    dice: { id: 'dice', name: '뼈 주사위', effects: { summonBase: -5 } },
+    shackles: { id: 'shackles', name: '푸른 족쇄', effects: { respawn: 0.7 } },
+    mirror: { id: 'mirror', name: '금 간 거울', effects: { refund: 1.5, sacrifice: 1.5 } }
 };
 
 // 표에 있는 id인지('toString' 같은 Object 속성 이름은 아니다)

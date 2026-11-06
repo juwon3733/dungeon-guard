@@ -6,10 +6,13 @@ function lordLine(kind) {
 }
 
 const Game = {
-    state: 'title', // title | prep | wave | victory | defeat
+    state: 'title', // title | story(스토리 지도) | select | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
-    runResult: null, // 판이 끝날 때 받은 영혼석과 새 기록(Meta.finishRun). 결과 화면이 보여 준다
+    runResult: null, // 판이 끝날 때의 기록(Meta.finishRun): 처음 깼는지, 풀린 것. 결과 화면과 해금 카드가 보여 준다
+    stage: null, // 이번 판 스테이지 id(STAGES). null이면 스토리 없이 WAVES 전부(tools/simulate.js와 시험 도구)
+    waves: WAVES, // 이번 판 웨이브 목록(stageWaves). 스테이지가 없으면 WAVES
+    heroHpMul: 1, // 이번 판 용사 체력 배율(스테이지의 hpMul)
     bossDefeated: false, // 이번 웨이브에 보스를 처치했는지. 웨이브가 끝날 때 보상 카드로 바뀐다
     bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'equip', id } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
@@ -24,7 +27,8 @@ const Game = {
     mods: emptyMods(), // 마왕과 유물의 효과를 합친 값(LORD_EFFECTS). 각 계산 지점이 읽는다
 
     // loadout: 선택 화면의 { lord, relics }. 없으면 효과 없이 시작한다(tools/simulate.js와 시험 도구)
-    reset(loadout) {
+    // stageId: 스토리 스테이지(STAGES의 id). 없으면 WAVES 전부를 체력 배율 1, 골드 보너스 없이 돈다
+    reset(loadout, stageId) {
         if (loadout) {
             const clean = cleanLoadout(loadout);
             this.lord = clean.lord;
@@ -35,7 +39,11 @@ const Game = {
             this.relics = [];
             this.mods = emptyMods();
         }
-        this.gold = COMBAT_RULES.startGold + this.mods.startGold;
+        const stage = hasStage(stageId) ? stageDef(stageId) : null;
+        this.stage = stage ? stage.id : null;
+        this.waves = stage ? stageWaves(stage) : WAVES;
+        this.heroHpMul = stage ? stage.hpMul : 1;
+        this.gold = COMBAT_RULES.startGold + this.mods.startGold + (stage ? stage.goldBonus || 0 : 0);
         this.hp = this.maxHp();
         this.waveIndex = 0;
         this.prepTimer = COMBAT_RULES.firstPrepTime;
@@ -45,6 +53,18 @@ const Game = {
         this.bossReward = null;
         this.equipBag = [];
         this.runResult = null;
+        this.clearField();
+        this.skills = { lightning: 0, roar: 0 };
+        this.streak = 0;
+        this.streakTimer = 0;
+        this.throneFlash = 0;
+        this.throneBless = 0;
+        this.stats = { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 };
+        this.state = 'prep';
+    },
+
+    // 맵 위의 몬스터, 용사, 연출을 비운다(판을 시작할 때와 스토리 지도·시작 전 대화로 돌아갈 때)
+    clearField() {
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -53,14 +73,7 @@ const Game = {
         this.telegraphs = [];
         this.pendingStrikes = [];
         this.hazards = [];
-        this.skills = { lightning: 0, roar: 0 };
-        this.streak = 0;
-        this.streakTimer = 0;
-        this.throneFlash = 0;
-        this.throneBless = 0;
-        this.stats = { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 };
         Fx.reset();
-        this.state = 'prep';
     },
 
     // 이번 판 마왕(그림, 초상, 대사). 고르지 않았으면 기본 마왕
@@ -91,7 +104,10 @@ const Game = {
     // 제물 효과(마왕과 유물의 sacrifice 배율 포함, 최대치 제한 전)
     sacrificeGain(m) { return sacrificeGain(m, this.mods.sacrifice); },
 
-    currentWave() { return WAVES[Math.min(this.waveIndex, WAVES.length - 1)]; },
+    currentWave() { return this.waves[Math.min(this.waveIndex, this.waves.length - 1)]; },
+
+    // 웨이브의 용사 체력 단계: 스테이지 웨이브는 원래 WAVES 인덱스(level), 아니면 지금 웨이브 번호
+    waveLevel(wave) { return wave.level !== undefined ? wave.level : this.waveIndex; },
 
     // 웨이브의 일반과 정예 인원을 입구 비율(wave.entry)대로 나눈 수: { north, south }. 보스는 세지 않는다.
     // 내림한 뒤 남는 인원은 소수 부분이 큰 입구부터(같으면 ROUTE_IDS 순서) 하나씩 더해 합이 정확히 맞는다. 비율이 없으면 모두 north
@@ -570,13 +586,13 @@ const Game = {
             const offset = this.entryOffset(route);
             for (let i = 0; i < counts[route]; i++) {
                 const delay = offset + i * COMBAT_RULES.spawnGap;
-                this.heroes.push(createHero(queue[next++], this.waveIndex, delay, false, route));
+                this.heroes.push(createHero(queue[next++], this.waveLevel(wave), delay, false, route));
                 lastStart = Math.max(lastStart, delay + COMBAT_RULES.spawnGap);
             }
         }
         if (wave.boss) {
             const route = this.bossEntry(wave.boss);
-            const boss = createHero(null, this.waveIndex, lastStart + 1, wave.boss, route);
+            const boss = createHero(null, this.waveLevel(wave), lastStart + 1, wave.boss, route);
             this.heroes.push(boss);
             const def = BOSSES[boss.bossKey];
             Fx.banner = { name: def.name, sub: `층 보스 · ${ROUTE_NAMES[route]}쪽 입구`, portrait: def.portrait, age: 0, life: 3.2 };
@@ -589,11 +605,11 @@ const Game = {
         return true;
     },
 
-    // 판 끝: 막은 웨이브 수(승리면 전부)로 영혼석과 기록을 남긴다(Meta.finishRun). 한 판에 한 번만
+    // 판 끝: 판 수, 승리 수와 깬 스테이지를 남긴다(Meta.finishRun, 해금은 처음 깰 때만). 한 판에 한 번만
     finish(victory) {
         if (this.state === 'victory' || this.state === 'defeat') return;
         this.state = victory ? 'victory' : 'defeat';
-        this.runResult = Meta.finishRun(victory ? WAVES.length : this.waveIndex, victory);
+        this.runResult = Meta.finishRun(this.stage, victory, victory ? this.waves.length : this.waveIndex);
         Sfx.play(victory ? 'victory' : 'defeat');
     },
 
@@ -643,7 +659,7 @@ const Game = {
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n;
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
-        if (n >= WAVES.length) {
+        if (n >= this.waves.length) {
             this.finish(true); // 마지막 보스는 보상 없이 승리
             return;
         }
