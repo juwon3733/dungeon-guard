@@ -451,7 +451,7 @@ const SCENES = {
                 h.hp = h.maxHp = 99999; // 장면 동안 쓰러지지 않게 한다
                 return h;
             };
-            const csD = nearestPathDistance(cs.x, cs.y);
+            const csD = nearestPathPoint(cs.x, cs.y).d; // 저주 사수 옆 길은 북쪽 길(합류 뒤 구간)
             const kD = bk.rally.d;
             Game.heroes = [
                 // 광전사가 붙잡은 용사 둘. 광전사가 가리지 않게 길 위쪽(뒤)에 세운다
@@ -557,6 +557,47 @@ const SCENES = {
     },
 
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
+    // 두 입구의 준비 화면: 5번째 웨이브(6:4, 대마도사)를 앞둔 준비 시간. 북쪽·남쪽 문 위에 올 인원(보스는 북쪽),
+    // 다음 파티 창의 입구별 인원 줄과 보스 줄의 입구, 남쪽 갈래 둘레의 건설 칸과 낀 칸(5..7,8)
+    twoGates: {
+        setup: () => {
+            startRun();
+            Game.gold = 2000;
+            Game.waveIndex = 4;
+            Game.place('orc_guard', 3, 10);
+            Game.place('skeleton_archer', 6, 8);
+            Game.place('orc_guard', 9, 7);
+            advance(1.6);
+            Fx.reset();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 웨이브 중 합류점 근처: 8번째 웨이브(5:5). 남쪽 갈래 오크(3,10)와 합류점 오크(9,7), 낀 칸 궁수(6,8)·마법사(7,8),
+    // 두 갈래의 용사가 합류점 (8,7)의 T자에서 만나 붙잡힌 순간
+    merge2: {
+        setup: () => {
+            startRun();
+            Game.gold = 2000;
+            Game.place('orc_guard', 3, 10);
+            Game.place('orc_guard', 9, 7);
+            Game.place('skeleton_archer', 6, 8);
+            Game.place('dark_mage', 7, 8);
+            Game.place('skeleton_archer', 5, 5);
+            advance(1.6);
+            for (const m of Game.monsters) { m.hp = m.maxHp = 1e6; } // 장면 동안 쓰러지지 않게 한다
+            Game.waveIndex = 7;
+            seededRandom(7, () => Game.startWave());
+            const near = r => Game.heroes.some(h => !h.waiting && h.route === r && h.blocker && distance(heroWorld(h).x, heroWorld(h).y, tileX(8), tileY(7)) < TILE * 1.5);
+            for (let i = 0; i < 60 * 30 && !(near('north') && near('south')); i++) { UI.update(1 / 60); Game.update(1 / 60); }
+            if (!near('north') || !near('south')) throw new Error('합류점에서 두 갈래 용사가 만나지 않았습니다');
+            advance(0.3);
+            Fx.numbers = [];
+            Fx.shake = 0;
+            freezeScene();
+        }
+    },
+
     archmageIntro: {
         setup: () => {
             startRun();

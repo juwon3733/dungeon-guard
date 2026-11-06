@@ -144,7 +144,7 @@ assert.strictEqual(withRandom([0.95, 0.5], () => Game.rollSummon()), 'bone_knigh
 assert.strictEqual(withRandom([0.999, 0], () => Game.rollSummon()), 'bone_knight');
 
 // 칸에서 길까지 거리(px)
-const pathGap = (c, r) => { const p = pathAt(nearestPathDistance(tileX(c), tileY(r))); return distance(tileX(c), tileY(r), p.x, p.y); };
+const pathGap = (c, r) => nearestPathPoint(tileX(c), tileY(r)).gap; // 두 갈래 중 가까운 길까지
 
 // 소환: 버튼을 누르면 25골드를 내고 맵의 빈 길 옆 칸에 바로 나온다. 길에 가장 가까운 칸(바로 옆)을 고른다
 withRandom([0.1, 0.1], () => btn('summon'));
@@ -198,7 +198,11 @@ assert.strictEqual(Game.summonCost(), 60);
 Game.summonCount = 200;
 assert.strictEqual(Game.summonCost(), 60, 'cost capped');
 
-// 원거리 몬스터는 사거리 안에 길이 들어오는 칸에만 나온다(암흑 마법사 사거리 2.5칸)
+// 원거리 몬스터는 사거리 안에 길이 들어오는 칸에만 나온다.
+// 남쪽 길이 생겨 모든 건설 칸이 어느 길에서든 2.5칸 안이라, 이 시험 동안만 암흑 마법사 사거리를 1.5칸으로 줄인다
+assert(![...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return pathGap(c, r) > 2.5 * TILE; }), 'every build cell within 2.5 tiles of a path');
+const mageRange = MONSTERS.dark_mage.stats.range;
+MONSTERS.dark_mage.stats.range = 1.5;
 const farCells = [...BUILD_CELLS].map(k => k.split(',').map(Number)).filter(([c, r]) => pathGap(c, r) > MONSTERS.dark_mage.stats.range * TILE);
 assert(farCells.length > 0, 'test needs a cell out of dark mage range');
 Game.monsters = [];
@@ -213,6 +217,7 @@ withRandom([0.69, 0.99], () => UI.onKey('KeyS')); // 암흑 마법사: 남은 �
 assert.strictEqual(Game.gold, g0, 'no cell in range: no gold spent');
 assert(UI.toast && UI.toast.text.includes('합쳐서'), 'no cell toast');
 assert(!Game.monsters.some(m => m.type === 'dark_mage'), 'dark mage not placed out of range');
+MONSTERS.dark_mage.stats.range = mageRange;
 withRandom([0.1, 0.1], () => UI.onKey('KeyS')); // 오크 경비병(막는 몬스터)은 사거리 조건 없이 남은 칸에 나온다
 const farOrc = Game.monsters.find(m => m.type === 'orc_guard');
 assert(farOrc && farCells.some(([c, r]) => c === farOrc.col && r === farOrc.row), 'blocker uses the far cell');
@@ -568,7 +573,7 @@ Game.gold = 2000;
 
 // 모든 몬스터는 길 칸에 놓을 수 없다
 assert(!Game.canPlace('orc_guard', 30, 30) && !Game.canPlace('skeleton_archer', 0, 0), 'off map rejected');
-for (const key of PATH.cells) {
+for (const key of PATH_CELLS) {
     const [c, r] = key.split(',').map(Number);
     for (const t of Object.keys(MONSTERS)) assert(!Game.canPlace(t, c, r), 'no monster on path ' + key);
 }
@@ -578,7 +583,8 @@ assert(Game.place('orc_guard', 3, 4));
 const orc = Game.monsterAt(3, 4);
 assert(orc && orc.blocks && orc.rally, 'orc placed beside path');
 assert.strictEqual(orc.x, tileX(3));
-assert.strictEqual(orc.rally.d, nearestPathDistance(tileX(3), tileY(4)));
+assert.strictEqual(orc.rally.d, nearestPathPoint(tileX(3), tileY(4)).d);
+assert.strictEqual(orc.rally.route, 'north');
 assert(distance(orc.rally.x, orc.rally.y + MONSTER_FOOT - 10, pathAt(orc.rally.d).x, pathAt(orc.rally.d).y) < 1, 'rally on path');
 tick(0.1);
 assert(orc.moving, 'orc walks');
@@ -607,7 +613,7 @@ UI.clearSelection();
 // 길로 나간 막는 몬스터도 끌어 옮길 수 있다: 새 칸에서 다시 걸어 나간다
 dragTo([orc.x * WORLD_ZOOM, (orc.y - 10) * WORLD_ZOOM], cellXY(3, 2));
 assert.strictEqual(Game.monsterAt(3, 2), orc, 'walked-out orc moved');
-assert(orc.x === tileX(3) && orc.y === tileY(2) && orc.rally.d === nearestPathDistance(tileX(3), tileY(2)));
+assert(orc.x === tileX(3) && orc.y === tileY(2) && orc.rally.d === nearestPathPoint(tileX(3), tileY(2)).d);
 dragTo(monXY(orc), cellXY(3, 4));
 assert.strictEqual(Game.monsterAt(3, 4), orc);
 tick(1.6);
@@ -771,7 +777,7 @@ const place = (type, d, bossKey) => {
 };
 const fakeOrc = (x, y) => {
     const u = createMonster('orc_guard', 1, 1);
-    Object.assign(u, { x, y, homeX: x, homeY: y, rally: { d: nearestPathDistance(x, y), x, y }, hp: 9999, maxHp: 9999 });
+    Object.assign(u, { x, y, homeX: x, homeY: y, rally: { route: nearestPathPoint(x, y).route, d: nearestPathPoint(x, y).d, x, y }, hp: 9999, maxHp: 9999 });
     Game.monsters.push(u);
     return u;
 };
@@ -1640,6 +1646,259 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.state = 'prep';
     Game.monsters = [];
     Game.gold = COMBAT_RULES.startGold;
+}
+
+// ----- 두 입구(합류형, docs/MULTI_PATH.md) -----
+// 준비 상태에서 준비 시간을 길게 두고 시험한다(웨이브 중이면 용사가 없을 때 웨이브가 끝난다)
+{
+    const savedWave = Game.waveIndex;
+    const prep = () => { Game.state = 'prep'; Game.prepTimer = 9999; Game.bossReward = null; };
+    const placeOn = (type, route, d) => {
+        const h = createHero(type, 0, 0, false, route);
+        Object.assign(h, { waiting: false, d, lane: 0, cast: 99, song: 99 });
+        Game.heroes.push(h);
+        return h;
+    };
+    // 시험 동안 서로 쓰러뜨리지 않는다
+    const sturdy = h => { h.hp = h.maxHp = 1e6; h.damage = 0; return h; };
+    const mN = mergeDistance('north');
+    const mS = mergeDistance('south');
+    clearBoard();
+    prep();
+
+    // 길: 합류점 (8,7)에서 만나고, 그 뒤로는 두 길의 좌표와 방향, 남은 거리가 같다. 남쪽이 2칸 짧다
+    assert.strictEqual(mN - mS, 2 * TILE, 'south is two tiles shorter');
+    assert.strictEqual(ROUTES.north.length - mN, ROUTES.south.length - mS, 'same distance after the merge');
+    for (let t = 0; t <= ROUTES.north.length - mN; t += TILE / 4) {
+        const a = pathAt(mN + t, 'north');
+        const b = pathAt(mS + t, 'south');
+        // 합류점 바로 그 점에서는 들어오던 방향이 달라 좌표만 본다
+        assert(distance(a.x, a.y, b.x, b.y) < 1e-6 && (t === 0 || (a.dx === b.dx && a.dy === b.dy)), 'merged section coincides at ' + t);
+    }
+    const mp = pathAt(mS, 'south');
+    assert(mp.x === tileX(MERGE_TILE.col) && mp.y === tileY(MERGE_TILE.row), 'merge at (8,7)');
+    assert(pathAt(0, 'south').x < 0 && pathAt(0, 'south').y === tileY(9), 'south walks in from outside the gate');
+    assert(pathAt(500).x === pathAt(500, 'north').x && pathAt(500).y === pathAt(500, 'north').y, 'route defaults to north');
+    // 길 칸은 합집합: 남쪽 갈래 (0..8, 9), (8, 8)도 길이라 지을 수 없다
+    for (let c = 0; c <= 8; c++) assert(isPathCell(c, 9) && !isBuildCell(c, 9), 'south path cell ' + c);
+    assert(isPathCell(8, 8) && !Game.canPlace('orc_guard', 8, 8));
+    for (const id of ROUTE_IDS) for (const k of ROUTES[id].cells) assert(PATH_CELLS.has(k), 'union has ' + k);
+    // 남쪽 갈래 아래 줄 10은 새 건설 칸이다
+    assert(isBuildCell(3, 10) && isBuildCell(2, 8), 'cells around the south branch');
+
+    // 입구 배분: 일반과 정예를 비율대로 정확히 나눈다. 비율이 없으면 전부 북쪽
+    for (const w of WAVES) {
+        const c = Game.entryCounts(w);
+        const total = [...Object.values(w.members), ...Object.values(w.elites || {})].reduce((a, b) => a + b, 0);
+        assert.strictEqual(c.north + c.south, total, 'split adds up ' + w.party);
+        if (!w.entry) assert.strictEqual(c.south, 0, 'no entry: all north ' + w.party);
+        else assert(Math.abs(c.south - total * w.entry.south / (w.entry.north + w.entry.south)) <= 0.5 + 1e-9, 'split follows ratio ' + w.party);
+    }
+    assert(!WAVES[0].entry && !WAVES[1].entry && WAVES[2].entry.south === 0.3 && WAVES[4].entry.south === 0.4 && WAVES[7].entry.south === 0.5, 'entry table');
+    assert.strictEqual(JSON.stringify(Game.entryCounts({ members: { warrior: 10 }, entry: { north: 0.7, south: 0.3 } })), '{"north":7,"south":3}');
+    assert.strictEqual(JSON.stringify(Game.entryCounts({ members: { warrior: 9 }, entry: { north: 0.5, south: 0.5 } })), '{"north":5,"south":4}', 'tie goes north');
+    assert.strictEqual(JSON.stringify(Game.entryCounts({ members: { warrior: 6, rogue: 3 } })), '{"north":9,"south":0}', 'no ratio: all north');
+    assert.strictEqual(JSON.stringify(Game.entryCounts({ members: { warrior: 6 }, entry: { south: 1 } })), '{"north":0,"south":6}');
+
+    // 웨이브 시작: 입구별 인원이 정확히 맞고, 직업 수는 그대로다. 출발 간격은 입구마다 따로 세고 남쪽은 절반 늦게 출발한다
+    const gap = COMBAT_RULES.spawnGap;
+    for (const wi of [0, 3, 8]) {
+        clearBoard();
+        prep();
+        Game.waveIndex = wi;
+        assert(Game.startWave());
+        const w = WAVES[wi];
+        const c = Game.entryCounts(w);
+        const of = r => Game.heroes.filter(h => h.route === r && !h.boss);
+        assert.strictEqual(of('north').length, c.north, 'north count wave ' + (wi + 1));
+        assert.strictEqual(of('south').length, c.south, 'south count wave ' + (wi + 1));
+        const types = {};
+        for (const h of Game.heroes) types[h.type] = (types[h.type] || 0) + 1;
+        for (const [t, n] of [...Object.entries(w.members), ...Object.entries(w.elites || {})]) assert.strictEqual(types[t], n, 'type count ' + t);
+        const delays = r => of(r).map(h => h.delay).sort((a, b) => a - b);
+        delays('north').forEach((d, i) => assert(Math.abs(d - i * gap) < 1e-9, 'north gap'));
+        delays('south').forEach((d, i) => assert(Math.abs(d - (gap / 2 + i * gap)) < 1e-9, 'south gap, half offset'));
+        if (wi === 0) assert(Game.heroes.every(h => h.route === 'north'), 'first wave all north');
+    }
+    // 보스는 북쪽 입구로, 모든 용사가 출발한 뒤에 온다. 예고 글자에 입구를 적는다. BOSSES의 entry를 바꾸면 그 입구로
+    clearBoard();
+    prep();
+    Game.waveIndex = 4;
+    Game.startWave();
+    {
+        const boss = Game.heroes.find(h => h.boss);
+        assert(boss && boss.route === 'north', 'boss from the north gate');
+        assert(Game.heroes.every(h => h === boss || h.delay < boss.delay), 'boss comes last');
+        assert(Fx.banner.sub.includes('북쪽 입구'), 'boss banner names the gate');
+        assert(Game.heroes.some(h => h.elite && h.route) && Game.heroes.filter(h => h.route === 'south').length === Game.entryCounts(WAVES[4]).south);
+    }
+    BOSSES.archmage.entry = 'south';
+    clearBoard();
+    prep();
+    Game.startWave();
+    assert.strictEqual(Game.heroes.find(h => h.boss).route, 'south', 'boss entry from the table');
+    assert(Fx.banner.sub.includes('남쪽 입구'));
+    BOSSES.archmage.entry = 'north';
+    assert.strictEqual(Game.bossEntry('fallen_knight'), 'north');
+
+    // 남쪽 용사는 남쪽 갈래를 지나 합류점에서 북쪽 길로 이어 걸어 왕좌에 닿는다(북쪽 갈래 칸은 지나지 않는다)
+    clearBoard();
+    prep();
+    Game.hp = 20;
+    {
+        const h = placeOn('warrior', 'south', 0);
+        h.speed = 12 * TILE;
+        const cells = new Set();
+        for (let i = 0; i < 300 && !h.dead; i++) {
+            Game.update(1 / 30);
+            const w = heroWorld(h);
+            cells.add(Math.floor(w.x / TILE) + ',' + Math.floor((w.y - MAP_TOP) / TILE));
+        }
+        assert(h.dead && h.arrived, 'south hero reached the throne');
+        assert.strictEqual(Game.hp, 19, 'south hero hits the throne');
+        assert(cells.has('4,9') && cells.has('8,8') && cells.has('12,5') && cells.has('20,9'), 'walked the south branch and the shared path');
+        assert(!cells.has('4,5') && !cells.has('2,3'), 'never on the north branch');
+    }
+
+    // 가장 앞선 용사: d가 아니라 왕좌까지 남은 거리로 비교한다
+    clearBoard();
+    prep();
+    {
+        const n = sturdy(placeOn('warrior', 'north', mN - TILE));
+        const s = sturdy(placeOn('warrior', 'south', mS - 0.5 * TILE));
+        assert(n.d > s.d && remainingDistance(s) < remainingDistance(n));
+        assert.strictEqual(foremostHero(tileX(6), tileY(8), 5 * TILE), s, 'south hero is closer to the throne');
+        s.d = mS - 1.5 * TILE;
+        assert.strictEqual(foremostHero(tileX(6), tileY(8), 5 * TILE), n, 'north hero is closer now');
+        // 낀 칸의 궁수도 같은 규칙으로 쏜다
+        n.speed = s.speed = 0;
+        s.d = mS - 0.5 * TILE;
+        const archer = Game.place('skeleton_archer', 6, 8);
+        archer.atk = 0;
+        for (let i = 0; i < 20 && !Game.projectiles.length; i++) Game.update(1 / 30);
+        assert(Game.projectiles.length && Game.projectiles[0].target === s, 'archer shoots the foremost (south) hero');
+        Game.projectiles = [];
+    }
+
+    // 막기와 풀림: 북쪽 갈래, 남쪽 갈래 따로
+    clearBoard();
+    prep();
+    {
+        const oN = Game.place('orc_guard', 2, 2);
+        const oS = Game.place('orc_guard', 3, 10);
+        assert.strictEqual(oN.rally.route, 'north');
+        assert.strictEqual(oS.rally.route, 'south', 'rally on the south branch');
+        assert(Math.abs(oS.rally.y + MONSTER_FOOT - 10 - tileY(9)) < 1e-6 && oS.rally.x === tileX(3), 'south rally under the cell');
+        for (const o of [oN, oS]) { o.hp = o.maxHp = 1e6; o.damage = 0; }
+        tick(1.6);
+        assert(!oN.moving && !oS.moving, 'both walked out');
+        const hN = sturdy(placeOn('warrior', 'north', oN.rally.d - 1.5 * TILE));
+        const hS = sturdy(placeOn('warrior', 'south', oS.rally.d - 1.5 * TILE));
+        tick(2);
+        assert.strictEqual(hN.blocker, oN, 'north branch blocked');
+        assert.strictEqual(hS.blocker, oS, 'south branch blocked');
+        const dS = hS.d;
+        tick(0.5);
+        assert.strictEqual(hS.d, dS, 'blocked hero stands');
+        // 풀림: 남쪽 오크를 옮기면 놓아주고 다시 걷는다. 북쪽 오크가 쓰러져도 놓아준다
+        assert(Game.moveMonster(oS, 3, 6));
+        assert.strictEqual(oS.rally.route, 'north', 'moved orc rallies on the north branch');
+        assert(!hS.blocker);
+        knockDownMonster(oN);
+        assert(!hN.blocker);
+        tick(0.5);
+        assert(hS.d > dS && hN.d > oN.rally.d - 1.5 * TILE, 'both walk on after release');
+    }
+
+    // 합류점 근처: (9,7)의 오크는 합류점에 서서 두 갈래에서 오는 용사를 모두 붙잡는다.
+    // (9,8)의 오크는 남쪽 갈래 (8,8)에 서고 북쪽 용사는 붙잡지 않는다
+    clearBoard();
+    prep();
+    {
+        const o = Game.place('orc_guard', 9, 7);
+        assert(o.rally.route === 'north' && o.rally.x === tileX(8) && Math.abs(o.rally.y + MONSTER_FOOT - 10 - tileY(7)) < 1e-6, 'rally on the merge point');
+        o.hp = o.maxHp = 1e6;
+        o.damage = 0;
+        tick(1.6);
+        const hN = sturdy(placeOn('warrior', 'north', mN - 1.5 * TILE));
+        const hS = sturdy(placeOn('warrior', 'south', mS - 1.5 * TILE));
+        tick(2);
+        assert(hN.blocker === o && hS.blocker === o, 'merge orc holds both branches');
+        Game.removeMonster(o);
+        assert(!hN.blocker && !hS.blocker);
+        clearBoard();
+        const o2 = Game.place('orc_guard', 9, 8);
+        assert(o2.rally.route === 'south' && o2.rally.d < mS, 'rally on the south branch before the merge');
+        o2.hp = o2.maxHp = 1e6;
+        o2.damage = 0;
+        tick(1.6);
+        const n2 = sturdy(placeOn('warrior', 'north', mN - 1.5 * TILE));
+        const s2 = sturdy(placeOn('warrior', 'south', mS - 2 * TILE));
+        tick(2);
+        assert.strictEqual(s2.blocker, o2, 'south hero held at (8,8)');
+        assert(n2.blocker !== o2 && n2.d > mN, 'north hero passes the merge');
+    }
+
+    // 낀 칸 (5..7, 8): 두 갈래에서 모두 1칸. 소환과 끌기로 놓을 수 있다
+    clearBoard();
+    prep();
+    {
+        const gapTo = (route, c, r) => Math.min(...ROUTES[route].segments.map(s => {
+            const t = clamp((tileX(c) - s.ax) * s.dx + (tileY(r) - s.ay) * s.dy, 0, s.len);
+            return distance(tileX(c), tileY(r), s.ax + s.dx * t, s.ay + s.dy * t);
+        }));
+        for (let c = 5; c <= 7; c++) {
+            assert(isBuildCell(c, 8), 'between cell ' + c);
+            assert(gapTo('north', c, 8) === TILE && gapTo('south', c, 8) === TILE, 'one tile from both branches ' + c);
+        }
+        // 다른 빈 칸을 모두 채우면 소환은 낀 칸에 나온다(오크 경비병, 암흑 마법사)
+        SUMMON_RULES.maxField = 999;
+        for (const key of BUILD_CELLS) {
+            const [c, r] = key.split(',').map(Number);
+            if (key !== '6,8') Game.place('skeleton_archer', c, r);
+        }
+        Game.gold = 5000;
+        const r1 = withRandom([0.1, 0.1], () => Game.summon());
+        assert(r1.ok && r1.type === 'orc_guard' && r1.monster.col === 6 && r1.monster.row === 8, 'blocker summoned into the between cell');
+        assert(r1.monster.rally.route === 'north' && Math.abs(r1.monster.rally.y + MONSTER_FOOT - 10 - tileY(7)) < 1e-6, 'tie goes to the north branch');
+        Game.removeMonster(r1.monster);
+        const r2 = withRandom([0.69, 0.99], () => Game.summon());
+        assert(r2.ok && r2.type === 'dark_mage' && r2.monster.col === 6 && r2.monster.row === 8, 'ranged summoned into the between cell');
+        SUMMON_RULES.maxField = 24;
+        // 끌기: 남쪽 갈래 아래 칸의 오크를 낀 칸으로 옮기면 집결 지점이 바뀐다
+        Game.monsters = [];
+        const o = Game.place('orc_guard', 3, 10);
+        assert.strictEqual(o.rally.route, 'south');
+        UI.clearSelection();
+        dragTo(monXY(o), cellXY(7, 8));
+        assert.strictEqual(Game.monsterAt(7, 8), o, 'dragged into the between cell');
+        assert(o.rally.route === 'north' && o.rally.x === tileX(7), 'rally moved to the north branch');
+        // 남쪽 길 칸으로는 끌어 놓지 못한다
+        dragTo(monXY(o), cellXY(5, 9));
+        assert.strictEqual(Game.monsterAt(7, 8), o, 'south path cell rejected');
+    }
+
+    // 시체와 타락 유닛에도 길을 남긴다(타락은 꺼 두었지만 켰을 때를 위해)
+    clearBoard();
+    prep();
+    {
+        Game.corpses = [];
+        const h = placeOn('warrior', 'south', 3 * TILE);
+        damageHero(h, 1e9);
+        const corpse = Game.corpses[Game.corpses.length - 1];
+        assert(corpse && corpse.route === 'south' && corpse.d === 3 * TILE, 'corpse keeps the route');
+        const u = createCorruptUnit(corpse);
+        assert(u.route === 'south' && u.d === corpse.d, 'corrupt unit keeps the route');
+        Game.corpses = [];
+    }
+
+    clearBoard();
+    Game.projectiles = [];
+    Game.waveIndex = savedWave;
+    prep();
+    Game.prepTimer = COMBAT_RULES.prepTime;
+    UI.clearSelection();
+    UI.toast = null;
 }
 
 // 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)

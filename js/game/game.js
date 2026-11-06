@@ -91,6 +91,32 @@ const Game = {
 
     currentWave() { return WAVES[Math.min(this.waveIndex, WAVES.length - 1)]; },
 
+    // 웨이브의 일반과 정예 인원을 입구 비율(wave.entry)대로 나눈 수: { north, south }. 보스는 세지 않는다.
+    // 내림한 뒤 남는 인원은 소수 부분이 큰 입구부터(같으면 ROUTE_IDS 순서) 하나씩 더해 합이 정확히 맞는다. 비율이 없으면 모두 north
+    entryCounts(wave) {
+        const total = [...Object.values(wave.members), ...Object.values(wave.elites || {})].reduce((a, b) => a + b, 0);
+        const counts = {};
+        for (const id of ROUTE_IDS) counts[id] = 0;
+        const weights = ROUTE_IDS.map(id => Math.max(0, (wave.entry && wave.entry[id]) || 0));
+        const sum = weights.reduce((a, b) => a + b, 0);
+        if (!(sum > 0)) { counts[ROUTE_IDS[0]] = total; return counts; }
+        const exact = weights.map(w => total * w / sum);
+        exact.forEach((v, i) => { counts[ROUTE_IDS[i]] = Math.floor(v + 1e-9); });
+        let left = total - Object.values(counts).reduce((a, b) => a + b, 0);
+        const order = ROUTE_IDS.map((id, i) => ({ id, frac: exact[i] - counts[id] })).sort((a, b) => b.frac - a.frac);
+        for (let i = 0; left > 0; i = (i + 1) % order.length, left--) counts[order[i].id]++;
+        return counts;
+    },
+
+    // 입구의 첫 출발 시각(초): 북쪽 0, 둘째 입구부터 출발 간격의 절반씩 늦춰 엇갈리게 한다
+    entryOffset(route) { return ROUTE_IDS.indexOf(route) * COMBAT_RULES.spawnGap / 2; },
+
+    // 보스가 들어오는 입구(BOSSES의 entry, 없으면 north)
+    bossEntry(key) {
+        const def = BOSSES[key === true ? 'fallen_knight' : key];
+        return def && ROUTES[def.entry] ? def.entry : 'north';
+    },
+
     // 놓은 칸으로 찾는다. 길로 걸어 나간 몬스터도 놓은 칸을 차지한다
     monsterAt(col, row) { return this.monsters.find(m => m.col === col && m.row === row) || null; },
 
@@ -162,8 +188,7 @@ const Game = {
             if (this.monsterAt(col, row)) continue;
             const x = tileX(col);
             const y = tileY(row);
-            const p = pathAt(nearestPathDistance(x, y));
-            const gap = distance(x, y, p.x, p.y);
+            const gap = nearestPathPoint(x, y).gap; // 두 갈래 중 가까운 쪽 길까지
             if (!blocks && gap > range + 0.5) continue;
             cells.push({ col, row, gap });
         }
@@ -366,7 +391,7 @@ const Game = {
         m.shot = null;
         if (m.blocks) {
             const r = rallyPoint(col, row);
-            m.rally = { d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
+            m.rally = { route: r.route, d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
         }
         Fx.ring(m.x, m.y + MONSTER_FOOT, 70, '#c79bff', 0.3);
         Fx.burst(m.x, m.y, '#c79bff', 10, 240, 0.35, 6);
@@ -535,12 +560,24 @@ const Game = {
             const j = Math.floor(Math.random() * (i + 1));
             [queue[i], queue[j]] = [queue[j], queue[i]];
         }
-        queue.forEach((type, i) => this.heroes.push(createHero(type, this.waveIndex, i * COMBAT_RULES.spawnGap, false)));
+        // 섞인 순서의 앞에서부터 입구별 인원(entryCounts)만큼 나눠 준다. 출발 간격은 입구마다 따로 센다
+        const counts = this.entryCounts(wave);
+        let next = 0;
+        let lastStart = 0;
+        for (const route of ROUTE_IDS) {
+            const offset = this.entryOffset(route);
+            for (let i = 0; i < counts[route]; i++) {
+                const delay = offset + i * COMBAT_RULES.spawnGap;
+                this.heroes.push(createHero(queue[next++], this.waveIndex, delay, false, route));
+                lastStart = Math.max(lastStart, delay + COMBAT_RULES.spawnGap);
+            }
+        }
         if (wave.boss) {
-            const boss = createHero(null, this.waveIndex, queue.length * COMBAT_RULES.spawnGap + 1, wave.boss);
+            const route = this.bossEntry(wave.boss);
+            const boss = createHero(null, this.waveIndex, lastStart + 1, wave.boss, route);
             this.heroes.push(boss);
             const def = BOSSES[boss.bossKey];
-            Fx.banner = { name: def.name, sub: '층 보스', portrait: def.portrait, age: 0, life: 3.2 };
+            Fx.banner = { name: def.name, sub: `층 보스 · ${ROUTE_NAMES[route]}쪽 입구`, portrait: def.portrait, age: 0, life: 3.2 };
             Fx.dim = 0.9;
             Sfx.play('bossIntro');
         }

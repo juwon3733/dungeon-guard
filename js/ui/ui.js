@@ -1049,6 +1049,7 @@ const UI = {
         this.drawBottomBar(ctx);
         this.drawTopBar(ctx);
         this.drawParty(ctx);
+        this.drawGateCounts(ctx);
         this.drawBossBar(ctx);
         this.drawStreak(ctx);
         if (this.popup) this.drawPopup(ctx);
@@ -1543,13 +1544,20 @@ const UI = {
         const y = 76;
         const entries = Object.entries(wave.members);
         const elites = Object.entries(wave.elites || {});
-        // Why: 정예와 보스가 섞이면 줄이 6개까지 늘어난다. 줄을 낮게 잡아 왕좌의 마왕을 가리지 않게 한다(6줄이어도 y 400 위에서 끝난다).
-        const ROW_H = 42;
-        const h = 58 + (entries.length + elites.length + (wave.boss ? 1 : 0)) * ROW_H;
+        // Why: 정예와 보스가 섞이면 줄이 6개까지 늘어난다. 줄을 낮게 잡아 왕좌의 마왕을 가리지 않게 한다.
+        // 입구별 인원 줄(ENTRY_H)이 더해져도 6줄이면 줄 높이를 38로 줄여 y 400 위에서 끝난다
+        const rows = entries.length + elites.length + (wave.boss ? 1 : 0);
+        const ROW_H = rows >= 6 ? 38 : 42;
+        const ENTRY_H = 26;
+        const h = 58 + ENTRY_H + rows * ROW_H;
         UIKit.frame(ctx, x, y, 360, h, 'panel', 8);
         UIKit.plain(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 20, y + 28, 18, '#c9b6ea');
         UIKit.text(ctx, wave.party, x + 340, y + 28, 23, '#ffe08a', 'right');
-        let ry = y + 54;
+        // 입구별 인원(일반과 정예). 보스는 아래 보스 줄에 입구를 적는다
+        const counts = G.entryCounts(wave);
+        UIKit.plain(ctx, '입구', x + 20, y + 56, 16, '#b8a9d0');
+        UIKit.text(ctx, ROUTE_IDS.map(id => `${ROUTE_NAMES[id]} ${counts[id]}`).join(' · '), x + 340, y + 56, 20, '#ffffff', 'right');
+        let ry = y + 54 + ENTRY_H;
         const row = (img, name, note, count, elite) => {
             const box = ROW_H - 4;
             UIKit.frame(ctx, x + 14, ry - 2, box, box, elite ? 'gold' : 'dark', 4);
@@ -1578,7 +1586,29 @@ const UI = {
         }
         if (wave.boss) {
             const def = BOSSES[wave.boss];
-            row(Assets.get(def.portrait), def.name, def.note, 1);
+            // 보스가 오는 입구는 이름 줄에 적는다(설명 줄은 이미 길다)
+            row(Assets.get(def.portrait), `${def.name} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽`, def.note, 1);
+        }
+    },
+
+    // 준비 시간: 각 입구 문 위에 이번에 올 인원을 작게 띄운다(보스가 오는 입구는 보스 표시를 더한다)
+    drawGateCounts(ctx) {
+        const G = Game;
+        if (G.state !== 'prep' || G.bossReward) return;
+        const wave = G.currentWave();
+        const counts = G.entryCounts(wave);
+        const bossRoute = wave.boss ? G.bossEntry(wave.boss) : null;
+        for (const gate of Render.gates()) {
+            const n = counts[gate.route];
+            const boss = bossRoute === gate.route;
+            if (!n && !boss) continue;
+            const cx = Math.round((gate.x + 18) * WORLD_ZOOM);
+            const cy = Math.round((gate.y - 128) * WORLD_ZOOM);
+            const label = `${ROUTE_NAMES[gate.route]} ${n}명${boss ? ' +보스' : ''}`;
+            ctx.font = `20px ${UI_FONT}`;
+            const w = Math.ceil(ctx.measureText(label).width) + 24;
+            UIKit.frame(ctx, Math.max(8, cx - w / 2), cy - 16, w, 32, boss ? 'danger' : 'dark', 4);
+            UIKit.text(ctx, label, Math.max(8, cx - w / 2) + w / 2, cy + 1, 20, boss ? '#ffd0db' : '#ffffff', 'center');
         }
     },
 

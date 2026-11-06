@@ -100,9 +100,10 @@ const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
 // art.footPx는 64px 캔버스 안의 발끝 높이다. 숫자 하나 또는 동작(walk, cast, atk)별 방향(down, left, right, up)별 표.
 //   Asteria 그림은 방향과 동작마다 발 높이가 달라(오른쪽 걷기 55, 오른쪽 공격 51, 아래 걷기 62) 하나로 적으면 떠 보인다
 // waveHpMul: 웨이브 배율까지 곱한 체력에 한 번 더 곱한다(중간 보스를 약하게. 없으면 1)
+// entry: 들어오는 입구(ROUTE_IDS). 없으면 north
 const BOSSES = {
     fallen_knight: {
-        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지',
+        name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지', entry: 'north',
         hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
         starY: 165,
         patterns: [
@@ -111,7 +112,7 @@ const BOSSES = {
         ]
     },
     archmage: {
-        name: '용사단 대마도사', portrait: 'stormcaller_walk_down0', note: '체력 50%·25%에 범위 감전',
+        name: '용사단 대마도사', portrait: 'stormcaller_walk_down0', note: '체력 50%·25%에 범위 감전', entry: 'north',
         // 체력 체계는 부대장과 같다(전사 체력 x 15). 5번째 웨이브 중간 보스라 waveHpMul로 낮춘다(초안)
         hpMultiplier: 15, waveHpMul: 0.6, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
         art: {
@@ -153,18 +154,23 @@ const CORRUPTED = {
     mage: { name: '타락 마법사', hp: 30, damage: 10, interval: 1.2, range: 2.5, ranged: true }
 };
 
-// elites는 일반 인원(members)에 더해 섞이는 정예 용사 수다. boss는 BOSSES의 열쇠다
+// elites는 일반 인원(members)에 더해 섞이는 정예 용사 수다. boss는 BOSSES의 열쇠다.
+// entry는 입구별 비율(ROUTE_IDS 열쇠, 합이 1이 아니어도 비율로 본다). 없으면 모두 북쪽이다.
+// 일반과 정예를 합친 인원을 비율대로 나누고(Game.entryCounts) 섞인 순서대로 입구를 정한다. 보스는 BOSSES의 entry를 따른다
+const ENTRY_70_30 = { north: 0.7, south: 0.3 };
+const ENTRY_60_40 = { north: 0.6, south: 0.4 };
+const ENTRY_50_50 = { north: 0.5, south: 0.5 };
 const WAVES = [
     { party: '신참 원정대', members: { warrior: 9 } },
     { party: '마을 자경단', members: { warrior: 12 } },
-    { party: '날쌘 도굴꾼', members: { rogue: 8 }, elites: { elite_tamer: 1 } },
-    { party: '수상한 혼성대', members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
-    { party: '견습 마법사와 친구들', boss: 'archmage', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
-    { party: '보물 사냥단', members: { rogue: 20 }, elites: { elite_tamer: 2, elite_rhapsodist: 1 } },
-    { party: '왕국 정찰대', members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
-    { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2, elite_rhapsodist: 1 } },
-    { party: '최후의 선봉대', members: { warrior: 24, rogue: 15, mage: 9 }, elites: { elite_swordsman: 1, elite_tamer: 1, elite_stormcaller: 1 } },
-    { party: '용사단 본대', boss: 'fallen_knight', members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_rhapsodist: 1, elite_stormcaller: 1 } }
+    { party: '날쌘 도굴꾼', entry: ENTRY_70_30, members: { rogue: 8 }, elites: { elite_tamer: 1 } },
+    { party: '수상한 혼성대', entry: ENTRY_70_30, members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
+    { party: '견습 마법사와 친구들', entry: ENTRY_60_40, boss: 'archmage', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
+    { party: '보물 사냥단', entry: ENTRY_60_40, members: { rogue: 20 }, elites: { elite_tamer: 2, elite_rhapsodist: 1 } },
+    { party: '왕국 정찰대', entry: ENTRY_60_40, members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
+    { party: '은빛 검 기사단', entry: ENTRY_50_50, members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2, elite_rhapsodist: 1 } },
+    { party: '최후의 선봉대', entry: ENTRY_50_50, members: { warrior: 24, rogue: 15, mage: 9 }, elites: { elite_swordsman: 1, elite_tamer: 1, elite_stormcaller: 1 } },
+    { party: '용사단 본대', entry: ENTRY_50_50, boss: 'fallen_knight', members: { warrior: 16, mage: 4 }, elites: { elite_swordsman: 1, elite_rhapsodist: 1, elite_stormcaller: 1 } }
 ];
 
 // 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.

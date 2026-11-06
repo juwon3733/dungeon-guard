@@ -5,7 +5,7 @@ function createCorruptUnit(corpse) {
     const def = CORRUPTED[corpse.type];
     return {
         kind: 'corrupt', heroType: corpse.type, female: corpse.female,
-        x: corpse.x, y: corpse.y, d: corpse.d,
+        x: corpse.x, y: corpse.y, route: corpse.route || 'north', d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
         range: def.range, ranged: !!def.ranged, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
         // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.

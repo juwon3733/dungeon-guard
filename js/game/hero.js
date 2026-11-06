@@ -4,7 +4,8 @@
 const ATTACK_POSE_TIME = 0.4;
 
 // bossKey: 층 보스로 만들 때 BOSSES의 열쇠(true면 부대장). 보스는 type 대신 보스의 base 직업을 쓴다.
-function createHero(type, waveIndex, delay, bossKey) {
+// route: 들어오는 입구의 길(ROUTES 열쇠). 없으면 north
+function createHero(type, waveIndex, delay, bossKey, route) {
     const key = bossKey === true ? 'fallen_knight' : bossKey;
     const bossDef = key ? BOSSES[key] : null;
     if (bossDef) type = bossDef.base;
@@ -20,7 +21,8 @@ function createHero(type, waveIndex, delay, bossKey) {
         throneDamage: src.throneDamage || 1,
         name: src.name,
         female: Math.random() < 0.5,
-        d: 0,
+        route: route || 'north',
+        d: 0, // route 길 위에서 입구로부터 이동한 거리
         lane: bossDef ? 0 : randRange(-34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
         speed: src.speed * TILE * Game.mods.heroSpeed, // 마왕과 유물의 용사 이동 속도(heroSpeed)
@@ -61,7 +63,7 @@ function canBlockHero(u, h) {
 }
 
 function heroWorld(h) {
-    const p = pathAt(h.d);
+    const p = pathAt(h.d, h.route);
     return { x: p.x - p.dy * h.lane, y: p.y + p.dx * h.lane, dx: p.dx, dy: p.dy };
 }
 
@@ -128,14 +130,14 @@ function updateHero(h, dt) {
 
     const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * (h.haste > 0 ? h.hasteMul : 1);
     h.d += speed * dt;
-    const p = pathAt(h.d);
+    const p = pathAt(h.d, h.route);
     h.dir = dirFromVector(p.dx, p.dy);
     if (h.chargeTime > 0) {
         h.chargeTime -= dt;
         const w = heroWorld(h);
         Fx.burst(w.x, w.y, '#b98bff', 1, 80, 0.3, 6);
     }
-    if (h.d >= PATH.length - 56) {
+    if (h.d >= ROUTES[h.route].length - 56) {
         h.dead = true;
         h.arrived = true;
         const w = heroWorld(h);
