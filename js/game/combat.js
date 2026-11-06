@@ -2,7 +2,7 @@
 
 function damageHero(hero, amount, fromX, fromY, color) {
     if (hero.dead) return;
-    // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수탑만 짓는 배치를 스스로 깎는다.
+    // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     const dealt = Math.max(1, amount - (hero.armor || 0));
     hero.hp -= dealt;
     hero.flash = 0.09;

@@ -248,28 +248,17 @@ const Render = {
         }
     },
 
+    // 타락 유닛
     drawUnit(ctx, u) {
-        if (u.kind === 'orc') {
-            const art = ORC_ART;
-            const clip = u.atkPose > 0 ? art.anim.attack : art.anim.walk;
-            const i = u.atkPose > 0 ? this.attackFrame(u.atkPose, u.atkPoseMax, clip.frames) : (u.moving ? Math.floor(u.anim) % clip.frames : 0);
-            const name = this.plFrame(art, clip, u.dir, i);
-            this.shadow(ctx, u.x, u.y + 8, 20, 7);
-            const img = u.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
-        } else {
-            const def = HEROES[u.heroType];
-            const casting = !!def.stunEvery;
-            // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
-            const anim = u.moving ? u.anim : 0;
-            const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
-            const risen = u.rise > 0 ? clamp(1 - u.rise / 0.5, 0, 1) : 1;
-            this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
-            this.drawCorruptAura(ctx, u.x, u.y + 9, risen, u.x * 0.013);
-            this.drawCorruptSprite(ctx, name, def, u.atkPose, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
-        }
-        const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
-        this.healthBar(ctx, u.x, u.y - barY, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
+        const def = HEROES[u.heroType];
+        const casting = !!def.stunEvery;
+        // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
+        const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', 0, u.atkPose, casting, u.atkPoseMax);
+        const risen = u.rise > 0 ? clamp(1 - u.rise / 0.5, 0, 1) : 1;
+        this.shadow(ctx, u.x, u.y + 9, 21, 7, 0.6);
+        this.drawCorruptAura(ctx, u.x, u.y + 9, risen, u.x * 0.013);
+        this.drawCorruptSprite(ctx, name, def, u.atkPose, u.dir || 'down', u.x, u.y + 10, risen, u.flash > 0);
+        this.healthBar(ctx, u.x, u.y - def.barY - 2, u.hp / u.maxHp, 40, '#c56bff');
     },
 
     // 타락 표시: 발밑에서 도는 도트 룬 고리와 위로 떠오르는 입자. seed로 유닛마다 박자를 어긋낸다.
@@ -365,59 +354,121 @@ const Render = {
         ctx.restore();
     },
 
-    drawFacility(ctx, f) {
-        const stunned = f.stun > 0;
-        const recoil = f.recoil * 5;
-        // 뒤쪽 빛: 어두운 바닥에서 시설의 실루엣이 먼저 보이게 한다
+    // 몬스터의 지금 그림 이름: 공격 중이면 공격 동작을 한 번, 아니면 대기 동작을 천천히 반복한다(idleFps 0이면 첫 프레임)
+    monsterFrame(def, m) {
+        const art = def.art;
+        if (m.atkPose > 0) {
+            const clip = art.anim.attack;
+            return { clip, name: this.plFrame(def, clip, m.dir, this.attackFrame(m.atkPose, m.atkPoseMax, clip.frames)) };
+        }
+        if (m.moving && art.anim.walk) {
+            const walk = art.anim.walk;
+            return { clip: walk, name: this.plFrame(def, walk, m.dir, Math.floor(m.anim * MONSTER_WALK_FPS) % walk.frames) };
+        }
+        const clip = art.anim.idle;
+        const i = art.idleFps ? Math.floor(m.anim * art.idleFps) % clip.frames : 0;
+        return { clip, name: this.plFrame(def, clip, m.dir, i) };
+    },
+
+    // 서 있는 몬스터 한 마리: 그림자와 그림. 건설 모드의 반투명 그림에도 쓴다
+    monsterBody(ctx, def, m, img, clip) {
+        const footY = m.y + MONSTER_FOOT;
+        this.shadow(ctx, m.x, footY - 2, 22, 8);
+        this.plSprite(ctx, img, def.art, clip, m.dir, m.x, footY);
+    },
+
+    drawMonster(ctx, m) {
+        const def = MONSTERS[m.type];
+        const footY = m.y + MONSTER_FOOT;
+        if (m.down > 0) {
+            this.drawRespawn(ctx, def, m);
+            return;
+        }
+        const stunned = m.stun > 0;
+        // 뒤쪽 빛: 어두운 바닥에서 몬스터의 실루엣이 먼저 보이게 한다
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const tint = { archer: '120,170,255', crystal: '190,90,255', barracks: '255,130,70' }[f.type];
-        const glowAlpha = 0.3 + Math.sin(Game.time * 2.4 + f.bob) * 0.05 + (f.tier - 1) * 0.08;
-        const back = ctx.createRadialGradient(f.x, f.y - 40, 10, f.x, f.y - 40, 110);
-        back.addColorStop(0, `rgba(${tint},${glowAlpha})`);
-        back.addColorStop(1, `rgba(${tint},0)`);
+        const glowAlpha = 0.22 + Math.sin(Game.time * 2.4 + m.x) * 0.04 + (m.tier - 1) * 0.06;
+        const back = ctx.createRadialGradient(m.x, footY - 44, 8, m.x, footY - 44, 80);
+        back.addColorStop(0, `rgba(${def.art.glow},${glowAlpha})`);
+        back.addColorStop(1, `rgba(${def.art.glow},0)`);
         ctx.fillStyle = back;
-        ctx.fillRect(f.x - 110, f.y - 150, 220, 220);
+        ctx.fillRect(m.x - 80, footY - 124, 160, 160);
         ctx.restore();
-        if (f.tier >= 2) {
+        if (m.tier >= 2) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const color = f.tier >= 3 ? '255,190,90' : '160,110,255';
-            const pulse = 0.2 + Math.sin(Game.time * 3 + f.bob) * 0.05;
-            ctx.fillStyle = `rgba(${color},${pulse})`;
+            const color = m.tier >= 3 ? '255,190,90' : '160,110,255';
+            ctx.fillStyle = `rgba(${color},${0.2 + Math.sin(Game.time * 3 + m.x) * 0.05})`;
             ctx.beginPath();
-            ctx.ellipse(f.x, f.y + 26, 54, 20, 0, 0, Math.PI * 2);
+            ctx.ellipse(m.x, footY, 40, 14, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
         }
-        const art = FACILITY_ART[f.type];
-        const img = stunned ? Assets.tinted(art.sprite, '#7fc6ff', 0.55) : Assets.get(art.sprite);
-        this.sprite(ctx, img, f.x, f.y + 34 + (f.type === 'barracks' ? 0 : recoil), 1 / WORLD_ZOOM, art.footPx); // 화면에서 원본 1배가 된다
+        const { clip, name } = this.monsterFrame(def, m);
+        let img = Assets.get(name);
+        if (m.flash > 0) img = Assets.tinted(name, '#ffffff', 0.85);
+        else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
+        this.monsterBody(ctx, def, m, img, clip);
 
-        if (f.muzzle > 0) {
-            const ox = f.x;
-            const oy = f.y - (f.type === 'archer' ? 85 : 60);
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = 'rgba(205,160,255,0.85)';
-            ctx.beginPath();
-            ctx.arc(ox, oy, 18, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
         // 단계 표시
-        for (let i = 0; i < f.tier; i++) {
-            const sx = f.x - (f.tier - 1) * 11 + i * 22;
-            const sy = f.y + 44;
+        for (let i = 0; i < m.tier; i++) {
+            const sx = m.x - (m.tier - 1) * 11 + i * 22;
+            const sy = footY + 20;
             ctx.fillStyle = '#120c20';
             ctx.fillRect(sx - 8, sy - 8, 16, 16);
-            ctx.fillStyle = f.tier >= 3 ? '#ffd76a' : '#c8a6ff';
+            ctx.fillStyle = m.tier >= 3 ? '#ffd76a' : '#c8a6ff';
             ctx.fillRect(sx - 5, sy - 5, 10, 10);
         }
+        if (m.blocks) this.healthBar(ctx, m.x, footY - def.art.barY, m.hp / m.maxHp, 40, '#74d65a');
         if (stunned) {
-            this.stunStars(ctx, f.x, f.y - 112);
-            UIKit.text(ctx, '정지', f.x, f.y - 138, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
+            this.stunStars(ctx, m.x, footY - def.art.barY - 14);
+            UIKit.text(ctx, '정지', m.x, footY - def.art.barY - 40, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
         }
+    },
+
+    // 막는 몬스터가 놓인 칸: 길로 나간 동안 칸이 비어 보이지 않게 바닥에 표식을 남긴다
+    drawMonsterHome(ctx, m) {
+        if (!m.blocks || m.down > 0) return;
+        const x = m.homeX;
+        const y = m.homeY + MONSTER_FOOT;
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = `rgba(255,183,107,${0.35 + Math.sin(Game.time * 2 + x) * 0.08})`;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.ellipse(x, y, 30, 11, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    },
+
+    // 쓰러진 막는 몬스터: 놓은 칸에 흐린 그림과 다시 나올 때까지 남은 시간 고리
+    drawRespawn(ctx, def, m) {
+        const left = clamp(m.down / monsterStats(m).respawn, 0, 1);
+        const x = m.homeX;
+        const footY = m.homeY + MONSTER_FOOT;
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        const name = this.plFrame(def, def.art.anim.idle, 'down', 0);
+        this.plSprite(ctx, Assets.tinted(name, '#1b1030', 0.6), def.art, def.art.anim.idle, 'down', x, footY);
+        ctx.restore();
+        const cy = footY - 40;
+        ctx.save();
+        ctx.fillStyle = 'rgba(10,6,20,0.7)';
+        ctx.beginPath();
+        ctx.arc(x, cy, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#3a2f4c';
+        ctx.beginPath();
+        ctx.arc(x, cy, 20, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffb76b';
+        ctx.beginPath();
+        ctx.arc(x, cy, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
+        ctx.stroke();
+        ctx.restore();
+        UIKit.text(ctx, String(Math.ceil(m.down)), x, cy, Math.round(22 / WORLD_ZOOM), '#ffe0c0', 'center');
     },
 
     drawThrone(ctx) {
@@ -509,22 +560,23 @@ const Render = {
         }
     },
 
+    // 몬스터를 놓을 수 있는 길 옆 칸: 건설 모드에서는 밝게, 준비 시간에는 흐리게 보여 준다. 길 칸에는 놓을 수 없다
     drawBuildPads(ctx) {
-        // 건설 모드에서는 지을 수 있는 칸을 밝게, 준비 시간에는 흐리게 보여 준다
-        const placing = !!UI.placing;
+        const placing = UI.placing;
         if (!placing && Game.state !== 'prep') return;
         const pulse = placing ? 0.42 + Math.sin(Game.time * 5) * 0.1 : 0.14 + Math.sin(Game.time * 3) * 0.05;
+        const color = '190,150,255';
         ctx.lineWidth = 3;
         for (const key of BUILD_CELLS) {
             const [c, r] = key.split(',').map(Number);
-            if (Game.facilityAt(c, r)) continue;
+            if (Game.monsterAt(c, r)) continue;
             const x = c * TILE;
             const y = MAP_TOP + r * TILE;
             if (placing) {
-                ctx.fillStyle = `rgba(190,150,255,${pulse * 0.15})`;
+                ctx.fillStyle = `rgba(${color},${pulse * 0.15})`;
                 ctx.fillRect(x + 7, y + 7, TILE - 14, TILE - 14);
             }
-            ctx.strokeStyle = `rgba(190,150,255,${pulse})`;
+            ctx.strokeStyle = `rgba(${color},${pulse})`;
             ctx.strokeRect(x + 7, y + 7, TILE - 14, TILE - 14);
         }
     },
@@ -761,7 +813,11 @@ const Render = {
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다
         const entities = [];
         for (const p of DECOR) entities.push({ y: tileY(p.row) + 30, draw: () => this.sprite(ctx, Assets.get(p.sprite), tileX(p.col), tileY(p.row) + 30, 2, 74) });
-        for (const f of Game.facilities) entities.push({ y: f.y + 30, draw: () => this.drawFacility(ctx, f) });
+        for (const m of Game.monsters) {
+            if (m.blocks) entities.push({ y: m.homeY - TILE / 2, draw: () => this.drawMonsterHome(ctx, m) });
+            const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
+            entities.push({ y: footY, draw: () => this.drawMonster(ctx, m) });
+        }
         for (const u of Game.units) entities.push({ y: u.y + 12, draw: () => this.drawUnit(ctx, u) });
         for (const h of Game.heroes) {
             if (h.waiting) continue;

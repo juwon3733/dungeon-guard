@@ -3,15 +3,14 @@ const BAR_H = 124; // 하단 바 높이
 const BAR_TAB_X = 206; // 체력 구슬 오른쪽의 탭 버튼
 const BAR_SLOT_X = 362; // 첫 슬롯 위치
 const BAR_SLOT_W = 236;
-const BUILD_TYPES = ['archer', 'crystal', 'barracks']; // 타워 탭 슬롯 순서이자 단축키 1, 2, 3
 
 const UI = {
     mouse: { x: 0, y: 0 },
     buttons: [],
     hoverCell: null,
-    selectedFacility: null,
-    tab: 'tower', // 하단 바 탭: 'tower' 시설 건설, 'demon' 마왕 스킬
-    placing: null, // 건설 모드에서 지을 시설 종류
+    selectedMonster: null,
+    tab: 'monster', // 하단 바 탭: 'monster' 몬스터 배치, 'demon' 마왕 스킬
+    placing: null, // 건설 모드에서 놓을 몬스터 id
     hoverCorpse: null,
     hoverButton: null,
     targeting: false,
@@ -51,17 +50,17 @@ const UI = {
         small('pause', G.paused ? '▶' : 'II', G.paused, () => { G.paused = !G.paused; });
         small('speed', `${G.speed}x`, G.speed > 1, () => { G.speed = G.speed === 1 ? 2 : 1; });
 
-        // 하단 바: 탭 두 개, 탭에 따라 시설 슬롯이나 마왕 스킬 슬롯, 다음 웨이브
+        // 하단 바: 탭 두 개, 탭에 따라 몬스터 슬롯이나 마왕 스킬 슬롯, 다음 웨이브
         const barY = GAME_HEIGHT - BAR_H;
-        this.button('tab_tower', BAR_TAB_X, barY + 8, 136, 52, { tab: 'tower', label: '타워', onClick: () => this.setTab('tower') });
+        this.button('tab_monster', BAR_TAB_X, barY + 8, 136, 52, { tab: 'monster', label: '몬스터', onClick: () => this.setTab('monster') });
         this.button('tab_demon', BAR_TAB_X, barY + 66, 136, 52, { tab: 'demon', label: '마왕', onClick: () => this.setTab('demon') });
         const slotY = barY + 12;
         const slotX = i => BAR_SLOT_X + i * (BAR_SLOT_W + 10);
-        if (this.tab === 'tower') {
-            BUILD_TYPES.forEach((type, i) => {
-                this.button(`build_${type}`, slotX(i), slotY, BAR_SLOT_W, 104, {
-                    card: type, hotkey: String(i + 1), disabled: G.gold < FACILITIES[type].cost,
-                    onClick: () => this.pickFacility(type)
+        if (this.tab === 'monster') {
+            MONSTER_SLOTS.forEach((type, i) => {
+                this.button(`place_${type}`, slotX(i), slotY, BAR_SLOT_W, 104, {
+                    card: type, hotkey: String(i + 1), disabled: G.gold < MONSTERS[type].cost,
+                    onClick: () => this.pickMonster(type)
                 });
             });
         } else {
@@ -77,7 +76,7 @@ const UI = {
             });
         }
 
-        if (this.selectedFacility) this.layoutFacilityMenu();
+        if (this.selectedMonster) this.layoutMonsterMenu();
     },
 
     popupOrigin(worldX, worldY, w, h) {
@@ -90,19 +89,19 @@ const UI = {
         return { x, y };
     },
 
-    layoutFacilityMenu() {
-        const f = this.selectedFacility;
-        const def = FACILITIES[f.type];
+    layoutMonsterMenu() {
+        const f = this.selectedMonster;
+        const def = MONSTERS[f.type];
         const w = 360;
         const rows = f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0);
         const h = 108 + rows * 88 + 62;
         const o = this.popupOrigin(f.x, f.y, w, h);
-        this.popup = { x: o.x, y: o.y, w, h, facility: f };
+        this.popup = { x: o.x, y: o.y, w, h, monster: f };
         let y = o.y + 100;
         if (f.tier === 1) {
             const cost = upgradeCost(f.type, 2);
             this.button('up2', o.x + 12, y, w - 24, 80, {
-                upgrade: { name: '2단계 강화', desc: f.type === 'barracks' ? '오크 피해·체력 +50%' : '피해 +50%', cost },
+                upgrade: { name: '2단계 강화', desc: f.blocks ? '피해·체력 +50%' : '피해 +50%', cost },
                 disabled: Game.gold < cost,
                 onClick: () => { if (!Game.upgrade(f)) this.showToast('골드가 부족합니다.'); }
             });
@@ -126,11 +125,11 @@ const UI = {
     },
 
     clearSelection() {
-        this.selectedFacility = null;
+        this.selectedMonster = null;
         this.popup = null;
     },
 
-    // 우클릭과 Esc: 건설 모드, 번개 조준, 시설 선택을 모두 끈다
+    // 우클릭과 Esc: 건설 모드, 번개 조준, 몬스터 선택을 모두 끈다
     cancel() {
         this.clearSelection();
         this.placing = null;
@@ -141,21 +140,22 @@ const UI = {
         Game.reset();
         Game.speed = 1;
         this.cancel();
-        this.tab = 'tower';
+        this.tab = 'monster';
     },
 
     setTab(tab) {
         if (this.tab === tab) return;
         this.tab = tab;
-        if (tab !== 'tower') this.placing = null;
+        if (tab !== 'monster') this.placing = null;
         if (tab !== 'demon') this.targeting = false;
     },
 
-    // 시설 슬롯을 고르면 건설 모드가 된다. 같은 슬롯을 다시 고르면 취소한다
-    pickFacility(type) {
-        this.setTab('tower');
+    // 몬스터 슬롯을 고르면 건설 모드가 된다. 같은 슬롯을 다시 고르면 취소한다
+    pickMonster(type) {
+        if (!type) return;
+        this.setTab('monster');
         if (this.placing === type) { this.placing = null; return; }
-        const def = FACILITIES[type];
+        const def = MONSTERS[type];
         if (Game.gold < def.cost) {
             this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
             return;
@@ -165,7 +165,7 @@ const UI = {
         this.clearSelection();
     },
 
-    canPlaceAt(col, row) { return isBuildCell(col, row) && !Game.facilityAt(col, row); },
+    canPlaceAt(col, row) { return !!this.placing && Game.canPlace(this.placing, col, row); },
 
     toggleLightning() {
         this.setTab('demon');
@@ -235,10 +235,10 @@ const UI = {
         }
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
-        // 건설 모드: 지을 수 있는 칸이면 짓는다. 아니면 아래 타락과 안내로 넘어간다
+        // 건설 모드: 놓을 수 있는 칸이면 놓는다. 아니면 아래 타락과 안내로 넘어간다
         if (this.placing && this.canPlaceAt(col, row)) {
-            const def = FACILITIES[this.placing];
-            if (G.build(this.placing, col, row)) {
+            const def = MONSTERS[this.placing];
+            if (G.place(this.placing, col, row)) {
                 if (!shift) this.placing = null;
             } else {
                 this.showToast(`${def.name}에는 ${def.cost}골드가 필요합니다.`);
@@ -254,19 +254,23 @@ const UI = {
             return;
         }
         if (this.placing) {
-            this.showToast(G.facilityAt(col, row) ? '이미 시설이 있는 칸입니다.' : '빛나는 칸에만 지을 수 있습니다.');
+            let msg = '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.';
+            if (isPathCell(col, row)) msg = '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.';
+            if (G.monsterAt(col, row)) msg = '이미 몬스터가 있는 칸입니다.';
+            this.showToast(msg);
             return;
         }
-        const f = G.facilityAt(col, row);
+        // 놓은 칸을 눌러도, 길로 걸어 나간 몬스터를 눌러도 강화·판매 창을 연다
+        const f = G.monsterAt(col, row) || G.monsterNear(wx, wy);
         if (f) {
-            this.selectedFacility = this.selectedFacility === f ? null : f;
+            this.selectedMonster = this.selectedMonster === f ? null : f;
             this.popup = null;
             return;
         }
         if (isBuildCell(col, row)) {
             this.clearSelection();
-            this.setTab('tower');
-            this.showToast('아래 타워 탭에서 지을 시설을 고르세요.');
+            this.setTab('monster');
+            this.showToast('아래 몬스터 탭에서 놓을 몬스터를 고르세요.');
             return;
         }
         this.clearSelection();
@@ -282,8 +286,8 @@ const UI = {
         if (code === 'Space') { G.startWave(); this.clearSelection(); }
         else if (code === 'KeyQ') this.toggleLightning();
         else if (code === 'KeyW') this.useRoar();
-        else if (code === 'Tab') this.setTab(this.tab === 'tower' ? 'demon' : 'tower');
-        else if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3') this.pickFacility(BUILD_TYPES[Number(code.slice(5)) - 1]);
+        else if (code === 'Tab') this.setTab(this.tab === 'monster' ? 'demon' : 'monster');
+        else if (/^Digit[1-9]$/.test(code)) this.pickMonster(MONSTER_SLOTS[Number(code.slice(5)) - 1]);
         else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
         else if (code === 'KeyP') G.paused = !G.paused;
         else if (code === 'Escape') this.cancel();
@@ -294,29 +298,73 @@ const UI = {
             this.toast.age += dt;
             if (this.toast.age > this.toast.life) this.toast = null;
         }
-        if (this.selectedFacility && !Game.facilities.includes(this.selectedFacility)) this.clearSelection();
+        if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
         this.layout();
         this.hoverButton = this.buttonAt(this.mouse.x, this.mouse.y);
     },
 
-    // 세계 위에 깔리는 사거리 표시와 건설 모드의 반투명 시설
+    // 세계 위에 깔리는 사거리 표시와 건설 모드의 반투명 몬스터
     drawRanges(ctx) {
         const cell = this.placing && this.hoverCell;
         if (cell) {
             const ok = this.canPlaceAt(cell.col, cell.row);
-            const x = tileX(cell.col);
-            const y = tileY(cell.row);
-            Render.rangeRing(ctx, x, y, FACILITIES[this.placing].range * TILE, ok ? 'rgba(255,224,138,1)' : 'rgba(255,90,110,1)');
-            const art = FACILITY_ART[this.placing];
+            const def = MONSTERS[this.placing];
+            const ghost = { x: tileX(cell.col), y: tileY(cell.row), dir: 'down', atkPose: 0, anim: 0 };
+            const color = ok ? 'rgba(255,224,138,1)' : 'rgba(255,90,110,1)';
+            if (monsterBlocks(this.placing)) {
+                // 막는 몬스터는 걸어 나가 설 길 지점과 그곳의 붙잡는 범위를 보여 준다
+                const r = rallyPoint(cell.col, cell.row);
+                if (ok) this.drawRallyPath(ctx, ghost.x, ghost.y + MONSTER_FOOT, r.x, r.y + 10);
+                Render.rangeRing(ctx, r.x, r.y + 10, def.stats.range * TILE, color);
+            } else {
+                Render.rangeRing(ctx, ghost.x, ghost.y, def.stats.range * TILE, color);
+            }
+            const { clip, name } = Render.monsterFrame(def, ghost);
             ctx.save();
             ctx.globalAlpha = ok ? 0.6 : 0.3;
-            Render.sprite(ctx, Assets.get(art.sprite), x, y + 34, 1 / WORLD_ZOOM, art.footPx); // drawFacility와 같은 위치와 배율
+            Render.monsterBody(ctx, def, ghost, Assets.get(name), clip); // drawMonster와 같은 위치와 배율
             ctx.restore();
         }
-        if (this.selectedFacility) {
-            const f = this.selectedFacility;
-            Render.rangeRing(ctx, f.x, f.y, facilityStats(f).range * TILE, 'rgba(255,224,138,1)');
+        if (this.selectedMonster) {
+            const f = this.selectedMonster;
+            if (f.blocks) {
+                this.drawRallyPath(ctx, f.homeX, f.homeY + MONSTER_FOOT, f.rally.x, f.rally.y + MONSTER_FOOT);
+                Render.rangeRing(ctx, f.rally.x, f.rally.y + MONSTER_FOOT, monsterStats(f).range * TILE, 'rgba(255,224,138,1)');
+            } else {
+                Render.rangeRing(ctx, f.x, f.y, monsterStats(f).range * TILE, 'rgba(255,224,138,1)');
+            }
         }
+    },
+
+    // 놓은 칸에서 걸어 나갈 길 지점까지 점선과, 그 지점의 깃발 표시
+    drawRallyPath(ctx, x0, y0, x1, y1) {
+        ctx.save();
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 8]);
+        ctx.lineDashOffset = -Game.time * 40;
+        ctx.strokeStyle = 'rgba(255,183,107,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,183,107,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x1, y1, 26, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffb76b';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = '#3a2214';
+        ctx.fillRect(x1 - 2, y1 - 40, 4, 40);
+        ctx.fillStyle = '#ffb76b';
+        ctx.beginPath();
+        ctx.moveTo(x1 + 2, y1 - 40);
+        ctx.lineTo(x1 + 24, y1 - 32);
+        ctx.lineTo(x1 + 2, y1 - 24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
     },
 
     draw(ctx) {
@@ -346,7 +394,7 @@ const UI = {
             ctx.fillStyle = 'rgba(4,2,14,0.45)';
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             UIKit.text(ctx, '일시정지', GAME_WIDTH / 2, 330, 62, '#ffe08a', 'center');
-            UIKit.text(ctx, '멈춘 상태에서도 짓기와 타락을 할 수 있습니다.', GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
+            UIKit.text(ctx, '멈춘 상태에서도 배치와 타락을 할 수 있습니다.', GAME_WIDTH / 2, 392, 26, '#ffffff', 'center');
         }
         if (G.state === 'victory' || G.state === 'defeat') {
             this.drawResult(ctx);
@@ -450,22 +498,30 @@ const UI = {
         const y = 76;
         const entries = Object.entries(wave.members);
         const elites = Object.entries(wave.elites || {});
-        const h = 92 + (entries.length + elites.length) * 62 + (wave.boss ? 62 : 0);
+        // Why: 정예와 보스가 섞이면 줄이 6개까지 늘어난다. 줄을 낮게 잡아 왕좌의 마왕을 가리지 않게 한다(6줄이어도 y 400 위에서 끝난다).
+        const ROW_H = 42;
+        const h = 58 + (entries.length + elites.length + (wave.boss ? 1 : 0)) * ROW_H;
         UIKit.frame(ctx, x, y, 360, h, 'panel', 8);
-        UIKit.plain(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 20, y + 28, 20, '#c9b6ea');
-        UIKit.text(ctx, wave.party, x + 20, y + 60, 25, '#ffe08a');
-        let ry = y + 90;
+        UIKit.plain(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 20, y + 28, 18, '#c9b6ea');
+        UIKit.text(ctx, wave.party, x + 340, y + 28, 23, '#ffe08a', 'right');
+        let ry = y + 54;
         const row = (img, name, note, count, elite) => {
-            UIKit.frame(ctx, x + 14, ry - 2, 56, 56, elite ? 'gold' : 'dark', 4);
+            const box = ROW_H - 4;
+            UIKit.frame(ctx, x + 14, ry - 2, box, box, elite ? 'gold' : 'dark', 4);
             if (img) {
                 ctx.imageSmoothingEnabled = false;
-                const size = img.width * Math.max(1, Math.floor(64 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
-                ctx.drawImage(img, x + 42 - size / 2, ry + 24 - size / 2, size, size);
+                const size = img.width * Math.max(1, Math.floor(44 / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x + 16, ry, box - 4, box - 4);
+                ctx.clip();
+                ctx.drawImage(img, x + 14 + box / 2 - size / 2, ry + box / 2 - 2 - size / 2, size, size);
+                ctx.restore();
             }
-            UIKit.text(ctx, name, x + 80, ry + 13, 22, elite ? '#ffd76a' : '#ffffff');
-            UIKit.plain(ctx, note, x + 80, ry + 39, 17, '#b8a9d0');
-            if (count) UIKit.text(ctx, `x${count}`, x + 340, ry + 22, 28, '#ffffff', 'right');
-            ry += 62;
+            UIKit.text(ctx, name, x + 62, ry + 9, 18, elite ? '#ffd76a' : '#ffffff');
+            UIKit.plain(ctx, note, x + 62, ry + 28, 14, '#b8a9d0');
+            if (count) UIKit.text(ctx, `x${count}`, x + 340, ry + 17, 24, '#ffffff', 'right');
+            ry += ROW_H;
         };
         for (const [type, count] of entries) {
             const def = HEROES[type];
@@ -475,7 +531,7 @@ const UI = {
             const def = HEROES[type];
             row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count, true);
         }
-        if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
+        if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 몬스터 정지', 1);
     },
 
     drawBossBar(ctx) {
@@ -503,27 +559,40 @@ const UI = {
         ctx.restore();
     },
 
-    // 시설 그림을 size 크기 네모 안에 그린다 (원본 96px)
-    drawCardIcon(ctx, type, x, y, size) {
-        ctx.imageSmoothingEnabled = false;
-        const i = Assets.get(FACILITY_ART[type].sprite);
-        if (i) ctx.drawImage(i, x, y, size, size);
+    // 몬스터의 rotations/south 그림을 size 크기 네모 안에 그리고, 등급 색 테두리를 두른다
+    drawMonsterIcon(ctx, type, x, y, size) {
+        const def = MONSTERS[type];
+        ctx.fillStyle = '#0d0918';
+        ctx.fillRect(x, y, size, size);
+        const img = Assets.get(`${def.sprite}/rotations/south`);
+        if (img) {
+            ctx.imageSmoothingEnabled = false;
+            const s = img.width * Math.max(1, Math.floor(size / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
+            ctx.drawImage(img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+        }
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = MONSTER_GRADES[def.grade].color;
+        ctx.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
     },
 
     drawPopup(ctx) {
         const p = this.popup;
         UIKit.frame(ctx, p.x, p.y, p.w, p.h, 'panel', 8);
-        if (p.facility) {
-            const f = p.facility;
-            const def = FACILITIES[f.type];
-            const stats = facilityStats(f);
+        if (p.monster) {
+            const f = p.monster;
+            const def = MONSTERS[f.type];
+            const stats = monsterStats(f);
             const tier = f.branch ? `3단계 · ${def.branches[f.branch].name}` : `${f.tier}단계`;
-            UIKit.text(ctx, def.name, p.x + 20, p.y + 30, 26, '#ffe08a');
+            this.drawMonsterIcon(ctx, f.type, p.x + 16, p.y + 14, 56);
+            UIKit.text(ctx, def.name, p.x + 84, p.y + 30, 26, '#ffe08a');
             UIKit.plain(ctx, tier, p.x + p.w - 20, p.y + 30, 20, '#c9b6ea', 'right');
-            const line = f.type === 'barracks'
-                ? `오크 체력 ${Math.round(stats.unitHp)} · 피해 ${Math.round(stats.damage)}`
-                : `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
-            UIKit.plain(ctx, line, p.x + 20, p.y + 70, 19, '#ffffff');
+            UIKit.plain(ctx, `${MONSTER_GRADES[def.grade].name} · ${MONSTER_ROLES[def.role].name}`, p.x + 84, p.y + 58, 17, MONSTER_GRADES[def.grade].color);
+            let line = `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
+            if (f.blocks) {
+                line = f.down > 0 ? `${Math.ceil(f.down)}초 뒤 다시 나옴 · 피해 ${Math.round(stats.damage)}`
+                    : `체력 ${Math.ceil(f.hp)}/${Math.round(stats.hp)} · 피해 ${Math.round(stats.damage)} · 막기 ${stats.block}`;
+            }
+            UIKit.plain(ctx, line, p.x + 20, p.y + 86, 18, '#ffffff');
         }
     },
 
@@ -598,19 +667,19 @@ const UI = {
     },
 
     drawCardButton(ctx, b, hover) {
-        const def = FACILITIES[b.card];
+        const def = MONSTERS[b.card];
         const active = this.placing === b.card;
         UIKit.frame(ctx, b.x, b.y, b.w, b.h, active ? 'goldHover' : (b.disabled ? 'off' : (hover ? 'buttonHover' : 'dark')), 6);
         ctx.save();
         if (b.disabled) ctx.globalAlpha = 0.4;
-        this.drawCardIcon(ctx, b.card, b.x + 6, b.y + 6, b.h - 12);
+        this.drawMonsterIcon(ctx, b.card, b.x + 8, b.y + 8, b.h - 16);
         ctx.restore();
         const tx = b.x + b.h + 4;
         UIKit.text(ctx, def.name, tx, b.y + 32, 21, b.disabled ? '#8a8299' : '#ffffff');
         UIKit.text(ctx, `${def.cost}G`, tx, b.y + 72, 24, b.disabled ? '#ff8f8f' : '#ffe08a');
         UIKit.text(ctx, b.hotkey, b.x + b.w - 16, b.y + 72, 22, '#e4d8fa', 'right');
         if (this.hoverButton === b) { // 골드가 모자라 어두운 슬롯도 설명은 보여 준다
-            this.drawTooltip(ctx, b.x, b.y - 92, `${def.name} · ${def.role}`, def.desc);
+            this.drawTooltip(ctx, b.x, b.y - 92, `${def.name} · ${MONSTER_ROLES[def.role].name}`, def.desc);
         }
     },
 
@@ -627,8 +696,8 @@ const UI = {
 
         let hint = null;
         if (this.targeting) hint = '번개를 떨어뜨릴 곳을 누르세요. Esc로 취소합니다.';
-        else if (this.placing) hint = '빛나는 칸을 눌러 지으세요. Shift 이어 짓기 · 우클릭/Esc 취소';
-        else if (G.waveIndex === 0 && G.state === 'prep' && G.facilities.length === 0) hint = '아래 타워 탭에서 시설을 고른 뒤 길 옆 칸을 누르세요.';
+        else if (this.placing) hint = `빛나는 길 옆 칸을 눌러 놓으세요.${monsterBlocks(this.placing) ? ' 근접 몬스터는 길로 걸어 나갑니다.' : ''} Shift 이어 놓기 · 우클릭/Esc 취소`;
+        else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = '아래 몬스터 탭에서 몬스터를 고른 뒤 빛나는 칸을 누르세요.';
         else if (G.corpses.length > 0 && !this.corruptHintShown) hint = '쓰러진 용사를 누르면 내 부하가 됩니다. 5초 안에 고르세요!';
         if (hint) {
             const pulse = 1 + Math.sin(G.time * 5) * 0.03;
@@ -688,14 +757,15 @@ const UI = {
         ctx.fillText('던전 수호대', cx, 310 + lift);
         ctx.restore();
         UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 442, 36, '#ffffff', 'center');
-        UIKit.frame(ctx, cx - 460, 500, 920, 216, 'panel', 8);
+        UIKit.frame(ctx, cx - 460, 488, 920, 252, 'panel', 8);
         const lines = [
-            '아래 타워 탭에서 시설을 고르고 길 옆 칸에 지으세요.',
+            '아래 몬스터 탭에서 몬스터를 골라 길 옆 칸에 놓으세요.',
+            '오크는 길로 걸어 나가 막고, 궁수와 마법사는 제자리에서 공격합니다.',
             '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
             '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!',
             '용사가 왕좌에 닿으면 마왕의 체력이 줄어듭니다.'
         ];
-        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 548 + i * 42, 26, '#efe6ff', 'center'));
+        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 530 + i * 42, 26, '#efe6ff', 'center'));
         UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층', cx, 900, 24, '#b8a9d0', 'center');
     },
 
@@ -717,7 +787,7 @@ const UI = {
             ['남은 마왕 체력', `${G.hp} / ${COMBAT_RULES.maxHp}`],
             ['처치한 용사', `${G.stats.kills}명`],
             ['타락시킨 용사', `${G.stats.corrupted}명`],
-            ['지은 시설', `${G.stats.built}개`],
+            ['놓은 몬스터', `${G.stats.placed}마리`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ];
         if (!win) rows.splice(0, 1, ['막아 낸 웨이브', `${G.waveIndex} / ${WAVES.length}`]);

@@ -119,7 +119,7 @@ function updateMageCast(h, dt) {
     const w = heroWorld(h);
     let target = null;
     let best = def.stunRange * TILE;
-    for (const f of Game.facilities) {
+    for (const f of Game.monsters) {
         const dd = distance(w.x, w.y, f.x, f.y);
         if (dd <= best && f.stun <= 0) { best = dd; target = f; }
     }
@@ -155,7 +155,7 @@ function updateBossPatterns(h, dt) {
         h.windup -= dt;
         if (h.windup <= 0) {
             const w = heroWorld(h);
-            for (const f of Game.facilities) {
+            for (const f of Game.monsters) {
                 if (distance(w.x, w.y, f.x, f.y) <= rule.stompRange * TILE) f.stun = rule.stompStun;
             }
             Fx.ring(w.x, w.y, rule.stompRange * TILE, '#d39bff', 0.5);

@@ -7,7 +7,8 @@ const Assets = {
 
     names() {
         const list = [];
-        for (const def of [...Object.values(HEROES), ORC_ART]) {
+        const monsterArt = Object.values(MONSTERS).map(m => ({ sprite: m.sprite, anim: m.art.anim }));
+        for (const def of [...Object.values(HEROES), ...monsterArt]) {
             if (!def.anim) {
                 // Asteria 직업 그림(정예 용사): 4방향 걷기 4장, 공격과 주문 2장씩, 남녀 두 벌
                 for (const base of [def.sprite, `${def.sprite}_female`]) {
@@ -31,10 +32,9 @@ const Assets = {
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
             'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison']) list.push(`fx_${fx}`);
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image); // pixelfx 시트, assets/fx/
-        for (const art of Object.values(FACILITY_ART)) list.push(art.sprite);
         list.push('portrait_riftLord', 'portrait_fallenKnight', 'prop_shard', 'prop_crystal', 'prop_pillarShadow',
             'tile_shadow_detailB', 'tile_shadow_rare', 'ui_skillSlot', 'icon_power_thunderStrike');
-        return list;
+        return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 
     loadAll(onDone) {
