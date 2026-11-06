@@ -102,7 +102,7 @@ const ELITES = {
     elite_swordsman: {
         base: 'warrior', name: '정예 검사', sprite: 'swordsman', hpMul: 4, armor: 4,
         breakthrough: { after: 2, push: 0.7, stun: 0.8, free: 1.2 },
-        counter: '갑옷 차림 돌파, 큰 한 방으로'
+        counter: '막히면 돌파, 큰 한 방'
     },
     elite_tamer: {
         base: 'rogue', name: '정예 조련사', sprite: 'beast_tamer', hpMul: 4, speed: 1.3, passOrcs: true,
