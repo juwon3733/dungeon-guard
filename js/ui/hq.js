@@ -202,6 +202,10 @@ Object.assign(UI, {
             this.button(`hq_${f.id}`, r.x, r.y, r.w, r.h, { facility: f, key: i + 1, onClick: () => this.enterFacility(f) });
         });
         const bx = GAME_WIDTH - TOP_BTN - 12;
+        const save = Game.readRunSave();
+        if (save) {
+            this.button('hq_resume', GAME_WIDTH / 2 - 220, 12, 440, 76, { label: `이어하기 · 라운드 ${save.waveIndex + 1}`, icon: 'retry', size: 28, onClick: () => { if (!this.resumeRun()) { this.openHQ(); this.showToast('저장한 판을 불러오지 못했습니다.'); } } });
+        }
         this.button('hq_settings', bx, 12, TOP_BTN, TOP_BTN, { icon: 'gear', iconOnly: true, tip: '설정', onClick: () => { this.hqSettings = true; } });
         this.button('mute', bx - TOP_BTN - 6, 12, TOP_BTN, TOP_BTN, {
             icon: 'sound', iconOnly: true, on: Sfx.muted, slash: Sfx.muted, tip: Sfx.muted ? '소리 켜기 (M)' : '소리 끄기 (M)',

@@ -5,15 +5,18 @@ function lordLine(kind) {
     return randItem([...(SPEECH[kind] || []), ...(own[kind] || [])]);
 }
 
+const RUN_SAVE_KEY = 'dungeonGuard.run';
 const Game = {
     state: 'title', // title | hq(본부) | story(스토리 지도) | select | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
+    roundTimer: 0, // 이번 라운드의 남은 시간
+    summonLevel: 0, // 소환 강화 레벨(SUMMON_LEVELS 번호). 판 안에서만 유지
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
     runResult: null, // 판이 끝날 때의 기록(Meta.finishRun): 처음 깼는지, 풀린 것. 결과 화면과 해금 카드가 보여 준다
     stage: null, // 이번 판 스테이지 id(STAGES). null이면 스토리 없이 WAVES 전부(tools/simulate.js와 시험 도구)
-    waves: WAVES, // 이번 판 웨이브 목록(stageWaves). 스테이지가 없으면 WAVES
+    waves: WAVES, // 이번 판 라운드 목록(stageWaves). 스테이지가 없으면 WAVES
     heroHpMul: 1, // 이번 판 용사 체력 배율(스테이지의 hpMul)
-    bossDefeated: false, // 이번 웨이브에 보스를 처치했는지. 웨이브가 끝날 때 보상 카드로 바뀐다
+    bossDefeated: false, // 이번 라운드에 보스를 처치했는지. 라운드가 끝날 때 보상 카드로 바뀐다
     bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'equip', id } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
@@ -50,6 +53,8 @@ const Game = {
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
         this.summonCount = 0;
+        this.summonLevel = 0;
+        this.roundTimer = 0;
         this.bossDefeated = false;
         this.bossReward = null;
         this.equipBag = [];
@@ -93,7 +98,7 @@ const Game = {
 
     // 등급별 소환 확률: 희귀 확률(rareChance)을 일반에서 옮긴다
     summonOdds() {
-        const odds = { ...SUMMON_RULES.odds };
+        const odds = { ...SUMMON_LEVELS[this.summonLevel].odds };
         const shift = clamp(this.mods.rareChance, -(odds.rare || 0), odds.common || 0);
         if (shift) {
             odds.common = (odds.common || 0) - shift;
@@ -107,10 +112,10 @@ const Game = {
 
     currentWave() { return this.waves[Math.min(this.waveIndex, this.waves.length - 1)]; },
 
-    // 웨이브의 용사 체력 단계: 스테이지 웨이브는 원래 WAVES 인덱스(level), 아니면 지금 웨이브 번호
+    // 라운드의 용사 체력 단계: 스테이지 라운드는 원래 WAVES 인덱스(level), 아니면 지금 라운드 번호
     waveLevel(wave) { return wave.level !== undefined ? wave.level : this.waveIndex; },
 
-    // 웨이브의 일반과 정예 인원을 입구 비율(wave.entry)대로 나눈 수: { north, south }. 보스는 세지 않는다.
+    // 라운드의 일반과 정예 인원을 입구 비율(wave.entry)대로 나눈 수: { north, south }. 보스는 세지 않는다.
     // 내림한 뒤 남는 인원은 소수 부분이 큰 입구부터(같으면 ROUTE_IDS 순서) 하나씩 더해 합이 정확히 맞는다. 비율이 없으면 모두 north
     entryCounts(wave) {
         const total = [...Object.values(wave.members), ...Object.values(wave.elites || {})].reduce((a, b) => a + b, 0);
@@ -181,17 +186,36 @@ const Game = {
     // 맵에 더 둘 자리가 있는지(상한)
     fieldFull() { return this.monsters.length >= this.maxField(); },
 
+    // 소환 강화: 다음 레벨 비용(최고 레벨이면 null)과 올리기. 실패하면 reason: 'state' | 'max' | 'gold'
+    summonUpgradeCost() {
+        const next = SUMMON_LEVELS[this.summonLevel + 1];
+        return next ? next.cost : null;
+    },
+
+    upgradeSummon() {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        const cost = this.summonUpgradeCost();
+        if (cost === null) return { ok: false, reason: 'max' };
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        this.summonLevel++;
+        Fx.goldPulse = 1;
+        Fx.banner = { name: `소환 강화 ${this.summonLevel + 1}단계`, sub: '더 좋은 등급이 잘 나옵니다', age: 0, life: 1.6, small: true };
+        Sfx.play('upgrade');
+        return { ok: true, level: this.summonLevel, cost };
+    },
+
     // 등급을 summonOdds로 고른 뒤 그 등급 몬스터 중 하나를 고른다. Math.random을 두 번 쓴다
     rollSummon() {
         const odds = this.summonOdds();
-        const grades = GRADE_ORDER.filter(g => odds[g] > 0 && gradePool(g).length);
+        const grades = GRADE_ORDER.filter(g => odds[g] > 0 && summonPool(g).length);
         let r = Math.random();
         let grade = grades[0];
         for (const g of grades) {
             if (r < odds[g]) { grade = g; break; }
             r -= odds[g];
         }
-        return randItem(gradePool(grade));
+        return randItem(summonPool(grade));
     },
 
     // 소환한 몬스터를 세울 칸. 없으면 null
@@ -304,7 +328,7 @@ const Game = {
         return { kind: 'gold', id };
     },
 
-    // 보관함 index번 장비를 맵의 몬스터에게 끼운다(웨이브 중에도). 이미 끼고 있으면 맞바꿔 원래 장비가 그 칸으로 돌아간다.
+    // 보관함 index번 장비를 맵의 몬스터에게 끼운다(라운드 중에도). 이미 끼고 있으면 맞바꿔 원래 장비가 그 칸으로 돌아간다.
     // 체력은 비율을 유지한다. 실패하면 { ok: false, reason: 'state' | 'empty' | 'index' }
     equipMonster(m, index) {
         if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
@@ -525,6 +549,7 @@ const Game = {
                 return this.merge({ monster: plan.src }, { monster: plan.dst }, plan.extra, true);
             }
             case 'summon': return this.summon();
+            case 'upgradeSummon': return this.upgradeSummon();
             case 'sell': this.sell(cmd.monster); return { ok: true };
             case 'sacrifice': return this.sacrifice(cmd.monster);
             case 'move': return { ok: this.moveMonster(cmd.monster, cmd.col, cmd.row) };
@@ -665,12 +690,13 @@ const Game = {
         const counts = this.entryCounts(wave);
         let next = 0;
         let lastStart = 0;
+        const gap = Math.min(COMBAT_RULES.spawnGap, COMBAT_RULES.spawnWindow / Math.max(1, ...ROUTE_IDS.map(r => counts[r])));
         for (const route of ROUTE_IDS) {
             const offset = this.entryOffset(route);
             for (let i = 0; i < counts[route]; i++) {
-                const delay = offset + i * COMBAT_RULES.spawnGap;
+                const delay = offset + i * gap;
                 this.heroes.push(createHero(queue[next++], this.waveLevel(wave), delay, false, route));
-                lastStart = Math.max(lastStart, delay + COMBAT_RULES.spawnGap);
+                lastStart = Math.max(lastStart, delay + gap);
             }
         }
         if (wave.boss) {
@@ -683,6 +709,7 @@ const Game = {
             Sfx.play('bossIntro');
         }
         this.state = 'wave';
+        this.roundTimer = wave.boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime;
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, lordLine('waveStart'), 2);
         Sfx.play('waveStart');
         return true;
@@ -692,6 +719,7 @@ const Game = {
     finish(victory) {
         if (this.state === 'victory' || this.state === 'defeat') return;
         this.state = victory ? 'victory' : 'defeat';
+        this.clearRunSave();
         this.runResult = Meta.finishRun(this.stage, victory, victory ? this.waves.length : this.waveIndex);
         Sfx.play(victory ? 'victory' : 'defeat');
     },
@@ -703,6 +731,7 @@ const Game = {
         this.throneBless = Math.max(0, this.throneBless - dt);
         this.streakPop = Math.max(0, this.streakPop - dt * 4);
         if (this.state !== 'prep' && this.state !== 'wave') return;
+        if (this.bossReward) return; // 보상을 고르는 동안 전투도 멈춘다
         this.stats.time += dt;
 
         for (const key of ['lightning', 'roar']) this.skills[key] = Math.max(0, this.skills[key] - dt);
@@ -734,12 +763,86 @@ const Game = {
         this.units = this.units.filter(u => !u.removed);
         this.heroes = this.heroes.filter(h => !h.dead);
 
-        if (this.state === 'wave' && this.heroes.length === 0) this.endWave();
+        if (this.state === 'wave') {
+            this.roundTimer = Math.max(0, this.roundTimer - dt);
+            if (this.heroes.length === 0) this.endWave();
+            else if (this.roundTimer === 0 && this.waveIndex + 1 < this.waves.length) this.nextRound();
+        }
+    },
+
+    // 중간 저장: 라운드가 끝나 준비 단계에 들어갈 때 판을 저장한다. 저장소가 없어도 게임은 돈다.
+    // 뒤에 입력 기록으로 바꿀 수 있게 저장과 복원을 이 세 함수에 모은다
+    saveRun() {
+        const data = { v: 1, lord: this.lord, relics: this.relics, stage: this.stage, gold: this.gold, hp: this.hp, waveIndex: this.waveIndex,
+            prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, equipBag: this.equipBag, bossReward: this.bossReward,
+            skills: this.skills, stats: this.stats,
+            monsters: this.monsters.filter(m => !m.removed).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, xp: m.xp || 0, equip: m.equip || null })) };
+        try { localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 저장을 못 해도 판은 계속된다 */ }
+    },
+
+    clearRunSave() {
+        try { localStorage.removeItem(RUN_SAVE_KEY); } catch (e) { /* 저장소 없음 */ }
+    },
+
+    readRunSave() {
+        try {
+            const d = JSON.parse(localStorage.getItem(RUN_SAVE_KEY) || 'null');
+            return d && d.v === 1 && Array.isArray(d.monsters) && typeof d.waveIndex === 'number' ? d : null;
+        } catch (e) { return null; }
+    },
+
+    // 저장한 판으로 돌아간다. 값이 이상하면 false(저장을 지운다)
+    loadRun(d) {
+        try {
+            this.reset(d.lord ? { lord: d.lord, relics: d.relics || [] } : undefined, d.stage);
+            if (d.waveIndex < 0 || d.waveIndex >= this.waves.length) throw new Error('wave');
+            this.gold = +d.gold || 0;
+            this.hp = clamp(+d.hp || 1, 1, this.maxHp());
+            this.waveIndex = d.waveIndex;
+            this.prepTimer = +d.prepTimer || COMBAT_RULES.prepTime;
+            this.summonCount = d.summonCount || 0;
+            this.summonLevel = clamp(d.summonLevel || 0, 0, SUMMON_LEVELS.length - 1);
+            this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
+            this.bossReward = d.bossReward || null;
+            if (d.skills) this.skills = d.skills;
+            if (d.stats) this.stats = d.stats;
+            for (const o of d.monsters) {
+                if (!MONSTERS[o.type] || !isBuildCell(o.col, o.row) || this.monsterAt(o.col, o.row)) continue;
+                const m = createMonster(o.type, o.col, o.row);
+                setMonsterRank(m, clamp(o.rank || 0, 0, MONSTER_RANKS.length - 1));
+                m.xp = o.xp || 0;
+                if (o.equip && EQUIPMENT[o.equip]) setMonsterEquip(m, o.equip);
+                this.monsters.push(m);
+            }
+            return true;
+        } catch (e) {
+            this.clearRunSave();
+            return false;
+        }
+    },
+
+    // 라운드 시간이 다 됐거나 플레이어가 불렀다: 남은 용사를 그대로 두고 다음 라운드를 시작한다.
+    // 일찍 부르면 남은 시간만큼 골드를 받는다. 마지막 라운드는 다 잡아야 끝난다
+    nextRound() {
+        if (this.state !== 'wave' || this.waveIndex + 1 >= this.waves.length) return false;
+        const n = this.waveIndex + 1;
+        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
+        const bossDown = this.bossDefeated;
+        this.bossDefeated = false;
+        this.gold += reward;
+        Fx.goldPulse = 1;
+        this.waveIndex = n;
+        if (bossDown || n % BOSS_REWARD_RULES.roundEvery === 0) this.bossReward = this.rollBossReward();
+        this.saveRun();
+        this.state = 'prep'; // startWave는 준비 단계에서 시작한다
+        this.prepTimer = 1;  // 카드를 고르는 중이면 고른 뒤 1초 뒤에 시작한다
+        this.startWave();
+        return true;
     },
 
     endWave() {
         const n = this.waveIndex + 1;
-        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n;
+        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
         if (n >= this.waves.length) {
@@ -748,12 +851,13 @@ const Game = {
         }
         this.gold += reward;
         Fx.goldPulse = 1;
-        Fx.banner = { name: `웨이브 ${n} 완료`, sub: `+${reward} 골드`, age: 0, life: 1.6, small: true };
+        Fx.banner = { name: `라운드 ${n} 완료`, sub: `+${reward} 골드`, age: 0, life: 1.6, small: true };
         Sfx.play('waveClear');
         this.waveIndex = n;
         this.prepTimer = COMBAT_RULES.prepTime;
         this.state = 'prep';
-        // 보스를 처치한 웨이브: 준비 단계에 들어가며 보상 3택을 띄운다(전투 중에는 띄우지 않는다)
-        if (bossDown) this.bossReward = this.rollBossReward();
+        // 보스를 처치한 라운드: 준비 단계에 들어가며 보상 3택을 띄운다(전투 중에는 띄우지 않는다)
+        if (bossDown || n % BOSS_REWARD_RULES.roundEvery === 0) this.bossReward = this.rollBossReward();
+        this.saveRun();
     }
 };

@@ -4,9 +4,9 @@
 //
 // 스테이지 항목
 //   id, no(지도 도장 번호), name, zone(맵 지역: js/data/map.js의 ZONES)
-//   waves: 이번 스테이지에 쓸 WAVES의 인덱스 목록(순서대로, 겹쳐도 된다). 웨이브의 나머지 값은 WAVES 그대로다
-//   noBoss: true면 고른 웨이브의 보스 칸을 모두 비운다("보스 없는 표")
-//   boss: 있으면 마지막 웨이브의 보스 칸을 이 보스(BOSSES 열쇠)로 덮어쓴다. 마지막 웨이브의 보스는 보상 없이 승리로 끝난다
+//   waves: 이번 스테이지에 쓸 WAVES의 인덱스 목록(순서대로, 겹쳐도 된다). 라운드의 나머지 값은 WAVES 그대로다
+//   noBoss: true면 고른 라운드의 보스 칸을 모두 비운다("보스 없는 표")
+//   boss: 있으면 마지막 라운드의 보스 칸을 이 보스(BOSSES 열쇠)로 덮어쓴다. 마지막 라운드의 보스는 보상 없이 승리로 끝난다
 //   hpMul: 용사(보스 포함) 체력 배율, goldBonus: 시작 골드에 더한다
 //   map: 스토리 지도의 도장 자리 [x, y](화면 좌표)
 //   intro, outro: 시작 전 대화와 승리 대화(2~4줄). [말하는 사람(STORY_CAST 열쇠), 대사]
@@ -30,9 +30,12 @@ const STORY_CAST = {
     captain: { name: '부대장 그라벨', portrait: { sprite: 'pl_boss_captain/rotations/south', crop: [31, 8, 28] } }
 };
 
+// 장 N은 1라운드부터 N*10라운드까지 한 판이다
+function firstRounds(n) { return Array.from({ length: n }, (_, i) => i); }
+
 const STAGES = [
     {
-        id: 's1', no: 1, name: '첫 손님', zone: 'moonGarden', waves: [0, 1, 2], hpMul: 0.5, goldBonus: 0, map: [260, 610],
+        id: 's1', no: 1, name: '첫 손님', zone: 'moonGarden', waves: firstRounds(10), hpMul: 0.5, goldBonus: 0, map: [260, 610],
         intro: [
             ['goblin', '군주님! 입주 첫날부터 용사 손님입니다. 소환(S)하면 길 옆에 부하가 나와요.'],
             ['rift', '같은 등급 둘을 겹치면 더 센 놈이 된다고? 좋아, 합쳐서 막는다.'],
@@ -45,7 +48,7 @@ const STAGES = [
         unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'pouch' }, { kind: 'relic', id: 'horn' }, { kind: 'relic', id: 'heart' }]
     },
     {
-        id: 's2', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: [1, 2, 3], hpMul: 0.55, goldBonus: 10, map: [560, 380],
+        id: 's2', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
         intro: [
             ['goblin', '도굴꾼입니다! 벽을 몰래 파고 있어요!'],
             ['bone_queen', '(벽 너머) 거기 시끄러워! 뼈 울린다고!'],
@@ -58,7 +61,7 @@ const STAGES = [
         unlocks: [{ kind: 'relic', id: 'chalice' }, { kind: 'relic', id: 'dice' }, { kind: 'relic', id: 'candle' }, { kind: 'relic', id: 'tablet' }]
     },
     {
-        id: 's3', no: 3, name: '건너편 세입자', zone: 'frost', waves: [2, 3, 5, 6], boss: 'archmage', hpMul: 0.6, goldBonus: 20, map: [840, 610],
+        id: 's3', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
         intro: [
             ['bone_queen', '난 백 년째 옆방에 살았어. 계약서는... 묻혔지.'],
             ['archmage', '불법 거주 마왕이 둘! 한 번에 신고 처리한다!'],
@@ -72,7 +75,7 @@ const STAGES = [
         unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'relic', id: 'shackles' }, { kind: 'relic', id: 'drum' }, { kind: 'relic', id: 'eye' }]
     },
     {
-        id: 's4', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: [3, 5, 6, 7], hpMul: 0.65, goldBonus: 20, map: [1110, 380],
+        id: 's4', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
         intro: [
             ['gold_king', '실례합니다. 이 던전 분양 대금이 아직 안 들어왔는데요?'],
             ['goblin', '그, 그 와중에 왕국 정찰대가 옵니다!'],
@@ -85,7 +88,7 @@ const STAGES = [
         unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'handgem' }, { kind: 'relic', id: 'hourglass' }, { kind: 'relic', id: 'key' }]
     },
     {
-        id: 's5', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: [5, 6, 7, 8], boss: 'archmage', hpMul: 0.7, goldBonus: 40, map: [1390, 610],
+        id: 's5', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
         intro: [
             ['archmage', '지난번 민원은 반려됐지만, 이번엔 직접 철거한다!'],
             ['gold_king', '이 던전이 철거되면 내 돈은 누가 갚지? 군주, 이번엔 나도 싸운다.'],
@@ -95,10 +98,10 @@ const STAGES = [
             ['gold_king', '대금은 분할 상환해 주지. 대신 여기 살면서 수금하겠다.'],
             ['goblin', '깃발이랑 번개 병도 두고 가셨어요. ...이자는 붙는대요.']
         ],
-        unlocks: [{ kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'banner' }, { kind: 'relic', id: 'bottle' }]
+        unlocks: [{ kind: 'slot' }, { kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'banner' }, { kind: 'relic', id: 'bottle' }]
     },
     {
-        id: 's6', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: [6, 7, 8, 8, 9], boss: 'fallen_knight', hpMul: 0.8, goldBonus: 60, map: [1640, 380],
+        id: 's6', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],
         intro: [
             ['captain', '내가 용사단 부대장이다. 이 던전의 모든 것을 확인하러 왔다!'],
             ['rift', '확인? 압류야, 철거야?'],
@@ -125,8 +128,8 @@ function nextStage(id) {
     return i >= 0 && i + 1 < STAGES.length ? STAGES[i + 1] : null;
 }
 
-// 스테이지의 웨이브 목록: WAVES 항목을 복사해 noBoss면 보스 칸을 비우고, boss가 있으면 마지막 웨이브의 보스 칸을 덮어쓴다.
-// level은 원래 WAVES 인덱스(용사 체력이 웨이브마다 오르는 계산에 쓴다)
+// 스테이지의 라운드 목록: WAVES 항목을 복사해 noBoss면 보스 칸을 비우고, boss가 있으면 마지막 라운드의 보스 칸을 덮어쓴다.
+// level은 원래 WAVES 인덱스(용사 체력이 라운드마다 오르는 계산에 쓴다)
 function stageWaves(stage) {
     return stage.waves.map((index, i) => {
         const w = Object.assign({}, WAVES[index], { level: index });
