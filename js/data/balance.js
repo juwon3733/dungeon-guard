@@ -97,6 +97,9 @@ const ELITE_ART = { scale: 2 / WORLD_ZOOM, footPx: 59, barY: 142 };
 // - charge: time초 동안 speed칸/초로 돌진, 막힘 풀림
 // - stomp / shock: 멈춰서 windup초 동안 경고 원을 띄운 뒤 반경 range칸 안 방어 쪽 전부를 stun초 정지(stomp는 부대장, shock은 감전)
 // art가 없으면 부대장 전용 그림, 있으면 Asteria 직업 그림을 scale배로 그린다. starY는 정지 별 높이(발 기준 위쪽 세계 px)
+// art.footPx는 64px 캔버스 안의 발끝 높이다. 숫자 하나 또는 동작(walk, cast, atk)별 방향(down, left, right, up)별 표.
+//   Asteria 그림은 방향과 동작마다 발 높이가 달라(오른쪽 걷기 55, 오른쪽 공격 51, 아래 걷기 62) 하나로 적으면 떠 보인다
+// waveHpMul: 웨이브 배율까지 곱한 체력에 한 번 더 곱한다(중간 보스를 약하게. 없으면 1)
 const BOSSES = {
     fallen_knight: {
         name: '용사단 부대장', portrait: 'portrait_fallenKnight', note: '돌진, 주변 몬스터 정지',
@@ -109,9 +112,16 @@ const BOSSES = {
     },
     archmage: {
         name: '용사단 대마도사', portrait: 'stormcaller_walk_down0', note: '체력 50%·25%에 범위 감전',
-        // 체력 체계는 부대장과 같다(전사 체력 x 15)
-        hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
-        art: { sprite: 'stormcaller', scale: 3 / WORLD_ZOOM, footPx: 59 }, starY: 225,
+        // 체력 체계는 부대장과 같다(전사 체력 x 15). 5번째 웨이브 중간 보스라 waveHpMul로 낮춘다(초안)
+        hpMultiplier: 15, waveHpMul: 0.6, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5,
+        art: {
+            sprite: 'stormcaller', scale: 3 / WORLD_ZOOM,
+            footPx: {
+                walk: { down: 62, left: 57, right: 55, up: 60 },
+                cast: { down: 59, left: 55, right: 52, up: 55 },
+                atk: { down: 59, left: 53, right: 51, up: 55 }
+            }
+        }, starY: 225,
         patterns: [
             { at: 0.5, kind: 'shock', windup: 1.0, range: 3, stun: 2.5 },
             { at: 0.25, kind: 'shock', windup: 1.6, range: 5, stun: 3 }
@@ -149,7 +159,7 @@ const WAVES = [
     { party: '마을 자경단', members: { warrior: 12 } },
     { party: '날쌘 도굴꾼', members: { rogue: 8 }, elites: { elite_tamer: 1 } },
     { party: '수상한 혼성대', members: { warrior: 12, rogue: 6 }, elites: { elite_swordsman: 1 } },
-    { party: '견습 마법사와 친구들', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
+    { party: '견습 마법사와 친구들', boss: 'archmage', members: { warrior: 15, mage: 3 }, elites: { elite_stormcaller: 1 } },
     { party: '보물 사냥단', members: { rogue: 20 }, elites: { elite_tamer: 2, elite_rhapsodist: 1 } },
     { party: '왕국 정찰대', members: { warrior: 18, rogue: 9, mage: 3 }, elites: { elite_swordsman: 1, elite_stormcaller: 1 } },
     { party: '은빛 검 기사단', members: { warrior: 28, mage: 6 }, elites: { elite_swordsman: 2, elite_rhapsodist: 1 } },

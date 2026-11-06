@@ -10,6 +10,10 @@ const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
 const POPUP_RANK_H = 30; // 팝업의 랭크 줄 높이
 const POPUP_SACRIFICE_H = 30; // 팝업의 제물 안내 줄 높이
 const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
+const REWARD_CARD_W = 380; // 보스 보상 카드
+const REWARD_CARD_H = 540;
+const REWARD_CARD_GAP = 44;
+const REWARD_CARD_Y = 290;
 
 const UI = {
     mouse: { x: 0, y: 0 },
@@ -60,6 +64,12 @@ const UI = {
         small('fx', Fx.reduce ? '약' : '강', !Fx.reduce, () => { Fx.reduce = !Fx.reduce; saveSettings(); });
         small('pause', G.paused ? '▶' : 'II', G.paused, () => { G.paused = !G.paused; });
         small('speed', `${G.speed}x`, G.speed > 1, () => { G.speed = G.speed === 1 ? 2 : 1; });
+
+        // 보스 보상 3택: 카드만 누를 수 있다(소환, 끌기, 탭, 다음 웨이브는 고른 뒤에)
+        if (G.bossReward) {
+            this.layoutBossReward();
+            return;
+        }
 
         // 하단 바: 탭 두 개, 탭에 따라 소환 버튼과 맵 몬스터 수나 마왕 스킬 슬롯, 다음 웨이브
         const barY = GAME_HEIGHT - BAR_H;
@@ -154,6 +164,28 @@ const UI = {
                 this.clearSelection();
             }
         });
+    },
+
+    // 보스 보상 카드 3장을 가운데에 나란히 놓는다. 맵에 세울 수 없는 몬스터 카드는 꺼 둔다
+    layoutBossReward() {
+        const cards = Game.bossReward.cards;
+        const total = cards.length * REWARD_CARD_W + (cards.length - 1) * REWARD_CARD_GAP;
+        const x0 = (GAME_WIDTH - total) / 2;
+        cards.forEach((card, i) => {
+            const disabled = card.kind === 'monster' && !Game.canTakeRewardMonster(card.type);
+            this.button(`reward${i}`, x0 + i * (REWARD_CARD_W + REWARD_CARD_GAP), REWARD_CARD_Y, REWARD_CARD_W, REWARD_CARD_H, {
+                reward: card, index: i, disabled, onClick: () => this.pickReward(i)
+            });
+        });
+    },
+
+    // 카드 클릭과 1, 2, 3 키
+    pickReward(i) {
+        const res = Game.pickBossReward(i);
+        if (res.ok) return res;
+        if (res.reason === 'full') this.showToast('몬스터를 놓을 자리가 없습니다. 골드를 고르세요.');
+        Sfx.play('mergeFail');
+        return res;
     },
 
     clearSelection() {
@@ -255,7 +287,7 @@ const UI = {
         this.layout();
         this.press = null;
         const b = this.buttonAt(x, y);
-        const inGame = Game.inPlay();
+        const inGame = Game.inPlay() && !Game.bossReward; // 보상을 고르는 동안 맵의 몬스터를 누르거나 끌지 않는다
         if (!b && inGame && !this.targeting) {
             const wx = x / WORLD_ZOOM;
             const wy = y / WORLD_ZOOM;
@@ -398,7 +430,7 @@ const UI = {
             return;
         }
         const G = Game;
-        if (!G.inPlay()) return;
+        if (!G.inPlay() || G.bossReward) return;
 
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
@@ -431,6 +463,14 @@ const UI = {
             if (code === 'Space' || code === 'Enter') this.startGame();
             return;
         }
+        if (G.bossReward) {
+            // 보상을 고르는 동안은 1, 2, 3(숫자 패드 포함)과 배속, 일시정지만 받는다
+            const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+            if (m) this.pickReward(Number(m[1]) - 1);
+            else if (code === 'KeyF') G.speed = G.speed === 1 ? 2 : 1;
+            else if (code === 'KeyP') G.paused = !G.paused;
+            return;
+        }
         if (code === 'Space') { G.startWave(); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyQ') this.toggleLightning();
@@ -447,6 +487,8 @@ const UI = {
             if (this.toast.age > this.toast.life) this.toast = null;
         }
         if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
+        // 보상 카드가 뜨면 끌기, 선택, 번개 조준을 끈다
+        if (Game.bossReward && (this.drag || this.press || this.selectedMonster || this.targeting)) this.cancel();
         // 끄는 몬스터가 맵에서 사라지면(판 종료 등) 끌기를 그만둔다
         if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
         // 체력 구슬: 오를 때는 초당 6씩 차오르고, 깎이면 바로 맞춘다
@@ -556,11 +598,14 @@ const UI = {
         if (this.popup) this.drawPopup(ctx);
         this.drawButtons(ctx);
         this.drawMergeBadges(ctx);
-        this.drawHints(ctx);
-        this.drawBanner(ctx);
+        if (!G.bossReward) {
+            this.drawHints(ctx);
+            this.drawBanner(ctx);
+        }
         this.drawPops(ctx);
         this.drawDragged(ctx);
         this.drawDiscovery(ctx);
+        if (G.bossReward) this.drawBossReward(ctx);
         if (this.toast) {
             const a = clamp((this.toast.life - this.toast.age) / 0.3, 0, 1);
             ctx.save();
@@ -853,6 +898,7 @@ const UI = {
     drawButtons(ctx) {
         for (const b of this.buttons) {
             const hover = this.hoverButton === b && !b.disabled;
+            if (b.reward) continue; // 보상 카드는 어둡게 깐 화면 위에 drawBossReward가 그린다
             if (b.skill) this.drawSkillButton(ctx, b, hover);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, hover);
             else if (b.tab) this.drawTabButton(ctx, b, hover);
@@ -865,6 +911,106 @@ const UI = {
                 UIKit.text(ctx, b.label, b.x + b.w / 2, ly, b.size || 24, '#ffffff', 'center');
                 if (b.sub) UIKit.text(ctx, b.sub, b.x + b.w / 2, ly + 30, 18, '#fff2d0', 'center');
             }
+        }
+    },
+
+    // 글자를 maxW 안에 들어가게 띄어쓰기 단위로 나눈다(글꼴은 미리 맞춰 둔다)
+    wrapLines(ctx, text, maxW) {
+        const lines = [];
+        let line = '';
+        for (const word of text.split(' ')) {
+            const next = line ? `${line} ${word}` : word;
+            if (line && ctx.measureText(next).width > maxW) {
+                lines.push(line);
+                line = word;
+            } else {
+                line = next;
+            }
+        }
+        if (line) lines.push(line);
+        return lines;
+    },
+
+    // 보스 보상 3택: 화면을 어둡게 깔고 제목과 카드 3장
+    drawBossReward(ctx) {
+        ctx.fillStyle = 'rgba(4,2,14,0.72)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        const cx = GAME_WIDTH / 2;
+        UIKit.text(ctx, '보스 처치 보상', cx, REWARD_CARD_Y - 112, 66, '#ffd76a', 'center');
+        UIKit.plain(ctx, '하나를 고르세요 · 누르거나 1, 2, 3', cx, REWARD_CARD_Y - 52, 26, '#e4d8fa', 'center');
+        for (const b of this.buttons) if (b.reward) this.drawRewardCard(ctx, b, this.hoverButton === b && !b.disabled);
+    },
+
+    drawRewardCard(ctx, b, hover) {
+        const card = b.reward;
+        const x = b.x;
+        const y = b.y - (hover ? 8 : 0);
+        const w = b.w;
+        const h = b.h;
+        const cx = x + w / 2;
+        const def = card.kind === 'monster' ? MONSTERS[card.type] : null;
+        const grade = def ? MONSTER_GRADES[def.grade] : null;
+        const edge = grade ? grade.color : '#ffd24d';
+        UIKit.frame(ctx, x, y, w, h, 'panel', 10);
+        if (hover) {
+            // 마우스를 올린 카드: 살짝 떠오르고 등급 색으로 은은하게 빛난다
+            ctx.save();
+            ctx.globalAlpha = 0.16;
+            ctx.fillStyle = edge;
+            ctx.fillRect(x + 12, y + 12, w - 24, h - 24);
+            ctx.restore();
+        }
+        // 등급 테두리(골드 카드는 금색)
+        ctx.lineWidth = hover ? 6 : 4;
+        ctx.strokeStyle = edge;
+        ctx.strokeRect(x + 12, y + 12, w - 24, h - 24);
+        // 고르는 키
+        UIKit.frame(ctx, x + 22, y + 22, 44, 44, 'dark', 4);
+        UIKit.text(ctx, String(b.index + 1), x + 44, y + 45, 26, '#ffe08a', 'center');
+        if (def) {
+            const size = 168;
+            this.drawMonsterIcon(ctx, card.type, cx - size / 2, y + 44, size);
+            UIKit.text(ctx, def.name, cx, y + 248, 34, grade.light, 'center');
+            UIKit.plain(ctx, `${grade.name} · ${MONSTER_ROLES[def.role].name}`, cx, y + 288, 22, '#d8ccef', 'center');
+            let ly = y + 330;
+            for (const a of def.abilities) {
+                const kind = ABILITY_KINDS[a.kind];
+                UIKit.text(ctx, kind.name, cx, ly, 22, '#ffb0e8', 'center');
+                ly += 30;
+                ctx.font = `19px ${UI_FONT}`;
+                for (const line of this.wrapLines(ctx, kind.desc(a), w - 64)) {
+                    UIKit.plain(ctx, line, cx, ly, 19, '#f2e6ff', 'center');
+                    ly += 26;
+                }
+                ly += 6;
+            }
+            ctx.font = `18px ${UI_FONT}`;
+            for (const line of this.wrapLines(ctx, def.desc, w - 64)) {
+                UIKit.plain(ctx, line, cx, ly + 4, 18, '#b8a9d0', 'center');
+                ly += 24;
+            }
+            UIKit.plain(ctx, '맵의 빈 칸에 바로 나옵니다', cx, y + h - 40, 19, '#c9b6ea', 'center');
+        } else {
+            // 골드 카드: 큰 금화
+            const gy = y + 128;
+            ctx.fillStyle = '#6b3f0a';
+            ctx.fillRect(cx - 62, gy - 62, 124, 124);
+            ctx.fillStyle = '#ffd24d';
+            ctx.fillRect(cx - 50, gy - 50, 100, 100);
+            ctx.fillStyle = '#fff2b0';
+            ctx.fillRect(cx - 38, gy - 38, 34, 34);
+            ctx.fillStyle = '#c98a1c';
+            ctx.fillRect(cx - 50, gy + 38, 100, 12);
+            UIKit.text(ctx, `${card.gold}G`, cx, y + 248, 46, '#ffe08a', 'center');
+            UIKit.plain(ctx, '골드', cx, y + 288, 22, '#d8ccef', 'center');
+            UIKit.plain(ctx, '바로 받습니다.', cx, y + 334, 19, '#f2e6ff', 'center');
+            UIKit.plain(ctx, `지금 소환 비용 ${Game.summonCost()}G`, cx, y + 364, 19, '#b8a9d0', 'center');
+        }
+        if (b.disabled) {
+            ctx.fillStyle = 'rgba(4,2,12,0.68)';
+            ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+            UIKit.text(ctx, '자리 없음', cx, y + h / 2, 36, '#ff8f8f', 'center');
+            UIKit.plain(ctx, `맵 몬스터 ${Game.monsters.length}/${SUMMON_RULES.maxField}`, cx, y + h / 2 + 42, 20, '#e4d8fa', 'center');
         }
     },
 

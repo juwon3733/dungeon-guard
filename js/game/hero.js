@@ -10,7 +10,7 @@ function createHero(type, waveIndex, delay, bossKey) {
     if (bossDef) type = bossDef.base;
     const def = HEROES[type];
     const scale = 1 + COMBAT_RULES.hpPerWave * waveIndex;
-    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale : def.hp * scale;
+    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) : def.hp * scale;
     const src = bossDef || def;
     return {
         type,

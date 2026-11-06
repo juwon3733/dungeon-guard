@@ -239,9 +239,11 @@ const Render = {
     // 직업 그림 보스(대마도사): Asteria 직업 그림을 크게 그린다. 경고(windup) 동안은 주문 동작, 공격은 공격 동작이다
     drawArtBoss(ctx, h, p, art) {
         let name;
-        if (h.windup > 0) name = `${art.sprite}_act_${h.dir}_cast${Math.floor(Game.time * 6) % 2}`;
-        else if (h.atkPose > 0) name = `${art.sprite}_act_${h.dir}_atk${this.attackFrame(h.atkPose, h.atkPoseMax, 2)}`;
+        let pose = 'walk';
+        if (h.windup > 0) { pose = 'cast'; name = `${art.sprite}_act_${h.dir}_cast${Math.floor(Game.time * 6) % 2}`; }
+        else if (h.atkPose > 0) { pose = 'atk'; name = `${art.sprite}_act_${h.dir}_atk${this.attackFrame(h.atkPose, h.atkPoseMax, 2)}`; }
         else name = `${art.sprite}_walk_${h.dir}${Math.floor(h.blocker ? 0 : h.anim) % 4}`;
+        const foot = typeof art.footPx === 'number' ? art.footPx : art.footPx[pose][h.dir];
         this.shadow(ctx, p.x, p.y + 10, 62, 19);
         // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다
         ctx.save();
@@ -257,7 +259,7 @@ const Render = {
         ctx.stroke();
         ctx.restore();
         const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-        this.sprite(ctx, img, p.x, p.y + 12, art.scale, art.footPx);
+        this.sprite(ctx, img, p.x, p.y + 12, art.scale, foot);
     },
 
     // 음유시인 가속 표시: 발밑에서 떠오르는 초록 음표. 상태 없이 시간만으로 계산한다

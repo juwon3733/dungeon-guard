@@ -29,6 +29,7 @@ function killHero(hero, pos, attacker) {
     Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - 34, hero.boss ? 620 : 150, hero.boss ? 0.8 : 0.36);
     Fx.glow(pos.x, pos.y - 30, hero.boss ? 280 : 80, 'rgba(255,190,110,1)', 0.2);
     if (hero.boss) {
+        G.bossDefeated = true; // 웨이브가 끝나면 보스 보상 3택(마지막 웨이브는 승리로 끝난다)
         Fx.addShake(26);
         Sfx.play('bossDown');
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, '고생했다. 다음엔 예약하고 와.', 3);

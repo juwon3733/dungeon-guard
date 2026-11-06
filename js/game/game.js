@@ -4,6 +4,8 @@ const Game = {
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
     discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
+    bossDefeated: false, // 이번 웨이브에 보스를 처치했는지. 웨이브가 끝날 때 보상 카드로 바뀐다
+    bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0, throneBless: 0, // throneBless: 제물을 받은 마왕이 빛나는 남은 시간
@@ -17,6 +19,8 @@ const Game = {
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
         this.summonCount = 0;
+        this.bossDefeated = false;
+        this.bossReward = null;
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -129,7 +133,7 @@ const Game = {
     // 골드를 내고 무작위 몬스터 1마리를 맵의 빈 길 옆 칸에 바로 세운다. 실패하면 골드를 쓰지 않고
     // reason: 'full'(상한이나 빈 칸 없음) | 'gold' | 'state'
     summon() {
-        if (!this.inPlay()) return { ok: false, reason: 'state' };
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
         if (this.fieldFull()) return { ok: false, reason: 'full' };
         const cost = this.summonCost();
         if (this.gold < cost) return { ok: false, reason: 'gold' };
@@ -145,6 +149,57 @@ const Game = {
         Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type, grade });
         Sfx.play('summon', GRADE_ORDER.indexOf(grade));
         return { ok: true, type, monster: m, cost };
+    },
+
+    // 보스 보상 카드: 서로 다른 몬스터 BOSS_REWARD_RULES.monsterCards장(희귀 또는 영웅)과 골드 1장.
+    // 몬스터 카드마다 Math.random을 두 번 쓴다(등급, 몬스터). 고른 등급 후보가 다 나왔으면 다른 등급에서 고른다
+    rollBossReward() {
+        const R = BOSS_REWARD_RULES;
+        const used = [];
+        const cards = [];
+        for (let i = 0; i < R.monsterCards; i++) {
+            const first = Math.random() < R.epicChance ? 'epic' : 'rare';
+            const second = first === 'epic' ? 'rare' : 'epic';
+            const left = g => gradePool(g).filter(t => !used.includes(t));
+            const pool = left(first).length ? left(first) : left(second);
+            if (!pool.length) break;
+            const type = randItem(pool);
+            used.push(type);
+            cards.push({ kind: 'monster', type });
+        }
+        cards.push({ kind: 'gold', gold: R.gold });
+        return { cards };
+    },
+
+    // 보상 몬스터를 맵에 세울 수 있는지(상한과 빈 칸)
+    canTakeRewardMonster(type) {
+        return !this.fieldFull() && !!this.pickSummonCell(type);
+    },
+
+    // 보스 보상 카드 i번을 고른다. 몬스터는 소환처럼 맵의 빈 칸에 바로 나온다(소환 비용과 횟수는 그대로).
+    // 실패하면 { ok: false, reason: 'none' | 'index' | 'full' }
+    pickBossReward(i) {
+        const reward = this.bossReward;
+        if (!reward) return { ok: false, reason: 'none' };
+        const card = reward.cards[i];
+        if (!card) return { ok: false, reason: 'index' };
+        if (card.kind === 'gold') {
+            this.gold += card.gold;
+            Fx.goldPulse = 1;
+            Sfx.play('sell');
+            this.bossReward = null;
+            return { ok: true, card };
+        }
+        if (this.fieldFull()) return { ok: false, reason: 'full' };
+        const cell = this.pickSummonCell(card.type);
+        if (!cell) return { ok: false, reason: 'full' };
+        const m = createMonster(card.type, cell.col, cell.row);
+        this.monsters.push(m);
+        const grade = MONSTERS[card.type].grade;
+        Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type: card.type, grade });
+        Sfx.play('summon', GRADE_ORDER.indexOf(grade));
+        this.bossReward = null;
+        return { ok: true, card, monster: m };
     },
 
     // 맵의 몬스터를 다른 빈 길 옆 칸으로 옮긴다. 쓰러져 있으면 새 칸에서 마저 기다린다
@@ -306,7 +361,7 @@ const Game = {
     },
 
     startWave() {
-        if (this.state !== 'prep') return false;
+        if (this.state !== 'prep' || this.bossReward) return false; // 보스 보상을 고르기 전에는 시작하지 않는다
         const bonus = Math.floor(Math.max(0, this.prepTimer)) * COMBAT_RULES.earlyGoldPerSecond;
         if (bonus > 0 && this.waveIndex > 0) {
             this.gold += bonus;
@@ -356,7 +411,7 @@ const Game = {
         this.streakTimer = Math.max(0, this.streakTimer - dt);
         if (this.streakTimer === 0) this.streak = 0;
 
-        if (this.state === 'prep') {
+        if (this.state === 'prep' && !this.bossReward) {
             this.prepTimer -= dt;
             if (this.prepTimer <= 0) this.startWave();
         }
@@ -384,8 +439,10 @@ const Game = {
     endWave() {
         const n = this.waveIndex + 1;
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n;
+        const bossDown = this.bossDefeated;
+        this.bossDefeated = false;
         if (n >= WAVES.length) {
-            this.finish(true);
+            this.finish(true); // 마지막 보스는 보상 없이 승리
             return;
         }
         this.gold += reward;
@@ -395,5 +452,7 @@ const Game = {
         this.waveIndex = n;
         this.prepTimer = COMBAT_RULES.prepTime;
         this.state = 'prep';
+        // 보스를 처치한 웨이브: 준비 단계에 들어가며 보상 3택을 띄운다(전투 중에는 띄우지 않는다)
+        if (bossDown) this.bossReward = this.rollBossReward();
     }
 };

@@ -430,6 +430,31 @@ const SCENES = {
         }
     },
 
+    // 보스 보상 3택: 5번째 웨이브 대마도사를 처치하고 준비 단계에 들어간 순간. 영웅·희귀 몬스터 카드와 300G 카드,
+    // 첫 카드에 마우스를 올린 상태
+    bossReward: {
+        setup: () => {
+            pressButton('start');
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
+            advance(1.6);
+            Game.waveIndex = 4;
+            Game.startWave();
+            const boss = Game.heroes.find(h => h.boss);
+            Game.heroes = [boss];
+            boss.waiting = false;
+            damageHero(boss, 1e9);
+            advance(1.5);
+            if (!Game.bossReward) throw new Error('보스 보상이 뜨지 않았습니다');
+            Game.bossReward = withRandom([0.1, 0, 0.9, 0.99], () => Game.rollBossReward()); // 해골 기사, 저주 사수, 골드
+            UI.update(0);
+            const b = UI.buttons.find(x => x.id === 'reward0');
+            UI.onMove(b.x + 60, b.y + 60);
+            freezeScene();
+        }
+    },
+
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
     archmageIntro: {
         setup: () => {
