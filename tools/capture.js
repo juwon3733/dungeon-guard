@@ -21,8 +21,10 @@ const SCENES = {
     title: { setup: () => {}, freeze: false },
 
     // 선택 화면: 마왕 카드 3장(황금 마왕을 고름), 유물 격자와 고른 유물(마녀의 눈), 이번 판 효과. 금 간 거울에 마우스를 올려 설명을 띄운다
+    // (모두 해금한 기록으로)
     select: {
         setup: () => {
+            unlockAll();
             pressButton('start');
             pressButton('lord_gold_king');
             pressButton('relic_eye');
@@ -34,6 +36,7 @@ const SCENES = {
     // 뼈의 여왕으로 시작한 판: 왕좌의 여왕 그림, 체력 구슬(최대 17), 마왕 탭의 초상(호통)과 유물 칸(푸른 족쇄, 마우스를 올려 설명)
     lordQueen: {
         setup: () => {
+            unlockAll();
             pressButton('start');
             pressButton('lord_bone_queen');
             pressButton('relic_shackles');
@@ -51,6 +54,49 @@ const SCENES = {
             UI.onMove(b.x + 20, b.y + 20);
         },
         afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 영구 수집이 거의 없는 선택 화면: 영혼석 26. 잠긴 마왕(뼈의 여왕)을 눌러 해금 버튼이 뜬 상태, 잠긴 유물은 어둡게 자물쇠와 가격,
+    // 2번째 유물 칸 자리의 칸 사기 버튼(30, 꺼짐, 4 더 필요). 잠긴 모래시계에 마우스를 올려 설명을 띄운다
+    selectLocked: {
+        setup: () => {
+            Meta.data = Meta.sanitize({ souls: 26, relics: ['eye'], runs: 3, bestWave: 4 });
+            pressButton('start');
+            pressButton('relic_eye');
+            pressButton('lord_bone_queen');
+            const b = UI.buttons.find(x => x.id === 'relic_hourglass');
+            UI.onMove(b.x + 20, b.y + 20);
+        }
+    },
+
+    // 도감 몬스터 탭: 본 몬스터 4종은 그림과 이름, 등급, 역할, 능력. 나머지는 검은 실루엣과 ???
+    collection: {
+        setup: () => {
+            Meta.data = Meta.sanitize({ souls: 40, runs: 4, wins: 1, bestWave: 10,
+                seen: ['orc_guard', 'skeleton_archer', 'dark_mage', 'orc_berserker', 'bone_knight'],
+                recipes: ['orc_berserker+skeleton_archer', 'dark_mage+orc_guard'] });
+            pressButton('collection');
+        }
+    },
+
+    // 승리 결과 화면: 영혼석 +35(웨이브 10 x 2 + 승리 15), 보유량, 새 기록(첫 승리, 최고 웨이브)
+    resultSouls: {
+        setup: () => {
+            Meta.data = Meta.sanitize({ souls: 22, runs: 3, bestWave: 6 });
+            startRun();
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
+            advance(1.6);
+            Fx.reset();
+            Game.stats.kills = 214;
+            Game.stats.summoned = 31;
+            Game.stats.merged = 12;
+            Game.stats.time = 1043;
+            Game.waveIndex = WAVES.length - 1;
+            Game.finish(true);
+            UI.update(0);
+        }
     },
 
     // 시작 버튼을 눌러 준비 단계로 들어간 첫 화면: 소환 버튼(현재 비용)과 맵 몬스터 수 0/24, 첫 안내 문구
@@ -526,6 +572,10 @@ const SCENES = {
 const PAGE_HELPERS = () => {
     // 타이틀에서 선택 화면을 거쳐 기본 선택(균열의 군주, 유물 없음)으로 판을 시작한다
     window.startRun = () => { pressButton('start'); pressButton('begin'); };
+    // 영구 수집 기록을 모든 마왕과 유물을 해금한 상태로(유물 칸 1개). 페이지마다 저장소를 비우고 시작해 사용자의 저장과 상관없다
+    window.unlockAll = () => {
+        Meta.data = Meta.sanitize({ lords: Object.keys(DEMON_LORDS), relics: Object.keys(RELICS) });
+    };
     window.pressButton = id => {
         UI.update(0);
         const b = UI.buttons.find(x => x.id === id);
@@ -641,6 +691,7 @@ async function captureScene(browser, url, name, problems) {
     page.on('requestfailed', req => report(`요청 실패: ${req.url()} (${req.failure() && req.failure().errorText})`));
     page.on('response', res => { if (res.status() >= 400) report(`HTTP ${res.status()}: ${res.url()}`); });
 
+    // 새 브라우저 페이지(사용자 프로필이 아님)의 저장소를 비우고 시작한다: 직전 선택과 영구 수집 기록(dungeonGuard.meta)이 없는 첫 실행
     await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { /* 무시 */ } });
     await page.goto(url, { waitUntil: 'load' });
     await page.waitForFunction(() => typeof ready !== 'undefined' && ready === true, null, { timeout: 30000 });

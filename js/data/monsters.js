@@ -246,7 +246,7 @@ const MONSTERS = {
 
 // 조합식: 두 재료(a, b)를 합치면 result가 나온다. 순서는 상관없다. 등급 합치기보다 먼저 적용한다.
 // aRank, bRank는 재료별 최소 랭크(MONSTER_RANKS의 name, 없으면 조건 없음). 조건이 안 맞으면 그 조합식이 없는 것처럼 판단한다.
-// hidden이면 미리 보여 주지 않고, 처음 만들면 "히든 조합 발견!" 연출을 한다(이번 시험판은 발견 기록을 저장하지 않는다)
+// hidden이면 미리 보여 주지 않고, 처음 만들면 "히든 조합 발견!" 연출을 한다. 만든 조합식은 영구 기록(Meta, 도감)에 남는다
 const MONSTER_RECIPES = [
     { a: 'skeleton_archer', b: 'dark_mage', result: 'curse_shooter', hidden: false },
     { a: 'orc_guard', b: 'dark_mage', result: 'orc_berserker', hidden: false },
@@ -254,6 +254,11 @@ const MONSTER_RECIPES = [
     { a: 'orc_berserker', b: 'skeleton_archer', result: 'bone_knight', hidden: true },
     { a: 'bone_knight', aRank: 'A', b: 'curse_shooter', bRank: 'A', result: 'death_lord', hidden: true }
 ];
+
+// 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'
+function recipeKey(r) {
+    return [r.a + (r.aRank ? `:${r.aRank}` : ''), r.b + (r.bRank ? `:${r.bRank}` : '')].sort().join('+');
+}
 
 // 등급별 소환·등급 합치기 후보. 표 순서를 따른다
 function gradePool(grade) {

@@ -33,7 +33,14 @@ const RELIC_COLS = 8;
 const RELIC_GRID_X = 170;
 const RELIC_GRID_Y = 676;
 const PICKED_X = 860; // 고른 유물 칸
-const LOADOUT_KEY = 'dungeonGuard.loadout'; // 직전 선택 저장(localStorage) // 맵 몬스터 곁 장비 그림(화면 px). 48px의 정확히 절반이라 도트 하나가 화면 1px이 되어 흐려지지 않는다
+const LOADOUT_KEY = 'dungeonGuard.loadout'; // 직전 선택 저장(localStorage)
+const UNLOCK_ROW = { x: RELIC_GRID_X, y: 926, w: 960, h: 84 }; // 선택 화면에서 누른 잠긴 유물의 해금 줄
+// 도감: 탭 3개(몬스터, 조합식, 기록). 스크롤 없이 칸으로 나누고 넘치면 쪽을 넘긴다. 표(MONSTERS, MONSTER_RECIPES)를 읽어 그린다
+const COL_TABS = [{ key: 'monster', label: '몬스터' }, { key: 'recipe', label: '조합식' }, { key: 'record', label: '기록' }];
+const COL_TOP = 206; // 내용이 시작하는 높이
+const COL_MON = { cols: 4, rows: 3, w: 420, h: 236, gap: 24 }; // 몬스터 카드
+const COL_RECIPE = { cols: 2, rows: 6, w: 860, h: 100, gap: 16 }; // 조합식 줄
+const WIPE_ARM_TIME = 4; // 기록 지우기를 한 번 누른 뒤 두 번째 누름을 기다리는 시간(초)
 
 const UI = {
     mouse: { x: 0, y: 0 },
@@ -57,6 +64,9 @@ const UI = {
     corruptHintShown: false,
     pressed: null,
     loadout: null, // 선택 화면의 { lord, relics }. 처음 열 때 저장소에서 읽고, 다시 시작해도 남는다
+    unlockFocus: null, // 선택 화면에서 누른 잠긴 마왕이나 유물: { kind: 'lord' | 'relic', id }. 해금 버튼을 한 번 더 눌러 산다
+    collection: null, // 열린 도감: { tab: 'monster' | 'recipe' | 'record', page }. 타이틀과 선택 화면에서 연다
+    wipeArmed: 0, // 기록 지우기를 한 번 누른 뒤 남은 시간. 0보다 크면 다음 누름에 지운다
 
     button(id, x, y, w, h, opts) {
         this.buttons.push(Object.assign({ id, x, y, w, h }, opts));
@@ -75,8 +85,13 @@ const UI = {
     layout() {
         this.buttons = [];
         const G = Game;
+        if ((G.state === 'title' || G.state === 'select') && this.collection) {
+            this.layoutCollection();
+            return;
+        }
         if (G.state === 'title') {
-            this.button('start', GAME_WIDTH / 2 - 190, 760, 380, 92, { label: '던전 지키기', theme: 'gold', size: 38, onClick: () => this.openSelect() });
+            this.button('start', GAME_WIDTH / 2 - 190, 812, 380, 92, { label: '던전 지키기', theme: 'gold', size: 38, onClick: () => this.openSelect() });
+            this.button('collection', GAME_WIDTH / 2 - 120, 922, 240, 62, { label: '도감', size: 28, onClick: () => this.openCollection() });
             return;
         }
         if (G.state === 'select') {
@@ -84,7 +99,7 @@ const UI = {
             return;
         }
         if (G.state === 'victory' || G.state === 'defeat') {
-            this.button('retry', GAME_WIDTH / 2 - 190, 700, 380, 84, {
+            this.button('retry', GAME_WIDTH / 2 - 190, 744, 380, 84, {
                 label: G.state === 'victory' ? '다시 도전' : '첫 웨이브부터 다시', theme: 'gold', size: 30, onClick: () => this.openSelect()
             });
             return;
@@ -125,7 +140,7 @@ const UI = {
             const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - 20) / 2);
             this.button('lightning', BAR_SLOT_X, slotY, skillW, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
             this.button('roar', BAR_SLOT_X + skillW + 10, slotY, skillW, 104, { skill: 'roar', onClick: () => this.useRoar() });
-            for (let i = 0; i < RELIC_RULES.slots; i++) {
+            for (let i = 0; i < Meta.relicSlots(); i++) {
                 const r = this.barRelicRect(i);
                 this.button(`barRelic${i}`, r.x, r.y, r.w, r.h, { barRelic: i });
             }
@@ -149,7 +164,7 @@ const UI = {
 
     // 마왕 탭의 유물 칸: 2줄로 쌓고 칸 수에 따라 열이 는다(보관함과 같은 52px 칸)
     barRelicWidth() {
-        const cols = Math.ceil(RELIC_RULES.slots / 2);
+        const cols = Math.ceil(Meta.relicSlots() / 2);
         return cols * BAG_SLOT + (cols - 1) * BAG_GAP;
     },
 
@@ -158,7 +173,7 @@ const UI = {
         const col = Math.floor(i / 2);
         const row = i % 2;
         // 1줄이면 스킬 칸(높이 104) 가운데에 맞춘다
-        const rows = Math.min(2, RELIC_RULES.slots);
+        const rows = Math.min(2, Meta.relicSlots());
         const y0 = GAME_HEIGHT - BAR_H + Math.max(8, 12 + (104 - rows * BAG_SLOT - (rows - 1) * BAG_GAP) / 2);
         return { x: x0 + col * (BAG_SLOT + BAG_GAP), y: y0 + row * (BAG_SLOT + BAG_GAP), w: BAG_SLOT, h: BAG_SLOT };
     },
@@ -180,9 +195,11 @@ const UI = {
         } catch (e) { /* 저장을 못 해도 이번 창에서는 선택이 남는다 */ }
     },
 
-    // 타이틀의 시작과 결과 화면의 다시 시작: 선택 화면으로. 직전 선택이 남아 있다
+    // 타이틀의 시작과 결과 화면의 다시 시작: 선택 화면으로. 직전 선택이 남아 있다(잠긴 마왕과 유물은 기본값으로 돌린다)
     openSelect() {
         this.loadout = cleanLoadout(this.loadout || this.loadLoadout());
+        this.unlockFocus = null;
+        this.collection = null;
         this.cancel();
         this.returning = [];
         Game.state = 'select';
@@ -206,40 +223,198 @@ const UI = {
         return { x: PICKED_X + i * (RELIC_CELL + RELIC_GAP), y: RELIC_GRID_Y, w: RELIC_CELL, h: RELIC_CELL };
     },
 
+    // 해금 버튼 자리: 잠긴 마왕은 카드 가운데(그림 위), 잠긴 유물은 격자 아래 해금 줄의 오른쪽
+    unlockRect(f) {
+        if (f.kind === 'lord') {
+            const r = this.lordCardRect(Object.keys(DEMON_LORDS).indexOf(f.id));
+            return { x: r.x + r.w / 2 - 150, y: r.y + 172, w: 300, h: 80 };
+        }
+        return { x: UNLOCK_ROW.x + UNLOCK_ROW.w - 300, y: UNLOCK_ROW.y + 6, w: 290, h: UNLOCK_ROW.h - 12 };
+    },
+
     layoutSelect() {
+        const souls = Meta.data.souls;
+        this.button('collection', 60, 22, 180, 64, { label: '도감', size: 28, onClick: () => this.openCollection() });
         Object.keys(DEMON_LORDS).forEach((id, i) => {
             const r = this.lordCardRect(i);
-            this.button(`lord_${id}`, r.x, r.y, r.w, r.h, { lordCard: id, onClick: () => this.pickLord(id) });
+            this.button(`lord_${id}`, r.x, r.y, r.w, r.h, { lordCard: id, locked: !Meta.hasLord(id), onClick: () => this.pickLord(id) });
         });
         Object.keys(RELICS).forEach((id, i) => {
             const r = this.relicCellRect(i);
-            this.button(`relic_${id}`, r.x, r.y, r.w, r.h, { relicId: id, onClick: () => this.toggleRelic(id) });
+            this.button(`relic_${id}`, r.x, r.y, r.w, r.h, { relicId: id, locked: !Meta.hasRelic(id), onClick: () => this.toggleRelic(id) });
         });
-        for (let i = 0; i < RELIC_RULES.slots; i++) {
+        // 고른 유물 칸: 가진 칸, 다음 잠긴 칸 자리에 칸 사기 버튼, 그 뒤는 잠긴 칸(모두 Meta.maxSlots()칸)
+        for (let i = 0; i < Meta.maxSlots(); i++) {
             const r = this.pickedRect(i);
-            const id = this.loadout.relics[i];
-            this.button(`picked${i}`, r.x, r.y, r.w, r.h, { pickedSlot: i, onClick: () => { if (id) this.toggleRelic(id); } });
+            if (i < Meta.relicSlots()) {
+                const id = this.loadout.relics[i];
+                this.button(`picked${i}`, r.x, r.y, r.w, r.h, { pickedSlot: i, onClick: () => { if (id) this.toggleRelic(id); } });
+            } else if (i === Meta.relicSlots()) {
+                const price = Meta.slotPrice();
+                this.button('buy_slot', r.x, r.y, r.w, r.h, { slotBuy: price, disabled: souls < price, onClick: () => this.buySlot() });
+            } else {
+                this.button(`slotLocked${i}`, r.x, r.y, r.w, r.h, { lockedSlot: true });
+            }
+        }
+        // 해금 버튼: 잠긴 것을 누른 뒤에만 나온다. 영혼석이 모자라면 꺼지고 모자란 양을 적는다
+        const f = this.unlockFocus;
+        if (f) {
+            const price = Meta.price(f.kind, f.id);
+            const short = price - souls;
+            const r = this.unlockRect(f);
+            this.button('unlock', r.x, r.y, r.w, r.h, {
+                label: `해금  영혼석 ${price}`, sub: short > 0 ? `영혼석 ${short} 더 필요` : '누르면 삽니다', theme: 'gold', size: 26,
+                disabled: short > 0, onClick: () => this.buyFocused()
+            });
         }
         this.button('begin', GAME_WIDTH - 440, GAME_HEIGHT - 150, 380, 96, {
             label: '시작', sub: DEMON_LORDS[this.loadout.lord].name, theme: 'gold', size: 38, onClick: () => this.beginRun()
         });
     },
 
+    // 마왕 카드를 누른다. 잠긴 마왕은 바로 사지 않고 해금 버튼을 띄운다
     pickLord(id) {
-        if (DEMON_LORDS[id]) this.loadout.lord = id;
+        if (!DEMON_LORDS[id]) return;
+        if (!Meta.hasLord(id)) {
+            this.unlockFocus = { kind: 'lord', id };
+            return;
+        }
+        this.unlockFocus = null;
+        this.loadout.lord = id;
     },
 
-    // 유물을 누르면 넣고, 고른 유물을 다시 누르면 뺀다. 칸이 1개면 다른 유물로 바꾸고, 여러 칸이 다 차면 알린다
+    // 유물을 누르면 넣고, 고른 유물을 다시 누르면 뺀다. 칸이 1개면 다른 유물로 바꾸고, 여러 칸이 다 차면 알린다.
+    // 잠긴 유물은 바로 사지 않고 해금 버튼을 띄운다
     toggleRelic(id) {
+        if (!Meta.hasRelic(id)) {
+            this.unlockFocus = { kind: 'relic', id };
+            return;
+        }
+        this.unlockFocus = null;
         const list = this.loadout.relics;
+        const slots = Meta.relicSlots();
         const at = list.indexOf(id);
         if (at >= 0) list.splice(at, 1);
-        else if (list.length < RELIC_RULES.slots) list.push(id);
-        else if (RELIC_RULES.slots === 1) list.splice(0, 1, id);
+        else if (list.length < slots) list.push(id);
+        else if (slots === 1) list.splice(0, 1, id);
         else {
             this.showToast('유물 칸이 가득 찼습니다. 고른 유물을 다시 눌러 빼세요.');
             Sfx.play('mergeFail');
         }
+    },
+
+    // 해금 버튼: 누른 잠긴 마왕이나 유물을 영혼석으로 사고 바로 고른다(유물은 빈 칸이 있거나 칸이 1개일 때)
+    buyFocused() {
+        const f = this.unlockFocus;
+        if (!f) return;
+        const res = Meta.buy(f.kind, f.id);
+        if (!res.ok) {
+            if (res.reason === 'souls') this.showToast(`영혼석이 ${res.need} 모자랍니다. 판을 끝내면 모입니다.`);
+            Sfx.play('mergeFail');
+            return;
+        }
+        this.unlockFocus = null;
+        Sfx.play('upgrade');
+        if (f.kind === 'lord') {
+            this.loadout.lord = f.id;
+            this.showToast(`${DEMON_LORDS[f.id].name} 해금!`);
+        } else {
+            if (this.loadout.relics.length < Meta.relicSlots() || Meta.relicSlots() === 1) this.toggleRelic(f.id);
+            this.showToast(`${RELICS[f.id].name} 해금!`);
+        }
+    },
+
+    // 유물 칸 사기(잠긴 칸 자리의 버튼)
+    buySlot() {
+        const res = Meta.buySlot();
+        if (!res.ok) {
+            if (res.reason === 'souls') this.showToast(`영혼석이 ${res.need} 모자랍니다.`);
+            Sfx.play('mergeFail');
+            return;
+        }
+        Sfx.play('upgrade');
+        this.showToast(`유물 칸이 ${res.slots}개가 되었습니다.`);
+    },
+
+    // ----- 도감 -----
+
+    openCollection() {
+        this.collection = { tab: 'monster', page: 0 };
+        this.unlockFocus = null;
+        this.wipeArmed = 0;
+    },
+
+    closeCollection() {
+        this.collection = null;
+        this.wipeArmed = 0;
+    },
+
+    setCollectionTab(tab) {
+        this.collection = { tab, page: 0 };
+        this.wipeArmed = 0;
+    },
+
+    // 탭의 쪽 수(칸에 다 들어가면 1)
+    collectionPages(tab) {
+        if (tab === 'monster') return Math.max(1, Math.ceil(Object.keys(MONSTERS).length / (COL_MON.cols * COL_MON.rows)));
+        if (tab === 'recipe') return Math.max(1, Math.ceil(MONSTER_RECIPES.length / (COL_RECIPE.cols * COL_RECIPE.rows)));
+        return 1;
+    },
+
+    turnCollectionPage(step) {
+        const C = this.collection;
+        C.page = clamp(C.page + step, 0, this.collectionPages(C.tab) - 1);
+    },
+
+    // 이번 쪽에 보일 항목과 칸 자리: [{ item, x, y, w, h }]. item은 몬스터 id 또는 조합식
+    collectionCells() {
+        const C = this.collection;
+        const grid = C.tab === 'monster' ? COL_MON : COL_RECIPE;
+        const list = C.tab === 'monster' ? Object.keys(MONSTERS) : MONSTER_RECIPES;
+        const per = grid.cols * grid.rows;
+        const x0 = (GAME_WIDTH - (grid.cols * grid.w + (grid.cols - 1) * grid.gap)) / 2;
+        return list.slice(C.page * per, C.page * per + per).map((item, i) => ({
+            item,
+            x: x0 + (i % grid.cols) * (grid.w + grid.gap),
+            y: COL_TOP + Math.floor(i / grid.cols) * (grid.h + grid.gap),
+            w: grid.w, h: grid.h
+        }));
+    },
+
+    layoutCollection() {
+        const C = this.collection;
+        COL_TABS.forEach((t, i) => {
+            this.button(`col_tab_${t.key}`, GAME_WIDTH / 2 - 340 + i * 230, 30, 220, 64, {
+                tab: 'collection', on: C.tab === t.key, label: t.label, onClick: () => this.setCollectionTab(t.key)
+            });
+        });
+        this.button('col_close', GAME_WIDTH - 220, 30, 170, 64, { label: '닫기 (Esc)', size: 24, onClick: () => this.closeCollection() });
+        const pages = this.collectionPages(C.tab);
+        if (pages > 1) {
+            this.button('col_prev', GAME_WIDTH / 2 - 250, GAME_HEIGHT - 96, 120, 64, { label: '◀', size: 28, disabled: C.page === 0, onClick: () => this.turnCollectionPage(-1) });
+            this.button('col_next', GAME_WIDTH / 2 + 130, GAME_HEIGHT - 96, 120, 64, { label: '▶', size: 28, disabled: C.page >= pages - 1, onClick: () => this.turnCollectionPage(1) });
+        }
+        if (C.tab === 'record') {
+            const armed = this.wipeArmed > 0;
+            this.button('col_wipe', GAME_WIDTH / 2 - 270, 900, 540, 88, {
+                label: armed ? '정말 지울까요? 한 번 더 누르세요' : '기록 지우기',
+                sub: armed ? '영혼석, 해금, 도감이 모두 처음으로 돌아갑니다' : null,
+                theme: 'danger', size: armed ? 26 : 30, onClick: () => this.pressWipe()
+            });
+        }
+    },
+
+    // 기록 지우기: 한 번 누르면 확인을 기다리고, WIPE_ARM_TIME 안에 한 번 더 누르면 지운다. 지운 뒤 바로 처음 상태로
+    pressWipe() {
+        if (this.wipeArmed <= 0) {
+            this.wipeArmed = WIPE_ARM_TIME;
+            return;
+        }
+        this.wipeArmed = 0;
+        Meta.wipe();
+        if (this.loadout) this.loadout = cleanLoadout(this.loadout);
+        this.unlockFocus = null;
+        this.showToast('기록을 지웠습니다. 처음 상태로 돌아갔습니다.', 2.4);
     },
 
     // 시작 버튼: 선택을 저장하고 그 마왕과 유물로 판을 시작한다
@@ -690,6 +865,16 @@ const UI = {
     onKey(code) {
         const G = Game;
         if (code === 'KeyM') { Sfx.setMuted(!Sfx.muted); saveSettings(); return; }
+        if (this.collection && (G.state === 'title' || G.state === 'select')) {
+            // 도감: Esc 닫기, 좌우 화살표로 쪽 넘기기, 1·2·3 탭
+            const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+            const tab = m && COL_TABS[Number(m[1]) - 1];
+            if (code === 'Escape') this.closeCollection();
+            else if (code === 'ArrowLeft') this.turnCollectionPage(-1);
+            else if (code === 'ArrowRight') this.turnCollectionPage(1);
+            else if (tab) this.setCollectionTab(tab.key);
+            return;
+        }
         if (G.state === 'title' || G.state === 'victory' || G.state === 'defeat') {
             if (code === 'Space' || code === 'Enter') this.openSelect();
             return;
@@ -700,6 +885,7 @@ const UI = {
             const id = m && Object.keys(DEMON_LORDS)[Number(m[1]) - 1];
             if (id) this.pickLord(id);
             else if (code === 'Space' || code === 'Enter') this.beginRun();
+            else if (code === 'Escape') this.unlockFocus = null;
             return;
         }
         if (G.bossReward) {
@@ -721,6 +907,7 @@ const UI = {
     },
 
     update(dt) {
+        this.wipeArmed = Math.max(0, this.wipeArmed - dt);
         if (this.toast) {
             this.toast.age += dt;
             if (this.toast.age > this.toast.life) this.toast = null;
@@ -841,6 +1028,12 @@ const UI = {
 
     draw(ctx) {
         const G = Game;
+        if ((G.state === 'title' || G.state === 'select') && this.collection) {
+            this.drawCollection(ctx);
+            this.drawButtons(ctx);
+            this.drawToast(ctx);
+            return;
+        }
         if (G.state === 'title') {
             this.drawTitle(ctx);
             this.drawButtons(ctx);
@@ -925,13 +1118,19 @@ const UI = {
         ctx.fillStyle = 'rgba(5,2,16,0.86)';
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         UIKit.text(ctx, '마왕과 유물 고르기', GAME_WIDTH / 2, 56, 46, '#ffe08a', 'center');
+        this.drawSouls(ctx, GAME_WIDTH - 60, 54, Meta.data.souls);
+        const focus = this.unlockFocus;
 
-        // 마왕 카드: 그림(128px를 2배), 이름, 효과, 설명. 고른 카드는 금색
+        // 마왕 카드: 그림(128px를 2배), 이름, 효과, 설명. 고른 카드는 금색. 잠긴 카드는 어둡게 자물쇠와 가격
         for (const b of this.buttons.filter(x => x.lordCard)) {
             const lord = DEMON_LORDS[b.lordCard];
             const on = L.lord === b.lordCard;
             const hover = this.hoverButton === b;
             const cx = b.x + b.w / 2;
+            if (b.locked) {
+                this.drawLockedLord(ctx, b, lord, hover, focus && focus.kind === 'lord' && focus.id === b.lordCard);
+                continue;
+            }
             UIKit.frame(ctx, b.x, b.y, b.w, b.h, on ? 'panel' : (hover ? 'buttonHover' : 'dark'), 8);
             if (on) {
                 ctx.save();
@@ -967,6 +1166,21 @@ const UI = {
             const picked = L.relics.includes(b.relicId);
             const hover = this.hoverButton === b;
             UIKit.frame(ctx, b.x, b.y, b.w, b.h, hover ? 'buttonHover' : 'dark', 4);
+            if (b.locked) {
+                // 잠긴 유물: 그림을 어둡게, 자물쇠와 가격
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
+                ctx.restore();
+                this.drawLock(ctx, b.x + b.w / 2, b.y + 24, 14, '#c9b6ea');
+                UIKit.text(ctx, String(Meta.price('relic', b.relicId)), b.x + b.w / 2, b.y + b.h - 15, 18, '#d9b8ff', 'center');
+                if (focus && focus.kind === 'relic' && focus.id === b.relicId) {
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = '#c79bff';
+                    ctx.strokeRect(b.x + 1.5, b.y + 1.5, b.w - 3, b.h - 3);
+                }
+                continue;
+            }
             this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
             if (picked) {
                 ctx.lineWidth = 3;
@@ -975,10 +1189,23 @@ const UI = {
             }
         }
         UIKit.plain(ctx, '누르면 넣고, 다시 누르면 뺍니다. 마우스를 올리거나 누르면 효과가 보입니다.', RELIC_GRID_X, 852, 19, '#c9b6ea');
-        UIKit.plain(ctx, '1·2·3 마왕 고르기 · Enter 시작', RELIC_GRID_X, 884, 19, '#8a7fa8');
+        UIKit.plain(ctx, '잠긴 것은 누른 뒤 해금 버튼으로 삽니다. 영혼석은 판이 끝날 때 받습니다. · 1·2·3 마왕 · Enter 시작', RELIC_GRID_X, 884, 19, '#8a7fa8');
+        if (focus && focus.kind === 'relic') this.drawUnlockRow(ctx, focus.id);
 
         // 고른 유물 칸과 이름·효과
-        UIKit.text(ctx, `고른 유물 ${L.relics.length}/${RELIC_RULES.slots}`, PICKED_X, 638, 26, '#ffe08a');
+        UIKit.text(ctx, `고른 유물 ${L.relics.length}/${Meta.relicSlots()}`, PICKED_X, 638, 26, '#ffe08a');
+        // 잠긴 칸: 다음 칸은 사기 버튼(자물쇠와 가격, 모자라면 꺼짐), 그 뒤는 자물쇠만
+        for (const b of this.buttons.filter(x => x.slotBuy !== undefined || x.lockedSlot)) {
+            const buy = b.slotBuy !== undefined;
+            UIKit.frame(ctx, b.x, b.y, b.w, b.h, buy && !b.disabled ? (this.hoverButton === b ? 'buttonHover' : 'button') : 'off', 4);
+            this.drawLock(ctx, b.x + b.w / 2, b.y + (buy ? 24 : b.h / 2), 14, buy && !b.disabled ? '#ffffff' : '#6f6588');
+            if (!buy) continue;
+            UIKit.text(ctx, `+${b.slotBuy}`, b.x + b.w / 2, b.y + b.h - 15, 18, b.disabled ? '#a59db5' : '#ffe08a', 'center');
+            const tx = PICKED_X + Meta.maxSlots() * (RELIC_CELL + RELIC_GAP) + 4; // 잠긴 칸들 오른쪽
+            UIKit.plain(ctx, `유물 칸 +1 · 영혼석 ${b.slotBuy}`, tx, b.y + 20, 18, '#ffe08a');
+            const short = b.slotBuy - Meta.data.souls;
+            UIKit.plain(ctx, short > 0 ? `영혼석 ${short} 더 필요` : '누르면 삽니다', tx, b.y + 46, 17, short > 0 ? '#ff9a9a' : '#9dffb0');
+        }
         for (const b of this.buttons.filter(x => x.pickedSlot !== undefined)) {
             const id = L.relics[b.pickedSlot];
             UIKit.frame(ctx, b.x, b.y, b.w, b.h, id && this.hoverButton === b ? 'buttonHover' : 'dark', 4);
@@ -1019,9 +1246,104 @@ const UI = {
         if (!b) return;
         const id = b.relicId || (b.pickedSlot !== undefined ? this.loadout.relics[b.pickedSlot] : null);
         if (!id) return;
-        // 유물 격자와 고른 칸을 가리지 않게 격자 아래(안내 문구 자리)에 띄운다
+        // 유물 격자와 고른 칸을 가리지 않게 격자 아래(안내 문구 자리)에 띄운다. 잠긴 유물은 이름 뒤에 가격
         const y = RELIC_GRID_Y + 2 * (RELIC_CELL + RELIC_GAP) + 4;
-        this.drawTooltip(ctx, clamp(b.x - 183, 12, 1330 - 442), y, RELICS[id].name, effectLines(RELICS[id].effects).join(', '));
+        const title = RELICS[id].name + (Meta.hasRelic(id) ? '' : `  (잠김 · 영혼석 ${Meta.price('relic', id)})`);
+        this.drawTooltip(ctx, clamp(b.x - 183, 12, 1330 - 442), y, title, effectLines(RELICS[id].effects).join(', '));
+    },
+
+    // 잠긴 마왕 카드: 그림은 어둡게, 자물쇠와 가격, 이름과 효과는 흐리게. 누른 카드(focused)는 보라 테두리와 해금 버튼
+    drawLockedLord(ctx, b, lord, hover, focused) {
+        const cx = b.x + b.w / 2;
+        UIKit.frame(ctx, b.x, b.y, b.w, b.h, hover ? 'buttonHover' : 'dark', 8);
+        const img = Assets.get(lord.sprite);
+        if (img) {
+            ctx.save();
+            ctx.globalAlpha = 0.22;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, Math.round(cx - img.width), Math.round(b.y + 258 - lord.footPx * 2), img.width * 2, img.height * 2);
+            ctx.restore();
+        }
+        ctx.fillStyle = 'rgba(5,2,16,0.45)';
+        ctx.fillRect(b.x + 8, b.y + 8, b.w - 16, b.h - 16);
+        if (!focused) {
+            this.drawLock(ctx, cx, b.y + 150, 34, '#d9c8f5');
+            UIKit.text(ctx, `영혼석 ${Meta.price('lord', b.lordCard)}`, cx, b.y + 228, 26, '#d9b8ff', 'center');
+        }
+        const index = Object.keys(DEMON_LORDS).indexOf(b.lordCard) + 1;
+        UIKit.text(ctx, String(index), b.x + 26, b.y + 30, 24, '#6f6588', 'center');
+        UIKit.text(ctx, lord.name, cx, b.y + 290, 34, '#a59db5', 'center');
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        const y = this.drawEffectLines(ctx, lord.effects, cx, b.y + 330, 22, 30, 'center');
+        ctx.font = `19px ${UI_FONT}`;
+        this.wrapLines(ctx, lord.desc, b.w - 60).forEach((line, i) => UIKit.plain(ctx, line, cx, y + 8 + i * 26, 19, '#c9b6ea', 'center'));
+        ctx.restore();
+        if (focused) {
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#c79bff';
+            ctx.strokeRect(b.x + 2.5, b.y + 2.5, b.w - 5, b.h - 5);
+        }
+    },
+
+    // 누른 잠긴 유물의 해금 줄: 그림, 이름, 효과. 해금 버튼은 layoutSelect가 오른쪽에 놓는다
+    drawUnlockRow(ctx, id) {
+        const R = UNLOCK_ROW;
+        UIKit.frame(ctx, R.x, R.y, R.w, R.h, 'panel', 6);
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        this.drawRelicIcon(ctx, id, R.x + 18, R.y + (R.h - 48) / 2);
+        ctx.restore();
+        this.drawLock(ctx, R.x + 58, R.y + R.h - 22, 9, '#d9c8f5');
+        UIKit.text(ctx, RELICS[id].name, R.x + 84, R.y + 28, 24, '#ffffff');
+        UIKit.plain(ctx, effectLines(RELICS[id].effects).join(', '), R.x + 84, R.y + 60, 19, '#9dffb0');
+    },
+
+    // 자물쇠 그림(가운데 cx, cy, 몸통 너비 s)
+    drawLock(ctx, cx, cy, s, color) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(3, s * 0.22);
+        ctx.beginPath();
+        ctx.arc(cx, cy - s * 0.25, s * 0.42, Math.PI, 0);
+        ctx.lineTo(cx + s * 0.42, cy + s * 0.05);
+        ctx.moveTo(cx - s * 0.42, cy + s * 0.05);
+        ctx.lineTo(cx - s * 0.42, cy - s * 0.25);
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.fillRect(Math.round(cx - s * 0.65), Math.round(cy), Math.round(s * 1.3), Math.round(s * 0.95));
+        ctx.fillStyle = '#1a1028';
+        ctx.fillRect(Math.round(cx - s * 0.08), Math.round(cy + s * 0.25), Math.max(2, Math.round(s * 0.16)), Math.round(s * 0.4));
+        ctx.restore();
+    },
+
+    // 영혼석 표시: 보라 결정 그림과 수(오른쪽 끝 x에 맞춘다)
+    drawSouls(ctx, right, y, souls) {
+        const label = `영혼석 ${souls}`;
+        ctx.font = `30px ${UI_FONT}`;
+        const w = ctx.measureText(label).width;
+        this.drawSoulGem(ctx, right - w - 26, y, 15);
+        UIKit.text(ctx, label, right, y, 30, '#e6c8ff', 'right');
+    },
+
+    drawSoulGem(ctx, cx, cy, r) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r * 0.75, cy - r * 0.2);
+        ctx.lineTo(cx, cy + r);
+        ctx.lineTo(cx - r * 0.75, cy - r * 0.2);
+        ctx.closePath();
+        const g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+        g.addColorStop(0, '#f2dcff');
+        g.addColorStop(0.5, '#b07cff');
+        g.addColorStop(1, '#5a2fb0');
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#07040e';
+        ctx.stroke();
+        ctx.restore();
     },
 
     // 마왕 탭의 유물 칸(고른 유물 그림, 빈 칸은 어둡게)
@@ -1402,17 +1724,18 @@ const UI = {
             if (b.bagSlot !== undefined) continue; // 보관함 칸은 drawBag이 그린다
             if (b.barRelic !== undefined) continue; // 마왕 탭 유물 칸은 drawBarRelics가 그린다
             if (b.lordCard || b.relicId || b.pickedSlot !== undefined) continue; // 선택 화면 칸은 drawSelect가 그린다
+            if (b.slotBuy !== undefined || b.lockedSlot) continue; // 잠긴 유물 칸과 칸 사기 버튼도 drawSelect가 그린다
             if (b.skill) this.drawSkillButton(ctx, b, hover);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, hover);
             else if (b.tab) this.drawTabButton(ctx, b, hover);
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, hover);
             else {
-                let theme = b.theme || 'button';
+                let theme = b.disabled ? 'off' : (b.theme || 'button');
                 if (hover) theme = theme === 'gold' ? 'goldHover' : (theme === 'danger' ? 'dangerHover' : 'buttonHover');
                 UIKit.frame(ctx, b.x, b.y, b.w, b.h, theme, 6);
                 const ly = b.y + b.h / 2 - (b.sub ? 12 : 0);
-                UIKit.text(ctx, b.label, b.x + b.w / 2, ly, b.size || 24, '#ffffff', 'center');
-                if (b.sub) UIKit.text(ctx, b.sub, b.x + b.w / 2, ly + 30, 18, '#fff2d0', 'center');
+                UIKit.text(ctx, b.label, b.x + b.w / 2, ly, b.size || 24, b.disabled ? '#a59db5' : '#ffffff', 'center');
+                if (b.sub) UIKit.text(ctx, b.sub, b.x + b.w / 2, ly + 30, 18, b.disabled ? '#ff9a9a' : '#fff2d0', 'center');
             }
         }
     },
@@ -1621,7 +1944,7 @@ const UI = {
     },
 
     drawTabButton(ctx, b, hover) {
-        const on = this.tab === b.tab;
+        const on = b.on !== undefined ? b.on : this.tab === b.tab; // 도감 탭은 on을 함께 넘긴다
         UIKit.frame(ctx, b.x, b.y, b.w, b.h, on ? 'gold' : (hover ? 'buttonHover' : 'dark'), 6);
         UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2, 26, on ? '#ffffff' : '#c9b6ea', 'center');
     },
@@ -1895,18 +2218,20 @@ const UI = {
         ctx.fillText('던전 수호대', cx, 310 + lift);
         ctx.restore();
         UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 442, 36, '#ffffff', 'center');
-        UIKit.frame(ctx, cx - 460, 488, 920, 252, 'panel', 8);
         const lines = [
             `소환(S)하면 몬스터가 길 옆 칸에 바로 나옵니다. 맵에 ${SUMMON_RULES.maxField}마리까지 둡니다.`,
             '몬스터를 다른 몬스터 위에 놓으면 합쳐 더 강한 몬스터가 됩니다.',
             '같은 등급 2마리는 상위 등급으로, 조합식은 정해진 몬스터로. 숨은 조합도 있습니다.',
             '보스와 정예가 주는 장비는 하단 보관함에서 몬스터 위로 끌어 끼웁니다.',
             '시작 전에 마왕과 유물을 고릅니다. 유물은 판 중에는 얻지 않습니다.',
+            '판이 끝나면 영혼석을 받아 마왕, 유물, 유물 칸을 해금합니다.',
             CORRUPTION_ENABLED && '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
             '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!'
         ].filter(Boolean);
-        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 526 + i * 40, 26, '#efe6ff', 'center'));
-        UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층', cx, 900, 24, '#b8a9d0', 'center');
+        UIKit.frame(ctx, cx - 520, 484, 1040, 52 + lines.length * 38, 'panel', 8);
+        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 520 + i * 38, 25, '#efe6ff', 'center'));
+        this.drawSouls(ctx, GAME_WIDTH - 60, 54, Meta.data.souls);
+        UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층 · 본 몬스터와 찾은 조합식은 도감에 남습니다', cx, 1030, 22, '#b8a9d0', 'center');
     },
 
     drawResult(ctx) {
@@ -1915,13 +2240,13 @@ const UI = {
         ctx.fillStyle = 'rgba(4,2,14,0.7)';
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         const cx = GAME_WIDTH / 2;
-        UIKit.frame(ctx, cx - 430, 230, 860, 590, 'panel', 10);
-        UIKit.text(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 310, 62, win ? '#ffe08a' : '#ff8f9f', 'center');
+        UIKit.frame(ctx, cx - 430, 150, 860, 700, 'panel', 10);
+        UIKit.text(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 230, 62, win ? '#ffe08a' : '#ff8f9f', 'center');
         const lord = G.lordDef();
         const portrait = Assets.get(win || !lord.cast ? lord.sprite : lord.cast);
         if (portrait) {
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(portrait, cx - 390, 370, 256, 256);
+            ctx.drawImage(portrait, cx - 390, 290, 256, 256);
         }
         const t = Math.round(G.stats.time);
         const rows = [
@@ -1933,9 +2258,185 @@ const UI = {
         ].filter(Boolean);
         if (!win) rows.splice(0, 1, ['막아 낸 웨이브', `${G.waveIndex} / ${WAVES.length}`]);
         rows.forEach(([k, v], i) => {
-            UIKit.plain(ctx, k, cx - 110, 408 + i * 50, 28, '#c9b6ea');
-            UIKit.text(ctx, v, cx + 380, 408 + i * 50, 30, '#ffffff', 'right');
+            UIKit.plain(ctx, k, cx - 110, 328 + i * 50, 28, '#c9b6ea');
+            UIKit.text(ctx, v, cx + 380, 328 + i * 50, 30, '#ffffff', 'right');
         });
-        UIKit.plain(ctx, win ? '"고생했다. 다음 지역은 2단계에서 만들어 두마."' : '"내 의자 다시 사 와."', cx, 660, 24, '#efe6ff', 'center');
+        // 영혼석: 받은 양(막은 웨이브 x2, 승리 보너스)과 보유량, 새 기록
+        const res = G.runResult;
+        if (res) {
+            ctx.fillStyle = 'rgba(216,169,79,0.45)';
+            ctx.fillRect(cx - 390, 580, 780, 2);
+            this.drawSoulGem(ctx, cx - 360, 622, 18);
+            UIKit.text(ctx, `영혼석 +${res.souls}`, cx - 330, 622, 36, '#e6c8ff');
+            const how = `웨이브 ${res.waves} x ${META_RULES.soulsPerWave}${win ? ` + 승리 ${META_RULES.winBonus}` : ''}`;
+            UIKit.plain(ctx, how, cx - 330, 660, 19, '#b8a9d0');
+            UIKit.text(ctx, `보유 ${res.total}`, cx + 380, 622, 28, '#ffffff', 'right');
+            const news = [res.firstWin && '첫 승리!', res.bestWave && `최고 웨이브 ${res.waves}`].filter(Boolean);
+            if (news.length) UIKit.text(ctx, `새 기록: ${news.join(' · ')}`, cx + 380, 660, 22, '#ffe08a', 'right');
+        }
+        UIKit.plain(ctx, win ? '"고생했다. 다음 지역은 2단계에서 만들어 두마."' : '"내 의자 다시 사 와."', cx, 704, 24, '#efe6ff', 'center');
+    },
+
+    // ----- 도감 그리기 -----
+
+    // 못 본 몬스터의 검은 실루엣(그림의 모양만 검게). 그림마다 한 번 만들어 둔다
+    silhouette(img) {
+        this.silhouettes = this.silhouettes || new Map();
+        let c = this.silhouettes.get(img);
+        if (!c) {
+            c = document.createElement('canvas');
+            c.width = img.width;
+            c.height = img.height;
+            const g = c.getContext('2d');
+            g.drawImage(img, 0, 0);
+            g.globalCompositeOperation = 'source-in';
+            g.fillStyle = '#000000';
+            g.fillRect(0, 0, c.width, c.height);
+            this.silhouettes.set(img, c);
+        }
+        return c;
+    },
+
+    // 몬스터 그림 칸(본 것) 또는 실루엣 칸(못 본 것, 회색 테두리)
+    drawDexIcon(ctx, type, x, y, size, known) {
+        if (known) {
+            this.drawMonsterIcon(ctx, type, x, y, size);
+            return;
+        }
+        ctx.fillStyle = '#3a2f52';
+        ctx.fillRect(x, y, size, size);
+        const img = Assets.get(`${MONSTERS[type].sprite}/rotations/south`);
+        if (img) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, size, size);
+            ctx.clip();
+            ctx.imageSmoothingEnabled = false;
+            const s = img.width * Math.max(1, Math.floor(size / img.width));
+            ctx.drawImage(this.silhouette(img), x + (size - s) / 2, y + (size - s) / 2, s, s);
+            ctx.restore();
+        }
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#5d5470';
+        ctx.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
+    },
+
+    drawCollection(ctx) {
+        const C = this.collection;
+        ctx.fillStyle = 'rgba(5,2,16,0.95)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        UIKit.text(ctx, '도감', 70, 62, 46, '#ffe08a');
+        if (C.tab === 'monster') this.drawDexMonsters(ctx);
+        else if (C.tab === 'recipe') this.drawDexRecipes(ctx);
+        else this.drawDexRecord(ctx);
+        const pages = this.collectionPages(C.tab);
+        if (pages > 1) UIKit.text(ctx, `${C.page + 1} / ${pages}`, GAME_WIDTH / 2, GAME_HEIGHT - 64, 28, '#ffffff', 'center');
+    },
+
+    // 몬스터 탭: 표 순서대로 카드. 본 것은 그림, 이름, 등급, 역할, 능력, 설명. 못 본 것은 실루엣과 ???
+    drawDexMonsters(ctx) {
+        const ids = Object.keys(MONSTERS);
+        const seen = ids.filter(id => Meta.hasSeen(id)).length;
+        UIKit.text(ctx, `본 몬스터 ${seen} / ${ids.length}`, 70, 150, 28, '#ffffff');
+        UIKit.plain(ctx, '소환, 합치기, 보스 보상으로 맵에 나온 몬스터가 기록됩니다.', 380, 152, 20, '#b8a9d0');
+        for (const c of this.collectionCells()) {
+            const type = c.item;
+            const def = MONSTERS[type];
+            const known = Meta.hasSeen(type);
+            UIKit.frame(ctx, c.x, c.y, c.w, c.h, known ? 'panel' : 'dark', 8);
+            this.drawDexIcon(ctx, type, c.x + 16, c.y + 16, 96, known);
+            const tx = c.x + 128;
+            if (!known) {
+                UIKit.text(ctx, '???', tx, c.y + 40, 30, '#8a7fa8');
+                UIKit.plain(ctx, '아직 만나지 못했습니다', tx, c.y + 78, 18, '#6f6588');
+                continue;
+            }
+            const grade = MONSTER_GRADES[def.grade];
+            UIKit.text(ctx, def.name, tx, c.y + 36, 26, grade.light);
+            UIKit.plain(ctx, `${grade.name} · ${MONSTER_ROLES[def.role].name}`, tx, c.y + 70, 19, '#e4d8fa');
+            UIKit.plain(ctx, MONSTER_FAMILIES[def.family] || '', tx, c.y + 98, 17, '#b8a9d0');
+            // 능력과 설명은 그림 아래 전체 너비로 줄을 나눈다
+            let y = c.y + 134;
+            const maxW = c.w - 32;
+            ctx.font = `16px ${UI_FONT}`;
+            const lines = [];
+            for (const a of def.abilities) {
+                const kind = ABILITY_KINDS[a.kind];
+                this.wrapLines(ctx, `${kind.name}: ${kind.desc(a)}`, maxW).forEach(t => lines.push([t, '#ffb0e8']));
+            }
+            if (!def.abilities.length) lines.push(['능력 없음', '#8a7fa8']);
+            this.wrapLines(ctx, def.desc || '', maxW).forEach(t => lines.push([t, '#f2e6ff']));
+            for (const [t, color] of lines.slice(0, 4)) {
+                UIKit.plain(ctx, t, c.x + 16, y, 16, color);
+                y += 23;
+            }
+        }
+    },
+
+    // 조합식 탭: 공개 조합식은 재료와 결과(전설 결과는 찾기 전 ???). 히든은 찾기 전 ???, 찾으면 재료와 랭크 조건
+    drawDexRecipes(ctx) {
+        const hidden = MONSTER_RECIPES.filter(r => r.hidden);
+        const foundHidden = hidden.filter(r => Meta.hasRecipe(r)).length;
+        UIKit.text(ctx, `조합식 ${MONSTER_RECIPES.length - hidden.length}개 공개 · 히든 ${foundHidden} / ${hidden.length} 찾음`, 70, 150, 28, '#ffffff');
+        UIKit.plain(ctx, '몬스터를 다른 몬스터 위에 놓아 합칩니다. 랭크 조건은 재료별 최소 랭크입니다.', 700, 152, 20, '#b8a9d0');
+        for (const c of this.collectionCells()) {
+            const r = c.item;
+            const found = Meta.hasRecipe(r);
+            const open = !r.hidden || found;
+            UIKit.frame(ctx, c.x, c.y, c.w, c.h, open ? 'panel' : 'dark', 6);
+            const cy = c.y + c.h / 2;
+            // 숨긴 칸은 실루엣도 없이 '?'(모양으로 몬스터를 알아볼 수 없게)
+            const unknownBox = x => {
+                ctx.fillStyle = '#1d1630';
+                ctx.fillRect(x, c.y + 14, 72, 72);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#5d5470';
+                ctx.strokeRect(x + 1.5, c.y + 15.5, 69, 69);
+                UIKit.text(ctx, '?', x + 36, c.y + 50, 40, '#8a7fa8', 'center');
+            };
+            const side = (type, rank, x, show) => {
+                if (show) this.drawMonsterIcon(ctx, type, x, c.y + 14, 72);
+                else unknownBox(x);
+                const label = show ? MONSTERS[type].name + (rank ? ` ${rank}+` : '') : '???';
+                UIKit.plain(ctx, label, x + 82, cy, 19, show ? '#ffffff' : '#8a7fa8');
+            };
+            side(r.a, r.aRank, c.x + 14, open);
+            UIKit.text(ctx, '+', c.x + 284, cy, 30, '#ffffff', 'center');
+            side(r.b, r.bRank, c.x + 306, open);
+            UIKit.text(ctx, '=', c.x + 576, cy, 30, '#ffd76a', 'center');
+            // 결과: 전설은 찾기 전까지 숨긴다
+            const res = MONSTERS[r.result];
+            const showResult = open && (res.grade !== 'legendary' || found);
+            if (showResult) this.drawMonsterIcon(ctx, r.result, c.x + 598, c.y + 14, 72);
+            else unknownBox(c.x + 598);
+            UIKit.plain(ctx, showResult ? res.name : '???', c.x + 680, cy, 19, showResult ? MONSTER_GRADES[res.grade].light : '#8a7fa8');
+            if (r.hidden) UIKit.text(ctx, found ? '히든' : '히든 조합식', c.x + c.w - 12, c.y + 16, 16, '#ffd76a', 'right');
+        }
+    },
+
+    // 기록 탭: 판 수, 승리 수, 최고 웨이브, 영혼석과 도감 수. 기록 지우기 버튼은 layoutCollection이 놓는다
+    drawDexRecord(ctx) {
+        const d = Meta.data;
+        const cx = GAME_WIDTH / 2;
+        const hidden = MONSTER_RECIPES.filter(r => r.hidden);
+        UIKit.frame(ctx, cx - 420, COL_TOP, 840, 540, 'panel', 10);
+        const rows = [
+            ['판 수', `${d.runs}판`],
+            ['승리 수', `${d.wins}번`],
+            ['최고 웨이브', `${d.bestWave} / ${WAVES.length}`],
+            ['영혼석', `${d.souls}`],
+            ['본 몬스터', `${d.seen.length} / ${Object.keys(MONSTERS).length}`],
+            ['찾은 히든 조합식', `${hidden.filter(r => Meta.hasRecipe(r)).length} / ${hidden.length}`],
+            ['유물 칸', `${d.slots} / ${Meta.maxSlots()}`]
+        ];
+        rows.forEach(([k, v], i) => {
+            const y = COL_TOP + 56 + i * 68;
+            UIKit.plain(ctx, k, cx - 360, y, 30, '#c9b6ea');
+            ctx.font = `34px ${UI_FONT}`;
+            if (k === '영혼석') this.drawSoulGem(ctx, cx + 360 - ctx.measureText(v).width - 30, y, 15);
+            UIKit.text(ctx, v, cx + 360, y, 34, k === '영혼석' ? '#e6c8ff' : '#ffffff', 'right');
+        });
+        UIKit.plain(ctx, `판이 끝나면 막은 웨이브 수 x ${META_RULES.soulsPerWave}, 승리하면 ${META_RULES.winBonus}를 더 받습니다.`, cx, 812, 21, '#b8a9d0', 'center');
+        UIKit.plain(ctx, '기록 지우기는 두 번 눌러야 합니다. 직전 선택의 잠긴 마왕과 유물은 기본값으로 돌아갑니다.', cx, 852, 19, '#8a7fa8', 'center');
     }
 };
