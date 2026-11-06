@@ -25,39 +25,41 @@ const dragTo = (from, to) => {
     for (let i = 1; i <= 4; i++) UI.onMove(from[0] + (to[0] - from[0]) * i / 4, from[1] + (to[1] - from[1]) * i / 4);
     UI.onUp(to[0], to[1]);
 };
-const benchXY = i => { const r = UI.benchRect(i); return [r.x + r.w / 2, r.y + r.h / 2]; };
 const cellXY = (c, r) => [tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM];
 const monXY = m => [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM];
-// Math.random을 고정한다. 배열이면 부를 때마다 차례로 돌려준다
+// Math.random을 고정한다. 배열이면 부를 때마다 차례로 돌려주고, 다 쓰면 0을 돌려준다
 const withRandom = (v, fn) => {
     const old = Math.random;
     const list = Array.isArray(v) ? v.slice() : null;
-    Math.random = () => (list ? list.shift() : v);
+    Math.random = () => (list ? (list.length ? list.shift() : 0) : v);
     try { return fn(); } finally { Math.random = old; }
 };
-const benchIs = (...types) => assert.strictEqual(Game.bench.map(t => t || '-').join(), types.join(), 'bench ' + Game.bench.join());
 
 // 시작
 assert.strictEqual(Game.state, 'title');
 btn('start');
 assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
-// 시작 골드는 그대로(130)이고 소환(40G)을 세 번 할 수 있다
-assert.strictEqual(SUMMON_RULES.cost, 40);
-assert(Math.floor(COMBAT_RULES.startGold / SUMMON_RULES.cost) >= 3, 'start gold allows 3 summons');
+// 소환 비용: 25G에서 시작해 소환할 때마다 1G씩 올라 60G에서 멈춘다. 맵에는 24마리까지
+assert.strictEqual(SUMMON_RULES.cost, 25);
+assert.strictEqual(SUMMON_RULES.costStep, 1);
+assert.strictEqual(SUMMON_RULES.maxCost, 60);
+assert.strictEqual(SUMMON_RULES.maxField, 24);
+assert.strictEqual(Game.summonCost(), 25);
+assert(BUILD_CELLS.size > SUMMON_RULES.maxField, 'enough build cells for the cap');
 
-// 몬스터 탭: 소환 버튼과 빈 대기 칸 5개. 예전 몬스터 슬롯과 스킬 슬롯은 없다
+// 몬스터 탭: 소환 버튼만 있다. 대기 칸과 예전 몬스터 슬롯, 스킬 슬롯은 없다
 assert.strictEqual(UI.tab, 'monster');
 assert(hasBtn('summon'));
-for (let i = 0; i < 5; i++) assert(hasBtn('bench_' + i), 'bench slot ' + i);
-assert(!hasBtn('bench_5') && !hasBtn('place_orc_guard'));
+assert(!UI.buttons.some(b => b.id.startsWith('bench')), 'no bench slots');
+assert(!('bench' in Game) && !Game.deploy && !Game.sellBench, 'bench removed');
+assert(!hasBtn('place_orc_guard'));
 assert(!hasBtn('lightning') && !hasBtn('roar'));
-benchIs('-', '-', '-', '-', '-');
 
 // 탭 전환: 클릭과 Tab 키
 btn('tab_demon');
 assert.strictEqual(UI.tab, 'demon');
-assert(hasBtn('lightning') && hasBtn('roar') && !hasBtn('summon') && !hasBtn('bench_0'));
+assert(hasBtn('lightning') && hasBtn('roar') && !hasBtn('summon'));
 UI.onKey('Tab');
 assert.strictEqual(UI.tab, 'monster');
 
@@ -87,47 +89,161 @@ assert.strictEqual(withRandom([0.94, 0.9], () => Game.rollSummon()), 'curse_shoo
 assert.strictEqual(withRandom([0.95, 0.5], () => Game.rollSummon()), 'bone_knight');
 assert.strictEqual(withRandom([0.999, 0], () => Game.rollSummon()), 'bone_knight');
 
-// 소환: 버튼과 S 키. 40골드를 내고 빈 대기 칸 앞에서부터 채운다
+// 칸에서 길까지 거리(px)
+const pathGap = (c, r) => { const p = pathAt(nearestPathDistance(tileX(c), tileY(r))); return distance(tileX(c), tileY(r), p.x, p.y); };
+
+// 소환: 버튼을 누르면 25골드를 내고 맵의 빈 길 옆 칸에 바로 나온다. 길에 가장 가까운 칸(바로 옆)을 고른다
 withRandom([0.1, 0.1], () => btn('summon'));
-benchIs('orc_guard', '-', '-', '-', '-');
-assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 40);
+assert.strictEqual(Game.monsters.length, 1, 'summoned onto the map');
+const s1 = Game.monsters[0];
+assert.strictEqual(s1.type, 'orc_guard');
+assert(isBuildCell(s1.col, s1.row) && Game.monsterAt(s1.col, s1.row) === s1, 'on a build cell');
+assert(Math.abs(pathGap(s1.col, s1.row) - TILE) < 1, 'nearest cell to the path');
+assert(s1.blocks && s1.rally, 'summoned blocker walks out');
+assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 25);
 assert.strictEqual(Game.stats.summoned, 1);
-assert(Fx.pops.some(p => p.kind === 'summon' && p.to.bench === 0 && p.grade === 'common'), 'summon effect');
+assert.strictEqual(Game.summonCost(), 26, 'cost +1');
+assert(Fx.pops.some(p => p.kind === 'summon' && p.to.x === s1.x && p.to.y === s1.y && p.grade === 'common'), 'summon effect on the cell');
+// S 키도 같다. 비용은 26, 27로 오른다
 withRandom([0.5, 0.5], () => UI.onKey('KeyS'));
 withRandom([0.1, 0.9], () => UI.onKey('KeyS'));
-benchIs('orc_guard', 'skeleton_archer', 'dark_mage', '-', '-');
-assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 120);
+assert.strictEqual(Game.monsters.map(m => m.type).join(), 'orc_guard,skeleton_archer,dark_mage');
+assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 25 - 26 - 27);
+assert.strictEqual(Game.summonCost(), 28);
+// 같은 거리의 칸에서는 무작위로 고른다: 칸을 고르는 난수가 다르면 다른 칸
+{
+    const a = withRandom(0, () => Game.pickSummonCell('skeleton_archer'));
+    const b = withRandom(0.99, () => Game.pickSummonCell('skeleton_archer'));
+    assert(a && b && (a.col !== b.col || a.row !== b.row), 'random among equally near cells');
+}
+// 소환 버튼과 하단 표시: 현재 비용과 맵 몬스터 수(현재 수/상한)
+UI.update(0);
+assert(!UI.buttons.find(b => b.id === 'summon').disabled);
 // 골드가 모자라면 소환하지 않고 안내한다
+Game.gold = 27;
 UI.toast = null;
 UI.update(0);
 assert(UI.buttons.find(b => b.id === 'summon').disabled, 'summon dimmed without gold');
 UI.onKey('KeyS');
-benchIs('orc_guard', 'skeleton_archer', 'dark_mage', '-', '-');
-assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 120);
-assert(UI.toast && UI.toast.text.includes('골드'), 'gold toast');
-// 대기 칸이 가득 차면 소환할 수 없다고 안내한다
+assert.strictEqual(Game.monsters.length, 3);
+assert.strictEqual(Game.gold, 27);
+assert(UI.toast && UI.toast.text.includes('28골드'), 'gold toast shows current cost');
+// 희귀·영웅 소환 연출은 등급을 따른다
 Game.gold = 1000;
-withRandom([0.1, 0.1], () => UI.onKey('KeyS'));
-withRandom([0.5, 0.5], () => UI.onKey('KeyS'));
-benchIs('orc_guard', 'skeleton_archer', 'dark_mage', 'orc_guard', 'skeleton_archer');
-assert.strictEqual(Game.gold, 1000 - 80);
+withRandom([0.97, 0], () => UI.onKey('KeyS'));
+const k1 = Game.monsters[3];
+assert.strictEqual(k1.type, 'bone_knight');
+assert(Fx.pops.some(p => p.kind === 'summon' && p.grade === 'epic' && p.to.x === k1.x), 'epic summon effect on the cell');
+assert.strictEqual(Game.summonCost(), 29);
+
+// 비용은 60G에서 멈춘다
+Game.summonCount = 34;
+assert.strictEqual(Game.summonCost(), 59);
+Game.summonCount = 35;
+assert.strictEqual(Game.summonCost(), 60);
+Game.summonCount = 200;
+assert.strictEqual(Game.summonCost(), 60, 'cost capped');
+
+// 원거리 몬스터는 사거리 안에 길이 들어오는 칸에만 나온다(암흑 마법사 사거리 2.5칸)
+const farCells = [...BUILD_CELLS].map(k => k.split(',').map(Number)).filter(([c, r]) => pathGap(c, r) > MONSTERS.dark_mage.stats.range * TILE);
+assert(farCells.length > 0, 'test needs a cell out of dark mage range');
+Game.monsters = [];
+SUMMON_RULES.maxField = 999; // 빈 칸이 없는 경우를 상한과 따로 시험한다
+for (const key of BUILD_CELLS) {
+    const [c, r] = key.split(',').map(Number);
+    if (!farCells.some(([fc, fr]) => fc === c && fr === r)) Game.place('skeleton_archer', c, r);
+}
+let g0 = Game.gold;
+UI.toast = null;
+withRandom([0.69, 0.99], () => UI.onKey('KeyS')); // 암흑 마법사: 남은 칸은 모두 사거리 밖
+assert.strictEqual(Game.gold, g0, 'no cell in range: no gold spent');
+assert(UI.toast && UI.toast.text.includes('합쳐서'), 'no cell toast');
+assert(!Game.monsters.some(m => m.type === 'dark_mage'), 'dark mage not placed out of range');
+withRandom([0.1, 0.1], () => UI.onKey('KeyS')); // 오크 경비병(막는 몬스터)은 사거리 조건 없이 남은 칸에 나온다
+const farOrc = Game.monsters.find(m => m.type === 'orc_guard');
+assert(farOrc && farCells.some(([c, r]) => c === farOrc.col && r === farOrc.row), 'blocker uses the far cell');
+// 막는 몬스터 지점이 모두 겹쳐도 빈 칸이 있으면 그 칸을 쓴다. 빈 칸이 하나도 없으면 거부하고 골드를 쓰지 않는다
+for (const [c, r] of farCells) Game.place('orc_guard', c, r);
+Game.removeMonster(Game.monsterAt(3, 4));
+withRandom([0, 0], () => UI.onKey('KeyS'));
+assert.strictEqual(Game.monsterAt(3, 4).type, 'orc_guard', 'blocker falls back to any free cell');
+g0 = Game.gold;
+UI.toast = null;
+withRandom([0, 0], () => UI.onKey('KeyS'));
+assert.strictEqual(Game.gold, g0, 'no free cell: no gold spent');
+assert(UI.toast && UI.toast.text.includes('합쳐서'));
+SUMMON_RULES.maxField = 24;
+// 원거리로 나온 몬스터는 모두 사거리 안에 길이 있다
+Game.monsters = [];
+Game.summonCount = 0;
+Game.gold = 5000;
+for (let i = 0; i < 20; i++) assert(Game.summon().ok);
+for (const m of Game.monsters) {
+    if (!m.blocks) assert(pathGap(m.col, m.row) <= MONSTERS[m.type].stats.range * TILE + 0.5, 'ranged in range ' + m.type);
+}
+
+// 막는 몬스터는 길 지점이 서로 1칸 안으로 겹치지 않게 퍼진다
+Game.monsters = [];
+for (let i = 0; i < 10; i++) assert(withRandom([0, 0, Math.random()], () => Game.summon()).ok);
+{
+    const orcs = Game.monsters.filter(m => m.type === 'orc_guard');
+    assert.strictEqual(orcs.length, 10);
+    for (let i = 0; i < orcs.length; i++) {
+        for (let j = i + 1; j < orcs.length; j++) {
+            const a = rallyPoint(orcs[i].col, orcs[i].row);
+            const b = rallyPoint(orcs[j].col, orcs[j].row);
+            assert(distance(a.x, a.y, b.x, b.y) > TILE * SUMMON_RULES.blockerSpacing, 'blocker rally points spread');
+        }
+    }
+}
+
+// 상한 24마리: 더 소환하면 거부하고 골드를 쓰지 않는다. 버튼은 "자리 없음"
+Game.monsters = [];
+Game.gold = 5000;
+for (let i = 0; i < 30 && Game.monsters.length < 24; i++) Game.summon();
+assert.strictEqual(Game.monsters.length, 24, 'filled to the cap');
+assert.strictEqual(new Set(Game.monsters.map(m => m.col + ',' + m.row)).size, 24, 'one monster per cell');
+assert(Game.monsters.every(m => isBuildCell(m.col, m.row)));
+g0 = Game.gold;
 UI.toast = null;
 btn('summon');
-assert.strictEqual(Game.gold, 1000 - 80, 'no gold spent when full');
-assert(UI.toast && UI.toast.text.includes('가득'), 'bench full toast');
+assert.strictEqual(Game.monsters.length, 24, 'cap holds');
+assert.strictEqual(Game.gold, g0, 'no gold spent at cap');
+assert(UI.toast && UI.toast.text.includes('합쳐서 자리를 만드세요'), 'cap toast');
 assert.strictEqual(Game.summon().reason, 'full');
 UI.update(0);
 assert(UI.buttons.find(b => b.id === 'summon').full, 'summon button shows full');
-// 희귀·영웅 소환 연출은 등급을 따른다
-Game.bench[4] = null;
-withRandom([0.97, 0], () => UI.onKey('KeyS'));
-assert.strictEqual(Game.bench[4], 'bone_knight');
-assert(Fx.pops.some(p => p.kind === 'summon' && p.grade === 'epic'), 'epic summon effect');
-Game.bench[4] = 'skeleton_archer';
+// 합쳐서 자리가 나면 다시 소환할 수 있다
+{
+    let pair = null;
+    for (const a of Game.monsters) for (const b of Game.monsters) {
+        const plan = mergePlan(a.type, b.type);
+        // 히든 조합식은 아래에서 처음 발견을 시험하므로 피한다
+        if (!pair && a !== b && plan.kind !== 'none' && !(plan.recipe && plan.recipe.hidden)) pair = [a, b];
+    }
+    assert(pair, 'some pair can merge among 24');
+    assert(Game.merge({ monster: pair[0] }, { monster: pair[1] }).ok);
+}
+assert.strictEqual(Game.monsters.length, 23, 'merge frees a spot');
+g0 = Game.gold;
+const costNow = Game.summonCost();
+assert(Game.summon().ok, 'summon again after merge');
+assert.strictEqual(Game.monsters.length, 24);
+assert.strictEqual(Game.gold, g0 - costNow);
+tick(1);
 
-// 대기 칸을 누르면(끌지 않고 떼면) 정보 팝업: 공개 조합식과 판매가 나오고 강화 버튼은 없다
-click(...benchXY(2));
-assert.strictEqual(UI.selectedBench, 2);
+// 아래는 끌기·합치기 시험. 맵을 비우고 정한 칸에 몬스터를 놓는다
+Game.monsters = [];
+Fx.pops = [];
+Game.gold = 1000;
+Game.place('skeleton_archer', 3, 4);
+Game.place('dark_mage', 7, 4);
+Game.place('orc_guard', 9, 4);
+
+// 맵의 몬스터를 누르면(끌지 않고 떼면) 정보 팝업: 공개 조합식과 판매가 나오고 강화 버튼은 없다
+const mage0 = Game.monsterAt(7, 4);
+click(...monXY(mage0));
+assert.strictEqual(UI.selectedMonster, mage0);
 UI.update(0);
 assert(UI.popup && UI.popup.type === 'dark_mage');
 assert.strictEqual(UI.popup.recipes.map(r => r.partner + '>' + r.result).join(), 'skeleton_archer>curse_shooter,orc_guard>orc_berserker');
@@ -142,74 +258,64 @@ assert.notStrictEqual(UI.shownPlan('orc_berserker', 'skeleton_archer').kind, 're
 assert.strictEqual(mergePlan('orc_berserker', 'skeleton_archer').kind, 'recipe');
 // 서로 다른 일반 몬스터 중 조합식이 없는 쌍은 등급 합치기다
 assert.strictEqual(mergePlan('orc_guard', 'skeleton_archer').kind, 'grade');
-click(...benchXY(2)); // 같은 칸을 다시 누르면 닫는다
-assert.strictEqual(UI.selectedBench, null);
+click(...monXY(mage0)); // 같은 몬스터를 다시 누르면 닫는다
+assert.strictEqual(UI.selectedMonster, null);
 
 // 끌기를 시작하면 놓을 칸 미리보기가 나온다. 길 칸은 빨간색, 길 옆 칸은 놓을 수 있다
-UI.onMove(...benchXY(1));
-UI.onDown(...benchXY(1));
+const archer1 = Game.monsterAt(3, 4);
+UI.onMove(...monXY(archer1));
+UI.onDown(...monXY(archer1));
 assert(!UI.drag, 'press alone is not a drag');
-UI.onMove(benchXY(1)[0] + 4, benchXY(1)[1] - 4);
+UI.onMove(monXY(archer1)[0] + 4, monXY(archer1)[1] - 4);
 assert(!UI.drag, 'tiny move is not a drag');
 UI.onMove(...cellXY(2, 3));
 assert(UI.drag && UI.drag.type === 'skeleton_archer', 'dragging');
 assert(UI.hoverCell && UI.hoverCell.col === 2 && UI.hoverCell.row === 3);
 assert(!UI.canPlaceAt(2, 3), 'path cell is red');
-UI.onMove(...cellXY(3, 4));
-assert(UI.canPlaceAt(3, 4), 'build cell ok');
+UI.onMove(...cellXY(5, 4));
+assert(UI.canPlaceAt(5, 4), 'build cell ok');
 assert.strictEqual(UI.dropAction(UI.dropTarget).action, 'place');
-// Esc로 끌기를 그만두면 대기 칸에 그대로 남는다
+// Esc로 끌기를 그만두면 제자리에 그대로 남는다
 UI.onKey('Escape');
 assert(!UI.drag);
-UI.onUp(...cellXY(3, 4));
-assert.strictEqual(Game.monsters.length, 0);
-assert.strictEqual(Game.bench[1], 'skeleton_archer');
+UI.onUp(...cellXY(5, 4));
+assert.strictEqual(Game.monsterAt(3, 4), archer1);
+assert.strictEqual(Game.monsterAt(5, 4), null);
 
-// 놓을 수 없는 곳에 놓으면 안내하고 대기 칸으로 돌아간다: 길 칸, 건설 칸이 아닌 곳, 하단 바
+// 놓을 수 없는 곳에 놓으면 안내하고 제자리로 돌아간다: 길 칸, 건설 칸이 아닌 곳, 하단 바
 UI.toast = null;
-dragTo(benchXY(1), cellXY(2, 3));
-assert.strictEqual(Game.monsters.length, 0, 'not on path');
-assert.strictEqual(Game.bench[1], 'skeleton_archer', 'back to bench');
+dragTo(monXY(archer1), cellXY(2, 3));
+assert.strictEqual(Game.monsterAt(3, 4), archer1, 'not on path');
 assert(UI.toast && UI.toast.text.includes('길'), 'path toast');
 assert(UI.returning.length > 0, 'fly back effect');
 UI.toast = null;
-dragTo(benchXY(1), cellXY(12, 12));
-assert(!isBuildCell(12, 12) && Game.monsters.length === 0 && Game.bench[1] === 'skeleton_archer');
+dragTo(monXY(archer1), cellXY(12, 12));
+assert(!isBuildCell(12, 12) && Game.monsterAt(3, 4) === archer1);
 assert(UI.toast && UI.toast.text.includes('길 옆'), 'not build cell toast');
-dragTo(benchXY(1), [BAR_SLOT_X + 20, GAME_HEIGHT - 40]);
-assert.strictEqual(Game.bench[1], 'skeleton_archer', 'dropped on bar');
-
-// 끌어 설치: 비용 없이 놓이고 대기 칸이 빈다
-const goldBeforeDeploy = Game.gold;
-dragTo(benchXY(1), cellXY(3, 4));
-const archer1 = Game.monsterAt(3, 4);
-assert(archer1 && archer1.type === 'skeleton_archer', 'deployed');
-assert.strictEqual(Game.bench[1], null);
-assert.strictEqual(Game.gold, goldBeforeDeploy, 'deploy is free');
+dragTo(monXY(archer1), [BAR_SLOT_X + 20, GAME_HEIGHT - 40]);
+assert.strictEqual(Game.monsterAt(3, 4), archer1, 'dropped on bar');
 // 이미 몬스터가 있는 칸 위에 놓으면 합치기로 본다(일반끼리라 등급 합치기 미리보기)
-UI.onMove(...benchXY(4));
-UI.onDown(...benchXY(4));
+const orc9 = Game.monsterAt(9, 4);
+UI.onMove(...monXY(orc9));
+UI.onDown(...monXY(orc9));
 UI.onMove(...monXY(archer1));
 assert.strictEqual(UI.dropAction(UI.dropTarget).action, 'merge');
 UI.cancel();
 UI.onUp(...monXY(archer1));
-// 대기 칸끼리 옮기기: 빈 칸으로
-dragTo(benchXY(4), benchXY(1));
-benchIs('orc_guard', 'skeleton_archer', 'dark_mage', 'orc_guard', '-');
+assert(Game.monsterAt(9, 4) === orc9 && Game.monsterAt(3, 4) === archer1);
 
-// 끌어 옮기기: 맵의 몬스터를 다른 빈 길 옆 칸으로. 원래 칸은 빈다
+// 끌어 옮기기: 맵의 몬스터를 다른 빈 길 옆 칸으로. 원래 칸은 빈다(비용 없음)
+const goldBeforeMove = Game.gold;
 dragTo(monXY(archer1), cellXY(5, 4));
 assert.strictEqual(Game.monsterAt(5, 4), archer1, 'moved');
 assert.strictEqual(Game.monsterAt(3, 4), null, 'old cell freed');
 assert(archer1.x === tileX(5) && archer1.homeY === tileY(4));
+assert.strictEqual(Game.gold, goldBeforeMove, 'move is free');
 // 길로는 옮길 수 없고 제자리에 남는다
 UI.toast = null;
 dragTo(monXY(archer1), cellXY(6, 7));
 assert.strictEqual(Game.monsterAt(5, 4), archer1, 'stays');
 assert(UI.toast && UI.toast.text.includes('길'));
-// 맵의 몬스터는 대기 칸으로 돌아가지 않는다
-dragTo(monXY(archer1), benchXY(4));
-assert(Game.monsterAt(5, 4) === archer1 && Game.bench[4] === null, 'field to bench refused');
 // 맵의 몬스터를 누르면 정보 팝업
 click(...monXY(archer1));
 assert.strictEqual(UI.selectedMonster, archer1);
@@ -217,77 +323,83 @@ UI.update(0);
 assert(UI.popup && UI.popup.monster === archer1 && hasBtn('sell') && !hasBtn('up2'));
 UI.clearSelection();
 
-// 조합식: 대기 칸의 암흑 마법사를 맵의 스켈레톤 궁수 위에 → 저주 사수가 궁수 자리에 남고 대기 칸이 빈다
+// 조합식: 암흑 마법사를 스켈레톤 궁수 위에 → 저주 사수가 궁수 자리에 남고 마법사 자리는 빈다
 Fx.pops = [];
-dragTo(benchXY(2), monXY(archer1));
+const mergedBefore = Game.stats.merged;
+dragTo(monXY(mage0), monXY(archer1));
 const shooter = Game.monsterAt(5, 4);
 assert(shooter && shooter.type === 'curse_shooter', 'recipe result at target');
 assert(archer1.removed && !Game.monsters.includes(archer1));
-assert.strictEqual(Game.bench[2], null, 'source freed');
+assert(mage0.removed && Game.monsterAt(7, 4) === null, 'source freed');
 assert(shooter.reveal > 0, 'result appears after suck-in');
 assert(Fx.pops.some(p => p.kind === 'merge' && p.type === 'curse_shooter' && p.grade === 'rare' && !p.hidden));
 assert.strictEqual(Fx.discovery, null, 'public recipe: no discovery');
-assert.strictEqual(Game.stats.merged, 1);
+assert.strictEqual(Game.stats.merged, mergedBefore + 1);
 tick(0.5);
 assert(!(shooter.reveal > 0), 'revealed');
-// 순서는 상관없다: 맵 → 대기 칸 방향도 같은 결과(대기 칸에 남는다)
-Game.bench[2] = 'dark_mage';
+// 순서는 상관없다: 궁수를 마법사 위에 놓아도 같은 결과(마법사 자리에 남는다)
+Game.place('dark_mage', 7, 4);
 Game.place('skeleton_archer', 3, 4);
-dragTo(monXY(Game.monsterAt(3, 4)), benchXY(2));
-assert.strictEqual(Game.bench[2], 'curse_shooter', 'reverse order recipe into bench');
-assert.strictEqual(Game.monsterAt(3, 4), null, 'field source freed');
+dragTo(monXY(Game.monsterAt(3, 4)), monXY(Game.monsterAt(7, 4)));
+assert.strictEqual(Game.monsterAt(7, 4).type, 'curse_shooter', 'reverse order recipe');
+assert.strictEqual(Game.monsterAt(3, 4), null, 'source freed');
+const shooter2 = Game.monsterAt(7, 4);
 
 // 히든 조합식: 오크 광전사 + 스켈레톤 궁수 → 해골 기사. 처음이면 "히든 조합 발견!"
-Game.bench[0] = 'orc_berserker';
-Game.bench[1] = 'skeleton_archer';
-dragTo(benchXY(0), benchXY(1));
-assert.strictEqual(Game.bench[1], 'bone_knight', 'hidden recipe result');
-assert.strictEqual(Game.bench[0], null);
+Game.place('orc_berserker', 3, 2);
+Game.place('skeleton_archer', 5, 3);
+tick(0.1);
+dragTo(monXY(Game.monsterAt(3, 2)), monXY(Game.monsterAt(5, 3)));
+assert.strictEqual(Game.monsterAt(5, 3).type, 'bone_knight', 'hidden recipe result');
+assert.strictEqual(Game.monsterAt(3, 2), null);
 assert(Fx.discovery && Fx.discovery.type === 'bone_knight', 'hidden discovered');
 assert(Game.discovered.has('orc_berserker+skeleton_archer'));
 assert(Fx.pops.some(p => p.kind === 'merge' && p.hidden && p.grade === 'epic'));
 tick(4.2);
 assert.strictEqual(Fx.discovery, null);
 // 두 번째부터는 발견 연출이 없다
-Game.bench[0] = 'skeleton_archer';
-Game.bench[4] = 'orc_berserker';
-dragTo(benchXY(4), benchXY(0));
-assert.strictEqual(Game.bench[0], 'bone_knight');
+Game.place('skeleton_archer', 3, 2);
+Game.place('orc_berserker', 7, 6);
+tick(0.1);
+dragTo(monXY(Game.monsterAt(7, 6)), monXY(Game.monsterAt(3, 2)));
+assert.strictEqual(Game.monsterAt(3, 2).type, 'bone_knight');
 assert.strictEqual(Fx.discovery, null, 'discovered only once');
+tick(0.5);
 
 // 영웅끼리는 합칠 수 없다: 안내하고 둘 다 그대로
+const kA = Game.monsterAt(3, 2), kB = Game.monsterAt(5, 3);
 UI.toast = null;
-dragTo(benchXY(0), benchXY(1));
-assert(Game.bench[0] === 'bone_knight' && Game.bench[1] === 'bone_knight', 'epic + epic refused');
+dragTo(monXY(kA), [kB.homeX * WORLD_ZOOM, (kB.homeY - 10) * WORLD_ZOOM]);
+assert(Game.monsterAt(3, 2) === kA && Game.monsterAt(5, 3) === kB, 'epic + epic refused');
 assert(UI.toast && UI.toast.text.includes('최고 등급'));
 assert.strictEqual(mergePlan('bone_knight', 'bone_knight').reason, 'top');
 
 // 합칠 수 없는 경우: 등급이 다르고 조합식도 없다
 UI.toast = null;
-Game.bench[4] = 'skeleton_archer';
-dragTo(benchXY(4), benchXY(0));
-assert(Game.bench[4] === 'skeleton_archer' && Game.bench[0] === 'bone_knight', 'mismatch refused');
+Game.place('skeleton_archer', 7, 6);
+dragTo(monXY(Game.monsterAt(7, 6)), [kB.homeX * WORLD_ZOOM, (kB.homeY - 10) * WORLD_ZOOM]);
+assert(Game.monsterAt(7, 6).type === 'skeleton_archer' && Game.monsterAt(5, 3) === kB, 'mismatch refused');
 assert(UI.toast && UI.toast.text.includes('합칠 수 없'));
 assert.strictEqual(mergePlan('skeleton_archer', 'curse_shooter').reason, 'mismatch');
+Game.removeMonster(Game.monsterAt(7, 6));
 
-// 등급 합치기: 같은 등급 2마리(조합식 없음) → 상위 등급 중 무작위. 대기 칸 → 맵
-Game.bench[4] = 'orc_guard';
-Game.bench[3] = 'orc_guard';
-dragTo(benchXY(3), cellXY(3, 6));
+// 등급 합치기: 같은 등급 2마리(조합식 없음) → 상위 등급 중 무작위
+Game.place('orc_guard', 3, 6);
+Game.place('orc_guard', 9, 6);
 const orcGuard = Game.monsterAt(3, 6);
-assert(orcGuard && orcGuard.type === 'orc_guard');
-withRandom(0.1, () => dragTo(benchXY(4), monXY(orcGuard)));
+withRandom(0.1, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(orcGuard)));
 const berserker = Game.monsterAt(3, 6);
 assert(berserker && berserker.type === 'orc_berserker', 'grade merge picks rare[0] with random 0.1');
 assert(berserker.blocks && berserker.rally, 'berserker walks out to block');
 assert.strictEqual(monsterStats(berserker).block, 2);
 // 무작위 값이 크면 같은 등급의 다른 몬스터
-Game.bench[3] = 'dark_mage';
-Game.bench[4] = 'dark_mage';
-withRandom(0.9, () => dragTo(benchXY(4), benchXY(3)));
-assert.strictEqual(Game.bench[3], 'curse_shooter');
-// 희귀 2마리 → 영웅(해골 기사뿐). 조합식(오크 광전사 + 저주 사수)도 같은 결과다. 맵끼리 합치기
-dragTo(monXY(shooter), monXY(berserker));
+Game.place('dark_mage', 9, 6);
+Game.place('dark_mage', 9, 2);
+withRandom(0.9, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(Game.monsterAt(9, 2))));
+assert.strictEqual(Game.monsterAt(9, 2).type, 'curse_shooter');
+tick(0.5);
+// 희귀 2마리 → 영웅(해골 기사뿐). 조합식(오크 광전사 + 저주 사수)도 같은 결과다
+dragTo(monXY(shooter), [berserker.homeX * WORLD_ZOOM, (berserker.homeY - 10) * WORLD_ZOOM]);
 const knight = Game.monsterAt(3, 6);
 assert(knight && knight.type === 'bone_knight', 'field + field recipe');
 assert.strictEqual(Game.monsterAt(5, 4), null);
@@ -295,30 +407,27 @@ assert.strictEqual(monsterStats(knight).hp, 500);
 // 희귀 2마리, 조합식 없음 → 영웅 등급 합치기
 assert.strictEqual(mergePlan('curse_shooter', 'curse_shooter').kind, 'grade');
 assert.strictEqual(mergePlan('curse_shooter', 'curse_shooter').grade, 'epic');
+tick(0.5);
 
-// 판매: 등급별 고정 환불(일반 20, 희귀 60, 영웅 150). 대기 칸과 맵 모두
+// 판매: 등급별 고정 환불(일반 20, 희귀 60, 영웅 150)
 assert.strictEqual(SUMMON_RULES.refund.common, 20);
-let g0 = Game.gold;
-click(...benchXY(3)); // 저주 사수(희귀)
+g0 = Game.gold;
+click(...monXY(shooter2)); // 저주 사수(희귀)
 btn('sell');
 assert.strictEqual(Game.gold, g0 + 60);
-assert.strictEqual(Game.bench[3], null);
+assert.strictEqual(Game.monsterAt(7, 4), null);
 g0 = Game.gold;
-click(...benchXY(0)); // 해골 기사(영웅)
+click(...monXY(kA)); // 해골 기사(영웅)
 btn('sell');
 assert.strictEqual(Game.gold, g0 + 150);
 g0 = Game.gold;
-click(...monXY(knight));
-assert.strictEqual(UI.selectedMonster, knight);
-btn('sell');
-assert.strictEqual(Game.gold, g0 + 150);
-assert.strictEqual(Game.monsters.length, 0);
-g0 = Game.gold;
-Game.bench[3] = 'orc_guard';
-click(...benchXY(3));
+const orc9b = Game.monsterAt(9, 4);
+click(...monXY(orc9b)); // 오크 경비병(일반)
+assert.strictEqual(UI.selectedMonster, orc9b);
 btn('sell');
 assert.strictEqual(Game.gold, g0 + 20);
-Game.bench.fill(null);
+Game.monsters = [];
+UI.clearSelection();
 Game.gold = 2000;
 
 // 모든 몬스터는 길 칸에 놓을 수 없다
@@ -329,8 +438,7 @@ for (const key of PATH.cells) {
 }
 
 // 근접 몬스터를 길 옆에 놓으면 가장 가까운 길 지점으로 걸어 나간다
-Game.bench[0] = 'orc_guard';
-dragTo(benchXY(0), cellXY(3, 4));
+assert(Game.place('orc_guard', 3, 4));
 const orc = Game.monsterAt(3, 4);
 assert(orc && orc.blocks && orc.rally, 'orc placed beside path');
 assert.strictEqual(orc.x, tileX(3));
@@ -390,16 +498,16 @@ tick(14);
 assert(Game.stats.kills > 0 || Game.heroes.length > 0);
 
 // 번개: Q는 몬스터 탭에서도 동작하고 마왕 탭으로 바꾼다. 끄던 몬스터는 제자리에 남는다
-Game.bench[0] = 'skeleton_archer';
-UI.onMove(...benchXY(0));
-UI.onDown(...benchXY(0));
+UI.onMove(...monXY(archer));
+UI.onDown(...monXY(archer));
 UI.onMove(...cellXY(7, 5));
 assert(UI.drag && UI.tab === 'monster');
 UI.onKey('KeyQ');
 assert.strictEqual(UI.tab, 'demon');
 assert.strictEqual(UI.drag, null);
 UI.onUp(...cellXY(7, 5));
-assert.strictEqual(Game.bench[0], 'skeleton_archer');
+assert.strictEqual(Game.monsterAt(5, 4), archer);
+assert.strictEqual(Game.monsterAt(7, 5), null);
 assert.strictEqual(UI.targeting, true);
 UI.onKey('KeyQ');
 assert.strictEqual(UI.targeting, false);
@@ -766,7 +874,8 @@ const tough = h => { h.hp = h.maxHp = 9999; return h; };
     assert.strictEqual(h.stun, 0, 'orc guard no death stun');
 }
 
-// 패배 후 다시 시작하면 모두 초기화
+// 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)
+assert(Game.summon().ok && Game.summonCost() > SUMMON_RULES.cost, 'cost rose before retry');
 Game.hp = 1;
 damageThrone(1);
 assert.strictEqual(Game.state, 'defeat');
@@ -775,7 +884,7 @@ assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 assert.strictEqual(Game.monsters.length, 0);
 assert.strictEqual(UI.tab, 'monster', 'retry starts on monster tab');
-assert(Game.bench.length === SUMMON_RULES.benchSize && Game.bench.every(t => t === null), 'bench cleared');
+assert(Game.summonCount === 0 && Game.summonCost() === SUMMON_RULES.cost, 'summon cost reset');
 assert.strictEqual(Game.units.length, 0);
 
 // 한 판 끝까지: 보스 패턴 포함, 예외 없이 승리 화면까지 간다
