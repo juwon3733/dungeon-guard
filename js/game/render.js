@@ -479,7 +479,7 @@ const Render = {
         for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
             const sx = m.x - (m.tier - 1) * 11 + i * 22;
             const sy = footY + 44;
-            ctx.fillStyle = '#120c20';
+            ctx.fillStyle = '#1e120a';
             ctx.fillRect(sx - 8, sy - 8, 16, 16);
             ctx.fillStyle = m.tier >= 3 ? '#ffd76a' : '#c8a6ff';
             ctx.fillRect(sx - 5, sy - 5, 10, 10);
@@ -545,11 +545,18 @@ const Render = {
         ctx.fillRect(x - s / 2, cy - s / 2, s, s);
     },
 
-    // 등급 마름모: 일반은 작고 흐리게, 희귀 이상은 크고 빛나게. 전설은 더 큰 금색 마름모에 넓은 빛과 반짝이는 테두리
+    // 등급 마름모: 초록 바닥에서도 보이게 진한 갈색 테두리를 굵게 두르고, 위쪽에 밝은 면을 낸다.
+    // 일반은 회백, 희귀 이상은 크고 바닥에 등급 빛. 전설은 더 큰 금색 마름모에 반짝이는 테두리
     gradeMark(ctx, x, y, grade) {
         const color = MONSTER_GRADES[grade].color;
         const legend = grade === 'legendary';
-        const s = grade === 'common' ? 6 : (legend ? 13 : 9);
+        const s = grade === 'common' ? 8 : (legend ? 14 : 11);
+        const diamond = r => {
+            ctx.beginPath();
+            ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
+            ctx.closePath();
+            ctx.fill();
+        };
         ctx.save();
         if (grade !== 'common') {
             ctx.globalCompositeOperation = 'lighter';
@@ -559,22 +566,23 @@ const Render = {
             ctx.fill();
             ctx.globalCompositeOperation = 'source-over';
         }
-        ctx.fillStyle = '#120c20';
-        ctx.beginPath();
-        ctx.moveTo(x, y - s - 4); ctx.lineTo(x + s + 4, y); ctx.lineTo(x, y + s + 4); ctx.lineTo(x - s - 4, y);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fillStyle = '#1e120a';
+        diamond(s + 6);
         ctx.fillStyle = color;
+        diamond(s);
+        // 위쪽 절반을 밝게(도트 면)
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
         ctx.beginPath();
-        ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
+        ctx.moveTo(x, y - s); ctx.lineTo(x + s / 2, y - s / 2); ctx.lineTo(x, y); ctx.lineTo(x - s / 2, y - s / 2);
         ctx.closePath();
         ctx.fill();
         if (legend) {
             ctx.strokeStyle = `rgba(255,248,214,${0.6 + Math.sin(Game.time * 6) * 0.3})`;
             ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
+            ctx.closePath();
             ctx.stroke();
-            ctx.fillStyle = '#fff6d0';
-            ctx.fillRect(x - 2, y - 2, 4, 4);
         }
         ctx.restore();
     },
@@ -621,7 +629,7 @@ const Render = {
         const sy = Math.round(cy * WORLD_ZOOM - s / 2);
         const z = 1 / WORLD_ZOOM;
         ctx.save();
-        ctx.fillStyle = 'rgba(13,9,24,0.85)';
+        ctx.fillStyle = 'rgba(30,18,10,0.85)';
         ctx.fillRect((sx - 2) * z, (sy - 2) * z, (s + 4) * z, (s + 4) * z);
         ctx.lineWidth = 2 * z;
         ctx.strokeStyle = MONSTER_GRADES[EQUIPMENT[id].grade].color;
@@ -1223,8 +1231,9 @@ const Render = {
             const w = ctx.measureText(s.text).width + 42;
             const x = clamp(s.x, w / 2 + 8, WORLD_WIDTH - w / 2 - 8);
             const y = s.y - (1 - a) * 8;
-            UIKit.frame(ctx, x - w / 2, y - 34, w, 64, s.boss ? 'danger' : 'speech', 6);
-            ctx.fillStyle = s.boss ? '#ffe6ea' : '#1c1428';
+            // 마왕 대사는 양피지 쪽지, 보스 대사는 붉은 밀랍 쪽지
+            UIKit.note(ctx, x - w / 2, y - 34, w, 64, { red: !!s.boss });
+            ctx.fillStyle = s.boss ? UI_THEME.cream : UI_THEME.ink;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(s.text, x, y - 1);

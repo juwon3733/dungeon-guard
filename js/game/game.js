@@ -506,7 +506,7 @@ const Game = {
         this.removeMonster(m);
         const equip = this.returnEquip(m); // 장비는 보관함으로(자리가 없으면 골드)
         this.stats.sacrificed++;
-        // 연출: 몬스터가 왕좌로 빨려 들어간 뒤(MERGE_REVEAL) 마왕이 빛나고 체력 구슬이 차오른다
+        // 연출: 몬스터가 왕좌로 빨려 들어간 뒤(MERGE_REVEAL) 마왕이 빛나고 체력 막대가 차오른다
         const tx = tileX(THRONE_TILE.col);
         const ty = tileY(THRONE_TILE.row);
         Fx.pop({ kind: 'sacrifice', from: [from], fromTypes: [m.type], to: { x: tx, y: ty - 40 }, type: m.type, grade });

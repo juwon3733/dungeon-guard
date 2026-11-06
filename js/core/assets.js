@@ -1,6 +1,7 @@
 // 그림 불러오기와 색 입힌 사본 캐시. 색 입히기는 픽셀을 읽지 않아 index.html을 바로 열어도 동작한다.
-// UI 아이콘(uiicon_<이름>, 48px). 지금은 마왕 탭의 스킬 칸만 쓴다
-const UI_ICONS = ['bolt'];
+// UI 아이콘(uiicon_<이름>, 48px)과 UI 재질 그림(ui_kit, ui_buttons: js/ui/uikit.js의 UI_SLICES가 잘라 쓴다)
+const UI_ICONS = ['summon', 'lord', 'attack', 'gold', 'soul', 'lock', 'book', 'bag', 'close', 'fast', 'pause', 'sound', 'gear', 'wave', 'retry', 'bolt'];
+const UI_SHEETS = ['ui_kit', 'ui_buttons'];
 // 맵 바닥 타일셋. 칸 정보(corners, bounding_box)는 js/data/map.js의 WANG_TILES
 const MAP_TILESETS = ['tileset_path', 'tileset_water'];
 const Assets = {
@@ -30,7 +31,7 @@ const Assets = {
         list.push(...MAP_TILESETS, ...DECOR.map(p => p.sprite), 'prop2_throne');
         // 전투 효과는 모두 pixelfx 시트(assets/fx/)다
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
-        list.push(...UI_ICONS.map(id => `uiicon_${id}`));
+        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS);
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 

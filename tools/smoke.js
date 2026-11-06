@@ -121,7 +121,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         assert(fs.existsSync(file), 'loaded picture exists: ' + n);
     }
     // 코드에 지운 그림 이름이 남지 않는다
-    const GONE = /['"`](boss_|portrait_|island_|void_|bridgedeck_|tile_(shadow|void)|wall_|prop_|ui_(skillSlot|itemSlot|button|closeButton|window)|icon_|enemy_|object_|pl_fac_)|_female|_walk_|ELITE_ART\.footPx/;
+    const GONE = /['"`](boss_|portrait_|island_|void_|bridgedeck_|tile_(shadow|void)|wall_|prop_|ui_(skillSlot|itemSlot|button(?!s['"`])|closeButton|window)|icon_|enemy_|object_|pl_fac_)|_female|_walk_|ELITE_ART\.footPx/;
     const jsFiles = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? jsFiles(path.join(dir, e.name)) : (e.name.endsWith('.js') ? [path.join(dir, e.name)] : []));
     for (const f of [...jsFiles(path.join(root, 'js')), path.join(root, 'tools/capture.js')]) {
         fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => assert(!GONE.test(line), `removed art referenced: ${path.relative(root, f)}:${i + 1}`));
@@ -3255,3 +3255,93 @@ delete globalThis.localStorage;
 Meta.data = Meta.fresh();
 console.log('smoke ok: meta collection');
 }`, ctx, { filename: 'smoke-meta' });
+
+// UI 배치: 모든 화면과 탭에서 버튼이 화면 안에 있고 서로 겹치지 않는다. 왼쪽 아래 체력 막대는 체력 값을 따라간다
+vm.runInContext(`{
+const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+// allow(a, b)가 참이면 일부러 포갠 버튼이다(잠긴 마왕 포스터 위의 해금 버튼)
+const check = (name, allow) => {
+    UI.update(0);
+    const list = UI.buttons;
+    assert(list.length > 0, name + ': buttons');
+    for (const b of list) assert(b.x >= 0 && b.y >= 0 && b.x + b.w <= GAME_WIDTH && b.y + b.h <= GAME_HEIGHT, name + ': ' + b.id + ' inside the screen');
+    for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+            const a = list[i];
+            const b = list[j];
+            if (allow && (allow(a, b) || allow(b, a))) continue;
+            assert(!overlap(a, b), name + ': ' + a.id + ' overlaps ' + b.id);
+        }
+    }
+    return list;
+};
+const ids = () => { UI.update(0); return UI.buttons.map(b => b.id); };
+delete globalThis.localStorage;
+Meta.data = Meta.fresh();
+UI.loadout = null;
+UI.collection = null;
+UI.unlockFocus = null;
+Game.paused = false;
+Game.state = 'title';
+check('title');
+UI.openCollection();
+for (const t of COL_TABS) {
+    UI.setCollectionTab(t.key);
+    check('collection ' + t.key);
+}
+UI.closeCollection();
+UI.openSelect();
+check('select');
+UI.pickLord('bone_queen');
+assert(ids().includes('unlock'), 'unlock button for a locked lord');
+check('select, locked lord', (a, b) => a.id === 'unlock' && b.id === 'lord_bone_queen');
+UI.toggleRelic('mirror');
+check('select, locked relic');
+UI.unlockFocus = null;
+Meta.data.slots = 3;
+check('select, three slots');
+UI.openCollection();
+check('collection from select');
+UI.closeCollection();
+Meta.data.slots = 1;
+UI.beginRun();
+assert.strictEqual(Game.state, 'prep');
+for (const tab of ['monster', 'demon']) {
+    UI.setTab(tab);
+    check('prep ' + tab);
+}
+UI.setTab('monster');
+// 체력 막대: 시작하면 가득, 깎이면 바로 줄고, 회복하면 천천히 차올라 값에 닿는다
+UI.update(0);
+assert(UI.hpShown === Game.hp && UI.hpRatio() === 1, 'hp bar full at start');
+damageThrone(5);
+UI.update(0);
+assert(UI.hpShown === Game.hp && Math.abs(UI.hpRatio() - Game.hp / Game.maxHp()) < 1e-9, 'hp bar drops at once');
+const before = Game.hp;
+Game.hp = Math.min(Game.maxHp(), Game.hp + 3);
+UI.update(0.1);
+assert(UI.hpShown > before && UI.hpShown < Game.hp, 'hp bar fills up slowly');
+UI.update(1);
+assert(UI.hpShown === Game.hp, 'hp bar reaches the value');
+// 팝업이 열린 상태(장비를 낀 몬스터): 판매와 빼기 버튼이 하단 바, 오른쪽 위 버튼과 겹치지 않는다
+const m = Game.summon().monster;
+m.equip = 'sword';
+UI.selectedMonster = m;
+check('popup');
+assert(ids().includes('sell') && ids().includes('unequip'), 'popup buttons');
+UI.clearSelection();
+Game.paused = true;
+check('paused');
+Game.paused = false;
+Game.startWave();
+check('wave');
+Game.bossReward = Game.rollBossReward();
+check('boss reward');
+Game.bossReward = null;
+Game.finish(true);
+check('victory');
+Game.state = 'defeat';
+check('defeat');
+UI.openSelect();
+console.log('smoke ok: ui layout');
+}`, ctx, { filename: 'smoke-ui' });
