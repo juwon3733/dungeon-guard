@@ -5,7 +5,8 @@ const Game = {
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
     discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
     bossDefeated: false, // 이번 웨이브에 보스를 처치했는지. 웨이브가 끝날 때 보상 카드로 바뀐다
-    bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
+    bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'equip', id } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
+    equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
     streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0, throneBless: 0, // throneBless: 제물을 받은 마왕이 빛나는 남은 시간
@@ -21,6 +22,7 @@ const Game = {
         this.summonCount = 0;
         this.bossDefeated = false;
         this.bossReward = null;
+        this.equipBag = [];
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -151,8 +153,9 @@ const Game = {
         return { ok: true, type, monster: m, cost };
     },
 
-    // 보스 보상 카드: 서로 다른 몬스터 BOSS_REWARD_RULES.monsterCards장(희귀 또는 영웅)과 골드 1장.
-    // 몬스터 카드마다 Math.random을 두 번 쓴다(등급, 몬스터). 고른 등급 후보가 다 나왔으면 다른 등급에서 고른다
+    // 보스 보상 카드: 서로 다른 몬스터 BOSS_REWARD_RULES.monsterCards장(희귀 또는 영웅), 장비 1장(희귀 또는 영웅), 골드 1장.
+    // 몬스터 카드마다 Math.random을 두 번 쓴다(등급, 몬스터). 고른 등급 후보가 다 나왔으면 다른 등급에서 고른다.
+    // 장비 카드도 두 번 쓴다(등급, 장비)
     rollBossReward() {
         const R = BOSS_REWARD_RULES;
         const used = [];
@@ -167,6 +170,8 @@ const Game = {
             used.push(type);
             cards.push({ kind: 'monster', type });
         }
+        const equipGrade = Math.random() < EQUIP_RULES.rewardEpicChance ? 'epic' : 'rare';
+        cards.push({ kind: 'equip', id: randItem(equipPool(equipGrade)) });
         cards.push({ kind: 'gold', gold: R.gold });
         return { cards };
     },
@@ -174,6 +179,92 @@ const Game = {
     // 보상 몬스터를 맵에 세울 수 있는지(상한과 빈 칸)
     canTakeRewardMonster(type) {
         return !this.fieldFull() && !!this.pickSummonCell(type);
+    },
+
+    // 보상 카드를 고를 수 있는지: 몬스터는 맵에 자리가 있어야, 장비는 보관함에 자리가 있어야 한다
+    canTakeReward(card) {
+        if (card.kind === 'monster') return this.canTakeRewardMonster(card.type);
+        if (card.kind === 'equip') return !this.bagFull();
+        return true;
+    },
+
+    // ----- 장비 -----
+
+    bagFull() { return this.equipBag.length >= EQUIP_RULES.slots; },
+
+    // 장비 하나를 보관함에 넣는다. 가득 차 있으면 EQUIP_RULES.fullGold 골드로 바꾸고 글자로 알린다.
+    // (x, y)는 연출 위치(세계 좌표, 없으면 연출 없음). { kind: 'bag' | 'gold', id }
+    gainEquip(id, x, y) {
+        const def = EQUIPMENT[id];
+        if (!this.bagFull()) {
+            this.equipBag.push(id);
+            if (x !== undefined) Fx.drops.push({ id, x, y, age: 0, life: 1.3 });
+            return { kind: 'bag', id };
+        }
+        this.gold += EQUIP_RULES.fullGold;
+        Fx.goldPulse = 1;
+        if (x !== undefined) Fx.coin(x, y, EQUIP_RULES.fullGold);
+        Fx.notice = `보관함이 가득 차 ${def.name}을(를) ${EQUIP_RULES.fullGold}G로 바꿨습니다.`;
+        return { kind: 'gold', id };
+    },
+
+    // 보관함 index번 장비를 맵의 몬스터에게 끼운다(웨이브 중에도). 이미 끼고 있으면 맞바꿔 원래 장비가 그 칸으로 돌아간다.
+    // 체력은 비율을 유지한다. 실패하면 { ok: false, reason: 'state' | 'empty' | 'index' }
+    equipMonster(m, index) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!m || m.removed || !this.monsters.includes(m)) return { ok: false, reason: 'empty' };
+        const id = this.equipBag[index];
+        if (!id) return { ok: false, reason: 'index' };
+        const old = m.equip;
+        if (old) this.equipBag[index] = old;
+        else this.equipBag.splice(index, 1);
+        setMonsterEquip(m, id);
+        const color = MONSTER_GRADES[EQUIPMENT[id].grade].color;
+        const footY = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
+        const x = m.down > 0 ? m.homeX : m.x;
+        Fx.ring(x, footY, 70, color, 0.35);
+        Fx.rise(x, footY, color, 14, 30, 0.5);
+        Sfx.play('upgrade');
+        return { ok: true, id, swapped: old || null };
+    },
+
+    // 낀 장비를 빼 보관함으로 돌려보낸다. 보관함이 가득 차면 빼지 않는다({ ok: false, reason: 'full' })
+    unequipMonster(m) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!m || !m.equip) return { ok: false, reason: 'none' };
+        if (this.bagFull()) return { ok: false, reason: 'full' };
+        const id = m.equip;
+        this.equipBag.push(id);
+        setMonsterEquip(m, null);
+        Sfx.play('click');
+        return { ok: true, id };
+    },
+
+    // 맵에서 사라지는 몬스터(제물, 판매)의 장비를 보관함으로 돌려보낸다(자리가 없으면 골드)
+    returnEquip(m) {
+        if (!m.equip) return null;
+        const id = m.equip;
+        m.equip = null;
+        return this.gainEquip(id, m.x, m.y - 40);
+    },
+
+    // 합칠 때 장비: 등급이 높은 쪽 1개가 결과로 이어지고(같으면 끌어온 src 쪽), 나머지는 돌아간다
+    mergeEquip(src, dst) {
+        const keep = betterEquip(src.equip, dst.equip);
+        const back = [src.equip, dst.equip].filter(Boolean);
+        back.splice(back.indexOf(keep), 1);
+        return { keep, back };
+    },
+
+    // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop 확률로 장비(일반 또는 희귀)를 떨어뜨린다. Math.random을 세 번까지 쓴다
+    eliteDrop(x, y) {
+        const R = EQUIP_RULES;
+        if (Math.random() >= R.eliteDrop) return null;
+        const grade = Math.random() < R.eliteRareChance ? 'rare' : 'common';
+        const id = randItem(equipPool(grade));
+        const res = this.gainEquip(id, x, y);
+        if (res.kind === 'bag') Fx.notice = `장비 획득: ${EQUIPMENT[id].name}`;
+        return res;
     },
 
     // 보스 보상 카드 i번을 고른다. 몬스터는 소환처럼 맵의 빈 칸에 바로 나온다(소환 비용과 횟수는 그대로).
@@ -187,6 +278,13 @@ const Game = {
             this.gold += card.gold;
             Fx.goldPulse = 1;
             Sfx.play('sell');
+            this.bossReward = null;
+            return { ok: true, card };
+        }
+        if (card.kind === 'equip') {
+            if (this.bagFull()) return { ok: false, reason: 'bagFull' };
+            this.equipBag.push(card.id);
+            Sfx.play('upgrade');
             this.bossReward = null;
             return { ok: true, card };
         }
@@ -281,6 +379,12 @@ const Game = {
         const monster = createMonster(type, old.col, old.row);
         // 랭크는 재료 중 낮은 쪽을 이어받는다(합치기로 랭크가 오르지는 않는다)
         setMonsterRank(monster, Math.min(src.monster.rank || 0, old.rank || 0));
+        // 장비는 등급이 높은 쪽 1개를 이어받고(같으면 끌어온 쪽), 나머지는 보관함으로(자리가 없으면 골드)
+        const equip = this.mergeEquip(src.monster, old);
+        if (equip.keep) setMonsterEquip(monster, equip.keep);
+        src.monster.equip = null;
+        old.equip = null;
+        const returned = equip.back.map(id => this.gainEquip(id, monster.x, monster.y - 40));
         monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
         this.monsters[this.monsters.indexOf(old)] = monster;
         old.removed = true;
@@ -297,7 +401,7 @@ const Game = {
                 age: -MERGE_REVEAL, life: grade === 'legendary' ? 4.6 : 3.6 };
             Sfx.play('hidden');
         }
-        return { ok: true, type, kind: plan.kind, hidden, discovered, monster };
+        return { ok: true, type, kind: plan.kind, hidden, discovered, monster, equip: equip.keep, returned };
     },
 
     sellValue(type) { return SUMMON_RULES.refund[MONSTERS[type].grade] || 0; },
@@ -321,6 +425,7 @@ const Game = {
         const grade = MONSTERS[m.type].grade;
         const from = { x: m.x, y: m.y };
         this.removeMonster(m);
+        const equip = this.returnEquip(m); // 장비는 보관함으로(자리가 없으면 골드)
         this.stats.sacrificed++;
         // 연출: 몬스터가 왕좌로 빨려 들어간 뒤(MERGE_REVEAL) 마왕이 빛나고 체력 구슬이 차오른다
         const tx = tileX(THRONE_TILE.col);
@@ -330,7 +435,7 @@ const Game = {
         this.throneBless = MERGE_REVEAL + 1.1;
         Fx.say(tx, ty - 190, randItem(SPEECH.sacrifice), 2);
         Sfx.play('merge', GRADE_ORDER.indexOf(grade));
-        return { ok: true, heal, lightning: gain.lightning, gain };
+        return { ok: true, heal, lightning: gain.lightning, gain, equip };
     },
 
     upgrade(m, branch) {
@@ -351,10 +456,11 @@ const Game = {
         return true;
     },
 
-    // 판매 환불은 등급별 고정값(SUMMON_RULES.refund)이다
+    // 판매 환불은 등급별 고정값(SUMMON_RULES.refund)이다. 장비는 보관함으로(자리가 없으면 골드)
     sell(m) {
         this.gold += this.sellValue(m.type);
         this.removeMonster(m);
+        this.returnEquip(m);
         Fx.burst(m.x, m.y, '#a9a2c4', 16, 280, 0.4, 6);
         Fx.goldPulse = 1;
         Sfx.play('sell');

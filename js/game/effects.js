@@ -20,6 +20,8 @@ const Fx = {
     pops: [], // 소환과 합치기 연출. 다른 몬스터와 HUD 위에도 보이도록 UI가 화면 맨 위에 그린다
     discovery: null, // "히든 조합 발견!" 연출
     hpGlow: 0, // 제물로 체력 구슬이 차오를 때 구슬 빛(1에서 0으로)
+    drops: [], // 장비를 얻은 자리에서 떠오르는 장비 그림: { id, x, y(세계 좌표), age, life }
+    notice: null, // 화면 아래에 띄울 알림 글자(장비 획득, 보관함 가득). UI가 가져가 비운다
 
     reset() {
         for (const key of ['particles', 'numbers', 'rings', 'beams', 'bolts', 'coins', 'decals', 'speech', 'glows', 'anims']) this[key] = [];
@@ -30,6 +32,8 @@ const Fx = {
         this.banner = null;
         this.pops = [];
         this.discovery = null;
+        this.drops = [];
+        this.notice = null;
         this.pendingBursts = [];
         this.pendingShakes = [];
         this.pendingSacrifices = [];
@@ -133,7 +137,7 @@ const Fx = {
         this.particles = this.particles.filter(p => p.life > 0);
         if (this.particles.length > 700) this.particles.splice(0, this.particles.length - 700);
 
-        for (const list of [this.numbers, this.rings, this.beams, this.bolts, this.speech, this.glows, this.anims]) {
+        for (const list of [this.numbers, this.rings, this.beams, this.bolts, this.speech, this.glows, this.anims, this.drops]) {
             for (const item of list) item.age += dt;
         }
         for (const n of this.numbers) n.y -= 52 * dt;
@@ -144,6 +148,7 @@ const Fx = {
         this.speech = this.speech.filter(s => s.age < s.life);
         this.glows = this.glows.filter(g => g.age < g.life);
         this.anims = this.anims.filter(a => a.age < a.life);
+        this.drops = this.drops.filter(d => d.age < d.life);
 
         for (const c of this.coins) {
             c.age += dt;

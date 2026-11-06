@@ -14,6 +14,13 @@ const REWARD_CARD_W = 380; // 보스 보상 카드
 const REWARD_CARD_H = 540;
 const REWARD_CARD_GAP = 44;
 const REWARD_CARD_Y = 290;
+// 하단 바의 장비 보관함(3칸 x 2줄). 마왕 탭 스킬 칸(844까지)과 다음 웨이브 버튼(NEXT_BTN_X) 사이라 탭과 관계없이 늘 보인다
+const BAG_X = 862;
+const BAG_COLS = 3;
+const BAG_SLOT = 52; // 칸 크기. 48px 장비 그림을 원래 크기로 넣는다
+const BAG_GAP = 6;
+const POPUP_EQUIP_H = 70; // 팝업의 장비 줄 높이
+const EQUIP_MAP_ICON = 24; // 맵 몬스터 곁 장비 그림(화면 px). 48px의 정확히 절반이라 도트 하나가 화면 1px이 되어 흐려지지 않는다
 
 const UI = {
     mouse: { x: 0, y: 0 },
@@ -25,6 +32,10 @@ const UI = {
     drag: null, // 끄는 중: { src, type, x, y }. src는 { monster }
     dropTarget: null, // 끄는 동안 손가락 아래 놓을 곳(미리보기용)
     returning: [], // 놓지 못해 제자리로 날아가는 그림
+    equipPress: null, // 보관함 칸을 누른 순간: { index, id, x, y }. DRAG_START 넘게 움직이면 equipDrag가 된다
+    equipDrag: null, // 장비를 끄는 중: { index, id, x, y }
+    equipTarget: null, // 장비를 끄는 동안 손가락 아래 몬스터
+    popupEquipRect: null, // 팝업의 장비 칸(마우스를 올리면 설명)
     hoverCorpse: null,
     hoverButton: null,
     orbHp: null, // 체력 구슬에 보이는 체력. 제물로 오를 때는 천천히 차오르고, 깎일 때는 바로 줄어든다
@@ -37,7 +48,14 @@ const UI = {
         this.buttons.push(Object.assign({ id, x, y, w, h }, opts));
     },
 
-    showToast(text) { this.toast = { text, age: 0, life: 1.6 }; },
+    showToast(text, life) { this.toast = { text, age: 0, life: life || 1.6 }; },
+
+    // 보관함 i번 칸의 화면 자리
+    bagRect(i) {
+        const col = i % BAG_COLS;
+        const row = Math.floor(i / BAG_COLS);
+        return { x: BAG_X + col * (BAG_SLOT + BAG_GAP), y: GAME_HEIGHT - BAR_H + 8 + row * (BAG_SLOT + BAG_GAP), w: BAG_SLOT, h: BAG_SLOT };
+    },
 
     // 매 프레임 지금 눌릴 수 있는 버튼 목록을 다시 만든다
     layout() {
@@ -87,6 +105,11 @@ const UI = {
             this.button('lightning', slotX(0), slotY, BAR_SLOT_W, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
             this.button('roar', slotX(1), slotY, BAR_SLOT_W, 104, { skill: 'roar', onClick: () => this.useRoar() });
         }
+        // 보관함 칸: 누르고 끌면 장비 끌기(onDown). 그림은 drawBag이 하단 바와 함께 그린다
+        for (let i = 0; i < EQUIP_RULES.slots; i++) {
+            const r = this.bagRect(i);
+            this.button(`bag${i}`, r.x, r.y, r.w, r.h, { bagSlot: i });
+        }
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
             this.button('next', NEXT_BTN_X, barY + 22, 320, 84, {
@@ -134,9 +157,19 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = 166 + POPUP_RANK_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + 64;
+        const h = 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
+        // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
+        if (f.equip) {
+            this.button('unequip', o.x + w - 98, o.y + 166 + POPUP_RANK_H + 8, 84, 34, {
+                label: '빼기', size: 19,
+                onClick: () => {
+                    const res = Game.unequipMonster(f);
+                    if (!res.ok && res.reason === 'full') this.showToast('보관함이 가득 차 뺄 수 없습니다.');
+                }
+            });
+        }
         let y = o.y + h - 64 - upgrades * 88;
         if (upgrades === 1) {
             const cost = upgradeCost(f.type, 2);
@@ -172,7 +205,7 @@ const UI = {
         const total = cards.length * REWARD_CARD_W + (cards.length - 1) * REWARD_CARD_GAP;
         const x0 = (GAME_WIDTH - total) / 2;
         cards.forEach((card, i) => {
-            const disabled = card.kind === 'monster' && !Game.canTakeRewardMonster(card.type);
+            const disabled = !Game.canTakeReward(card);
             this.button(`reward${i}`, x0 + i * (REWARD_CARD_W + REWARD_CARD_GAP), REWARD_CARD_Y, REWARD_CARD_W, REWARD_CARD_H, {
                 reward: card, index: i, disabled, onClick: () => this.pickReward(i)
             });
@@ -184,6 +217,7 @@ const UI = {
         const res = Game.pickBossReward(i);
         if (res.ok) return res;
         if (res.reason === 'full') this.showToast('몬스터를 놓을 자리가 없습니다. 골드를 고르세요.');
+        else if (res.reason === 'bagFull') this.showToast('보관함이 가득 찼습니다. 다른 카드를 고르세요.');
         Sfx.play('mergeFail');
         return res;
     },
@@ -191,13 +225,45 @@ const UI = {
     clearSelection() {
         this.selectedMonster = null;
         this.popup = null;
+        this.popupEquipRect = null;
     },
 
     // 우클릭과 Esc: 끌기, 번개 조준, 몬스터 선택을 모두 끈다
     cancel() {
         this.clearSelection();
         this.cancelDrag();
+        this.cancelEquipDrag();
         this.targeting = false;
+    },
+
+    cancelEquipDrag() {
+        this.equipPress = null;
+        this.equipDrag = null;
+        this.equipTarget = null;
+    },
+
+    // 장비를 놓을 몬스터: 놓은 칸 또는 길로 나간 곳. 하단 바와 버튼 위는 없음
+    equipTargetAt(x, y) {
+        if (y > GAME_HEIGHT - BAR_H || this.buttonAt(x, y)) return null;
+        const wx = x / WORLD_ZOOM;
+        const wy = y / WORLD_ZOOM;
+        return Game.monsterAt(Math.floor(wx / TILE), Math.floor((wy - MAP_TOP) / TILE)) || Game.monsterNear(wx, wy);
+    },
+
+    // 끈 장비를 놓는다: 몬스터 위면 끼우고(끼고 있으면 맞바꾼다), 아니면 보관함에 그대로 남는다
+    dropEquip(x, y) {
+        const d = this.equipDrag;
+        const m = this.equipTargetAt(x, y);
+        if (!m) {
+            if (y <= GAME_HEIGHT - BAR_H) {
+                this.showToast('장비는 맵의 몬스터 위에 놓아야 끼웁니다.');
+                Sfx.play('mergeFail');
+            }
+            return null;
+        }
+        const res = Game.equipMonster(m, d.index);
+        if (res.ok && res.swapped) this.showToast(`맞바꿨습니다. ${EQUIPMENT[res.swapped].name}은(는) 보관함으로 돌아갔습니다.`, 2.2);
+        return res;
     },
 
     cancelDrag() {
@@ -286,8 +352,18 @@ const UI = {
         this.onMove(x, y);
         this.layout();
         this.press = null;
+        this.cancelEquipDrag();
         const b = this.buttonAt(x, y);
         const inGame = Game.inPlay() && !Game.bossReward; // 보상을 고르는 동안 맵의 몬스터를 누르거나 끌지 않는다
+        if (b && b.bagSlot !== undefined) {
+            // 보관함 칸: 장비가 있으면 끌 준비(떼는 순간 끌기인지 누르기인지 나눈다)
+            const id = Game.equipBag[b.bagSlot];
+            if (id && inGame) {
+                this.equipPress = { index: b.bagSlot, id, x, y };
+                this.targeting = false;
+            }
+            return;
+        }
         if (!b && inGame && !this.targeting) {
             const wx = x / WORLD_ZOOM;
             const wy = y / WORLD_ZOOM;
@@ -309,6 +385,18 @@ const UI = {
         const press = this.press;
         const drag = this.drag;
         this.press = null;
+        if (this.equipDrag) {
+            this.dropEquip(x, y);
+            this.cancelEquipDrag();
+            return;
+        }
+        if (this.equipPress) {
+            // 끌지 않고 뗐다: 끼우는 법을 알려 준다
+            this.cancelEquipDrag();
+            Sfx.play('click');
+            this.showToast('장비를 맵의 몬스터 위로 끌어 놓으면 끼웁니다.');
+            return;
+        }
         if (drag) {
             this.drop(this.dropAt(x, y), x, y);
             this.cancelDrag();
@@ -411,6 +499,21 @@ const UI = {
             }
             this.press = null;
         }
+        const ep = this.equipPress;
+        if (ep && !this.equipDrag && distance(x, y, ep.x, ep.y) > DRAG_START) {
+            if (Game.inPlay() && !Game.bossReward && Game.equipBag[ep.index] === ep.id) {
+                this.equipDrag = { index: ep.index, id: ep.id };
+                this.clearSelection();
+                this.targeting = false;
+                Sfx.play('pickup');
+            }
+            this.equipPress = null;
+        }
+        if (this.equipDrag) {
+            this.equipDrag.x = x;
+            this.equipDrag.y = y;
+            this.equipTarget = this.equipTargetAt(x, y);
+        }
         if (!this.drag) { this.hoverCell = null; this.dropTarget = null; return; }
         if (!Game.inPlay()) { this.cancelDrag(); return; }
         this.drag.x = x;
@@ -486,9 +589,17 @@ const UI = {
             this.toast.age += dt;
             if (this.toast.age > this.toast.life) this.toast = null;
         }
+        // 장비 획득과 보관함 가득 알림(게임 쪽이 Fx.notice에 남긴다)
+        if (Fx.notice) {
+            this.showToast(Fx.notice, 2.4);
+            Fx.notice = null;
+        }
         if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
         // 보상 카드가 뜨면 끌기, 선택, 번개 조준을 끈다
-        if (Game.bossReward && (this.drag || this.press || this.selectedMonster || this.targeting)) this.cancel();
+        if (Game.bossReward && (this.drag || this.press || this.equipDrag || this.equipPress || this.selectedMonster || this.targeting)) this.cancel();
+        // 끄는 장비가 보관함에서 사라지거나 판이 끝나면 끌기를 그만둔다
+        const ed = this.equipDrag || this.equipPress;
+        if (ed && (!Game.inPlay() || Game.equipBag[ed.index] !== ed.id)) this.cancelEquipDrag();
         // 끄는 몬스터가 맵에서 사라지면(판 종료 등) 끌기를 그만둔다
         if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
         // 체력 구슬: 오를 때는 초당 6씩 차오르고, 깎이면 바로 맞춘다
@@ -503,6 +614,15 @@ const UI = {
     // 세계 위에 깔리는 표시: 끄는 동안 놓을 칸 미리보기(반투명 그림, 사거리, 나갈 지점), 합칠 수 있는 몬스터 발밑 고리,
     // 고른 몬스터의 사거리
     drawRanges(ctx) {
+        // 장비를 끄는 동안: 끼울 수 있는 몬스터 발밑을 살짝 밝히고, 놓으려는 몬스터는 진하게
+        if (this.equipDrag) {
+            const color = MONSTER_GRADES[EQUIPMENT[this.equipDrag.id].grade].light;
+            for (const m of Game.monsters) {
+                if (m.reveal > 0) continue;
+                const down = m.down > 0;
+                Render.mergeRing(ctx, down ? m.homeX : m.x, (down ? m.homeY : m.y) + MONSTER_FOOT, color, this.equipTarget === m);
+            }
+        }
         // 끄는 동안 왕좌에 제물 표시
         if (this.drag) Render.sacrificeMark(ctx, !!(this.dropTarget && this.dropTarget.throne));
         const cell = this.drag && this.hoverCell;
@@ -597,6 +717,7 @@ const UI = {
         this.drawStreak(ctx);
         if (this.popup) this.drawPopup(ctx);
         this.drawButtons(ctx);
+        this.drawEquipTips(ctx);
         this.drawMergeBadges(ctx);
         if (!G.bossReward) {
             this.drawHints(ctx);
@@ -731,6 +852,68 @@ const UI = {
         ctx.fillStyle = '#fff2b0';
         ctx.fillRect(HUD_GOLD.x - 11, HUD_GOLD.y - 11, 11, 11);
         UIKit.text(ctx, String(G.gold), GAME_WIDTH - 36, HUD_GOLD.y, Math.round(44 * pulse), '#ffe08a', 'right');
+        this.drawBag(ctx);
+    },
+
+    // 장비 그림(48px)을 (x, y)에 scale배로 그린다. 정수 배율이거나 절반이라 도트가 흐려지지 않는다
+    drawEquipIcon(ctx, id, x, y, scale) {
+        const img = Assets.get(`equip_${id}`);
+        if (!img) return;
+        const s = 48 * (scale || 1);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, Math.round(x), Math.round(y), s, s);
+    },
+
+    // 장비 칸 하나: 어두운 네모, 장비가 있으면 등급 색 테두리와 그림
+    drawEquipSlot(ctx, id, x, y, size, hot, faded) {
+        UIKit.frame(ctx, x, y, size, size, hot ? 'buttonHover' : 'dark', 4);
+        if (!id) return;
+        ctx.save();
+        if (faded) ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = MONSTER_GRADES[EQUIPMENT[id].grade].color;
+        ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+        this.drawEquipIcon(ctx, id, x + (size - 48) / 2, y + (size - 48) / 2, 1);
+        ctx.restore();
+    },
+
+    // 하단 바의 보관함: 3x2칸과 "장비 n/6". 보상을 고르는 동안에도 보인다
+    drawBag(ctx) {
+        const G = Game;
+        for (let i = 0; i < EQUIP_RULES.slots; i++) {
+            const r = this.bagRect(i);
+            const id = G.equipBag[i];
+            const hot = id && this.hoverButton && this.hoverButton.bagSlot === i && !this.equipDrag && !G.bossReward;
+            const dragging = this.equipDrag && this.equipDrag.index === i;
+            this.drawEquipSlot(ctx, id, r.x, r.y, r.w, hot, dragging);
+        }
+        const lx = BAG_X + BAG_COLS * (BAG_SLOT + BAG_GAP) + 6;
+        const y = GAME_HEIGHT - BAR_H;
+        const full = G.bagFull();
+        UIKit.plain(ctx, '장비', lx, y + 36, 20, '#c9b6ea');
+        UIKit.text(ctx, `${G.equipBag.length}/${EQUIP_RULES.slots}`, lx, y + 80, 30, full ? '#ff8f8f' : '#ffffff');
+    },
+
+    // 장비 설명: 보관함 칸이나 팝업의 장비 칸 위에 마우스를 올렸을 때
+    drawEquipTips(ctx) {
+        if (this.equipDrag || Game.bossReward) return;
+        const tip = (id, x, y) => {
+            const def = EQUIPMENT[id];
+            const grade = MONSTER_GRADES[def.grade];
+            this.drawTooltip(ctx, clamp(x, 12, GAME_WIDTH - 442), y, `${def.name} · ${grade.name}`, equipEffectText(id), grade.light);
+        };
+        const b = this.hoverButton;
+        if (b && b.bagSlot !== undefined && Game.equipBag[b.bagSlot]) {
+            tip(Game.equipBag[b.bagSlot], b.x - 120, GAME_HEIGHT - BAR_H - 92);
+        }
+        const r = this.popupEquipRect;
+        const f = this.selectedMonster;
+        const m = this.mouse;
+        if (r && f && f.equip && this.popup && m.x >= r.x && m.x <= r.x + r.w && m.y >= r.y && m.y <= r.y + r.h) {
+            // 팝업 글자를 가리지 않게 팝업 옆(왼쪽, 자리가 없으면 오른쪽)에 띄운다
+            const p = this.popup;
+            tip(f.equip, p.x - 442 >= 12 ? p.x - 442 : p.x + p.w + 12, r.y - 13);
+        }
     },
 
     drawParty(ctx) {
@@ -841,14 +1024,15 @@ const UI = {
         UIKit.text(ctx, def.name, p.x + 96, p.y + 36, 28, '#ffe08a');
         UIKit.plain(ctx, `${grade.name} · ${MONSTER_ROLES[def.role].name} · ${MONSTER_FAMILIES[def.family]}`, p.x + 96, p.y + 68, 19, grade.light);
         const stats = monsterStats(f);
+        const num = v => Math.round(v * 100) / 100; // 장비로 0.8695...처럼 되는 값을 소수 둘째 자리까지
         let line1;
         let line2;
         if (monsterBlocks(p.type)) {
             line1 = f.down > 0 ? `${Math.ceil(f.down)}초 뒤 다시 나옴` : `체력 ${Math.ceil(f.hp)}/${Math.round(stats.hp)}`;
-            line1 += ` · 피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초`;
+            line1 += ` · 피해 ${Math.round(stats.damage)} · 간격 ${num(stats.interval)}초`;
             line2 = `막기 ${stats.block}명 · 쓰러지면 ${stats.respawn}초 뒤 다시 나옴`;
         } else {
-            line1 = `피해 ${Math.round(stats.damage)} · 간격 ${stats.interval}초 · 사거리 ${stats.range}`;
+            line1 = `피해 ${Math.round(stats.damage)} · 간격 ${num(stats.interval)}초 · 사거리 ${num(stats.range)}`;
             line2 = stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림';
         }
         // 랭크: 글자는 랭크 색, 옆에 다음 랭크까지 남은 처치 수(정예 3, 보스 10으로 센다)
@@ -862,8 +1046,26 @@ const UI = {
         UIKit.plain(ctx, line1, p.x + 20, p.y + 108 + POPUP_RANK_H, 19, '#ffffff');
         UIKit.plain(ctx, line2, p.x + 20, p.y + 138 + POPUP_RANK_H, 18, '#d8ccef');
 
-        // 능력: 한 줄에 하나. 이름과 설명은 ABILITY_KINDS에서 온다
+        // 장비 줄: 칸(마우스를 올리면 설명), 이름과 등급, 효과. 빼기 버튼은 layoutMonsterMenu가 놓는다
         let y = p.y + 166 + POPUP_RANK_H;
+        ctx.fillStyle = 'rgba(216,169,79,0.45)';
+        ctx.fillRect(p.x + 16, y - 6, p.w - 32, 2);
+        this.popupEquipRect = { x: p.x + 18, y: y + 4, w: 56, h: 56 };
+        this.drawEquipSlot(ctx, f.equip, p.x + 18, y + 4, 56, false, false);
+        if (f.equip) {
+            const eq = EQUIPMENT[f.equip];
+            const eg = MONSTER_GRADES[eq.grade];
+            UIKit.text(ctx, eq.name, p.x + 88, y + 22, 21, eg.light);
+            ctx.font = `21px ${UI_FONT}`;
+            UIKit.plain(ctx, `${eg.name} 장비`, p.x + 98 + ctx.measureText(eq.name).width, y + 22, 16, '#b8a9d0');
+            UIKit.plain(ctx, equipEffectText(f.equip), p.x + 88, y + 50, 16, '#9dffb0');
+        } else {
+            UIKit.text(ctx, '장비 없음', p.x + 88, y + 22, 20, '#a59db5');
+            UIKit.plain(ctx, '보관함의 장비를 끌어 놓으면 끼웁니다', p.x + 88, y + 50, 16, '#b8a9d0');
+        }
+        y += POPUP_EQUIP_H;
+
+        // 능력: 한 줄에 하나. 이름과 설명은 ABILITY_KINDS에서 온다
         for (const a of def.abilities) {
             const kind = ABILITY_KINDS[a.kind];
             UIKit.plain(ctx, kind.name, p.x + 20, y + 12, 18, '#ffb0e8');
@@ -899,6 +1101,7 @@ const UI = {
         for (const b of this.buttons) {
             const hover = this.hoverButton === b && !b.disabled;
             if (b.reward) continue; // 보상 카드는 어둡게 깐 화면 위에 drawBossReward가 그린다
+            if (b.bagSlot !== undefined) continue; // 보관함 칸은 drawBag이 그린다
             if (b.skill) this.drawSkillButton(ctx, b, hover);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, hover);
             else if (b.tab) this.drawTabButton(ctx, b, hover);
@@ -949,7 +1152,8 @@ const UI = {
         const h = b.h;
         const cx = x + w / 2;
         const def = card.kind === 'monster' ? MONSTERS[card.type] : null;
-        const grade = def ? MONSTER_GRADES[def.grade] : null;
+        const eq = card.kind === 'equip' ? EQUIPMENT[card.id] : null;
+        const grade = def || eq ? MONSTER_GRADES[(def || eq).grade] : null;
         const edge = grade ? grade.color : '#ffd24d';
         UIKit.frame(ctx, x, y, w, h, 'panel', 10);
         if (hover) {
@@ -990,6 +1194,25 @@ const UI = {
                 ly += 24;
             }
             UIKit.plain(ctx, '맵의 빈 칸에 바로 나옵니다', cx, y + h - 40, 19, '#c9b6ea', 'center');
+        } else if (eq) {
+            // 장비 카드: 48px 그림을 3배(정수 배율)로
+            const size = 168;
+            ctx.fillStyle = '#0d0918';
+            ctx.fillRect(cx - size / 2, y + 44, size, size);
+            this.drawEquipIcon(ctx, card.id, cx - 72, y + 44 + (size - 144) / 2, 3);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = grade.color;
+            ctx.strokeRect(cx - size / 2 + 1.5, y + 45.5, size - 3, size - 3);
+            UIKit.text(ctx, eq.name, cx, y + 248, 34, grade.light, 'center');
+            UIKit.plain(ctx, `${grade.name} · 장비`, cx, y + 288, 22, '#d8ccef', 'center');
+            let ly = y + 334;
+            ctx.font = `21px ${UI_FONT}`;
+            for (const line of this.wrapLines(ctx, equipEffectText(card.id), w - 64)) {
+                UIKit.text(ctx, line, cx, ly, 21, '#9dffb0', 'center');
+                ly += 30;
+            }
+            UIKit.plain(ctx, '몬스터 하나에 끼워 강하게 만듭니다.', cx, ly + 10, 18, '#b8a9d0', 'center');
+            UIKit.plain(ctx, `보관함에 들어갑니다 · ${Game.equipBag.length}/${EQUIP_RULES.slots}`, cx, y + h - 40, 19, '#c9b6ea', 'center');
         } else {
             // 골드 카드: 큰 금화
             const gy = y + 128;
@@ -1009,8 +1232,9 @@ const UI = {
         if (b.disabled) {
             ctx.fillStyle = 'rgba(4,2,12,0.68)';
             ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
-            UIKit.text(ctx, '자리 없음', cx, y + h / 2, 36, '#ff8f8f', 'center');
-            UIKit.plain(ctx, `맵 몬스터 ${Game.monsters.length}/${SUMMON_RULES.maxField}`, cx, y + h / 2 + 42, 20, '#e4d8fa', 'center');
+            UIKit.text(ctx, eq ? '보관함 가득' : '자리 없음', cx, y + h / 2, 36, '#ff8f8f', 'center');
+            const note = eq ? `보관함 ${Game.equipBag.length}/${EQUIP_RULES.slots}` : `맵 몬스터 ${Game.monsters.length}/${SUMMON_RULES.maxField}`;
+            UIKit.plain(ctx, note, cx, y + h / 2 + 42, 20, '#e4d8fa', 'center');
         }
     },
 
@@ -1084,9 +1308,9 @@ const UI = {
     },
 
     // 슬롯 위에 뜨는 설명
-    drawTooltip(ctx, x, y, title, desc) {
+    drawTooltip(ctx, x, y, title, desc, titleColor) {
         UIKit.frame(ctx, x, y, 430, 82, 'dark', 6);
-        UIKit.text(ctx, title, x + 20, y + 24, 24, '#ffe08a');
+        UIKit.text(ctx, title, x + 20, y + 24, 24, titleColor || '#ffe08a');
         UIKit.plain(ctx, desc, x + 20, y + 56, 19, '#ffffff');
     },
 
@@ -1110,6 +1334,8 @@ const UI = {
         let hint = null;
         if (this.targeting) hint = '번개를 떨어뜨릴 곳을 누르세요. Esc로 취소합니다.';
         else if (this.drag) hint = '빈 칸으로 옮기거나 몬스터 위에 놓아 합치세요. 왕좌에 놓으면 제물입니다.';
+        else if (this.equipDrag) hint = '장비를 몬스터 위에 놓으면 끼웁니다. 이미 끼고 있으면 맞바꿉니다.';
+        else if (G.equipBag.length && G.monsters.length && !G.monsters.some(m => m.equip)) hint = '아래 보관함의 장비를 맵의 몬스터 위로 끌어 놓으면 끼웁니다.';
         else if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) hint = `아래 소환 버튼(S)을 누르면 몬스터가 길 옆에 바로 나옵니다. 지금 ${G.summonCost()}골드입니다.`;
         else if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) hint = '몬스터를 끌어 다른 몬스터 위에 놓으면 합칩니다. 빈 칸으로 옮길 수도 있습니다.';
         else if (G.state === 'prep' && G.hp < COMBAT_RULES.maxHp && G.stats.sacrificed === 0 && G.monsters.length > 0) hint = '몬스터를 왕좌의 마왕 위로 끌어 바치면 체력을 회복하고 번개가 빨리 돌아옵니다.';
@@ -1177,6 +1403,18 @@ const UI = {
             const x = clamp(this.mouse.x, 200, GAME_WIDTH - 200);
             const y = this.mouse.y > GAME_HEIGHT - 260 ? this.mouse.y - 150 : this.mouse.y + 70;
             UIKit.text(ctx, text, x, y, 28, color, 'center');
+            // 합치면 결과가 이어받을 장비: 글자 오른쪽에 작은 칸
+            const keep = act.action === 'merge' ? Game.mergeEquip(this.drag.src.monster, act.loc.monster).keep : null;
+            if (keep) {
+                ctx.font = `28px ${UI_FONT}`;
+                const ex = Math.round(x + ctx.measureText(text).width / 2 + 12);
+                const ey = Math.round(y - 15);
+                UIKit.frame(ctx, ex, ey, 30, 30, 'dark', 3);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = MONSTER_GRADES[EQUIPMENT[keep].grade].color;
+                ctx.strokeRect(ex + 1, ey + 1, 28, 28);
+                this.drawEquipIcon(ctx, keep, ex + 3, ey + 3, 0.5);
+            }
         }
     },
 
@@ -1196,6 +1434,19 @@ const UI = {
             const k = clamp(r.age / r.life, 0, 1);
             const e = 1 - (1 - k) * (1 - k);
             draw(r.type, r.x + (r.to.x - r.x) * e, r.y + 20 + (r.to.y - 10 - r.y - 20) * e, 0.85 * (1 - k * 0.5));
+        }
+        // 끄는 장비: 손가락 오른쪽 아래에 원래 크기로(놓을 몬스터를 가리지 않게), 놓을 몬스터가 있으면 끼우기·맞바꾸기 안내
+        const ed = this.equipDrag;
+        if (ed && ed.x !== undefined) {
+            this.drawEquipSlot(ctx, ed.id, ed.x + 14, ed.y + 4, 56, true, false);
+            const m = this.equipTarget;
+            if (m) {
+                const name = MONSTERS[m.type].name;
+                const text = m.equip ? `맞바꾸기 → ${name} (${EQUIPMENT[m.equip].name}은 보관함으로)` : `끼우기 → ${name}`;
+                const x = clamp(ed.x, 320, GAME_WIDTH - 320);
+                const y = ed.y > GAME_HEIGHT - 260 ? ed.y - 110 : ed.y + 90;
+                UIKit.text(ctx, text, x, y, 26, MONSTER_GRADES[EQUIPMENT[ed.id].grade].light, 'center');
+            }
         }
         if (!this.drag || this.drag.x === undefined) return;
         // 놓을 수 있는 칸 위에서는 칸에 붙은 반투명 그림(drawRanges)만 보인다
@@ -1343,10 +1594,11 @@ const UI = {
             `소환(S)하면 몬스터가 길 옆 칸에 바로 나옵니다. 맵에 ${SUMMON_RULES.maxField}마리까지 둡니다.`,
             '몬스터를 다른 몬스터 위에 놓으면 합쳐 더 강한 몬스터가 됩니다.',
             '같은 등급 2마리는 상위 등급으로, 조합식은 정해진 몬스터로. 숨은 조합도 있습니다.',
+            '보스와 정예가 주는 장비는 하단 보관함에서 몬스터 위로 끌어 끼웁니다.',
             CORRUPTION_ENABLED && '쓰러진 용사를 5초 안에 누르면 타락시켜 부하로 만듭니다.',
             '마왕 탭의 번개(Q)로 공격하고, 체력이 낮으면 호통(W)!'
         ].filter(Boolean);
-        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 530 + i * 42, 26, '#efe6ff', 'center'));
+        lines.forEach((t, i) => UIKit.plain(ctx, t, cx, 526 + i * 40, 26, '#efe6ff', 'center'));
         UIKit.plain(ctx, '품질 시험판 · 지하 감옥 1층', cx, 900, 24, '#b8a9d0', 'center');
     },
 
