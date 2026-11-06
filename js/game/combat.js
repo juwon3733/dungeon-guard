@@ -22,6 +22,7 @@ function killHero(hero, pos, attacker) {
     const bounty = hero.bounty;
     G.gold += bounty;
     G.stats.kills++;
+    if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
     Fx.coin(pos.x, pos.y - 40, bounty);
     Fx.burst(pos.x, pos.y - 30, hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 56 : 10, hero.boss ? 620 : 300, 0.45, 6);
     Fx.burst(pos.x, pos.y - 30, '#ff9d4d', hero.boss ? 28 : 5, 240, 0.4, 5);

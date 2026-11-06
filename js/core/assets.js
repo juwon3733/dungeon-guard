@@ -28,6 +28,7 @@ const Assets = {
         }
         for (const pose of ['down', 'left', 'slam', 'windup']) list.push(`boss_fallen_knight_${pose}`);
         list.push('boss_rift_lord_down', 'boss_rift_lord_cast');
+        for (const id of Object.keys(EQUIPMENT)) list.push(`equip_${id}`); // 장비 그림(48px)
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',
             'adv_arcanist_lightning', 'adv_arcanist_thunderGod', 'adv_doomMelody_requiem', 'arrowBig', 'arrowPoison']) list.push(`fx_${fx}`);

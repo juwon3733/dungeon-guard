@@ -32,6 +32,13 @@ function monsterStats(m) {
         if (b.beam) stats.beam = true;
         if (b.heavy) stats.heavy = true;
     }
+    // 장비: 랭크와 갈래까지 정한 수치에 곱한다(갈래의 interval, range는 값을 바꾸므로 그 뒤에)
+    if (m.equip) {
+        stats.hp *= 1 + equipEffect(m.equip, 'hp');
+        stats.damage *= 1 + equipEffect(m.equip, 'damage');
+        stats.range *= 1 + equipEffect(m.equip, 'range');
+        stats.interval /= 1 + equipEffect(m.equip, 'speed');
+    }
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
     return stats;
@@ -74,6 +81,7 @@ function createMonster(type, col, row) {
         homeX: tileX(col), homeY: tileY(row), rally: null, moving: false,
         tier: 1, branch: null, invested: MONSTERS[type].cost,
         rank: 0, xp: 0, rankUp: 0, // rank는 MONSTER_RANKS 번호, rankUp은 랭크가 오른 연출의 남은 초
+        equip: null, // 낀 장비 id(EQUIPMENT)
         atk: 0.2, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, shot: null, anim: Math.random() * 4,
         dir: 'down', flash: 0, stun: 0, down: 0, target: null, hp: 0, maxHp: 0, armor: 0
     };
@@ -86,7 +94,7 @@ function createMonster(type, col, row) {
     return m;
 }
 
-// 강화하면 체력은 비율을 유지한 채 최대치만 늘린다
+// 강화, 랭크, 장비로 수치가 바뀌면 체력은 비율을 유지한 채 최대치만 바꾼다
 function applyMonsterStats(m, fresh) {
     const stats = monsterStats(m);
     const ratio = fresh || m.maxHp <= 0 ? 1 : m.hp / m.maxHp;
@@ -102,17 +110,24 @@ function setMonsterRank(m, rank) {
     applyMonsterStats(m);
 }
 
-// 다음 랭크까지 남은 경험치(처치 수). 최고 랭크면 0
+// 장비를 끼우거나 뺀다(id 또는 null). 체력은 비율을 유지한다
+function setMonsterEquip(m, id) {
+    m.equip = id || null;
+    applyMonsterStats(m);
+}
+
+// 다음 랭크까지 남은 경험치(처치 수). 최고 랭크면 0. 장비로 경험치가 소수가 되면 올려서 센다
 function monsterXpToNext(m) {
     const next = MONSTER_RANKS[(m.rank || 0) + 1];
-    return next ? Math.max(0, next.xp - (m.xp || 0)) : 0;
+    return next ? Math.max(0, Math.ceil(next.xp - (m.xp || 0) - 1e-9)) : 0;
 }
 
 // 몬스터가 용사를 쓰러뜨림: 처치 경험치를 받고, 넘친 만큼 랭크를 올린다(체력은 비율을 유지한다).
 // 합쳐지거나 팔려 사라진 몬스터의 투사체가 마무리했으면 아무도 받지 않는다
 function monsterKilledHero(m, hero) {
     if (!m || m.kind !== 'monster' || m.removed) return;
-    m.xp += hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
+    const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
+    m.xp += gain * (1 + equipEffect(m.equip, 'xp')); // 장비(처치 경험치)
     const before = m.rank;
     while (MONSTER_RANKS[m.rank + 1] && m.xp >= MONSTER_RANKS[m.rank + 1].xp) m.rank++;
     if (m.rank === before) return;

@@ -500,6 +500,7 @@ const Render = {
         // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
         this.gradeMark(ctx, m.x, footY + 20, def.grade);
         this.rankMark(ctx, m, footY);
+        if (m.equip) this.equipMark(ctx, m.equip, m.x - 30, footY + 18);
         for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
             const sx = m.x - (m.tier - 1) * 11 + i * 22;
             const sy = footY + 40;
@@ -631,6 +632,52 @@ const Render = {
             ctx.save();
             ctx.globalAlpha = Math.min(1, up * 2.5);
             UIKit.text(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(24 / WORLD_ZOOM), r.color, 'center', 'bold');
+            ctx.restore();
+        }
+    },
+
+    // 몬스터 곁의 작은 장비 그림(세계 좌표 cx, cy가 가운데). 화면에서 EQUIP_MAP_ICON px(48px의 절반)로,
+    // 화면 픽셀 경계에 맞춰 최근접 표본으로 줄여 도트가 흐려지지 않게 한다
+    equipMark(ctx, id, cx, cy) {
+        const img = Assets.get(`equip_${id}`);
+        if (!img) return;
+        const s = EQUIP_MAP_ICON; // 화면 px
+        const sx = Math.round(cx * WORLD_ZOOM - s / 2);
+        const sy = Math.round(cy * WORLD_ZOOM - s / 2);
+        const z = 1 / WORLD_ZOOM;
+        ctx.save();
+        ctx.fillStyle = 'rgba(13,9,24,0.85)';
+        ctx.fillRect((sx - 2) * z, (sy - 2) * z, (s + 4) * z, (s + 4) * z);
+        ctx.lineWidth = 2 * z;
+        ctx.strokeStyle = MONSTER_GRADES[EQUIPMENT[id].grade].color;
+        ctx.strokeRect((sx - 1) * z, (sy - 1) * z, (s + 2) * z, (s + 2) * z);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, sx * z, sy * z, s * z, s * z);
+        ctx.restore();
+    },
+
+    // 장비를 얻은 자리에서 떠오르며 사라지는 장비 그림(원래 크기)과 빛
+    drawDrops(ctx) {
+        for (const d of Fx.drops) {
+            const k = clamp(d.age / d.life, 0, 1);
+            const a = k < 0.7 ? 1 : (1 - k) / 0.3;
+            const y = d.y - 70 * (1 - (1 - k) * (1 - k));
+            const rgb = MONSTER_GRADES[EQUIPMENT[d.id].grade].glow;
+            ctx.save();
+            ctx.globalAlpha = a;
+            ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(d.x, y, 4, d.x, y, 70);
+            g.addColorStop(0, `rgba(${rgb},0.7)`);
+            g.addColorStop(1, `rgba(${rgb},0)`);
+            ctx.fillStyle = g;
+            ctx.fillRect(d.x - 70, y - 70, 140, 140);
+            ctx.globalCompositeOperation = 'source-over';
+            const img = Assets.get(`equip_${d.id}`);
+            if (img) {
+                ctx.imageSmoothingEnabled = false;
+                const s = 48 / WORLD_ZOOM; // 화면에서 48px(원래 크기)
+                ctx.drawImage(img, d.x - s / 2, y - s / 2, s, s);
+            }
             ctx.restore();
         }
     },
@@ -1245,6 +1292,7 @@ const Render = {
         for (const p of Game.projectiles) this.drawProjectile(ctx, p);
         this.drawEffects(ctx);
         this.drawNumbers(ctx);
+        this.drawDrops(ctx);
         this.drawSpeech(ctx);
         ctx.restore();
         this.drawCoins(ctx);

@@ -91,7 +91,7 @@ const endPointer = (e, cancelled) => {
     if (e.pointerId !== activePointer) return;
     activePointer = null;
     const p = toVirtual(e);
-    if (cancelled) UI.cancelDrag();
+    if (cancelled) { UI.cancelDrag(); UI.cancelEquipDrag(); }
     else UI.onUp(p.x, p.y);
 };
 canvas.addEventListener('pointerup', e => endPointer(e, false));

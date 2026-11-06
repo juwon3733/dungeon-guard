@@ -9,6 +9,24 @@ const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js',
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
+
+// 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
+{
+    const actx = vm.createContext({ console });
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
+        vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
+    }
+    const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
+    const names = vm.runInContext('Assets.names()', actx);
+    assert.strictEqual(ids.length, 16, 'sixteen equipment');
+    for (const id of ids) {
+        const file = path.join(root, 'assets/sprites', `equip_${id}.png`);
+        assert(fs.existsSync(file), 'missing picture ' + file);
+        const png = fs.readFileSync(file);
+        assert(png.readUInt32BE(16) === 48 && png.readUInt32BE(20) === 48, `equip_${id}.png is 48px`);
+        assert(names.includes(`equip_${id}`), `equip_${id} in Assets.names()`);
+    }
+}
 vm.runInContext(`
 // 입력은 main.js와 같은 길로 넣는다: 누름(onDown) → 움직임(onMove) → 뗌(onUp). 마우스와 터치가 같은 pointer 이벤트다
 const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
@@ -1233,26 +1251,26 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
         assert(typeof BOSSES.archmage.art.footPx[pose][dir] === 'number', 'archmage foot ' + pose + ' ' + dir);
     }
 
-    // 보상 표: 몬스터 2장(희귀 또는 영웅, 영웅 40%)과 골드 300G 1장
-    assert.strictEqual(JSON.stringify(BOSS_REWARD_RULES), '{"monsterCards":2,"epicChance":0.4,"gold":300}');
-    const kinds = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : c.type).join();
-    assert.strictEqual(withRandom([0.39, 0, 0.4, 0], () => kinds(Game.rollBossReward())), 'bone_knight,orc_berserker,gold300', 'epic under 40%');
-    assert.strictEqual(withRandom([0.4, 0.99, 0.4, 0], () => kinds(Game.rollBossReward())), 'curse_shooter,orc_berserker,gold300', 'rare from 40%');
-    // 영웅이 두 번 나와도 같은 몬스터는 겹치지 않는다(영웅 후보가 다 나왔으면 희귀에서)
-    assert.strictEqual(withRandom([0, 0, 0, 0], () => kinds(Game.rollBossReward())), 'bone_knight,orc_berserker,gold300', 'no duplicate epic');
-    // 희귀가 두 번 나와도 겹치지 않는다
-    assert.strictEqual(withRandom([0.9, 0, 0.9, 0], () => kinds(Game.rollBossReward())), 'orc_berserker,curse_shooter,gold300', 'no duplicate rare');
+    // 보상 표: 몬스터 1장(희귀 또는 영웅, 영웅 40%), 장비 1장(희귀 또는 영웅, 영웅 40%), 골드 300G 1장
+    assert.strictEqual(JSON.stringify(BOSS_REWARD_RULES), '{"monsterCards":1,"epicChance":0.4,"gold":300}');
+    assert.strictEqual(EQUIP_RULES.rewardEpicChance, 0.4);
+    const kinds = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : (c.kind === 'equip' ? c.id : c.type)).join();
+    // 난수 순서: 몬스터 등급, 몬스터, 장비 등급, 장비
+    assert.strictEqual(withRandom([0.39, 0, 0.39, 0], () => kinds(Game.rollBossReward())), 'bone_knight,gauntlet,gold300', 'epic under 40%');
+    assert.strictEqual(withRandom([0.4, 0.99, 0.4, 0.99], () => kinds(Game.rollBossReward())), 'curse_shooter,tome,gold300', 'rare from 40%');
+    const seenEquip = new Set();
     for (let i = 0; i < 300; i++) {
         const r = Game.rollBossReward();
         assert.strictEqual(r.cards.length, 3);
-        const [a, b, g] = r.cards;
-        assert(a.kind === 'monster' && b.kind === 'monster' && a.type !== b.type, 'two different monsters');
-        for (const c of [a, b]) {
-            const def = MONSTERS[c.type];
-            assert((def.grade === 'rare' || def.grade === 'epic') && def.summon !== false, 'rare or epic only: ' + c.type);
-        }
+        const [a, e, g] = r.cards;
+        assert(a.kind === 'monster', 'first card monster');
+        const def = MONSTERS[a.type];
+        assert((def.grade === 'rare' || def.grade === 'epic') && def.summon !== false, 'rare or epic only: ' + a.type);
+        assert(e.kind === 'equip' && EQUIPMENT[e.id] && EQUIPMENT[e.id].grade !== 'common', 'second card rare or epic equipment: ' + e.id);
+        seenEquip.add(EQUIPMENT[e.id].grade);
         assert(g.kind === 'gold' && g.gold === 300);
     }
+    assert(seenEquip.has('rare') && seenEquip.has('epic'), 'both equipment grades appear');
 
     // 5번째 웨이브 시작: 대마도사가 파티 뒤에 나온다
     Game.state = 'prep';
@@ -1322,9 +1340,9 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.bossReward = Game.rollBossReward();
     UI.update(0);
     const rb = id => UI.buttons.find(b => b.id === id);
-    assert(rb('reward0').disabled && rb('reward1').disabled && !rb('reward2').disabled, 'monster cards dimmed at cap');
+    assert(rb('reward0').disabled && !rb('reward1').disabled && !rb('reward2').disabled, 'monster card dimmed at cap, equipment card stays');
     UI.toast = null;
-    UI.onKey('Digit2');
+    UI.onKey('Digit1');
     btn('reward0');
     assert(Game.bossReward && Game.monsters.length === SUMMON_RULES.maxField, 'monster card refused at cap');
     assert(UI.toast && UI.toast.text.includes('골드'), 'cap toast');
@@ -1352,14 +1370,252 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(Game.prepTimer < t0, 'prep timer runs after retry');
 }
 
+// 장비: 표 16종, 보관함 6칸, 끼우기·빼기·맞바꾸기, 합치기 승계, 제물·판매 반환, 가득 차면 골드, 보상 카드, 정예 드롭
+{
+    assert.strictEqual(Game.state, 'prep');
+    Game.monsters = [];
+    Game.heroes = [];
+    Game.equipBag = [];
+    Game.gold = 1000;
+    // 표: id, 이름, 등급, 효과
+    const table = Object.values(EQUIPMENT).map(e => [e.id, e.name, e.grade, equipEffectText(e.id)].join('|')).join('\\n');
+    assert.strictEqual(table, [
+        'sword|저주받은 검|common|피해 +20%', 'bow|뼈 활|common|사거리 +15%', 'armor|강철 흉갑|common|체력 +30%',
+        'ring|보랏빛 반지|common|공격 속도 +15%', 'boots|날개 장화|common|공격 속도 +10%, 사거리 +5%',
+        'elixir|초록 비약|common|체력 +15%, 피해 +10%', 'axe|룬 전투 도끼|rare|피해 +40%', 'shield|해골 방패|rare|체력 +60%',
+        'helmet|뿔 투구|rare|체력 +30%, 피해 +20%', 'amulet|핏빛 목걸이|rare|공격 속도 +30%', 'tome|고대 주문서|rare|피해 +15%, 사거리 +25%',
+        'gauntlet|악마 손아귀|epic|피해 +60%, 공격 속도 +15%', 'staff|해골 지팡이|epic|피해 +40%, 사거리 +30%',
+        'cape|어둠의 망토|epic|체력 +80%, 공격 속도 +15%', 'crystal|영혼 수정|epic|공격 속도 +30%, 처치 경험치 +100%',
+        'crown|뼈 왕관|epic|체력 +40%, 피해 +40%, 처치 경험치 +50%'].join('\\n'));
+    assert.strictEqual(JSON.stringify(EQUIP_RULES), '{"slots":6,"fullGold":30,"rewardEpicChance":0.4,"eliteDrop":0.25,"eliteRareChance":0.25}');
+    // 하단 바: 보관함 6칸이 늘 있고(두 탭 모두), 소환 버튼·스킬 칸·다음 웨이브 버튼과 겹치지 않는다
+    const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    for (const tab of ['monster', 'demon']) {
+        UI.setTab(tab);
+        UI.update(0);
+        const bags = UI.buttons.filter(b => b.bagSlot !== undefined);
+        assert.strictEqual(bags.length, 6, 'six bag slots on ' + tab + ' tab');
+        for (const b of bags) for (const o of UI.buttons.filter(o => o.bagSlot === undefined)) assert(!overlap(b, o), 'bag slot overlaps ' + o.id);
+    }
+    UI.setTab('monster');
+    const bagXY = i => { const r = UI.bagRect(i); return [r.x + r.w / 2, r.y + r.h / 2]; };
+    const near = (a, b) => Math.abs(a - b) < 1e-9;
+
+    // 끼우기: 보관함 칸을 몬스터 위로 끈다. 끄는 동안 몬스터 강조 대상과 놓을 몬스터가 잡힌다
+    const archer = Game.place('skeleton_archer', 5, 4);
+    const base = monsterStats(archer);
+    Game.equipBag = ['sword'];
+    UI.update(0);
+    const [bx, by] = bagXY(0);
+    UI.onMove(bx, by);
+    UI.onDown(bx, by);
+    const to = monXY(archer);
+    for (let i = 1; i <= 4; i++) UI.onMove(bx + (to[0] - bx) * i / 4, by + (to[1] - by) * i / 4);
+    assert(UI.equipDrag && UI.equipDrag.id === 'sword' && UI.equipTarget === archer, 'equip drag targets the monster');
+    UI.onUp(to[0], to[1]);
+    assert(!UI.equipDrag && archer.equip === 'sword' && Game.equipBag.length === 0, 'equipped from bag');
+    assert(near(monsterStats(archer).damage, base.damage * 1.2), 'sword +20% damage');
+    assert(near(monsterStats(archer).range, base.range) && near(monsterStats(archer).interval, base.interval), 'other stats unchanged');
+    // 보관함 칸을 끌지 않고 누르면 안내만
+    Game.equipBag = ['bow'];
+    UI.toast = null;
+    click(...bagXY(0));
+    assert(Game.equipBag[0] === 'bow' && UI.toast && UI.toast.text.includes('끌어'), 'bag click hint');
+    // 몬스터가 없는 곳에 놓으면 보관함에 그대로
+    dragTo(bagXY(0), cellXY(13, 2));
+    assert(Game.equipBag.join() === 'bow', 'dropped on nothing stays in bag');
+    // 맞바꾸기: 끼고 있으면 원래 장비가 그 칸으로 돌아간다
+    Game.equipBag = ['ring', 'bow'];
+    dragTo(bagXY(1), monXY(archer));
+    assert(archer.equip === 'bow' && Game.equipBag.join() === 'ring,sword', 'swap returns old equipment to the bag');
+    assert(near(monsterStats(archer).range, base.range * 1.15) && near(monsterStats(archer).damage, base.damage), 'bow +15% range, sword gone');
+    dragTo(bagXY(0), monXY(archer));
+    assert(archer.equip === 'ring' && near(monsterStats(archer).interval, base.interval / 1.15), 'ring +15% attack speed');
+    // 팝업: 장비 줄과 빼기 버튼. 빼면 수치가 그대로 돌아온다
+    click(...monXY(archer));
+    assert(UI.selectedMonster === archer && hasBtn('unequip'), 'unequip button in popup');
+    btn('unequip');
+    assert(!archer.equip && Game.equipBag.join() === 'bow,sword,ring', 'unequip back to bag');
+    const after = monsterStats(archer);
+    assert(after.damage === base.damage && after.range === base.range && after.interval === base.interval && after.hp === base.hp, 'stats restored');
+    UI.clearSelection();
+    // 보관함이 가득 차면 빼지 못한다
+    setMonsterEquip(archer, 'sword');
+    Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
+    click(...monXY(archer));
+    UI.toast = null;
+    btn('unequip');
+    assert(archer.equip === 'sword' && Game.equipBag.length === 6 && UI.toast.text.includes('가득'), 'unequip refused when bag full');
+    UI.clearSelection();
+    setMonsterEquip(archer, null);
+
+    // 랭크 배율과 겹쳐도 곱해진다: 랭크 B(x1.5) + 뿔 투구(체력 +30%, 피해 +20%)
+    const orc = Game.place('orc_guard', 3, 4);
+    setMonsterRank(orc, 2);
+    setMonsterEquip(orc, 'helmet');
+    assert(near(orc.maxHp, 120 * 1.5 * 1.3) && near(monsterStats(orc).damage, 8 * 1.5 * 1.2), 'rank and equipment multiply');
+    setMonsterEquip(orc, null);
+    assert(near(orc.maxHp, 120 * 1.5) && near(monsterStats(orc).damage, 8 * 1.5), 'rank stays after unequip');
+    // 체력 비율 유지: 절반 체력에서 강철 흉갑을 끼고 빼도 절반
+    orc.hp = orc.maxHp / 2;
+    Game.equipBag = ['armor'];
+    dragTo(bagXY(0), monXY(orc));
+    assert(orc.equip === 'armor' && near(orc.maxHp, 180 * 1.3) && near(orc.hp / orc.maxHp, 0.5), 'hp ratio kept on equip');
+    assert(Game.unequipMonster(orc).ok && near(orc.maxHp, 180) && near(orc.hp, 90), 'hp ratio kept on unequip');
+    // 웨이브 중에도 끼운다. 보상을 고르는 동안은 안 된다
+    Game.state = 'wave';
+    Game.equipBag = ['shield'];
+    assert(Game.equipMonster(orc, 0).ok && orc.equip === 'shield', 'equip during wave');
+    Game.state = 'prep';
+    Game.bossReward = Game.rollBossReward();
+    Game.equipBag = ['sword'];
+    assert(!Game.equipMonster(archer, 0).ok && !archer.equip, 'no equip while choosing reward');
+    Game.bossReward = null;
+    // 처치 경험치: 영혼 수정 +100%, 뼈 왕관 +50%
+    setMonsterRank(orc, 0);
+    setMonsterEquip(orc, 'crystal');
+    monsterKilledHero(orc, { boss: false, elite: false });
+    assert.strictEqual(orc.xp, 2, 'crystal doubles kill xp');
+    setMonsterEquip(orc, 'crown');
+    monsterKilledHero(orc, { boss: false, elite: false });
+    assert.strictEqual(orc.xp, 3.5, 'crown +50% xp');
+    assert.strictEqual(monsterXpToNext(orc), 2, 'xp to next rounds up');
+    setMonsterEquip(orc, null);
+
+    // 합치기: 등급이 높은 쪽 장비 1개가 이어지고, 나머지는 보관함으로
+    Game.equipBag = [];
+    let mage = Game.place('dark_mage', 7, 4);
+    setMonsterEquip(mage, 'sword');
+    setMonsterEquip(archer, 'axe');
+    assert.strictEqual(Game.mergeEquip(mage, archer).keep, 'axe', 'preview: higher grade');
+    dragTo(monXY(mage), monXY(archer));
+    let res = Game.monsterAt(5, 4);
+    assert(res.type === 'curse_shooter' && res.equip === 'axe' && Game.equipBag.join() === 'sword', 'merge keeps higher grade, returns the other');
+    assert(near(monsterStats(res).damage, MONSTERS.curse_shooter.stats.damage * 1.4), 'merged monster has the equipment effect');
+    // 등급이 같으면 끌어온 쪽 것
+    Game.monsters = [];
+    Game.equipBag = [];
+    let a = Game.place('skeleton_archer', 5, 4);
+    mage = Game.place('dark_mage', 7, 4);
+    setMonsterEquip(a, 'bow');
+    setMonsterEquip(mage, 'armor');
+    assert.strictEqual(Game.mergeEquip(mage, a).keep, 'armor', 'preview: tie keeps dragged');
+    dragTo(monXY(mage), monXY(a));
+    res = Game.monsterAt(5, 4);
+    assert(res.equip === 'armor' && Game.equipBag.join() === 'bow', 'tie: dragged monster equipment');
+    // 한쪽만 있으면 그것이 이어진다
+    a = Game.place('skeleton_archer', 3, 4);
+    mage = Game.place('dark_mage', 7, 4);
+    setMonsterEquip(a, 'gauntlet');
+    assert(Game.merge({ monster: mage }, { monster: a }).monster.equip === 'gauntlet', 'single equipment carried');
+    // 보관함이 가득 차 있으면 나머지는 30G
+    Game.monsters = [];
+    Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
+    a = Game.place('skeleton_archer', 5, 4);
+    mage = Game.place('dark_mage', 7, 4);
+    setMonsterEquip(a, 'crown');
+    setMonsterEquip(mage, 'sword');
+    let gold0 = Game.gold;
+    Fx.notice = null;
+    UI.toast = null;
+    res = Game.merge({ monster: mage }, { monster: a });
+    assert(res.ok && res.monster.equip === 'crown' && Game.equipBag.length === 6 && Game.gold === gold0 + 30, 'merge leftover becomes 30G when bag full');
+    UI.update(0);
+    assert(UI.toast && UI.toast.text.includes('30G') && UI.toast.text.includes('저주받은 검'), 'full bag notice');
+
+    // 제물과 판매: 장비는 보관함으로, 자리가 없으면 30G
+    Game.equipBag = [];
+    const s1 = Game.monsterAt(5, 4);
+    assert(Game.sacrifice(s1).ok && Game.equipBag.join() === 'crown', 'sacrifice returns equipment');
+    const s2 = Game.place('orc_guard', 3, 4);
+    setMonsterEquip(s2, 'axe');
+    click(...monXY(s2));
+    btn('sell');
+    assert(!Game.monsters.includes(s2) && Game.equipBag.join() === 'crown,axe', 'sell returns equipment');
+    Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
+    const s3 = Game.place('orc_guard', 3, 4);
+    setMonsterEquip(s3, 'axe');
+    gold0 = Game.gold;
+    Game.sell(s3);
+    assert(Game.gold === gold0 + Game.sellValue('orc_guard') + 30 && Game.equipBag.length === 6, 'sell with full bag: 30G');
+    const s4 = Game.place('orc_guard', 3, 4);
+    setMonsterEquip(s4, 'axe');
+    gold0 = Game.gold;
+    assert(Game.sacrifice(s4).ok && Game.gold === gold0 + 30 && Game.equipBag.length === 6, 'sacrifice with full bag: 30G');
+
+    // 보스 보상: 장비 카드를 고르면 보관함으로. 보관함이 가득 차면 장비 카드만 꺼진다
+    Game.equipBag = [];
+    const kinds2 = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : (c.kind === 'equip' ? c.id : c.type)).join();
+    Game.bossReward = withRandom([0.5, 0, 0.1, 0], () => Game.rollBossReward());
+    assert.strictEqual(kinds2(Game.bossReward), 'orc_berserker,gauntlet,gold300');
+    UI.onKey('Digit2');
+    assert(!Game.bossReward && Game.equipBag.join() === 'gauntlet', 'equipment card goes to the bag');
+    Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
+    Game.bossReward = Game.rollBossReward();
+    UI.update(0);
+    const rb = id => UI.buttons.find(b => b.id === id);
+    assert(!rb('reward0').disabled && rb('reward1').disabled && !rb('reward2').disabled, 'equipment card dimmed when bag full');
+    UI.toast = null;
+    UI.onKey('Digit2');
+    assert(Game.bossReward && Game.equipBag.length === 6 && UI.toast.text.includes('보관함'), 'equipment card refused when bag full');
+    UI.onKey('Digit3');
+    assert(!Game.bossReward);
+
+    // 정예 드롭: 25% 확률, 일반 75% 희귀 25%. 난수 순서: 드롭, 등급, 장비
+    Game.equipBag = [];
+    assert(withRandom([0.25], () => Game.eliteDrop(0, 0)) === null && Game.equipBag.length === 0, 'no drop from 25%');
+    assert(withRandom([0.24, 0.25, 0], () => Game.eliteDrop(0, 0)).id === 'sword', 'common drop');
+    assert(withRandom([0, 0.24, 0.99], () => Game.eliteDrop(0, 0)).id === 'tome', 'rare drop');
+    assert.strictEqual(Game.equipBag.join(), 'sword,tome');
+    for (let i = 0; i < 200; i++) {
+        Game.equipBag = [];
+        const d = Game.eliteDrop(0, 0);
+        assert(!d || EQUIPMENT[d.id].grade !== 'epic', 'elite never drops epic');
+    }
+    // 실제 처치: 정예를 쓰러뜨리면 떨어뜨리고 알린다. 일반 용사는 떨어뜨리지 않는다
+    Game.state = 'wave';
+    Game.equipBag = [];
+    const elite = createHero('elite_swordsman', 2, 0, false);
+    elite.waiting = false;
+    Game.heroes = [elite];
+    Fx.notice = null;
+    withRandom(0, () => damageHero(elite, 1e9));
+    assert(elite.dead && Game.equipBag.join() === 'axe' && Fx.drops.some(d => d.id === 'axe'), 'elite kill drops equipment');
+    UI.update(0);
+    assert(UI.toast && UI.toast.text.includes('룬 전투 도끼'), 'drop notice');
+    const grunt = createHero('warrior', 2, 0, false);
+    grunt.waiting = false;
+    Game.heroes = [grunt];
+    withRandom(0, () => damageHero(grunt, 1e9));
+    assert.strictEqual(Game.equipBag.length, 1, 'normal hero drops nothing');
+    // 보관함이 가득 차면 드롭은 30G로 바뀐다
+    Game.equipBag = ['bow', 'bow', 'bow', 'bow', 'bow', 'bow'];
+    const elite2 = createHero('elite_tamer', 2, 0, false);
+    elite2.waiting = false;
+    Game.heroes = [elite2];
+    gold0 = Game.gold;
+    withRandom(0, () => damageHero(elite2, 1e9));
+    assert(Game.gold === gold0 + elite2.bounty + 30 && Game.equipBag.length === 6, 'full bag drop becomes 30G');
+    UI.update(0);
+    assert(UI.toast.text.includes('30G'), 'full bag drop notice');
+    Game.heroes = [];
+    Game.corpses = [];
+    Game.state = 'prep';
+    Game.monsters = [];
+    Game.gold = COMBAT_RULES.startGold;
+}
+
 // 패배 후 다시 시작하면 모두 초기화(소환 비용도 처음으로)
 assert(Game.summon().ok && Game.summonCost() > SUMMON_RULES.cost, 'cost rose before retry');
 setMonsterRank(Game.monsters[0], 4);
+setMonsterEquip(Game.monsters[0], 'crown');
+Game.equipBag = ['sword', 'axe'];
 Game.hp = 1;
 damageThrone(1);
 assert.strictEqual(Game.state, 'defeat');
 btn('retry');
 assert.strictEqual(Game.state, 'prep');
+assert.strictEqual(Game.equipBag.length, 0, 'bag emptied on retry');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 assert.strictEqual(Game.monsters.length, 0);
 assert.strictEqual(UI.tab, 'monster', 'retry starts on monster tab');
@@ -1368,7 +1624,7 @@ assert.strictEqual(Game.units.length, 0);
 {
     // 랭크도 처음으로: 다시 소환한 몬스터는 D
     const r = Game.summon();
-    assert(r.ok && r.monster.rank === 0 && r.monster.xp === 0, 'rank reset on retry');
+    assert(r.ok && r.monster.rank === 0 && r.monster.xp === 0 && !r.monster.equip, 'rank and equipment reset on retry');
     Game.removeMonster(r.monster);
     Game.gold = COMBAT_RULES.startGold;
     Game.summonCount = 0;
@@ -1380,16 +1636,21 @@ Game.gold = 6000;
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
     [17,6,'orc_guard'],[19,8,'orc_guard'],[21,8,'orc_guard'],[19,6,'skeleton_archer'],[18,7,'dark_mage'],[21,5,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
-let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false;
+let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false, equipped = 0;
 const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
-    // 보스 보상: 첫 카드(몬스터)를 고르고, 자리가 없으면 골드
+    // 보스 보상: 둘째 카드(장비)를 고르고, 보관함이 가득 차면 골드
     if (Game.bossReward) {
         rewards++;
         assert(!Game.startWave(), 'no wave before reward');
-        UI.onKey('Digit1');
+        UI.onKey('Digit2');
         if (Game.bossReward) UI.onKey('Digit3');
         assert(!Game.bossReward);
+    }
+    // 보관함의 장비는 바로 맵의 몬스터에게 끼운다(웨이브 중에도)
+    if (Game.equipBag.length && Game.inPlay()) {
+        const free = Game.monsters.find(m => !m.equip);
+        if (free && Game.equipMonster(free, 0).ok) equipped++;
     }
     if (Game.state === 'prep') Game.startWave();
     if (Game.waveIndex === 4 && Game.heroes.some(h => h.bossKey === 'archmage')) sawArchmage = true;
@@ -1404,5 +1665,6 @@ assert.strictEqual(Game.state, 'victory', 'wave ' + (Game.waveIndex + 1) + ' hp 
 assert(sawCharge && sawStomp, 'boss patterns fired');
 assert(sawArchmage && rewards === 1, 'archmage in wave 5, one boss reward (rewards ' + rewards + ')');
 assert.strictEqual(eliteWaves.size, WAVES.length - 2, 'elites appeared in waves 3..' + WAVES.length);
+assert(equipped >= 1, 'boss reward equipment was equipped');
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });

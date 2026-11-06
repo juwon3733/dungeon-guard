@@ -430,7 +430,29 @@ const SCENES = {
         }
     },
 
-    // 보스 보상 3택: 5번째 웨이브 대마도사를 처치하고 준비 단계에 들어간 순간. 영웅·희귀 몬스터 카드와 300G 카드,
+    // 장비: 맵의 몬스터 넷이 장비를 끼고(발 옆 작은 그림), 보관함 5/6칸. 보관함의 룬 전투 도끼를 뼈 활을 낀
+    // 스켈레톤 궁수 위로 끄는 중이라 몬스터 발밑이 밝아지고 "맞바꾸기" 안내가 보인다
+    equipment: {
+        setup: () => {
+            setupBoard();
+            const on = (c, r, id) => setMonsterEquip(Game.monsterAt(c, r), id);
+            on(6, 6, 'shield');
+            on(6, 4, 'bow');
+            on(11, 5, 'crown');
+            on(10, 5, 'staff');
+            on(9, 2, 'gauntlet');
+            Game.equipBag = ['sword', 'axe', 'cape', 'ring', 'elixir'];
+            UI.update(0);
+            const r = UI.bagRect(1);
+            const m = Game.monsterAt(6, 4);
+            dragHold([r.x + r.w / 2, r.y + r.h / 2], [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            if (!UI.equipDrag || UI.equipTarget !== m) throw new Error('장비를 끌지 못했습니다');
+            freezeScene();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
+    // 보스 보상 3택: 5번째 웨이브 대마도사를 처치하고 준비 단계에 들어간 순간. 영웅 몬스터, 희귀 장비, 300G 카드,
     // 첫 카드에 마우스를 올린 상태
     bossReward: {
         setup: () => {
@@ -447,7 +469,7 @@ const SCENES = {
             damageHero(boss, 1e9);
             advance(1.5);
             if (!Game.bossReward) throw new Error('보스 보상이 뜨지 않았습니다');
-            Game.bossReward = withRandom([0.1, 0, 0.9, 0.99], () => Game.rollBossReward()); // 해골 기사, 저주 사수, 골드
+            Game.bossReward = withRandom([0.1, 0, 0.9, 0.99], () => Game.rollBossReward()); // 해골 기사, 고대 주문서, 골드
             UI.update(0);
             const b = UI.buttons.find(x => x.id === 'reward0');
             UI.onMove(b.x + 60, b.y + 60);
