@@ -305,7 +305,8 @@ const UIKit = {
         for (const [cx, cy] of [[x + 3, y + 3], [x + size - 3, y + 3], [x + 3, y + size - 3], [x + size - 3, y + size - 3]]) this.nail(ctx, cx, cy);
     },
 
-    // 등급 테두리: 굵고 밝은 등급 색 띠와 바깥 진한 선, 안쪽 위 밝은 줄. color는 MONSTER_GRADES[..].color
+    // 등급 테두리: 굵고 밝은 등급 색 띠와 바깥 진한 선, 안쪽 위 밝은 줄. color는 MONSTER_GRADES[..].color.
+    // 등급 표에 rainbow가 있는 등급(신화)의 색이면 그 색들이 테두리를 따라 흐르는 무지개 빛으로 그린다
     gradeFrame(ctx, x, y, w, h, color, thick) {
         const t = thick || 4;
         x = Math.round(x);
@@ -315,13 +316,26 @@ const UIKit = {
         ctx.fillRect(x - 2, y + h, w + 4, 2);
         ctx.fillRect(x - 2, y, 2, h);
         ctx.fillRect(x + w, y, 2, h);
-        ctx.fillStyle = color;
+        ctx.fillStyle = this.gradeFill(ctx, color, x, y, w, h);
         ctx.fillRect(x, y, w, t);
         ctx.fillRect(x, y + h - t, w, t);
         ctx.fillRect(x, y, t, h);
         ctx.fillRect(x + w - t, y, t, h);
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.fillRect(x + t, y + t, w - t * 2, 2);
+    },
+
+    // 등급 색 칠하기: 보통은 색 그대로, rainbow 등급이면 시간에 따라 흐르는 대각선 그라데이션
+    gradeFill(ctx, color, x, y, w, h) {
+        const g = Object.values(MONSTER_GRADES).find(v => v.rainbow && v.color === color);
+        if (!g) return color;
+        const shift = ((typeof Game !== 'undefined' ? Game.time : 0) * 0.6) % 1;
+        const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+        const stops = g.rainbow;
+        for (let i = 0; i < stops.length; i++) grad.addColorStop(((i / (stops.length - 1)) + shift) % 1, stops[i]);
+        grad.addColorStop(0, stops[0]);
+        grad.addColorStop(1, stops[0]);
+        return grad;
     },
 
     // 48px 아이콘(uiicon_<name>)을 정수 배율로

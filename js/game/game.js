@@ -345,10 +345,13 @@ const Game = {
     },
 
     // 합칠 때 장비: 등급이 높은 쪽 1개가 결과로 이어지고(같으면 끌어온 src 쪽), 나머지는 돌아간다
-    mergeEquip(src, dst) {
-        const keep = betterEquip(src.equip, dst.equip);
-        const back = [src.equip, dst.equip].filter(Boolean);
-        back.splice(back.indexOf(keep), 1);
+    mergeEquip(src, dst) { return this.mergeEquipAll([src, dst]); },
+
+    // 재료 여럿의 장비: 가장 좋은 것 1개(같으면 앞쪽 재료)가 이어지고 나머지는 돌아간다
+    mergeEquipAll(materials) {
+        const back = materials.map(m => m.equip).filter(Boolean);
+        const keep = bestEquip(back);
+        if (keep) back.splice(back.indexOf(keep), 1);
         return { keep, back };
     },
 
@@ -443,44 +446,120 @@ const Game = {
     // 연출 좌표: 세계 좌표(서 있는 곳)
     fxPoint(loc) { return { x: loc.monster.x, y: loc.monster.y }; },
 
-    // 맵의 두 몬스터(개체)를 합칠 때의 판단. mergePlan(랭크 조건 포함)에 맵 수 제한(등급 fieldMax)을 더한다.
-    // 조합식 결과가 제한을 넘으면 { kind: 'none', reason: 'unique', recipe, result }. 재료 두 마리는 사라지니 세지 않는다
-    mergePlanFor(a, b) {
-        const plan = mergePlan(a, b);
-        if (plan.kind !== 'recipe') return plan;
-        const grade = MONSTERS[plan.result].grade;
-        const max = MONSTER_GRADES[grade].fieldMax;
-        if (max === undefined) return plan;
-        const count = this.monsters.filter(m => m !== a && m !== b && !m.removed && MONSTERS[m.type].grade === grade).length;
-        return count >= max ? { kind: 'none', reason: 'unique', recipe: plan.recipe, result: plan.result } : plan;
+    // 맵의 grade 등급 몬스터 수(exclude에 든 개체는 세지 않는다)
+    gradeCount(grade, exclude) {
+        return this.monsters.filter(m => !m.removed && !(exclude && exclude.includes(m)) && MONSTERS[m.type].grade === grade).length;
     },
 
-    // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 src 자리는 빈다.
-    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' }
-    merge(src, dst) {
+    // 등급 합치기의 나머지 재료 후보: base와 같은 등급인 맵의 몬스터(exclude 제외)를
+    // 랭크가 낮은 순, 장비가 없는 쪽 먼저, base(끄는 몬스터)와 가까운 순으로 늘어놓는다
+    mergeCandidates(base, exclude) {
+        const grade = MONSTERS[base.type].grade;
+        const dist = m => distance(m.homeX, m.homeY, base.homeX, base.homeY);
+        return this.monsters
+            .filter(m => m !== base && !m.removed && !exclude.includes(m) && MONSTERS[m.type].grade === grade)
+            .sort((x, y) => (x.rank || 0) - (y.rank || 0) || (x.equip ? 1 : 0) - (y.equip ? 1 : 0) || dist(x) - dist(y));
+    },
+
+    // 등급 합치기의 나머지 재료(a, b 말고 MERGE_RULES.gradeCount - 2마리). 고른 것(picked)이 쓸 수 있으면 먼저 쓰고 모자라면 자동으로 채운다.
+    // 다 채우지 못하면 null
+    mergeExtras(a, b, picked) {
+        const need = MERGE_RULES.gradeCount - 2;
+        const grade = MONSTERS[a.type].grade;
+        const extra = [];
+        for (const m of [].concat(picked || [])) {
+            if (extra.length >= need) break;
+            if (m && m !== a && m !== b && !m.removed && this.monsters.includes(m) && !extra.includes(m) && MONSTERS[m.type].grade === grade) extra.push(m);
+        }
+        for (const m of this.mergeCandidates(a, [b, ...extra])) {
+            if (extra.length >= need) break;
+            extra.push(m);
+        }
+        return extra.length >= need ? extra : null;
+    },
+
+    // 맵의 두 몬스터(개체)를 합칠 때의 판단. mergePlan(랭크 조건 포함)에 등급 합치기의 나머지 재료와 맵 수 제한(등급 fieldMax)을 더한다.
+    //   a: 끄는 몬스터, b: 놓는 몬스터(결과 칸), picked: 나머지 재료로 고른 몬스터(없거나 못 쓰면 자동), gradeOnly: 조합식을 보지 않는다
+    //   등급 합치기는 { kind: 'grade', grade, count, extra: [나머지 재료] }. 같은 등급이 모자라면 { kind: 'none', reason: 'count', grade, have, count }
+    //   결과가 제한을 넘으면 { kind: 'none', reason: 'unique', grade, ... }. 사라지는 재료는 세지 않는다
+    mergePlanFor(a, b, picked, gradeOnly) {
+        const plan = mergePlan(a, b, gradeOnly);
+        if (plan.kind === 'none') return plan;
+        let materials = [a, b];
+        if (plan.kind === 'grade') {
+            const extra = this.mergeExtras(a, b, picked);
+            if (!extra) return { kind: 'none', reason: 'count', grade: plan.grade, have: this.gradeCount(MONSTERS[a.type].grade), count: plan.count };
+            plan.extra = extra;
+            materials = materials.concat(extra);
+        }
+        const grade = plan.kind === 'recipe' ? MONSTERS[plan.result].grade : plan.grade;
+        const max = MONSTER_GRADES[grade].fieldMax;
+        if (max !== undefined && this.gradeCount(grade, materials) >= max) {
+            return Object.assign({}, plan, { kind: 'none', reason: 'unique', grade, plan: plan.kind });
+        }
+        return plan;
+    },
+
+    // 팝업의 합치기 버튼: m과 같은 등급 몬스터를 끌기와 같은 판단(랭크 낮음, 장비 없음, 가까움)으로 골라 gradeCount마리를 합친다.
+    // 결과는 m의 칸. 조합식은 보지 않는다. { kind: 'grade', src, dst, extra, ... } 또는 { kind: 'none', reason }
+    quickMergePlan(m) {
+        if (!m || m.removed || !this.monsters.includes(m)) return { kind: 'none', reason: 'empty' };
+        const next = nextGrade(MONSTERS[m.type].grade);
+        if (!next) return { kind: 'none', reason: 'top' };
+        const src = this.mergeCandidates(m, [])[0];
+        if (!src) return { kind: 'none', reason: 'count', grade: next, have: 1, count: MERGE_RULES.gradeCount };
+        return Object.assign(this.mergePlanFor(src, m, null, true), { src, dst: m });
+    },
+
+    // 행동 하나: 입력(끌어 놓기, 버튼)과 처리를 이 함수로 모은다(뒤에 고정 난수와 입력 기록을 여기에 넣는다).
+    //   { kind: 'merge', src, dst, extra? }  끌어 합치기(src, dst는 맵의 몬스터. extra는 고른 나머지 재료, 없으면 자동)
+    //   { kind: 'quickMerge', monster }       팝업의 합치기 버튼
+    //   { kind: 'summon' } | { kind: 'sell', monster } | { kind: 'sacrifice', monster } | { kind: 'move', monster, col, row }
+    act(cmd) {
+        switch (cmd.kind) {
+            case 'merge': return this.merge({ monster: cmd.src }, { monster: cmd.dst }, cmd.extra);
+            case 'quickMerge': {
+                if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+                const plan = this.quickMergePlan(cmd.monster);
+                if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
+                return this.merge({ monster: plan.src }, { monster: plan.dst }, plan.extra, true);
+            }
+            case 'summon': return this.summon();
+            case 'sell': this.sell(cmd.monster); return { ok: true };
+            case 'sacrifice': return this.sacrifice(cmd.monster);
+            case 'move': return { ok: this.moveMonster(cmd.monster, cmd.col, cmd.row) };
+        }
+        return { ok: false, reason: 'kind' };
+    },
+
+    // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 다른 재료 자리는 빈다.
+    //   조합식: src와 dst 2마리. 등급 합치기: 같은 등급 gradeCount마리(나머지는 extra, 못 쓰면 자동으로 고른다)
+    //   랭크는 재료 중 가장 낮은 값, 장비는 가장 좋은 것 하나를 잇고(같으면 끌어온 쪽, 놓은 쪽, 나머지 순) 나머지는 보관함으로
+    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' | 'count' }
+    merge(src, dst, extra, gradeOnly) {
         const a = this.typeAt(src);
         const b = this.typeAt(dst);
         if (!a || !b) return { ok: false, reason: 'empty' };
         if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
-        const plan = this.mergePlanFor(src.monster, dst.monster);
-        if (plan.kind === 'none') return { ok: false, reason: plan.reason };
-        const type = plan.kind === 'recipe' ? plan.result : randItem(gradePool(plan.grade));
+        const plan = this.mergePlanFor(src.monster, dst.monster, extra, gradeOnly);
+        if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
+        const type = plan.kind === 'recipe' ? plan.result : randItem(mergePool(plan.grade));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
         // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
         const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;
         const discovered = hidden && found;
         Meta.seeMonster(type);
-        const from = [this.fxPoint(src), this.fxPoint(dst)];
-        this.removeMonster(src.monster);
         const old = dst.monster;
+        const materials = [src.monster, old, ...(plan.extra || [])];
+        const from = materials.map(m => this.fxPoint({ monster: m }));
+        for (const m of materials) if (m !== old) this.removeMonster(m);
         const monster = createMonster(type, old.col, old.row);
-        // 랭크는 재료 중 낮은 쪽을 이어받는다(합치기로 랭크가 오르지는 않는다)
-        setMonsterRank(monster, Math.min(src.monster.rank || 0, old.rank || 0));
-        // 장비는 등급이 높은 쪽 1개를 이어받고(같으면 끌어온 쪽), 나머지는 보관함으로(자리가 없으면 골드)
-        const equip = this.mergeEquip(src.monster, old);
+        // 랭크는 재료 중 가장 낮은 값을 이어받는다(합치기로 랭크가 오르지는 않는다)
+        setMonsterRank(monster, Math.min(...materials.map(m => m.rank || 0)));
+        // 장비는 가장 좋은 것 1개를 이어받고, 나머지는 보관함으로(자리가 없으면 골드)
+        const equip = this.mergeEquipAll(materials);
         if (equip.keep) setMonsterEquip(monster, equip.keep);
-        src.monster.equip = null;
-        old.equip = null;
+        for (const m of materials) m.equip = null;
         const returned = equip.back.map(id => this.gainEquip(id, monster.x, monster.y - 40));
         monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
         this.monsters[this.monsters.indexOf(old)] = monster;
@@ -489,16 +568,17 @@ const Game = {
         const to = { x: monster.x, y: monster.y };
         this.stats.merged++;
         const grade = MONSTERS[type].grade;
-        Fx.pop({ kind: 'merge', from, fromTypes: [a, b], to, type, grade, hidden });
+        Fx.pop({ kind: 'merge', from, fromTypes: materials.map(m => m.type), to, type, grade, hidden });
         Sfx.play('merge', GRADE_ORDER.indexOf(grade));
         if (discovered) {
-            // 재료 줄에는 조합식의 랭크 조건도 적는다. 전설은 더 오래 보여 준다
+            // 재료 줄에는 조합식의 랭크 조건도 적는다. 높은 등급(등급 표의 fx)은 더 오래 보여 준다
             const r = plan.recipe;
+            const fx = gradeInfo(grade, 'fx', 0);
             Fx.discovery = { a: r.a, aRank: r.aRank || null, b: r.b, bRank: r.bRank || null, type, grade,
-                age: -MERGE_REVEAL, life: grade === 'legendary' ? 4.6 : 3.6 };
+                age: -MERGE_REVEAL, life: fx >= 3 ? 5.4 : (fx >= 2 ? 4.6 : 3.6) };
             Sfx.play('hidden');
         }
-        return { ok: true, type, kind: plan.kind, hidden, discovered, monster, equip: equip.keep, returned };
+        return { ok: true, type, kind: plan.kind, hidden, discovered, monster, equip: equip.keep, returned, materials };
     },
 
     // 판매 환불: 등급별 고정값에 마왕과 유물의 refund를 곱한다

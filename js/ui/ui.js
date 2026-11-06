@@ -20,6 +20,7 @@ const POPUP_TOP = 16; // 팝업 창 위쪽 판자 머리 높이(내용은 그 �
 const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
 const POPUP_RANK_H = 30; // 팝업의 랭크 줄 높이
 const POPUP_SACRIFICE_H = 30; // 팝업의 제물 안내 줄 높이
+const POPUP_MERGE_H = 60; // 팝업의 합치기 버튼 줄 높이
 const DRAG_START = 10; // 이만큼(화면 px) 움직여야 끌기로 본다. 덜 움직이고 떼면 누르기(선택)다
 const REWARD_CARD_W = 380; // 보스 보상 카드
 const REWARD_CARD_H = 540;
@@ -611,13 +612,41 @@ const UI = {
     },
 
     // 화면에 보여 줄 합치기 결과. a, b는 맵의 몬스터 개체(랭크 조건을 함께 판단한다).
-    // 히든 조합식은 드러내지 않는다(등급 합치기가 되면 그것으로, 아니면 '???')
-    shownPlan(a, b) {
-        const plan = Game.mergePlanFor(a, b);
+    // 히든 조합식은 드러내지 않는다(등급 합치기가 되면 그것으로, 아니면 '???').
+    // picked는 등급 합치기의 나머지 재료로 고른 몬스터(끄는 중이면 drag.extra)
+    shownPlan(a, b, picked) {
+        const plan = Game.mergePlanFor(a, b, picked);
         if (plan.kind !== 'recipe' || !plan.recipe.hidden) return plan;
-        const ga = MONSTERS[a.type].grade;
-        if (ga === MONSTERS[b.type].grade && nextGrade(ga)) return { kind: 'grade', grade: nextGrade(ga) };
-        return { kind: 'unknown' };
+        const grade = Game.mergePlanFor(a, b, picked, true);
+        return grade.kind === 'grade' ? grade : { kind: 'unknown' };
+    },
+
+    // 합칠 수 없는 까닭의 안내 글. plan은 Game.mergePlanFor의 { kind: 'none', reason, grade, ... }, type은 끄는 몬스터
+    mergeFailText(plan, type) {
+        const g = MONSTER_GRADES[MONSTERS[type].grade];
+        const target = plan.grade ? MONSTER_GRADES[plan.grade] : null;
+        if (plan.reason === 'top') return `${g.name}은 최고 등급이라 더 합칠 수 없습니다.`;
+        if (plan.reason === 'mismatch') return '등급이 다르고 조합식도 없어 합칠 수 없습니다.';
+        if (plan.reason === 'count') return `같은 ${g.name} ${plan.count}마리가 있어야 합칩니다(지금 ${plan.have}마리).`;
+        if (plan.reason === 'unique' && target) return `${target.name} 몬스터는 맵에 ${target.fieldMax}마리만 둘 수 있습니다.`;
+        return null;
+    },
+
+    // 끄는 동안 등급 합치기 나머지 재료 고르기: 끌기를 시작할 때 자동으로 정하고(랭크 낮음, 장비 없음, 가까움),
+    // 같은 등급 몬스터 위로 올렸다가 다른 몬스터로 옮기면 먼저 올렸던 몬스터가 재료가 된다. 올린 몬스터가 재료였으면 다른 몬스터로 바꾼다
+    updateMergePick() {
+        const d = this.drag;
+        const t = this.dropTarget && this.dropTarget.monster;
+        if (!d || !t || t === d.src.monster || t === d.lastPick) return;
+        const src = d.src.monster;
+        if (MONSTERS[t.type].grade !== MONSTERS[src.type].grade) return;
+        const need = MERGE_RULES.gradeCount - 2;
+        let extra = d.extra.filter(m => m !== t && !m.removed);
+        if (d.lastPick && !d.lastPick.removed && !extra.includes(d.lastPick)) extra.unshift(d.lastPick);
+        extra = extra.slice(0, need);
+        if (extra.length < need) extra = extra.concat(Game.mergeCandidates(src, [t, ...extra]).slice(0, need - extra.length));
+        d.extra = extra;
+        d.lastPick = t;
     },
 
     // 팝업 줄: 이름과 수치, 함께 합칠 수 있는 몬스터, 판매. 강화는 MONSTER_UPGRADE_ENABLED일 때만
@@ -628,7 +657,7 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + 64;
+        const h = POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
@@ -641,7 +670,7 @@ const UI = {
                 }
             });
         }
-        let y = o.y + h - 64 - upgrades * 88;
+        let y = o.y + h - 64 - POPUP_MERGE_H - upgrades * 88;
         if (upgrades === 1) {
             const cost = upgradeCost(f.type, 2);
             this.button('up2', o.x + 12, y, w - 24, 80, {
@@ -661,10 +690,24 @@ const UI = {
                 y += 88;
             }
         }
+        // 합치기: 같은 등급 gradeCount마리를 끌기와 같은 판단으로 골라 이 몬스터 칸에서 합친다(조합식은 보지 않는다)
+        const quick = Game.quickMergePlan(f);
+        const next = nextGrade(def.grade);
+        this.button('quickMerge', o.x + 12, y, w - 24, 52, {
+            label: next ? `합치기 · ${MONSTER_GRADES[def.grade].name} ${MERGE_RULES.gradeCount}마리 → ${MONSTER_GRADES[next].name}` : '합치기 · 최고 등급',
+            size: 22, disabled: quick.kind === 'none',
+            onClick: () => {
+                const res = Game.act({ kind: 'quickMerge', monster: f });
+                if (res.ok) { this.clearSelection(); return; }
+                this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없습니다.');
+                Sfx.play('mergeFail');
+            }
+        });
+        y += POPUP_MERGE_H;
         this.button('sell', o.x + 12, y, w - 24, 52, {
             label: `판매 +${Game.sellValue(type)}`, icon: 'gold', theme: 'danger', size: 24,
             onClick: () => {
-                Game.sell(f);
+                Game.act({ kind: 'sell', monster: f });
                 this.clearSelection();
             }
         });
@@ -810,9 +853,11 @@ const UI = {
         if (t.monster) {
             const loc = { monster: t.monster };
             if (Game.sameLoc(src, loc)) return { action: 'back' };
-            const plan = this.shownPlan(src.monster, loc.monster);
-            const real = Game.mergePlanFor(src.monster, loc.monster);
-            return real.kind === 'none' ? { action: 'invalid', loc, reason: real.reason, plan } : { action: 'merge', loc, plan };
+            const plan = this.shownPlan(src.monster, loc.monster, d.extra);
+            const real = Game.mergePlanFor(src.monster, loc.monster, d.extra);
+            if (real.kind === 'none') return { action: 'invalid', loc, reason: real.reason, plan, real };
+            // materials: 사라지는 재료 전부(끄는 몬스터, 놓는 몬스터, 등급 합치기의 나머지)
+            return { action: 'merge', loc, plan, real, materials: [src.monster, loc.monster, ...(real.extra || [])] };
         }
         const { col, row } = t.cell;
         if (src.monster.col === col && src.monster.row === row) return { action: 'back' };
@@ -892,24 +937,22 @@ const UI = {
     drop(t, x, y) {
         const d = this.drag;
         const act = this.dropAction(t);
-        if (act.action === 'sacrifice' && Game.sacrifice(d.src.monster).ok) return;
+        if (act.action === 'sacrifice' && Game.act({ kind: 'sacrifice', monster: d.src.monster }).ok) return;
         if (act.action === 'merge') {
-            const res = Game.merge(d.src, act.loc);
+            const res = Game.act({ kind: 'merge', src: d.src.monster, dst: act.loc.monster, extra: d.extra });
             if (res.ok) return;
             act.action = 'invalid';
             act.reason = res.reason;
+            act.real = res.plan;
         }
         if (act.action === 'place') {
-            if (Game.moveMonster(d.src.monster, act.col, act.row)) return;
+            if (Game.act({ kind: 'move', monster: d.src.monster, col: act.col, row: act.row }).ok) return;
             act.action = 'invalid';
             act.reason = 'cell';
         }
         // 놓지 못했다: 안내하고 제자리로 날아간다
         if (act.action === 'invalid') {
-            const msg = {
-                top: '영웅은 최고 등급이라 더 합칠 수 없습니다.',
-                mismatch: '등급이 다르고 조합식도 없어 합칠 수 없습니다.',
-                unique: '전설 몬스터는 맵에 1마리만 둘 수 있습니다.',
+            const msg = (act.real && this.mergeFailText(act.real, d.type)) || {
                 path: '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.',
                 cell: '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.'
             }[act.reason] || '여기에는 놓을 수 없습니다.';
@@ -970,7 +1013,12 @@ const UI = {
         if (this.press && !this.drag && distance(x, y, this.press.x, this.press.y) > DRAG_START) {
             const type = Game.typeAt(this.press.src);
             if (type && Game.inPlay()) {
-                this.drag = { src: this.press.src, type };
+                // extra: 등급 합치기의 나머지 재료(끌기를 시작할 때 자동으로 정해 강조한다. 놓을 몬스터까지 채울 수 없으면 비운다),
+                // lastPick: 마지막으로 올린 같은 등급 몬스터
+                const src = this.press.src.monster;
+                const need = MERGE_RULES.gradeCount - 2;
+                const cands = Game.mergeCandidates(src, []);
+                this.drag = { src: this.press.src, type, extra: cands.length > need ? cands.slice(0, need) : [], lastPick: null };
                 this.clearSelection();
                 this.targeting = false;
                 Sfx.play('pickup');
@@ -997,7 +1045,8 @@ const UI = {
         this.drag.x = x;
         this.drag.y = y;
         this.dropTarget = this.dropAt(x, y);
-        this.hoverCell = this.dropTarget && this.dropTarget.cell && this.dropTarget.cell.col >= 0 && this.dropTarget.cell.row >= 0 ? this.dropTarget.cell : null;
+        this.updateMergePick();
+        this.hoverCell =this.dropTarget && this.dropTarget.cell && this.dropTarget.cell.col >= 0 && this.dropTarget.cell.row >= 0 ? this.dropTarget.cell : null;
     },
 
     // 버튼, 번개 조준, 타락, 빈 곳 누르기. 몬스터를 누르고 끄는 것은 onDown과 onUp이 맡는다
@@ -1147,6 +1196,43 @@ const UI = {
         this.hoverButton = this.buttonAt(this.mouse.x, this.mouse.y);
     },
 
+    // 끄는 동안 등급 합치기 재료 표시(세계 좌표): 나머지 재료에 진한 고리, 재료끼리 결과 칸(놓을 몬스터, 없으면 손가락)으로 잇는 선.
+    // 놓을 몬스터가 조합식이면 나머지 재료는 쓰지 않으니 그리지 않는다
+    drawMergeMaterials(ctx) {
+        const d = this.drag;
+        const act = this.dropTarget ? this.dropAction(this.dropTarget) : null;
+        if (act && act.action === 'merge' && act.real.kind === 'recipe') return;
+        const target = act && act.loc && act.real && act.real.kind === 'grade' ? act.loc.monster : null;
+        const extra = target ? act.real.extra : d.extra;
+        const src = d.src.monster;
+        const next = nextGrade(MONSTERS[src.type].grade);
+        if (!extra.length || !next) return;
+        const color = MONSTER_GRADES[next].color;
+        const foot = m => (m.down > 0 || m === src ? { x: m.homeX, y: m.homeY + MONSTER_FOOT } : { x: m.x, y: m.y + MONSTER_FOOT });
+        const end = target ? foot(target) : (d.x !== undefined ? { x: d.x / WORLD_ZOOM, y: d.y / WORLD_ZOOM + 30 } : foot(src));
+        ctx.save();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.setLineDash([14, 10]);
+        ctx.lineDashOffset = -Game.time * 60;
+        for (const m of [src, ...extra]) {
+            const p = foot(m);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+        }
+        ctx.restore();
+        for (const m of extra) {
+            const p = foot(m);
+            Render.mergeRing(ctx, p.x, p.y, color, true);
+            Render.mergeRing(ctx, p.x, p.y, '#ffffff', false);
+        }
+        // 끌기 시작한 칸에도 재료 고리
+        Render.mergeRing(ctx, src.homeX, src.homeY + MONSTER_FOOT, color, false);
+    },
+
     // 세계 위에 깔리는 표시: 끄는 동안 놓을 칸 미리보기(반투명 그림, 사거리, 나갈 지점), 합칠 수 있는 몬스터 발밑 고리,
     // 고른 몬스터의 사거리
     drawRanges(ctx) {
@@ -1187,9 +1273,10 @@ const UI = {
         if (focus) {
             // 합칠 수 있는 맵의 몬스터: 발밑에 고리. 놓으려는 대상은 더 밝게
             const target = this.drag && this.dropTarget && this.dropTarget.monster;
+            const picked = this.drag ? this.drag.extra : null;
             for (const m of Game.monsters) {
                 if (focus.loc.monster === m || m.reveal > 0) continue;
-                const plan = this.shownPlan(focus.loc.monster, m);
+                const plan = this.shownPlan(focus.loc.monster, m, picked);
                 if (plan.kind === 'none' || plan.kind === 'unknown') continue;
                 Render.mergeRing(ctx, m.homeX, m.homeY + MONSTER_FOOT, plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan.grade].color, target === m);
                 // 길로 걸어 나간 몬스터도 서 있는 곳에 고리를 그린다
@@ -1197,6 +1284,7 @@ const UI = {
                     Render.mergeRing(ctx, m.x, m.y + MONSTER_FOOT, plan.kind === 'recipe' ? '#ffd76a' : MONSTER_GRADES[plan.grade].color, target === m);
                 }
             }
+            if (this.drag) this.drawMergeMaterials(ctx);
         }
         const f = this.selectedMonster;
         if (f) {
@@ -2172,7 +2260,7 @@ const UI = {
             y += 50;
         }
         const next = nextGrade(def.grade);
-        const gradeLine = next ? `같은 ${grade.name} 아무나 → ${MONSTER_GRADES[next].name} 무작위 1마리`
+        const gradeLine = next ? `같은 ${grade.name} 아무 ${MERGE_RULES.gradeCount}마리 → ${MONSTER_GRADES[next].name} 무작위 1마리`
             : `${grade.name}은 최고 등급이라 등급 합치기를 할 수 없습니다`;
         UIKit.ink(ctx, gradeLine, p.x + 22, y + 18, 17, next ? MONSTER_GRADES[next].ink : T.inkFaint, 'left', 'bold');
         // 제물: 이 몬스터(랭크 포함)를 바치면 얻는 것
@@ -2538,7 +2626,7 @@ const UI = {
         if (this.equipDrag) return { key: 'equipDrag', text: '몬스터 위에 놓으면 끼웁니다' };
         if (G.equipBag.length && G.monsters.length && !G.monsters.some(m => m.equip)) return { key: 'bag', text: '보관함의 장비를 몬스터 위로 끌어 끼우세요' };
         if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) return { key: 'summon', text: `소환(S)하면 길 옆에 몬스터가 나옵니다 · ${G.summonCost()}G` };
-        if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: '몬스터를 다른 몬스터 위에 놓으면 합쳐집니다' };
+        if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: `같은 등급 몬스터 위에 놓으면 ${MERGE_RULES.gradeCount}마리가 합쳐집니다 · 조합식은 2마리` };
         if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '몬스터를 왕좌로 끌어 바치면 체력을 회복합니다' };
         if (G.state === 'wave' && G.waveIndex === 0 && G.skills.lightning <= 0) return { key: 'lightning', text: '마왕 탭의 번개(Q)로 용사를 직접 때리세요' };
         if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사를 5초 안에 누르면 부하가 됩니다!' };
@@ -2592,7 +2680,7 @@ const UI = {
         const hotMonster = this.drag && this.dropTarget && this.dropTarget.monster;
         for (const m of Game.monsters) {
             if (focus.loc.monster === m || m.reveal > 0) continue;
-            const plan = this.shownPlan(focus.loc.monster, m);
+            const plan = this.shownPlan(focus.loc.monster, m, this.drag ? this.drag.extra : null);
             if (plan.kind !== 'recipe' && plan.kind !== 'grade') continue;
             const p = this.monsterTopScreen(m.down > 0 ? { ...m, x: m.homeX, y: m.homeY } : m);
             badge(p.x, p.y, plan, hotMonster === m);
@@ -2609,16 +2697,23 @@ const UI = {
             text = `제물: ${sacrificeText({ heal, lightning: act.gain.lightning })}${room === 0 ? ' (체력 가득)' : ''}`;
             color = UI_THEME.inkWax;
         } else if (act.action === 'merge') {
+            const n = act.materials.length;
             text = act.plan.kind === 'recipe' ? `합치기 → ${MONSTERS[act.plan.result].name}`
-                : (act.plan.kind === 'grade' ? `합치기 → ${MONSTER_GRADES[act.plan.grade].name} 무작위` : '합치기 → ???');
+                : (act.plan.kind === 'grade' ? `${n}마리 합치기 → ${MONSTER_GRADES[act.plan.grade].name} 무작위` : '합치기 → ???');
             color = act.plan.kind === 'grade' ? MONSTER_GRADES[act.plan.grade].ink : UI_THEME.ink;
-        } else if (act.action === 'invalid' && (act.reason === 'top' || act.reason === 'mismatch' || act.reason === 'unique')) {
-            text = { top: '합칠 수 없음 · 최고 등급', mismatch: '합칠 수 없음', unique: '합칠 수 없음 · 전설은 맵에 1마리' }[act.reason];
+        } else if (act.action === 'invalid' && act.real) {
+            const r = act.real;
+            const g = r.grade ? MONSTER_GRADES[r.grade] : null;
+            text = {
+                top: '합칠 수 없음 · 최고 등급', mismatch: '합칠 수 없음',
+                count: `합칠 수 없음 · 같은 등급 ${r.count}마리 필요(${r.have}마리)`,
+                unique: g ? `합칠 수 없음 · ${g.name}은 맵에 ${g.fieldMax}마리` : '합칠 수 없음'
+            }[r.reason] || null;
             color = UI_THEME.inkBad;
         }
         if (text) {
             // 손가락 아래쪽에 띄운다. 하단 바 근처에서는 위쪽에 띄운다
-            const keep = act.action === 'merge' ? Game.mergeEquip(this.drag.src.monster, act.loc.monster).keep : null;
+            const keep = act.action === 'merge' ? Game.mergeEquipAll(act.materials).keep : null;
             ctx.font = `bold 26px ${UI_FONT}`;
             const tw = ctx.measureText(text).width;
             const w = Math.ceil((tw + 48 + (keep ? 44 : 0)) / 8) * 8;
@@ -2690,16 +2785,20 @@ const UI = {
     },
 
     // "히든 조합 발견!": 화면 가운데 남색 띠, 재료 두 마리(랭크 조건이 있으면 이름 뒤에)와 결과.
-    // 전설 결과는 띠와 결과 그림이 더 크고, 빛줄기가 많고 "전설" 글자가 붙고 금빛 반짝이가 쏟아진다
+    // 등급 표의 fx가 2 이상(전설, 신화)이면 띠와 결과 그림이 더 크고, 빛줄기가 많고 "전설 등급" 글자가 붙고 반짝이가 쏟아진다.
+    // 신화(fx 3)는 더 크고 빛줄기가 붉은 무지개 색으로 돈다
     drawDiscovery(ctx) {
         const d = Fx.discovery;
         if (!d || d.age < 0) return;
         const T = UI_THEME;
-        const legend = d.grade === 'legendary';
+        const fx = gradeInfo(d.grade, 'fx', 0);
+        const legend = fx >= 2;
+        const myth = fx >= 3;
+        const rainbow = gradeInfo(d.grade, 'rainbow', null);
         const a = clamp(Math.min(d.age / 0.2, (d.life - d.age) / 0.4), 0, 1);
         const cx = GAME_WIDTH / 2;
         const cy = 520;
-        const half = legend ? 300 : 230;
+        const half = myth ? 340 : (legend ? 300 : 230);
         ctx.save();
         ctx.globalAlpha = a;
         ctx.fillStyle = T.dimLight;
@@ -2708,9 +2807,10 @@ const UI = {
         // 결과 뒤에서 도는 빛줄기
         const rx = cx + 250;
         const ry = cy + 40;
-        const rays = legend ? 28 : 16;
-        const len = legend ? 520 : 320;
-        const color = legend ? '255,210,90' : (MONSTER_GRADES[d.grade] ? MONSTER_GRADES[d.grade].glow : '255,215,106');
+        const rays = myth ? 40 : (legend ? 28 : 16);
+        const len = myth ? 700 : (legend ? 520 : 320);
+        const color = MONSTER_GRADES[d.grade] ? MONSTER_GRADES[d.grade].glow : '255,215,106';
+        const rayColor = i => (rainbow ? hexRgb(rainbow[i % (rainbow.length - 1)]) : color);
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, cy - half + 30, GAME_WIDTH, half * 2 - 60);
@@ -2718,7 +2818,7 @@ const UI = {
         ctx.globalCompositeOperation = 'lighter';
         for (let i = 0; i < rays; i++) {
             const ang = d.age * (legend ? 0.9 : 0.7) + i / rays * Math.PI * 2;
-            ctx.fillStyle = `rgba(${color},${i % 2 ? 0.2 : 0.12})`;
+            ctx.fillStyle = `rgba(${rayColor(i)},${i % 2 ? 0.2 : 0.12})`;
             ctx.beginPath();
             ctx.moveTo(rx, ry);
             ctx.lineTo(rx + Math.cos(ang - 0.08) * len, ry + Math.sin(ang - 0.08) * len);
@@ -2726,26 +2826,26 @@ const UI = {
             ctx.closePath();
             ctx.fill();
         }
-        const glow = ctx.createRadialGradient(rx, ry, 10, rx, ry, legend ? 260 : 180);
+        const glow = ctx.createRadialGradient(rx, ry, 10, rx, ry, myth ? 320 : (legend ? 260 : 180));
         glow.addColorStop(0, `rgba(${color},0.55)`);
         glow.addColorStop(1, `rgba(${color},0)`);
         ctx.fillStyle = glow;
         ctx.fillRect(rx - 300, ry - 300, 600, 600);
         // 쏟아지는 반짝이(도트)
-        for (let i = 0; i < (legend ? 60 : 30); i++) {
+        for (let i = 0; i < (myth ? 110 : (legend ? 60 : 30)); i++) {
             const k = (d.age * 0.6 + i * 0.137) % 1;
             const px = rx + Math.cos(i * 2.4) * (60 + k * (legend ? 480 : 320));
             const py = ry + Math.sin(i * 2.4) * (40 + k * (legend ? 220 : 160));
             ctx.globalAlpha = a * (1 - k);
-            ctx.fillStyle = i % 3 ? `rgb(${color})` : '#ffffff';
+            ctx.fillStyle = i % 3 ? `rgb(${rayColor(i)})` : '#ffffff';
             const s = i % 4 === 0 ? 8 : 4;
             ctx.fillRect(Math.round(px), Math.round(py), s, s);
         }
         ctx.restore();
         const pop = d.age < 0.25 ? 1.5 - d.age / 0.25 * 0.5 : 1;
-        const titleY = cy - (legend ? 168 : 124);
-        UIKit.bigText(ctx, '히든 조합 발견!', cx, titleY, Math.round((legend ? 112 : 92) * pop), T.gold, 'center', '#fff4c0');
-        if (legend) UIKit.bigText(ctx, `${MONSTER_GRADES.legendary.name} 등급`, cx, titleY + 84, 44, MONSTER_GRADES.legendary.light, 'center', '#ffffff');
+        const titleY = cy - (myth ? 200 : (legend ? 168 : 124));
+        UIKit.bigText(ctx, '히든 조합 발견!', cx, titleY, Math.round((myth ? 128 : (legend ? 112 : 92)) * pop), T.gold, 'center', '#fff4c0');
+        if (legend) UIKit.bigText(ctx, `${MONSTER_GRADES[d.grade].name} 등급`, cx, titleY + (myth ? 96 : 84), myth ? 56 : 44, MONSTER_GRADES[d.grade].light, 'center', '#ffffff');
         const icon = (type, rank, x, size) => {
             this.drawMonsterIcon(ctx, type, x - size / 2, ry - size / 2, size);
             const big = size > 100;
@@ -2756,7 +2856,8 @@ const UI = {
         UIKit.bigText(ctx, '+', cx - 275, ry, 56, T.cream, 'center');
         icon(d.b, d.bRank, cx - 150, 96);
         UIKit.bigText(ctx, '=', cx + 40, ry, 56, T.gold, 'center');
-        icon(d.type, null, rx, legend ? 200 : 152);
+        if (myth) UIKit.gradeFrame(ctx, rx - 124, ry - 124, 248, 248, MONSTER_GRADES[d.grade].color, 8);
+        icon(d.type, null, rx, myth ? 230 : (legend ? 200 : 152));
         ctx.restore();
     },
 
@@ -3301,9 +3402,9 @@ const UI = {
             UIKit.text(ctx, '+', c.x + 284, cy, 30, T.cream, 'center');
             side(r.b, r.bRank, c.x + 306, open);
             UIKit.text(ctx, '=', c.x + 576, cy, 30, T.gold, 'center');
-            // 결과: 전설은 찾기 전까지 숨긴다
+            // 결과: 등급 표의 secret(전설, 신화)은 찾기 전까지 숨긴다
             const res = MONSTERS[r.result];
-            const showResult = open && (res.grade !== 'legendary' || found);
+            const showResult = open && (!gradeInfo(res.grade, 'secret', false) || found);
             if (showResult) this.drawMonsterIcon(ctx, r.result, c.x + 598, c.y + 14, 72);
             else unknownBox(c.x + 598);
             UIKit.text(ctx, showResult ? res.name : '???', c.x + 682, cy, 19, showResult ? MONSTER_GRADES[res.grade].light : T.creamSoft);

@@ -246,6 +246,27 @@ const SCENES = {
         }
     },
 
+    // 신화 등장(시험용 신화 항목. 신화 몬스터는 아직 표에 없다): 전설 3마리(대리치를 죽음의 군주 위에, 셋째 재료 지옥 대장군)가
+    // 합쳐지는 순간. 붉은 무지개 빛 등급, 전설보다 큰 빛줄기와 이름
+    mythic: {
+        setup: () => {
+            MONSTERS.test_mythic = Object.assign({}, MONSTERS.death_lord, { id: 'test_mythic', name: '시험 신화', grade: 'mythic' });
+            startRun();
+            Game.place('death_lord', 7, 4);
+            Game.place('archlich', 3, 5);
+            Game.place('hell_general', 8, 2);
+            advance(1.6);
+            Fx.reset();
+            const a = Game.monsterAt(3, 5);
+            const b = Game.monsterAt(7, 4);
+            dragDrop([a.x * WORLD_ZOOM, (a.y - 10) * WORLD_ZOOM], [b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM]);
+            if (!Game.monsters.some(m => m.type === 'test_mythic')) throw new Error('신화가 만들어지지 않았습니다');
+            advance(MERGE_REVEAL + 0.7);
+            freezeScene();
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
     // 히든 조합 발견: 오크 광전사 + 스켈레톤 궁수 = 해골 기사
     hidden: {
         setup: () => {

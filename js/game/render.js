@@ -742,11 +742,13 @@ const Render = {
     },
 
     // 등급 마름모: 초록 바닥에서도 보이게 진한 갈색 테두리를 굵게 두르고, 위쪽에 밝은 면을 낸다.
-    // 일반은 회백, 희귀 이상은 크고 바닥에 등급 빛. 전설은 더 큰 금색 마름모에 반짝이는 테두리
+    // 일반은 회백, 희귀 이상은 크고 바닥에 등급 빛. 등급 표 fx 2 이상(전설)은 더 큰 마름모에 반짝이는 테두리,
+    // 신화(fx 3)는 가장 크고 붉은 무지개 빛
     gradeMark(ctx, x, y, grade) {
-        const color = MONSTER_GRADES[grade].color;
-        const legend = grade === 'legendary';
-        const s = grade === 'common' ? 8 : (legend ? 14 : 11);
+        const fx = gradeInfo(grade, 'fx', 0);
+        const legend = fx >= 2;
+        const s = grade === 'common' ? 8 : (fx >= 3 ? 17 : (legend ? 14 : 11));
+        const color = UIKit.gradeFill(ctx, MONSTER_GRADES[grade].color, x - s, y - s, s * 2, s * 2);
         const diamond = r => {
             ctx.beginPath();
             ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
@@ -758,7 +760,7 @@ const Render = {
             ctx.globalCompositeOperation = 'lighter';
             ctx.fillStyle = `rgba(${MONSTER_GRADES[grade].glow},${(legend ? 0.4 : 0.25) + Math.sin(Game.time * 4 + x) * 0.08})`;
             ctx.beginPath();
-            ctx.ellipse(x, y - 20, legend ? 60 : 42, legend ? 20 : 14, 0, 0, Math.PI * 2);
+            ctx.ellipse(x, y - 20, fx >= 3 ? 76 : (legend ? 60 : 42), fx >= 3 ? 25 : (legend ? 20 : 14), 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -890,6 +892,8 @@ const Render = {
     drawPop(ctx, p, pt) {
         const g = GRADE_FX[p.grade] || GRADE_FX.common;
         const rgb = MONSTER_GRADES[p.grade].glow;
+        const rainbow = gradeInfo(p.grade, 'rainbow', null); // 신화: 빛줄기와 불꽃을 무지개 색으로 돌린다
+        const tint = i => (rainbow ? hexRgb(rainbow[i % (rainbow.length - 1)]) : rgb);
         const to = pt(p.to);
         ctx.imageSmoothingEnabled = false;
         if (p.delay > 0 && p.age < p.delay) {
@@ -958,7 +962,7 @@ const Render = {
         for (let i = 0; i < g.rays; i++) {
             const ang = p.seed + i / g.rays * Math.PI * 2 + t * 0.9;
             const len = 90 + 220 * ease + (i % 2) * 40;
-            ctx.fillStyle = `rgba(${i % 2 ? '255,255,255' : rgb},${0.45 * fade})`;
+            ctx.fillStyle = `rgba(${i % 2 ? '255,255,255' : tint(i >> 1)},${0.45 * fade})`;
             ctx.beginPath();
             ctx.moveTo(to.x, to.y);
             ctx.lineTo(to.x + Math.cos(ang - 0.07) * len, to.y + Math.sin(ang - 0.07) * len);
@@ -985,7 +989,7 @@ const Render = {
             const x = to.x + Math.cos(ang) * dist;
             const y = to.y + Math.sin(ang) * dist * 0.8 + k * k * 90;
             const sz = i % 3 === 0 ? 10 : 6;
-            ctx.fillStyle = i % 3 === 0 ? `rgba(255,255,255,${fade})` : `rgba(${rgb},${fade})`;
+            ctx.fillStyle = i % 3 === 0 ? `rgba(255,255,255,${fade})` : `rgba(${tint(i)},${fade})`;
             ctx.fillRect(Math.round(x / 2) * 2 - sz / 2, Math.round(y / 2) * 2 - sz / 2, sz, sz);
         }
         ctx.restore();
@@ -1000,11 +1004,12 @@ const Render = {
         }
         // 결과 이름과 등급: 합치기는 언제나, 소환은 희귀 이상만
         if (p.kind === 'merge' || p.grade !== 'common') {
-            const big = p.grade === 'epic' || p.grade === 'legendary';
+            const fx = gradeInfo(p.grade, 'fx', 0);
+            const big = fx >= 1;
             const a = clamp(Math.min(t / 0.12, (T + 0.4 - t) / 0.3), 0, 1);
             const popK = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
             const label = p.kind === 'summon' ? `${MONSTER_GRADES[p.grade].name} 등장!` : MONSTERS[p.type].name;
-            const size = Math.round((p.grade === 'legendary' ? 64 : big ? 52 : 38) * popK / WORLD_ZOOM);
+            const size = Math.round((fx >= 3 ? 80 : fx >= 2 ? 64 : big ? 52 : 38) * popK / WORLD_ZOOM);
             const ly = to.y - 200 - t * 30;
             const lx = clamp(to.x, 220, WORLD_WIDTH - 220);
             ctx.save();
