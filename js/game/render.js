@@ -193,7 +193,9 @@ const Render = {
     drawHero(ctx, h) {
         const p = heroWorld(h);
         if (h.waiting) return;
-        if (h.boss) {
+        if (h.boss && BOSSES[h.bossKey].art) {
+            this.drawArtBoss(ctx, h, p, BOSSES[h.bossKey].art);
+        } else if (h.boss) {
             const bob = h.windup > 0 ? 0 : Math.sin(h.anim * 0.9) * 4;
             let name = 'boss_fallen_knight_down';
             let flip = false;
@@ -214,7 +216,7 @@ const Render = {
             this.sprite(ctx, img, p.x, p.y + bob + 12, BOSS_SCALE, 118, flip);
         } else {
             const def = HEROES[h.type];
-            const casting = !!def.stunEvery;
+            const casting = !!(def.stunEvery || def.song);
             // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
             const anim = h.blocker ? 0 : h.anim;
             const name = this.heroSpriteName(h.type, h.female, h.dir, anim, h.atkPose, casting, h.atkPoseMax);
@@ -228,7 +230,64 @@ const Render = {
             this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
             this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
         }
-        if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? 165 : (HEROES[h.type].barY || 64) + 8));
+        if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 1.4 : 1);
+        if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? BOSSES[h.bossKey].starY : (HEROES[h.type].barY || 64) + 8));
+    },
+
+    // 직업 그림 보스(대마도사): Asteria 직업 그림을 크게 그린다. 경고(windup) 동안은 주문 동작, 공격은 공격 동작이다
+    drawArtBoss(ctx, h, p, art) {
+        let name;
+        if (h.windup > 0) name = `${art.sprite}_act_${h.dir}_cast${Math.floor(Game.time * 6) % 2}`;
+        else if (h.atkPose > 0) name = `${art.sprite}_act_${h.dir}_atk${this.attackFrame(h.atkPose, h.atkPoseMax, 2)}`;
+        else name = `${art.sprite}_walk_${h.dir}${Math.floor(h.blocker ? 0 : h.anim) % 4}`;
+        this.shadow(ctx, p.x, p.y + 10, 62, 19);
+        // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const hot = h.windup > 0 ? 1 : 0;
+        const pulse = 0.45 + Math.sin(Game.time * (hot ? 30 : 5)) * 0.15 + hot * 0.3;
+        ctx.fillStyle = `rgba(90,180,255,${pulse * 0.35})`;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y + 10, 70, 22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = `rgba(150,220,255,${pulse})`;
+        ctx.stroke();
+        ctx.restore();
+        const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
+        this.sprite(ctx, img, p.x, p.y + 12, art.scale, art.footPx);
+    },
+
+    // 음유시인 가속 표시: 발밑에서 떠오르는 초록 음표. 상태 없이 시간만으로 계산한다
+    hasteNotes(ctx, x, y, seed, size) {
+        const t = Game.time + seed;
+        const snap = v => Math.round(v / 2) * 2;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = 'rgba(120,255,170,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(x, y, 36 * size, 12 * size, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        for (let i = 0; i < 3; i++) {
+            const k = (t * 0.9 + i / 3) % 1;
+            const nx = snap(x + Math.sin(i * 2.1 + seed * 5) * 26 * size + Math.sin(t * 3 + i) * 6);
+            const ny = snap(y - 8 - k * 70 * size);
+            const a = Math.min(1, (1 - k) * 2) * Math.min(1, k * 8);
+            const s = 2 * Math.round(size * 1.5);
+            ctx.fillStyle = `rgba(40,90,50,${a * 0.8})`; // 어두운 바닥에서 떨어져 보이게 1도트 그림자
+            this.noteGlyph(ctx, nx + s / 2, ny + s / 2, s);
+            ctx.fillStyle = i === 1 ? `rgba(255,240,150,${a})` : `rgba(140,255,180,${a})`;
+            this.noteGlyph(ctx, nx, ny, s);
+        }
+    },
+
+    // 도트 음표 한 개: 머리, 기둥, 꼬리. s는 도트 한 칸 크기
+    noteGlyph(ctx, x, y, s) {
+        ctx.fillRect(x - 2 * s, y - s, 3 * s, 2 * s);
+        ctx.fillRect(x, y - 6 * s, s, 6 * s);
+        ctx.fillRect(x + s, y - 6 * s, s, s);
+        ctx.fillRect(x + 2 * s, y - 5 * s, s, 2 * s);
     },
 
     healthBar(ctx, x, y, ratio, w, color) {
@@ -259,7 +318,7 @@ const Render = {
             this.plSprite(ctx, img, art, clip, u.dir, u.x, u.y + 10);
         } else {
             const def = HEROES[u.heroType];
-            const casting = !!def.stunEvery;
+            const casting = !!(def.stunEvery || def.song);
             // 타락 유닛은 시체 자리에 멈춰 싸우므로 공격 사이에는 서 있는 그림(걷기 0번 프레임)을 쓴다
             const anim = u.moving ? u.anim : 0;
             const name = this.heroSpriteName(u.heroType, u.female, u.dir || 'down', anim, u.atkPose, casting, u.atkPoseMax);
@@ -270,6 +329,7 @@ const Render = {
         }
         const barY = (u.kind === 'corrupt' ? HEROES[u.heroType].barY : ORC_ART.barY) + 2;
         this.healthBar(ctx, u.x, u.y - barY, u.hp / u.maxHp, 40, u.kind === 'corrupt' ? '#c56bff' : '#74d65a');
+        if (u.stun > 0) this.stunStars(ctx, u.x, u.y - barY - 14);
     },
 
     // 타락 표시: 발밑에서 도는 도트 룬 고리와 위로 떠오르는 입자. seed로 유닛마다 박자를 어긋낸다.
@@ -736,15 +796,16 @@ const Render = {
 
         for (const t of Game.telegraphs) {
             const k = t.age / t.life;
+            const rgb = t.color || '255,70,110'; // 감전 경고는 푸른색
             ctx.save();
-            ctx.fillStyle = `rgba(255,70,110,${0.12 + 0.18 * k})`;
+            ctx.fillStyle = `rgba(${rgb},${0.12 + 0.18 * k})`;
             ctx.beginPath();
             ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
             ctx.fill();
             ctx.lineWidth = 5;
-            ctx.strokeStyle = '#ff5e7f';
+            ctx.strokeStyle = t.color ? `rgb(${rgb})` : '#ff5e7f';
             ctx.stroke();
-            ctx.fillStyle = 'rgba(255,90,130,0.35)';
+            ctx.fillStyle = t.color ? `rgba(${rgb},0.35)` : 'rgba(255,90,130,0.35)';
             ctx.beginPath();
             ctx.arc(t.x, t.y, t.radius * k, 0, Math.PI * 2);
             ctx.fill();

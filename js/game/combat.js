@@ -166,3 +166,18 @@ function castRoar() {
     Sfx.play('roar');
     return true;
 }
+
+// 정지·감전의 대상 목록: (x, y)에서 반경 rangePx 안의 방어 쪽 전부(시설과 마왕군 유닛).
+// Why: 시설이 몬스터로 바뀌는 중이다. 정지 대상은 모두 이 함수로 얻으므로, 전환 뒤에는 여기만 고치면 된다.
+// 돌려주는 대상은 x, y와 stun(남은 정지 초)을 가진다.
+function stunTargets(x, y, rangePx) {
+    const list = [];
+    for (const f of Game.facilities) if (distance(x, y, f.x, f.y) <= rangePx) list.push(f);
+    for (const u of Game.units) if (!u.removed && distance(x, y, u.x, u.y) <= rangePx) list.push(u);
+    return list;
+}
+
+// 더 긴 쪽 정지를 남긴다
+function applyStun(target, seconds) {
+    target.stun = Math.max(target.stun || 0, seconds);
+}

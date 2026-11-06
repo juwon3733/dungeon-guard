@@ -9,7 +9,7 @@ function createOrc(owner, slot, stats) {
     return {
         kind: 'orc', owner, slot, x: owner.x, y: owner.y, homeX: p.x - p.dy * side, homeY: p.y + p.dx * side, d: owner.rally.d + offset,
         hp: stats.unitHp, maxHp: stats.unitHp, damage: stats.damage, interval: stats.interval, armor: stats.armor,
-        range: 1.1, blockCount: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: Math.random() * 4, target: null,
+        range: 1.1, blockCount: 0, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: Math.random() * 4, target: null,
         facing: 1, ranged: false
     };
 }
@@ -20,7 +20,7 @@ function createCorruptUnit(corpse) {
         kind: 'corrupt', heroType: corpse.type, female: corpse.female, owner: null, slot: -1,
         x: corpse.x, y: corpse.y, homeX: corpse.x, homeY: corpse.y, d: corpse.d,
         hp: def.hp, maxHp: def.hp, damage: def.damage, interval: def.interval, armor: 0,
-        range: def.range, ranged: !!def.ranged, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
+        range: def.range, ranged: !!def.ranged, stun: 0, atk: 0, atkPose: 0, atkPoseMax: ATTACK_POSE_TIME, flash: 0, anim: 0, target: null,
         // 쓰러질 때 걷던 방향의 반대, 곧 다음 용사가 오는 쪽을 보고 일어난다. 위아래로 걷다 쓰러졌으면 얼굴이 보이게 아래를 본다.
         facing: 1, dir: { right: 'left', left: 'right' }[corpse.dir] || 'down', rise: 0.5
     };
@@ -49,6 +49,12 @@ function updateUnit(u, dt) {
         u.rise -= dt;
         return;
     }
+    // 감전·밀침으로 정지: 붙잡은 용사는 계속 붙잡고 있지만 때리지도 걷지도 않는다
+    if (u.stun > 0) {
+        u.stun -= dt;
+        u.moving = false;
+        return;
+    }
 
     // 초소에서 길로 걸어 나온다
     const toHome = distance(u.x, u.y, u.homeX, u.homeY);
@@ -70,7 +76,7 @@ function updateUnit(u, dt) {
         // Why: 무리를 상대하므로 유닛 하나가 최대 3명을 붙잡는다. 나머지는 지나가 추가 배치 판단이 생긴다.
         const held = Game.heroes.filter(h => h.blocker === u && !h.dead);
         if (held.length < BLOCK_CAPACITY) {
-            const candidate = nearestHero(u.x, u.y, u.range * TILE, h => !h.blocker && h.chargeTime <= 0);
+            const candidate = nearestHero(u.x, u.y, u.range * TILE, h => canBlockHero(u, h));
             if (candidate) { candidate.blocker = u; held.push(candidate); }
         }
         if (!u.target && held.length) u.target = held[0];

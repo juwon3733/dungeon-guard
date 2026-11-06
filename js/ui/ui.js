@@ -475,7 +475,10 @@ const UI = {
             const def = HEROES[type];
             row(Assets.get(Render.heroStandName(type, false, 'down')), def.name, def.counter, count, true);
         }
-        if (wave.boss) row(Assets.get('portrait_fallenKnight'), FLOOR_BOSS.name, '돌진, 주변 시설 정지', 1);
+        if (wave.boss) {
+            const def = BOSSES[wave.boss];
+            row(Assets.get(def.portrait), def.name, def.note, 1);
+        }
     },
 
     drawBossBar(ctx) {
@@ -483,10 +486,12 @@ const UI = {
         if (!boss) return;
         const cx = GAME_WIDTH / 2;
         UIKit.frame(ctx, cx - 340, 82, 680, 62, 'danger', 8);
-        const p = Assets.get('portrait_fallenKnight');
+        const p = Assets.get(BOSSES[boss.bossKey].portrait);
         if (p) {
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(p, cx - 332, 84, 58, 58);
+            // 64px 직업 그림은 줄이면 도트가 깨지므로 가운데 58px을 그대로 잘라 쓴다
+            if (p.width === 64) ctx.drawImage(p, 3, 0, 58, 58, cx - 332, 84, 58, 58);
+            else ctx.drawImage(p, cx - 332, 84, 58, 58);
         }
         UIKit.text(ctx, boss.name, cx - 262, 102, 22, '#ffe6ea');
         UIKit.bar(ctx, cx - 262, 120, 590, 14, boss.hp / boss.maxHp, '#ff6e8a', '#a0233f');
@@ -652,7 +657,7 @@ const UI = {
             ctx.fillStyle = '#d4354f';
             ctx.fillRect(0, 380, GAME_WIDTH, 6);
             ctx.fillRect(0, 614, GAME_WIDTH, 6);
-            const p = Assets.get('portrait_fallenKnight');
+            const p = Assets.get(b.portrait || 'portrait_fallenKnight');
             if (p) {
                 ctx.imageSmoothingEnabled = false;
                 ctx.drawImage(p, 420 - slide, 404, 192, 192);
