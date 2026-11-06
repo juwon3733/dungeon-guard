@@ -656,13 +656,14 @@ const Render = {
 
     // 소환·합치기 연출 한 개. pt(점)는 몬스터가 선 세계 좌표를 연출 중심(세계 좌표)으로 바꾼다
     //   합치기: delay 동안 두 몬스터가 하얗게 달아오르며 결과 자리로 빨려 들어가고, 그 뒤 빛이 터진다
+    //   제물: 같은 방식으로 몬스터 하나가 왕좌로 빨려 들어가고 빛만 터진다(결과 그림과 이름 없음)
     //   터진 뒤: 등급 색 빛, 빛줄기(희귀 이상), 퍼지는 고리, 불꽃, 결과 이름. 등급이 높을수록 크고 길다
     drawPop(ctx, p, pt) {
         const g = GRADE_FX[p.grade] || GRADE_FX.common;
         const rgb = MONSTER_GRADES[p.grade].glow;
         const to = pt(p.to);
         ctx.imageSmoothingEnabled = false;
-        if (p.kind === 'merge' && p.age < p.delay) {
+        if (p.delay > 0 && p.age < p.delay) {
             const k = p.age / p.delay;
             const e = k * k;
             ctx.save();
@@ -759,6 +760,7 @@ const Render = {
             ctx.fillRect(Math.round(x / 2) * 2 - sz / 2, Math.round(y / 2) * 2 - sz / 2, sz, sz);
         }
         ctx.restore();
+        if (p.kind === 'sacrifice') return;
         // 결과 그림의 하얀 섬광: 커졌다가 줄며 사라진다
         if (t < 0.3) {
             const name = `${MONSTERS[p.type].sprite}/rotations/south`;
@@ -848,8 +850,46 @@ const Render = {
         ctx.restore();
         this.shadow(ctx, x, y + 26, 84, 24, 0.55);
         const bob = Math.sin(Game.time * 1.6) * 3;
-        const img = hurt ? Assets.tinted(name, '#ff4466', 0.7) : Assets.get(name);
+        // 제물을 받으면 금빛으로 빛난다(빨려 든 몬스터가 닿은 뒤부터)
+        const bless = Game.throneBless > 0 && Game.throneBless < 1.1 ? Game.throneBless / 1.1 : 0;
+        if (bless > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const b = ctx.createRadialGradient(x, y - 60, 10, x, y - 60, 240);
+            b.addColorStop(0, `rgba(255,225,140,${0.7 * bless})`);
+            b.addColorStop(1, 'rgba(255,200,90,0)');
+            ctx.fillStyle = b;
+            ctx.fillRect(x - 240, y - 300, 480, 480);
+            ctx.restore();
+        }
+        const img = hurt ? Assets.tinted(name, '#ff4466', 0.7)
+            : bless > 0 ? Assets.tinted(name, '#ffe08a', Math.round(bless * 4) / 4 * 0.6) : Assets.get(name);
         this.sprite(ctx, img, x, y + 30 + bob, 2, 118);
+    },
+
+    // 끄는 동안 왕좌의 제물 표시: 발밑에 도는 금빛 고리. hot이면(왕좌 위) 더 밝고 크다
+    sacrificeMark(ctx, hot) {
+        const x = tileX(THRONE_TILE.col);
+        const y = tileY(THRONE_TILE.row) + 30;
+        const pulse = Math.sin(Game.time * 5) * 0.5 + 0.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const r = hot ? 190 : 150;
+        const g = ctx.createRadialGradient(x, y - 50, 10, x, y - 50, r);
+        g.addColorStop(0, `rgba(255,215,120,${hot ? 0.45 : 0.18 + pulse * 0.12})`);
+        g.addColorStop(1, 'rgba(255,200,90,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - 50 - r, r * 2, r * 2);
+        ctx.restore();
+        ctx.save();
+        ctx.lineWidth = hot ? 7 : 5;
+        ctx.strokeStyle = hot ? '#fff1b0' : `rgba(255,215,106,${0.6 + pulse * 0.4})`;
+        ctx.setLineDash([18, 10]);
+        ctx.lineDashOffset = -Game.time * 60;
+        ctx.beginPath();
+        ctx.ellipse(x, y, hot ? 130 : 112, hot ? 46 : 40, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
     },
 
     drawCorpse(ctx, c) {

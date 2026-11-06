@@ -109,6 +109,24 @@ const SCENES = {
         }
     },
 
+    // 제물: 오크 광전사를 왕좌에 바친 직후(마왕이 금빛으로 빛나고 회복 숫자, 대사, 체력 구슬이 차오름)에
+    // 저주 사수를 왕좌 위로 끌어 올린 순간. 왕좌의 제물 고리와 "제물: 체력 +2, 번개 -5초" 미리보기가 보인다
+    sacrifice: {
+        setup: () => {
+            setupBoard();
+            Game.hp = 12;
+            Game.skills.lightning = 20;
+            advance(0.1);
+            const throne = [tileX(THRONE_TILE.col) * WORLD_ZOOM, (tileY(THRONE_TILE.row) - 40) * WORLD_ZOOM];
+            const b = Game.monsterAt(9, 2);
+            dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], throne);
+            advance(MERGE_REVEAL + 0.25);
+            const s = Game.monsterAt(11, 5);
+            dragHold([s.x * WORLD_ZOOM, (s.y - 10) * WORLD_ZOOM], [throne[0] - 20, throne[1] + 10]);
+            freezeScene();
+        }
+    },
+
     // 맵의 암흑 마법사를 누른 정보 팝업: 이름, 등급, 역할, 수치, 함께 합칠 수 있는 몬스터, 판매
     popup: {
         setup: () => {

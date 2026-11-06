@@ -6,8 +6,8 @@ const Game = {
     discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     skills: { lightning: 0, roar: 0 },
-    streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0,
-    stats: { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, time: 0 },
+    streak: 0, streakTimer: 0, streakPop: 0, throneFlash: 0, throneBless: 0, // throneBless: 제물을 받은 마왕이 빛나는 남은 시간
+    stats: { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 },
     time: 0,
 
     reset() {
@@ -28,7 +28,8 @@ const Game = {
         this.streak = 0;
         this.streakTimer = 0;
         this.throneFlash = 0;
-        this.stats = { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, time: 0 };
+        this.throneBless = 0;
+        this.stats = { kills: 0, corrupted: 0, placed: 0, summoned: 0, merged: 0, sacrificed: 0, time: 0 };
         Fx.reset();
         this.state = 'prep';
     },
@@ -246,6 +247,37 @@ const Game = {
 
     sellValue(type) { return SUMMON_RULES.refund[MONSTERS[type].grade] || 0; },
 
+    // 세계 좌표가 왕좌(마왕) 위인지: 왕좌 칸 둘레 3x3과 마왕 그림이 서 있는 위쪽 한 칸
+    onThrone(wx, wy) {
+        const col = Math.floor(wx / TILE);
+        const row = Math.floor((wy - MAP_TOP) / TILE);
+        return Math.abs(col - THRONE_TILE.col) <= 1 && row >= THRONE_TILE.row - 2 && row <= THRONE_TILE.row + 1;
+    },
+
+    // 제물: 맵의 몬스터를 왕좌에 바친다. 몬스터는 사라지고(칸이 비고 붙잡던 용사가 풀린다) 마왕 체력과 번개 대기가 좋아진다.
+    // 체력이 가득해도 번개 감소를 위해 바칠 수 있다. 환불은 없다. 실패하면 { ok: false, reason: 'state' | 'empty' }
+    sacrifice(m) {
+        if (!this.inPlay()) return { ok: false, reason: 'state' };
+        if (!m || m.removed || !this.monsters.includes(m)) return { ok: false, reason: 'empty' };
+        const gain = sacrificeGain(m);
+        const heal = Math.min(gain.heal, Math.max(0, COMBAT_RULES.maxHp - this.hp));
+        this.hp += heal;
+        this.skills.lightning = Math.max(0, this.skills.lightning - gain.lightning);
+        const grade = MONSTERS[m.type].grade;
+        const from = { x: m.x, y: m.y };
+        this.removeMonster(m);
+        this.stats.sacrificed++;
+        // 연출: 몬스터가 왕좌로 빨려 들어간 뒤(MERGE_REVEAL) 마왕이 빛나고 체력 구슬이 차오른다
+        const tx = tileX(THRONE_TILE.col);
+        const ty = tileY(THRONE_TILE.row);
+        Fx.pop({ kind: 'sacrifice', from: [from], fromTypes: [m.type], to: { x: tx, y: ty - 40 }, type: m.type, grade });
+        Fx.pendingSacrifices.push({ t: MERGE_REVEAL, x: tx, y: ty, heal });
+        this.throneBless = MERGE_REVEAL + 1.1;
+        Fx.say(tx, ty - 190, randItem(SPEECH.sacrifice), 2);
+        Sfx.play('merge', GRADE_ORDER.indexOf(grade));
+        return { ok: true, heal, lightning: gain.lightning, gain };
+    },
+
     upgrade(m, branch) {
         const nextTier = m.tier + 1;
         if (nextTier > 3) return false;
@@ -315,6 +347,7 @@ const Game = {
         this.time += dt;
         Fx.update(dt);
         this.throneFlash = Math.max(0, this.throneFlash - dt);
+        this.throneBless = Math.max(0, this.throneBless - dt);
         this.streakPop = Math.max(0, this.streakPop - dt * 4);
         if (this.state !== 'prep' && this.state !== 'wave') return;
         this.stats.time += dt;
