@@ -28,6 +28,9 @@ const Assets = {
         }
         for (const pose of ['down', 'left', 'slam', 'windup']) list.push(`boss_fallen_knight_${pose}`);
         list.push('boss_rift_lord_down', 'boss_rift_lord_cast');
+        // 마왕 그림(128px)과 초상, 유물 그림(48px)
+        for (const lord of Object.values(DEMON_LORDS)) list.push(lord.sprite, lord.cast || lord.sprite, lord.portrait.sprite);
+        for (const id of Object.keys(RELICS)) list.push(`relic_${id}`);
         for (const id of Object.keys(EQUIPMENT)) list.push(`equip_${id}`); // 장비 그림(48px)
         list.push('island_shadow', 'void_shadow', 'bridgedeck_shadow', 'prop_fieldPortal');
         for (const fx of ['hit_physical', 'hit_crit', 'hit_fire', 'hit_lightning', 'blastViolet', 'blastPink', 'blastCyan', 'blastGold', 'explosion',

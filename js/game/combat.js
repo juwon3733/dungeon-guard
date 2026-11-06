@@ -19,7 +19,7 @@ function killHero(hero, pos, attacker) {
     hero.dead = true;
     if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
-    const bounty = hero.bounty;
+    const bounty = Math.round(hero.bounty * G.mods.bounty); // 마왕과 유물의 처치 골드(bounty)
     G.gold += bounty;
     G.stats.kills++;
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
@@ -106,7 +106,7 @@ function damageThrone(amount, heroName) {
     Fx.number('throne', tx, ty - 200, amount, '#ff5e73', true);
     Fx.burst(tx, ty - 60, '#ff5e73', 22, 420, 0.5, 7);
     Fx.anim('fx_hit_fire', tx, ty - 60, 300, 0.4);
-    Fx.say(tx, ty - 190, randItem(SPEECH.throneHit), 1.8);
+    Fx.say(tx, ty - 190, lordLine('throneHit'), 1.8);
     if (G.hp <= 0) G.finish(false);
 }
 
@@ -137,7 +137,7 @@ function castLightning(x, y) {
     const G = Game;
     const rule = COMBAT_RULES.lightning;
     if (G.skills.lightning > 0) return false;
-    G.skills.lightning = rule.cooldown;
+    G.skills.lightning = G.skillCooldown('lightning');
     G.pendingStrikes.push({ x, y, t: 0.16 });
     Fx.dim = 0.75;
     Sfx.play('charge');
@@ -156,7 +156,7 @@ function resolveStrike(strike) {
     Fx.glow(strike.x, strike.y, 330, 'rgba(180,220,255,1)', 0.3);
     Fx.burst(strike.x, strike.y, '#d8f3ff', 42, 620, 0.5, 7);
     Fx.decals.push({ kind: 'scorch', x: strike.x, y: strike.y, age: 0, life: 9, radius: rule.radius * TILE * 0.72 });
-    splashDamage(strike.x, strike.y, rule.radius * TILE, rule.damage, '#bfe9ff');
+    splashDamage(strike.x, strike.y, rule.radius * TILE, Game.lightningDamage(), '#bfe9ff');
     Sfx.play('lightning');
 }
 
@@ -164,7 +164,7 @@ function castRoar() {
     const G = Game;
     const rule = COMBAT_RULES.roar;
     if (G.hp > rule.unlockHp || G.skills.roar > 0) return false;
-    G.skills.roar = rule.cooldown;
+    G.skills.roar = G.skillCooldown('roar');
     for (const h of G.heroes) if (!h.dead) h.stun = Math.max(h.stun, rule.duration);
     const tx = tileX(THRONE_TILE.col);
     const ty = tileY(THRONE_TILE.row);

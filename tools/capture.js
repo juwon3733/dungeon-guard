@@ -20,9 +20,42 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
+    // 선택 화면: 마왕 카드 3장(황금 마왕을 고름), 유물 격자와 고른 유물(마녀의 눈), 이번 판 효과. 금 간 거울에 마우스를 올려 설명을 띄운다
+    select: {
+        setup: () => {
+            pressButton('start');
+            pressButton('lord_gold_king');
+            pressButton('relic_eye');
+            const b = UI.buttons.find(x => x.id === 'relic_mirror');
+            UI.onMove(b.x + 20, b.y + 20);
+        }
+    },
+
+    // 뼈의 여왕으로 시작한 판: 왕좌의 여왕 그림, 체력 구슬(최대 17), 마왕 탭의 초상(호통)과 유물 칸(푸른 족쇄, 마우스를 올려 설명)
+    lordQueen: {
+        setup: () => {
+            pressButton('start');
+            pressButton('lord_bone_queen');
+            pressButton('relic_shackles');
+            pressButton('begin');
+            Game.place('orc_guard', 6, 6);
+            Game.place('skeleton_archer', 6, 4);
+            Game.place('dark_mage', 10, 5);
+            advance(1.6);
+            Fx.reset();
+            Game.hp = 9; // 호통을 쓸 수 있는 체력
+            pressButton('tab_demon');
+            Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 190, DEMON_LORDS.bone_queen.speech.waveStart[0], 30);
+            UI.update(0);
+            const b = UI.buttons.find(x => x.id === 'barRelic0');
+            UI.onMove(b.x + 20, b.y + 20);
+        },
+        afterFreeze: () => { Game.time = Math.PI / 6; }
+    },
+
     // 시작 버튼을 눌러 준비 단계로 들어간 첫 화면: 소환 버튼(현재 비용)과 맵 몬스터 수 0/24, 첫 안내 문구
     prep: {
-        setup: () => { pressButton('start'); },
+        setup: () => { startRun(); },
         // 건설 칸 테두리는 Game.time으로 깜빡인다. 가장 밝은 순간(sin = 1)에 멈춘다
         afterFreeze: () => { Game.time = Math.PI / 6; }
     },
@@ -30,7 +63,7 @@ const SCENES = {
     // 소환: 몬스터 넷을 맵에 소환한 뒤 다섯째로 영웅(해골 기사)이 길 옆 칸에 나오는 순간. 소환 버튼에 마우스를 올려 확률 설명을 띄운다
     summon: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 400;
             for (const r of [[0.1, 0.1, 0.2], [0.5, 0.5, 0.4], [0.1, 0.9, 0.3], [0.8, 0.9, 0.5]]) withRandom(r, () => pressButton('summon'));
             advance(1.5);
@@ -160,7 +193,7 @@ const SCENES = {
     // 몬스터 20마리 넘게 소환해 맵에 깔고(22/24) 7번째 웨이브를 붙인 장면. 용사와 체력바가 몬스터 사이에서 보이는지 본다
     crowded: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 5000;
             seededRandom(7, () => { for (let i = 0; i < 22; i++) pressButton('summon'); });
             if (Game.monsters.length < 20) throw new Error(`몬스터가 ${Game.monsters.length}마리뿐입니다`);
@@ -182,7 +215,7 @@ const SCENES = {
     // 몬스터 24마리에 랭크를 섞은 장면: 대부분 D(글자 없음), C·B·A 몇, S 둘. 하나는 랭크가 막 오른 연출 중이다
     ranks: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 5000;
             seededRandom(7, () => { for (let i = 0; i < 24; i++) pressButton('summon'); });
             if (Game.monsters.length < 22) throw new Error(`몬스터가 ${Game.monsters.length}마리뿐입니다`);
@@ -199,7 +232,7 @@ const SCENES = {
     // 몬스터 3종을 길 옆에 놓고 웨이브를 시작한 뒤, 오크가 길로 나가 용사를 붙잡을 때까지 시간을 빨리 돌린다
     combat: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 2000; // 장면용: 세 몬스터를 모두 놓을 돈
             // 화면 가운데쯤(길이 ㄷ자로 꺾이는 곳)에 놓아 싸움이 입구 그림에 가리지 않게 한다
             Game.place('orc_guard', 6, 6);
@@ -293,7 +326,7 @@ const SCENES = {
     // 정예 4종이 함께 걷는 장면: 음유시인 노래(음표), 뇌술사 범위 감전 경고 원, 오크에 막힌 검사, 오크를 지나는 조련사
     elites: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 2000;
             Game.place('orc_guard', 6, 6);
             Game.place('skeleton_archer', 6, 4);
@@ -330,7 +363,7 @@ const SCENES = {
     // 대마도사 보스: 체력 25% 넓은 범위 감전 경고 중. 보스 체력바가 위에 나온다
     archmage: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 2000;
             Game.place('orc_guard', 6, 6);
             Game.place('skeleton_archer', 6, 4);
@@ -356,7 +389,7 @@ const SCENES = {
     // 막 쓰러진 해골 기사(고리와 입자, 주변 용사 기절 별. 보스는 기절하지 않는다)
     abilities: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 2000;
             // 셋을 서로 다른 길 옆에 떨어뜨려 놓아 효과가 겹치지 않게 한다
             const bz = Game.place('orc_berserker', 6, 6);
@@ -401,7 +434,7 @@ const SCENES = {
     // 화면에는 전설용 "히든 조합 발견!"(재료 줄에 랭크 A)이 떠 있다. 발밑에는 금색 전설 표식과 랭크 A
     legend: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.gold = 2000;
             const knight = Game.place('bone_knight', 10, 2);
             const shooter = Game.place('curse_shooter', 14, 2);
@@ -456,7 +489,7 @@ const SCENES = {
     // 첫 카드에 마우스를 올린 상태
     bossReward: {
         setup: () => {
-            pressButton('start');
+            startRun();
             Game.place('orc_guard', 6, 6);
             Game.place('skeleton_archer', 6, 4);
             Game.place('dark_mage', 10, 5);
@@ -480,7 +513,7 @@ const SCENES = {
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
     archmageIntro: {
         setup: () => {
-            pressButton('start');
+            startRun();
             WAVES[WAVES.length - 1].boss = 'archmage';
             Game.waveIndex = WAVES.length - 1;
             Game.startWave();
@@ -491,6 +524,8 @@ const SCENES = {
 
 // 페이지 안에 넣는 도우미: 실제 입력 경로로 UI 버튼을 누른다(tools/smoke.js와 같은 방식)
 const PAGE_HELPERS = () => {
+    // 타이틀에서 선택 화면을 거쳐 기본 선택(균열의 군주, 유물 없음)으로 판을 시작한다
+    window.startRun = () => { pressButton('start'); pressButton('begin'); };
     window.pressButton = id => {
         UI.update(0);
         const b = UI.buttons.find(x => x.id === id);
@@ -524,7 +559,7 @@ const PAGE_HELPERS = () => {
     // 끌기 장면 공통 판: 오크 경비병(6,6)·스켈레톤 궁수(6,4)·암흑 마법사(10,5)와 끌어 쓸 암흑 마법사(3,5),
     // 오크 경비병(13,6), 저주 사수(11,5), 오크 광전사(9,2)
     window.setupBoard = () => {
-        pressButton('start');
+        startRun();
         Game.gold = 300;
         Game.place('orc_guard', 6, 6);
         Game.place('skeleton_archer', 6, 4);

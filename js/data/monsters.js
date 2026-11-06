@@ -86,7 +86,7 @@ const MONSTER_RANKS = [
 const RANK_KILL_XP = { normal: 1, elite: 3, boss: 10 };
 
 // 제물: 맵의 몬스터를 끌어 왕좌의 마왕 위에 놓으면 몬스터가 사라지고 마왕이 힘을 얻는다(웨이브 중에도, 준비 중에도). 판매 환불은 없다.
-//   heal: 마왕 체력 회복(COMBAT_RULES.maxHp를 넘지 않는다), lightning: 번개 재사용 대기 감소(초, 0 아래로 내려가지 않는다)
+//   heal: 마왕 체력 회복(최대 체력 Game.maxHp()를 넘지 않는다), lightning: 번개 재사용 대기 감소(초, 0 아래로 내려가지 않는다)
 //   랭크가 높으면 MONSTER_RANKS의 mul만큼 커진다(랭크마다 +25%, S는 2배). 체력은 내림으로 정수를 유지한다
 const SACRIFICE_RULES = {
     common: { heal: 1, lightning: 2 },
@@ -319,11 +319,12 @@ function monsterAbility(type, kind) {
 }
 
 // 제물 효과: m은 { type, rank } 개체 또는 id 문자열(랭크 D). { heal, lightning }(최대치 제한 전 값)
-function sacrificeGain(m) {
+// extra는 마왕과 유물의 제물 효과 배율(없으면 1). 판 중에는 Game.sacrificeGain이 넘긴다
+function sacrificeGain(m, extra) {
     const input = mergeInput(m);
     const base = SACRIFICE_RULES[MONSTERS[input.type].grade];
-    const mul = MONSTER_RANKS[input.rank].mul;
-    return { heal: Math.floor(base.heal * mul), lightning: base.lightning * mul };
+    const mul = MONSTER_RANKS[input.rank].mul * (extra === undefined ? 1 : extra);
+    return { heal: Math.floor(base.heal * mul + 1e-9), lightning: base.lightning * mul };
 }
 
 // "체력 +2, 번개 -5초". 6.25초처럼 소수도 그대로 적는다

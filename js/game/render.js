@@ -887,7 +887,9 @@ const Render = {
         const y = tileY(THRONE_TILE.row);
         const hurt = Game.throneFlash > 0;
         const casting = Fx.dim > 0.3;
-        const name = casting ? 'boss_rift_lord_cast' : 'boss_rift_lord_down';
+        // 고른 마왕의 그림. 주문 그림이 없는 마왕은 같은 그림에 주문 빛(아래)을 더해 구분한다
+        const lord = Game.lordDef();
+        const name = casting && lord.cast ? lord.cast : lord.sprite;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const pulse = 0.2 + Math.sin(Game.time * 2) * 0.06;
@@ -913,7 +915,30 @@ const Render = {
         }
         const img = hurt ? Assets.tinted(name, '#ff4466', 0.7)
             : bless > 0 ? Assets.tinted(name, '#ffe08a', Math.round(bless * 4) / 4 * 0.6) : Assets.get(name);
-        this.sprite(ctx, img, x, y + 30 + bob, 2, 118);
+        this.sprite(ctx, img, x, y + 30 + bob, 2, lord.footPx);
+        this.throneFoot = y + 30 + bob; // 주문 빛(drawLordCast)이 같은 자리에 다시 그린다
+    },
+
+    // 주문 그림이 없는 마왕의 주문 자세: 화면이 어두워진 위로 마왕을 빛과 함께 다시 그려 떠오르게 한다(번개를 쓰는 동안)
+    drawLordCast(ctx) {
+        const lord = Game.lordDef();
+        if (lord.cast || Fx.dim <= 0.3 || this.throneFoot === undefined) return;
+        const x = tileX(THRONE_TILE.col);
+        const y = this.throneFoot;
+        const k = Math.min(1, Fx.dim / 0.75);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const c = ctx.createRadialGradient(x, y - 130, 10, x, y - 130, 240);
+        c.addColorStop(0, `rgba(170,210,255,${0.55 * k})`);
+        c.addColorStop(0.5, `rgba(150,110,255,${0.28 * k})`);
+        c.addColorStop(1, 'rgba(150,110,255,0)');
+        ctx.fillStyle = c;
+        ctx.fillRect(x - 240, y - 370, 480, 480);
+        ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = k;
+        this.sprite(ctx, Assets.tinted(lord.sprite, '#d8f3ff', 0.3), x, y, 2, lord.footPx);
+        ctx.restore();
     },
 
     // 끄는 동안 왕좌의 제물 표시: 발밑에 도는 금빛 고리. hot이면(왕좌 위) 더 밝고 크다
@@ -1287,6 +1312,7 @@ const Render = {
         if (Fx.dim > 0) {
             ctx.fillStyle = `rgba(4,2,16,${Fx.dim * 0.72})`;
             ctx.fillRect(-40, -40, WORLD_WIDTH + 80, WORLD_HEIGHT + 80);
+            this.drawLordCast(ctx);
         }
 
         for (const p of Game.projectiles) this.drawProjectile(ctx, p);

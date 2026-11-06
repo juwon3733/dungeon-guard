@@ -23,7 +23,7 @@ function createHero(type, waveIndex, delay, bossKey) {
         d: 0,
         lane: bossDef ? 0 : randRange(-34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
-        speed: src.speed * TILE,
+        speed: src.speed * TILE * Game.mods.heroSpeed, // 마왕과 유물의 용사 이동 속도(heroSpeed)
         damage: src.damage,
         interval: src.interval,
         armor: src.armor || 0,

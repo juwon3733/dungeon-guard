@@ -39,6 +39,13 @@ function monsterStats(m) {
         stats.range *= 1 + equipEffect(m.equip, 'range');
         stats.interval /= 1 + equipEffect(m.equip, 'speed');
     }
+    // 마왕과 유물: 장비와 같은 방식으로 그 뒤에 곱한다. 값이 없으면(0, 1) 그대로다
+    const mods = Game.mods;
+    stats.hp *= 1 + mods.hp;
+    stats.damage *= 1 + mods.damage;
+    stats.range *= 1 + mods.range;
+    stats.interval /= 1 + mods.attackSpeed;
+    stats.respawn *= mods.respawn;
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
     return stats;
@@ -127,7 +134,7 @@ function monsterXpToNext(m) {
 function monsterKilledHero(m, hero) {
     if (!m || m.kind !== 'monster' || m.removed) return;
     const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
-    m.xp += gain * (1 + equipEffect(m.equip, 'xp')); // 장비(처치 경험치)
+    m.xp += gain * (1 + equipEffect(m.equip, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
     const before = m.rank;
     while (MONSTER_RANKS[m.rank + 1] && m.xp >= MONSTER_RANKS[m.rank + 1].xp) m.rank++;
     if (m.rank === before) return;

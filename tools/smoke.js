@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/game.js', 'js/ui/ui.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -13,7 +13,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
     const actx = vm.createContext({ console });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
     }
     const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
@@ -25,6 +25,32 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         const png = fs.readFileSync(file);
         assert(png.readUInt32BE(16) === 48 && png.readUInt32BE(20) === 48, `equip_${id}.png is 48px`);
         assert(names.includes(`equip_${id}`), `equip_${id} in Assets.names()`);
+    }
+    // 마왕과 유물 그림: 표에 적은 그림 파일이 있고(마왕 128px, 유물 48px) 불러오기 목록에 들어 있다
+    const pngSize = name => {
+        const file = path.join(root, 'assets/sprites', `${name}.png`);
+        assert(fs.existsSync(file), 'missing picture ' + file);
+        const png = fs.readFileSync(file);
+        return [png.readUInt32BE(16), png.readUInt32BE(20)];
+    };
+    const lords = vm.runInContext('Object.values(DEMON_LORDS)', actx);
+    assert.strictEqual(lords.length, 3, 'three lords');
+    for (const lord of lords) {
+        for (const name of [lord.sprite, lord.cast].filter(Boolean)) {
+            assert.deepStrictEqual(pngSize(name), [128, 128], name + ' is 128px');
+            assert(names.includes(name), name + ' in Assets.names()');
+        }
+        assert(names.includes(lord.portrait.sprite) && pngSize(lord.portrait.sprite), 'portrait ' + lord.portrait.sprite);
+        if (lord.portrait.crop) {
+            const [x, y, s] = lord.portrait.crop;
+            assert(x >= 0 && y >= 0 && x + s <= 128 && y + s <= 128, 'portrait crop inside the picture');
+        }
+    }
+    const relicIds = vm.runInContext('Object.keys(RELICS)', actx);
+    assert.strictEqual(relicIds.length, 16, 'sixteen relics');
+    for (const id of relicIds) {
+        assert.deepStrictEqual(pngSize(`relic_${id}`), [48, 48], `relic_${id}.png is 48px`);
+        assert(names.includes(`relic_${id}`), `relic_${id} in Assets.names()`);
     }
 }
 vm.runInContext(`
@@ -53,10 +79,14 @@ const withRandom = (v, fn) => {
     try { return fn(); } finally { Math.random = old; }
 };
 
-// 시작
+// 시작: 타이틀 → 선택 화면(기본 마왕 균열의 군주, 유물 없음) → 시작
 assert.strictEqual(Game.state, 'title');
 btn('start');
+assert.strictEqual(Game.state, 'select');
+assert.strictEqual(JSON.stringify(UI.loadout), '{"lord":"rift","relics":[]}', 'default loadout');
+btn('begin');
 assert.strictEqual(Game.state, 'prep');
+assert.strictEqual(Game.lord, 'rift');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
 // 소환 비용: 25G에서 시작해 소환할 때마다 1G씩 올라 60G에서 멈춘다. 맵에는 24마리까지
 assert.strictEqual(SUMMON_RULES.cost, 25);
@@ -617,7 +647,7 @@ btn('lightning');
 assert.strictEqual(UI.targeting, true);
 worldClick(tileX(4), tileY(5));
 assert.strictEqual(UI.targeting, false);
-assert.strictEqual(Game.skills.lightning, COMBAT_RULES.lightning.cooldown);
+assert.strictEqual(Game.skills.lightning, COMBAT_RULES.lightning.cooldown * DEMON_LORDS.rift.effects.skillCooldown);
 tick(0.5);
 
 // 호통은 체력이 충분하면 막히고, 낮으면 쓸 수 있다. W도 마왕 탭으로 바꾼다
@@ -628,7 +658,7 @@ assert.strictEqual(UI.tab, 'demon');
 assert.strictEqual(Game.skills.roar, 0);
 Game.hp = 8;
 UI.onKey('KeyW');
-assert.strictEqual(Game.skills.roar, COMBAT_RULES.roar.cooldown);
+assert.strictEqual(Game.skills.roar, COMBAT_RULES.roar.cooldown * DEMON_LORDS.rift.effects.skillCooldown);
 Game.hp = 20;
 
 // 타락은 꺼져 있다: 시체를 눌러도 아무 일이 없고, 시체는 쓰러지는 동작 뒤 1초쯤 사라지며, 몬스터 끌기를 가로막지 않는다
@@ -1358,12 +1388,15 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(Game.state === 'victory' && !Game.bossReward && !Game.bossDefeated, 'last boss: victory without reward');
     // 다시 시작하면 보상 상태도 처음으로
     btn('retry');
+    btn('begin');
     Game.bossReward = Game.rollBossReward();
     Game.bossDefeated = true;
     Game.hp = 1;
     damageThrone(1);
     assert.strictEqual(Game.state, 'defeat');
     btn('retry');
+    assert(Game.state === 'select', 'retry opens the select screen');
+    btn('begin');
     assert(Game.state === 'prep' && !Game.bossReward && !Game.bossDefeated, 'reward state reset on retry');
     const t0 = Game.prepTimer;
     Game.update(0.1);
@@ -1614,6 +1647,8 @@ Game.hp = 1;
 damageThrone(1);
 assert.strictEqual(Game.state, 'defeat');
 btn('retry');
+assert.strictEqual(Game.state, 'select');
+btn('begin');
 assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.equipBag.length, 0, 'bag emptied on retry');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
@@ -1668,3 +1703,389 @@ assert.strictEqual(eliteWaves.size, WAVES.length - 2, 'elites appeared in waves 
 assert(equipped >= 1, 'boss reward equipment was equipped');
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });
+
+// 마왕과 유물: 표, 선택 화면, 효과 키, 유물 칸 수, 다시 시작, 저장소. 위의 한 판 시험이 끝난 뒤 같은 환경에서 이어 돈다
+vm.runInContext(`{ // 위 시험과 이름이 겹치지 않게 블록으로 감싼다
+const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
+const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
+const btnOf = id => { UI.update(0); return UI.buttons.find(b => b.id === id); };
+const btn = id => { const b = btnOf(id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
+const withRandom = (v, fn) => {
+    const old = Math.random;
+    const list = Array.isArray(v) ? v.slice() : null;
+    Math.random = () => (list ? (list.length ? list.shift() : 0) : v);
+    try { return fn(); } finally { Math.random = old; }
+};
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
+const near = (a, b, msg) => assert(Math.abs(a - b) < 1e-9, (msg || '') + ': ' + a + ' != ' + b);
+// 저장소 흉내: 값을 담는 것, 읽기와 쓰기에서 예외를 내는 것
+const memoryStorage = () => {
+    const data = {};
+    return { data, getItem: k => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); } };
+};
+const brokenStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+
+// ----- 표 -----
+same(Object.keys(DEMON_LORDS), ['rift', 'bone_queen', 'gold_king'], 'three lords');
+same(DEMON_LORDS.rift.effects, { lightningDamage: 1.25, skillCooldown: 0.9 }, 'rift');
+same(DEMON_LORDS.bone_queen.effects, { respawn: 0.6, xp: 0.25, maxHp: -3 }, 'bone queen');
+same(DEMON_LORDS.gold_king.effects, { startGold: 100, bounty: 1.2, maxHp: -5 }, 'gold king');
+same(Object.keys(RELICS), ['pouch', 'chalice', 'hourglass', 'candle', 'tablet', 'handgem', 'drum', 'horn', 'key', 'heart', 'bottle', 'eye', 'banner', 'dice', 'shackles', 'mirror'], 'sixteen relics');
+assert.strictEqual(RELIC_RULES.slots, 1, 'one relic slot for now');
+for (const src of [...Object.values(DEMON_LORDS), ...Object.values(RELICS)]) {
+    for (const key of Object.keys(src.effects)) assert(LORD_EFFECTS[key], 'known effect key ' + key + ' in ' + src.name);
+}
+// 설명 문구는 효과 표에서 만든다
+same(effectLines(DEMON_LORDS.rift.effects), ['번개 피해 +25%', '스킬 재사용 ×0.9']);
+same(effectLines(DEMON_LORDS.bone_queen.effects), ['부활 시간 ×0.6', '처치 경험치 +25%', '최대 체력 -3']);
+same(effectLines(DEMON_LORDS.gold_king.effects), ['시작 골드 +100G', '처치 골드 ×1.2', '최대 체력 -5']);
+same(Object.values(RELICS).map(r => effectLines(r.effects).join(', ')), ['시작 골드 +100G', '최대 체력 +5', '스킬 재사용 ×0.8', '용사 이동 속도 ×0.92',
+    '몬스터 사거리 +10%', '소환 희귀 확률 +5%', '몬스터 공격 속도 +10%', '몬스터 피해 +10%', '정예 장비 드롭 +15%', '몬스터 체력 +15%',
+    '번개 피해 +50%', '처치 경험치 +50%', '맵 몬스터 상한 +4', '소환 시작 비용 -5G', '부활 시간 ×0.7', '판매 환불 ×1.5, 제물 효과 ×1.5'], 'relic texts');
+assert(effectGood('maxHp', -3) === false && effectGood('respawn', 0.6) && effectGood('skillCooldown', 0.9) && effectGood('startGold', 100), 'good/bad colors');
+// 합치기: 더하는 키는 더하고 곱하는 키는 곱한다
+{
+    const m = buildMods('bone_queen', ['shackles']);
+    near(m.respawn, 0.42, 'respawn multiplies');
+    near(buildMods('rift', ['hourglass']).skillCooldown, 0.72, 'cooldown multiplies');
+    near(buildMods('rift', ['bottle']).lightningDamage, 1.875, 'lightning multiplies');
+    near(buildMods('bone_queen', ['eye']).xp, 0.75, 'xp ratios add');
+    assert.strictEqual(buildMods('gold_king', ['chalice']).maxHp, 0, 'maxHp adds');
+    assert.strictEqual(buildMods('gold_king', ['pouch']).startGold, 200, 'gold adds');
+    same(buildMods('nobody', ['nothing', 'toString']), emptyMods(), 'unknown ids ignored');
+}
+
+// ----- 코드에 마왕이나 유물 이름별 분기가 없다(id 문자열은 데이터에만) -----
+{
+    const src = ${JSON.stringify(['js/game/game.js', 'js/game/combat.js', 'js/game/hero.js', 'js/game/monster.js', 'js/game/render.js', 'js/ui/ui.js', 'js/main.js'].map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'))};
+    for (const id of [...Object.keys(DEMON_LORDS), ...Object.keys(RELICS)]) {
+        assert(!new RegExp("['\\"\`]" + id + "['\\"\`]").test(src), 'no branch on id ' + id);
+    }
+}
+
+// ----- 값이 없으면 지금과 같다: 효과 없는 시작(시험 도구와 tools/simulate.js) -----
+Game.reset();
+same(Game.mods, emptyMods(), 'no mods');
+assert(Game.lord === null && Game.relics.length === 0 && Game.lordDef() === DEMON_LORDS.rift, 'default lord art');
+assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
+assert(Game.hp === COMBAT_RULES.maxHp && Game.maxHp() === COMBAT_RULES.maxHp, 'max hp');
+assert(Game.skillCooldown('lightning') === COMBAT_RULES.lightning.cooldown && Game.skillCooldown('roar') === COMBAT_RULES.roar.cooldown, 'cooldowns');
+assert.strictEqual(Game.lightningDamage(), COMBAT_RULES.lightning.damage);
+assert.strictEqual(Game.maxField(), SUMMON_RULES.maxField);
+same(Game.summonOdds(), SUMMON_RULES.odds, 'odds');
+assert.strictEqual(Game.summonCost(), SUMMON_RULES.cost);
+for (const t of Object.keys(MONSTERS)) {
+    assert.strictEqual(Game.sellValue(t), SUMMON_RULES.refund[MONSTERS[t].grade], 'refund ' + t);
+    for (let r = 0; r < MONSTER_RANKS.length; r++) same(Game.sacrificeGain({ type: t, rank: r }), sacrificeGain({ type: t, rank: r }), 'sacrifice ' + t);
+}
+// 몬스터 수치: 기본 수치 x 랭크 x 장비 그대로
+{
+    const m = createMonster('orc_guard', 3, 4);
+    setMonsterRank(m, 2);
+    setMonsterEquip(m, 'helmet');
+    const s = monsterStats(m);
+    const b = MONSTERS.orc_guard.stats;
+    near(s.hp, b.hp * 1.5 * 1.3, 'hp');
+    near(s.damage, b.damage * 1.5 * 1.2, 'damage');
+    assert(s.interval === b.interval && s.range === b.range && s.respawn === b.respawn, 'interval, range, respawn');
+}
+
+// ----- 효과 키마다 적용 -----
+// 효과 하나만 넣고 시작한다(다른 키는 기본값)
+const only = (key, value) => { Game.reset(); Game.mods[key] = value; };
+const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r));
+{
+    // startGold, maxHp: 선택한 마왕과 유물로 시작
+    Game.reset({ lord: 'gold_king', relics: ['pouch'] });
+    assert(Game.gold === COMBAT_RULES.startGold + 200 && Game.hp === 15 && Game.maxHp() === 15, 'gold king + pouch: gold ' + Game.gold + ' hp ' + Game.hp);
+    Game.reset({ lord: 'bone_queen', relics: ['chalice'] });
+    assert(Game.hp === 22 && Game.maxHp() === 22, 'bone queen + chalice: hp 22');
+    // 제물 회복도 늘어난 최대 체력까지
+    Game.hp = 21;
+    const r = Game.sacrifice(Game.place('bone_knight', ...firstEmptyCell()));
+    assert(r.ok && r.heal === 1 && Game.hp === 22, 'sacrifice clamps at modded max hp');
+
+    // skillCooldown, lightningDamage
+    only('skillCooldown', 0.8);
+    assert(castLightning(500, 500) && Game.skills.lightning === 24, 'lightning cooldown x0.8');
+    Game.hp = 5;
+    assert(castRoar() && Game.skills.roar === 48, 'roar cooldown x0.8');
+    only('lightningDamage', 1.5);
+    {
+        const h = createHero('rogue', 0, 0, false);
+        Object.assign(h, { waiting: false, d: 900, lane: 0 });
+        Game.heroes.push(h);
+        const p = heroWorld(h);
+        const before = h.hp = 1000;
+        resolveStrike({ x: p.x, y: p.y });
+        assert.strictEqual(before - h.hp, 60, 'lightning damage x1.5');
+    }
+
+    // heroSpeed
+    only('heroSpeed', 0.92);
+    near(createHero('rogue', 0, 0, false).speed, HEROES.rogue.speed * TILE * 0.92, 'hero speed');
+    near(createHero(null, 0, 0, 'archmage').speed, BOSSES.archmage.speed * TILE * 0.92, 'boss speed');
+
+    // damage, hp, attackSpeed, range: 장비 다음에 곱한다
+    only('damage', 0.1);
+    Game.mods.hp = 0.15;
+    Game.mods.attackSpeed = 0.1;
+    Game.mods.range = 0.1;
+    const m = createMonster('skeleton_archer', 3, 4);
+    setMonsterEquip(m, 'bow');
+    const s = monsterStats(m);
+    const b = MONSTERS.skeleton_archer.stats;
+    near(s.damage, b.damage * 1.1, 'damage +10%');
+    near(s.hp, b.hp * 1.15, 'hp +15%');
+    near(s.interval, b.interval / 1.1, 'attack speed +10%');
+    near(s.range, b.range * 1.15 * 1.1, 'range after equipment');
+    near(m.maxHp, b.hp * 1.15, 'max hp follows');
+
+    // xp
+    only('xp', 0.5);
+    const killer = Game.place('skeleton_archer', ...firstEmptyCell());
+    monsterKilledHero(killer, { elite: false, boss: false });
+    near(killer.xp, 1.5, 'xp +50%');
+    setMonsterEquip(killer, 'crystal');
+    monsterKilledHero(killer, { elite: true, boss: false });
+    near(killer.xp, 1.5 + 3 * 2 * 1.5, 'xp with equipment');
+
+    // bounty
+    only('bounty', 1.2);
+    {
+        const h = createHero('warrior', 0, 0, false);
+        Object.assign(h, { waiting: false, d: 900, lane: 0 });
+        Game.heroes.push(h);
+        const g0 = Game.gold;
+        damageHero(h, 1e9);
+        assert.strictEqual(Game.gold - g0, Math.round(HEROES.warrior.bounty * 1.2), 'bounty x1.2');
+    }
+
+    // rareChance: 일반에서 희귀로 옮긴다
+    only('rareChance', 0.05);
+    const odds = Game.summonOdds();
+    near(odds.common, 0.65, 'common');
+    near(odds.rare, 0.30, 'rare');
+    assert.strictEqual(odds.epic, 0.05);
+    assert.strictEqual(SUMMON_RULES.odds.common, 0.70, 'table untouched');
+    assert.strictEqual(MONSTERS[withRandom([0.66, 0], () => Game.rollSummon())].grade, 'rare', '0.66 is rare now');
+    Game.mods.rareChance = 0;
+    assert.strictEqual(MONSTERS[withRandom([0.66, 0], () => Game.rollSummon())].grade, 'common', '0.66 is common by default');
+
+    // summonBase
+    only('summonBase', -5);
+    assert.strictEqual(Game.summonCost(), 20, 'start cost -5');
+    Game.summonCount = 100;
+    assert.strictEqual(Game.summonCost(), SUMMON_RULES.maxCost, 'max cost unchanged');
+
+    // fieldMax
+    only('fieldMax', 4);
+    assert.strictEqual(Game.maxField(), 28);
+    Game.gold = 99999;
+    for (let i = 0; i < 24; i++) assert(Game.place('orc_guard', ...firstEmptyCell()), 'fill');
+    assert(!Game.fieldFull() && Game.summon().ok, 'room beyond 24');
+    for (let i = 0; i < 3; i++) Game.summon();
+    assert(Game.monsters.length === 28 && Game.fieldFull() && Game.summon().reason === 'full', 'cap 28');
+
+    // respawn
+    only('respawn', 0.6);
+    {
+        const o = Game.place('orc_guard', ...firstEmptyCell());
+        knockDownMonster(o);
+        near(o.down, MONSTERS.orc_guard.stats.respawn * 0.6, 'respawn x0.6');
+    }
+
+    // eliteDrop
+    only('eliteDrop', 0.15);
+    assert(withRandom([0.3, 0, 0], () => Game.eliteDrop(0, 0)), 'drop at 0.3 with +15%');
+    Game.mods.eliteDrop = 0;
+    assert.strictEqual(withRandom([0.3, 0, 0], () => Game.eliteDrop(0, 0)), null, 'no drop at 0.3 by default');
+
+    // refund
+    only('refund', 1.5);
+    assert(Game.sellValue('orc_guard') === 30 && Game.sellValue('bone_knight') === 225, 'refund x1.5');
+    {
+        const o = Game.place('orc_guard', ...firstEmptyCell());
+        const g0 = Game.gold;
+        Game.sell(o);
+        assert.strictEqual(Game.gold - g0, 30, 'sell pays refund');
+    }
+
+    // sacrifice: 체력은 내림
+    only('sacrifice', 1.5);
+    same(Game.sacrificeGain('orc_guard'), { heal: 1, lightning: 3 }, 'common x1.5');
+    same(Game.sacrificeGain('bone_knight'), { heal: 7, lightning: 15 }, 'epic x1.5');
+    Game.hp = 1;
+    Game.skills.lightning = 20;
+    const r2 = Game.sacrifice(Game.place('bone_knight', ...firstEmptyCell()));
+    assert(r2.ok && Game.hp === 8 && Game.skills.lightning === 5, 'sacrifice applied');
+}
+
+// ----- 선택 화면: 고르고 시작, 다시 시작, 저장소 -----
+globalThis.localStorage = memoryStorage();
+UI.loadout = null; // 창을 새로 연 것처럼
+Game.state = 'title';
+btn('start');
+assert.strictEqual(Game.state, 'select');
+same(UI.loadout, { lord: 'rift', relics: [] }, 'empty storage: default');
+// 마왕 카드 3장, 유물 16칸, 고른 칸 1개, 시작 버튼
+assert(['lord_rift', 'lord_bone_queen', 'lord_gold_king', 'begin', 'picked0'].every(hasBtn) && !hasBtn('picked1'), 'select buttons');
+assert.strictEqual(UI.buttons.filter(b => b.relicId).length, 16, 'relic grid');
+// 유물 격자 칸은 48px 그림이 원래 크기로 들어간다
+assert(UI.buttons.filter(b => b.relicId).every(b => b.w >= 48 && b.h >= 48), 'relic cell fits 48px');
+btn('lord_bone_queen');
+assert.strictEqual(UI.loadout.lord, 'bone_queen');
+UI.onKey('Digit3');
+assert.strictEqual(UI.loadout.lord, 'gold_king', 'key 3');
+btn('lord_bone_queen');
+// 유물: 눌러 넣고, 다른 것을 누르면 바꾸고(칸 1개), 다시 누르면 뺀다. 고른 칸을 눌러도 뺀다
+btn('relic_pouch');
+same(UI.loadout.relics, ['pouch']);
+btn('relic_eye');
+same(UI.loadout.relics, ['eye'], 'swap with one slot');
+btn('relic_eye');
+same(UI.loadout.relics, [], 'tap again removes');
+btn('relic_eye');
+btn('picked0');
+same(UI.loadout.relics, [], 'picked slot removes');
+btn('picked0');
+same(UI.loadout.relics, [], 'empty picked slot does nothing');
+btn('relic_eye');
+// 마우스를 올리면(터치는 누른 곳) 설명이 나오는 버튼이다
+{
+    const b = btnOf('relic_eye');
+    UI.onMove(b.x + 10, b.y + 10);
+    assert(UI.hoverButton && UI.hoverButton.relicId === 'eye', 'hover shows relic');
+}
+btn('begin');
+assert(Game.state === 'prep' && Game.lord === 'bone_queen' && Game.relics.join() === 'eye', 'started with choice');
+near(Game.mods.xp, 0.75, 'mods from choice');
+assert.strictEqual(Game.hp, 17, 'bone queen hp');
+assert.strictEqual(Game.lordDef(), DEMON_LORDS.bone_queen, 'throne art');
+same(JSON.parse(localStorage.data['dungeonGuard.loadout']), { lord: 'bone_queen', relics: ['eye'] }, 'saved');
+// 판 중: 마왕 탭에 유물 칸, 스킬 칸과 겹치지 않는다
+UI.setTab('demon');
+UI.update(0);
+{
+    const r0 = btnOf('barRelic0');
+    const roar = btnOf('roar');
+    const bag = btnOf('bag0');
+    assert(r0 && !hasBtn('barRelic1'), 'one relic slot in the demon tab');
+    assert(roar.x + roar.w <= r0.x && r0.x + r0.w <= bag.x, 'relic slot between roar and bag');
+    UI.onMove(r0.x + 10, r0.y + 10);
+    assert(UI.hoverButton.id === 'barRelic0' && Game.relics[UI.hoverButton.barRelic] === 'eye', 'hover relic in bar');
+    click(r0.x + 10, r0.y + 10); // 눌러도 아무 일 없다
+    assert(Game.state === 'prep' && Game.relics.join() === 'eye');
+}
+// 다시 시작: 선택 화면으로, 직전 선택이 남아 있다
+Game.hp = 1;
+damageThrone(1);
+assert.strictEqual(Game.state, 'defeat');
+btn('retry');
+assert.strictEqual(Game.state, 'select');
+same(UI.loadout, { lord: 'bone_queen', relics: ['eye'] }, 'kept on retry');
+UI.onKey('Enter');
+assert(Game.state === 'prep' && Game.lord === 'bone_queen' && Game.relics.join() === 'eye', 'Enter starts');
+// 창을 새로 열어도 저장소에서 읽는다
+UI.loadout = null;
+Game.state = 'title';
+UI.onKey('Space');
+same(UI.loadout, { lord: 'bone_queen', relics: ['eye'] }, 'loaded from storage');
+
+// 저장소를 못 읽거나 못 쓸 때: 기본 선택으로 동작하고 시작할 수 있다
+globalThis.localStorage = brokenStorage;
+UI.loadout = null;
+Game.state = 'title';
+btn('start');
+same(UI.loadout, { lord: 'rift', relics: [] }, 'broken storage: default');
+btn('relic_pouch');
+btn('begin');
+assert(Game.state === 'prep' && Game.relics.join() === 'pouch', 'starts without storage');
+Game.hp = 1;
+damageThrone(1);
+btn('retry');
+same(UI.loadout, { lord: 'rift', relics: ['pouch'] }, 'kept in memory without storage');
+btn('begin');
+// 저장소가 아예 없을 때(file:// 등)
+delete globalThis.localStorage;
+UI.loadout = null;
+Game.state = 'title';
+btn('start');
+btn('begin');
+assert(Game.state === 'prep' && Game.lord === 'rift', 'no storage at all');
+// 저장된 값이 이상할 때: 고쳐 쓴다
+for (const [raw, want] of [
+    ['not json', { lord: 'rift', relics: [] }],
+    ['null', { lord: 'rift', relics: [] }],
+    ['"x"', { lord: 'rift', relics: [] }],
+    ['{"lord":"toString","relics":"pouch"}', { lord: 'rift', relics: [] }],
+    ['{"lord":"gold_king","relics":["nope","toString","dice","dice","eye"]}', { lord: 'gold_king', relics: ['dice'] }]
+]) {
+    globalThis.localStorage = memoryStorage();
+    localStorage.data['dungeonGuard.loadout'] = raw;
+    UI.loadout = null;
+    Game.state = 'title';
+    btn('start');
+    same(UI.loadout, want, 'clean ' + raw);
+}
+delete globalThis.localStorage;
+
+// ----- 유물 칸 3개: 화면과 게임이 동작한다 -----
+RELIC_RULES.slots = 3;
+UI.loadout = { lord: 'rift', relics: [] };
+Game.state = 'title';
+btn('start');
+assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('picked3'), 'three picked slots');
+{
+    const rects = ['picked0', 'picked1', 'picked2', 'begin'].map(btnOf);
+    const grid = UI.buttons.filter(b => b.relicId);
+    const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    for (const r of rects) for (const g of grid) assert(!overlap(r, g), 'picked slots clear of the grid');
+    assert(rects.every(r => r.x + r.w <= GAME_WIDTH && r.y + r.h <= GAME_HEIGHT), 'on screen');
+}
+btn('relic_pouch');
+btn('relic_hourglass');
+btn('relic_bottle');
+UI.toast = null;
+btn('relic_dice');
+same(UI.loadout.relics, ['pouch', 'hourglass', 'bottle'], 'fourth refused');
+assert(UI.toast && UI.toast.text.includes('가득'), 'full toast');
+btn('relic_hourglass');
+btn('relic_dice');
+same(UI.loadout.relics, ['pouch', 'bottle', 'dice']);
+btn('picked0');
+same(UI.loadout.relics, ['bottle', 'dice'], 'picked slot removes');
+btn('relic_pouch');
+btn('begin');
+assert(Game.relics.join() === 'bottle,dice,pouch' && Game.gold === COMBAT_RULES.startGold + 100 && Game.summonCost() === 20, 'three relics apply');
+near(Game.lightningDamage(), COMBAT_RULES.lightning.damage * 1.25 * 1.5, 'rift + bottle');
+UI.setTab('demon');
+UI.update(0);
+{
+    const slots = ['barRelic0', 'barRelic1', 'barRelic2'].map(btnOf);
+    const roar = btnOf('roar');
+    const light = btnOf('lightning');
+    const bag = btnOf('bag0');
+    assert(slots.every(Boolean) && !hasBtn('barRelic3'), 'three relic slots in the bar');
+    assert(light.x + light.w <= roar.x && slots.every(s => roar.x + roar.w <= s.x && s.x + s.w <= bag.x && s.y + s.h <= GAME_HEIGHT), 'bar layout fits');
+    assert(light.w >= 180, 'skill buttons stay readable');
+}
+// 칸을 1개로 되돌리면 저장된 3개 중 앞의 1개만 쓴다
+RELIC_RULES.slots = 1;
+Game.hp = 1;
+damageThrone(1);
+btn('retry');
+same(UI.loadout.relics, ['bottle'], 'trimmed to one slot');
+btn('begin');
+assert(Game.relics.join() === 'bottle');
+
+// 마왕 대사: 공통 대사에 고른 마왕의 대사가 더해진다
+Game.reset({ lord: 'gold_king', relics: [] });
+assert.strictEqual(withRandom(0.9999, () => lordLine('waveStart')), DEMON_LORDS.gold_king.speech.waveStart.slice(-1)[0], 'gold king line');
+assert(SPEECH.waveStart.includes(withRandom(0, () => lordLine('waveStart'))), 'common lines stay');
+for (const lord of Object.values(DEMON_LORDS)) {
+    const n = Object.values(lord.speech).reduce((a, l) => a + l.length, 0);
+    assert(n >= 2 && n <= 3, lord.name + ' has 2~3 own lines');
+}
+console.log('smoke ok: demon lords and relics');
+}`, ctx, { filename: 'smoke-lords' });
