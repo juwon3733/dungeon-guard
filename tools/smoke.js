@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -200,9 +200,12 @@ const withRandom = (v, fn) => {
 // 영구 수집은 저장소 없이 초기값에서 시작한다(시험끼리 기록이 이어지지 않게 블록마다 처음 상태로 둔다)
 assert(typeof localStorage === 'undefined', 'smoke runs without storage');
 Meta.data = Meta.fresh();
-// 시작: 타이틀 → 선택 화면(기본 마왕 균열의 군주, 유물 없음) → 시작
+// 시작: 타이틀 → 스토리 지도. 이 묶음은 스토리 없이 WAVES 전부로 도는 판(시험 도구용 고르기 화면 → 시작)을 쓴다.
+// 스토리 흐름은 맨 아래 smoke-story 묶음에서 본다
 assert.strictEqual(Game.state, 'title');
 btn('start');
+assert.strictEqual(Game.state, 'story');
+UI.openSelect(null);
 assert.strictEqual(Game.state, 'select');
 assert.strictEqual(JSON.stringify(UI.loadout), '{"lord":"rift","relics":[]}', 'default loadout');
 btn('begin');
@@ -2556,9 +2559,12 @@ const memoryStorage = () => {
     return { data, getItem: k => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); } };
 };
 const brokenStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
-// 영구 수집 기록을 이 시험용으로: 모든 마왕과 유물을 해금하고 유물 칸 slots개(저장소는 건드리지 않는다)
-const unlockAll = slots => { Meta.data = Meta.sanitize({ lords: Object.keys(DEMON_LORDS), relics: Object.keys(RELICS), slots }); };
-unlockAll(1);
+// 기록을 이 시험용으로: 스토리 스테이지를 앞에서부터 n개 깬 상태(저장소는 건드리지 않는다).
+// 12개면 마왕 3명, 유물 16종, 칸 3개. 6개면 균열의 군주와 뼈의 여왕, 유물 11종, 칸 1개
+const progress = n => { Meta.data = Meta.sanitize({ version: 2, cleared: STAGES.slice(0, n).map(s => s.id) }); };
+// 스토리 없는 판의 고르기 화면(시험 도구용)
+const toSelect = () => { Game.state = 'title'; UI.openSelect(null); };
+progress(12);
 
 // ----- 표 -----
 same(Object.keys(DEMON_LORDS), ['rift', 'bone_queen', 'gold_king'], 'three lords');
@@ -2756,12 +2762,11 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
     assert(r2.ok && Game.hp === 8 && Game.skills.lightning === 5, 'sacrifice applied');
 }
 
-// ----- 선택 화면: 고르고 시작, 다시 시작, 저장소(모두 해금, 유물 칸 1개) -----
-unlockAll(1);
+// ----- 선택 화면: 고르고 시작, 다시 시작, 저장소(스테이지 6까지 깸: 마왕 2명, 유물 칸 1개) -----
+progress(6);
 globalThis.localStorage = memoryStorage();
 UI.loadout = null; // 창을 새로 연 것처럼
-Game.state = 'title';
-btn('start');
+toSelect();
 assert.strictEqual(Game.state, 'select');
 same(UI.loadout, { lord: 'rift', relics: [] }, 'empty storage: default');
 // 마왕 카드 3장, 유물 16칸, 고른 칸 1개, 시작 버튼
@@ -2771,8 +2776,11 @@ assert.strictEqual(UI.buttons.filter(b => b.relicId).length, 16, 'relic grid');
 assert(UI.buttons.filter(b => b.relicId).every(b => b.w >= 48 && b.h >= 48), 'relic cell fits 48px');
 btn('lord_bone_queen');
 assert.strictEqual(UI.loadout.lord, 'bone_queen');
+UI.onKey('Digit1');
+assert.strictEqual(UI.loadout.lord, 'rift', 'key 1');
+UI.toast = null;
 UI.onKey('Digit3');
-assert.strictEqual(UI.loadout.lord, 'gold_king', 'key 3');
+assert(UI.loadout.lord === 'rift' && UI.toast.text.includes('스테이지 8에서 해금'), 'key 3: locked gold king says where it unlocks');
 btn('lord_bone_queen');
 // 유물: 눌러 넣고, 다른 것을 누르면 바꾸고(칸 1개), 다시 누르면 뺀다. 고른 칸을 눌러도 뺀다
 btn('relic_pouch');
@@ -2824,15 +2832,13 @@ UI.onKey('Enter');
 assert(Game.state === 'prep' && Game.lord === 'bone_queen' && Game.relics.join() === 'eye', 'Enter starts');
 // 창을 새로 열어도 저장소에서 읽는다
 UI.loadout = null;
-Game.state = 'title';
-UI.onKey('Space');
+toSelect();
 same(UI.loadout, { lord: 'bone_queen', relics: ['eye'] }, 'loaded from storage');
 
 // 저장소를 못 읽거나 못 쓸 때: 기본 선택으로 동작하고 시작할 수 있다
 globalThis.localStorage = brokenStorage;
 UI.loadout = null;
-Game.state = 'title';
-btn('start');
+toSelect();
 same(UI.loadout, { lord: 'rift', relics: [] }, 'broken storage: default');
 btn('relic_pouch');
 btn('begin');
@@ -2845,8 +2851,7 @@ btn('begin');
 // 저장소가 아예 없을 때(file:// 등)
 delete globalThis.localStorage;
 UI.loadout = null;
-Game.state = 'title';
-btn('start');
+toSelect();
 btn('begin');
 assert(Game.state === 'prep' && Game.lord === 'rift', 'no storage at all');
 // 저장된 값이 이상할 때: 고쳐 쓴다
@@ -2855,22 +2860,21 @@ for (const [raw, want] of [
     ['null', { lord: 'rift', relics: [] }],
     ['"x"', { lord: 'rift', relics: [] }],
     ['{"lord":"toString","relics":"pouch"}', { lord: 'rift', relics: [] }],
-    ['{"lord":"gold_king","relics":["nope","toString","dice","dice","eye"]}', { lord: 'gold_king', relics: ['dice'] }]
+    ['{"lord":"bone_queen","relics":["nope","toString","dice","dice","eye"]}', { lord: 'bone_queen', relics: ['dice'] }],
+    ['{"lord":"gold_king","relics":["mirror","eye"]}', { lord: 'rift', relics: ['eye'] }] // 잠긴 마왕과 유물은 기본값으로
 ]) {
     globalThis.localStorage = memoryStorage();
     localStorage.data['dungeonGuard.loadout'] = raw;
     UI.loadout = null;
-    Game.state = 'title';
-    btn('start');
+    toSelect();
     same(UI.loadout, want, 'clean ' + raw);
 }
 delete globalThis.localStorage;
 
-// ----- 유물 칸 3개: 화면과 게임이 동작한다 -----
-Meta.data.slots = 3;
+// ----- 유물 칸 3개(스토리를 다 깸): 화면과 게임이 동작한다 -----
+progress(12);
 UI.loadout = { lord: 'rift', relics: [] };
-Game.state = 'title';
-btn('start');
+toSelect();
 assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('picked3'), 'three picked slots');
 {
     const rects = ['picked0', 'picked1', 'picked2', 'begin'].map(btnOf);
@@ -2906,16 +2910,17 @@ UI.update(0);
     assert(light.x + light.w <= roar.x && slots.every(s => roar.x + roar.w <= s.x && s.x + s.w <= bag.x && s.y + s.h <= GAME_HEIGHT), 'bar layout fits');
     assert(light.w >= 180, 'skill buttons stay readable');
 }
-// 칸을 1개로 되돌리면 저장된 3개 중 앞의 1개만 쓴다
-Meta.data.slots = 1;
+// 칸이 1개인 기록(스테이지 6까지)으로 돌아가면 잠긴 유물(번개 병)은 빠지고 앞의 1개만 쓴다
+progress(6);
 Game.hp = 1;
 damageThrone(1);
 btn('retry');
-same(UI.loadout.relics, ['bottle'], 'trimmed to one slot');
+same(UI.loadout.relics, ['dice'], 'locked relic dropped, trimmed to one slot');
 btn('begin');
-assert(Game.relics.join() === 'bottle');
+assert(Game.relics.join() === 'dice');
 
 // 마왕 대사: 공통 대사에 고른 마왕의 대사가 더해진다
+progress(12);
 Game.reset({ lord: 'gold_king', relics: [] });
 assert.strictEqual(withRandom(0.9999, () => lordLine('waveStart')), DEMON_LORDS.gold_king.speech.waveStart.slice(-1)[0], 'gold king line');
 assert(SPEECH.waveStart.includes(withRandom(0, () => lordLine('waveStart'))), 'common lines stay');
@@ -2926,7 +2931,7 @@ for (const lord of Object.values(DEMON_LORDS)) {
 console.log('smoke ok: demon lords and relics');
 }`, ctx, { filename: 'smoke-lords' });
 
-// 영구 수집: 영혼석, 해금, 유물 칸, 저장과 다시 읽기, 망가진 값, 잠긴 직전 선택, 도감 기록, 기록 지우기.
+// 판을 넘어 남는 기록(버전 2): 깬 스테이지에서 계산하는 해금, 저장과 다시 읽기, 버전 1 이전, 망가진 값, 도감 기록, 기록 지우기.
 // 블록마다 빈 저장소(memoryStorage)와 초기 기록에서 시작해 위 시험의 기록에 기대지 않는다
 vm.runInContext(`{
 const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
@@ -2952,149 +2957,85 @@ const freshWindow = storage => {
     Meta.load();
     UI.loadout = null;
     UI.collection = null;
-    UI.unlockFocus = null;
+    UI.dialogue = null;
+    UI.unlockCards = null;
+    UI.afterRun = null;
+    UI.stageId = null;
     Game.state = 'title';
 };
-// 선택 화면에서 판을 시작해 막은 웨이브 수(waves)로 끝낸다
-const playRun = (waves, victory) => {
-    Game.state = 'title';
-    btn('start');
-    btn('begin');
-    Game.waveIndex = victory ? WAVES.length - 1 : waves;
-    if (victory) Game.finish(true);
-    else { Game.hp = 1; damageThrone(1); }
-    assert(Game.state === (victory ? 'victory' : 'defeat'));
-    return Game.runResult;
-};
+const ids = list => list.map(s => s.id);
 
-// ----- 표 -----
-same(META_RULES, { soulsPerWave: 2, winBonus: 15, relicSlots: { start: 1, prices: [30, 80] } }, 'meta rules');
-same(Object.values(DEMON_LORDS).map(l => [l.id, l.unlock]), [['rift', 0], ['bone_queen', 20], ['gold_king', 20]], 'lord prices');
-same(Object.fromEntries(Object.values(RELICS).map(r => [r.id, r.unlock])), {
-    pouch: 0, chalice: 0, hourglass: 14, candle: 8, tablet: 8, handgem: 14, drum: 8, horn: 0,
-    key: 14, heart: 0, bottle: 14, eye: 8, banner: 14, dice: 8, shackles: 14, mirror: 14 }, 'relic prices');
-assert.strictEqual(DEMON_LORDS[DEFAULT_LORD].unlock, 0, 'default lord is free');
+// ----- 표: 영혼석과 가격은 없다 -----
+assert(typeof META_RULES === 'undefined', 'no soul rules');
+assert(Object.values(DEMON_LORDS).every(l => !('unlock' in l)) && Object.values(RELICS).every(r => !('unlock' in r)), 'no prices');
+assert(typeof Meta.buy === 'undefined' && typeof Meta.buySlot === 'undefined' && typeof Meta.price === 'undefined', 'no buying');
+assert.strictEqual(META_VERSION, 2);
 assert.strictEqual(Meta.maxSlots(), 3);
 
-// ----- 첫 실행: 균열의 군주, 유물 pouch·chalice·horn·heart, 유물 칸 1개, 영혼석 0 -----
+// ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Object.keys(DEMON_LORDS).filter(id => Meta.hasLord(id)), ['rift'], 'lords at start');
-same(Object.keys(RELICS).filter(id => Meta.hasRelic(id)), ['pouch', 'chalice', 'horn', 'heart'], 'relics at start');
-assert(Meta.relicSlots() === 1 && Meta.slotPrice() === 30 && Meta.data.souls === 0);
-assert(!Meta.hasLord('nope') && !Meta.hasRelic('toString') && Meta.price('lord', 'toString') === null, 'unknown ids');
-btn('start');
-assert.strictEqual(Game.state, 'select');
-assert(btnOf('lord_rift').locked === false && btnOf('lord_bone_queen').locked && btnOf('lord_gold_king').locked, 'locked lords');
-assert.strictEqual(UI.buttons.filter(b => b.relicId && b.locked).length, 12, 'twelve locked relics');
-// 잠긴 칸 자리: 2번째는 칸 사기 버튼(영혼석 30, 꺼짐), 3번째는 잠긴 칸
-assert(hasBtn('picked0') && !hasBtn('picked1') && hasBtn('buy_slot') && hasBtn('slotLocked2'), 'slot buttons');
-assert(btnOf('buy_slot').slotBuy === 30 && btnOf('buy_slot').disabled, 'slot buy disabled without souls');
-assert(hasBtn('collection'), 'collection from select');
+same(Meta.fresh(), { version: 2, cleared: [], seen: [], recipes: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.lordsOwned(), ['rift'], 'lords at start');
+same(Meta.relicsOwned(), [], 'no relics at start');
+assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
+same(ids(STAGES.filter(s => Meta.isOpen(s.id))), ['s1'], 'only the first stage is open');
+assert(!Meta.hasLord('nope') && !Meta.hasLord('toString') && !Meta.hasRelic('toString') && !Meta.isOpen('nope'), 'unknown ids');
 
-// ----- 모자랄 때 거절: 눌러도 바로 사지 않고 해금 버튼이 나온다. 꺼진 버튼을 눌러도 사지 않는다 -----
-assert(!hasBtn('unlock'), 'no unlock button before tapping a locked card');
-btn('lord_bone_queen');
-assert.strictEqual(UI.loadout.lord, 'rift', 'locked lord not picked');
-same(UI.unlockFocus, { kind: 'lord', id: 'bone_queen' });
-{
-    const u = btnOf('unlock');
-    assert(u && u.disabled && u.sub.includes('20') && u.label.includes('20'), 'disabled unlock shows price and shortfall');
-}
-UI.toast = null;
-btn('unlock');
-assert(!Meta.hasLord('bone_queen') && Meta.data.souls === 0 && UI.toast.text.includes('20'), 'refused when short');
-same(Meta.buy('relic', 'eye'), { ok: false, reason: 'souls', need: 8 });
-same(Meta.buySlot(), { ok: false, reason: 'souls', need: 30 });
-same(Meta.buy('relic', 'pouch'), { ok: false, reason: 'owned' });
-same(Meta.buy('lord', 'nope'), { ok: false, reason: 'unknown' });
-UI.onKey('Escape');
-assert(UI.unlockFocus === null && !hasBtn('unlock'), 'Esc closes the unlock button');
-// 잠긴 유물을 누르면 넣지 않고 해금 버튼을 띄운다
-btn('relic_eye');
-same(UI.loadout.relics, [], 'locked relic not picked');
-assert(UI.unlockFocus.id === 'eye' && btnOf('unlock').disabled);
-btn('relic_pouch');
-assert(UI.unlockFocus === null && UI.loadout.relics.join() === 'pouch', 'unlocked relic still works');
+// ----- 해금은 깬 스테이지에서 계산한다(저장하지 않는다) -----
+Meta.data.cleared = ['s1'];
+assert(Meta.relicSlots() === 1 && Meta.hasRelic('pouch') && !Meta.hasRelic('horn'), 'stage 1: slot and pouch');
+assert(Meta.isOpen('s2') && !Meta.isOpen('s3'), 'stage 2 opens after stage 1');
+Meta.data.cleared = ['s1', 's2', 's3', 's4'];
+assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.hasRelic('shackles'), 'stage 4: bone queen');
+Meta.data.cleared = ids(STAGES);
+same(Meta.lordsOwned(), Object.keys(DEMON_LORDS), 'all lords after the story');
+same(Meta.relicsOwned(), Object.keys(RELICS), 'all relics after the story');
+assert.strictEqual(Meta.relicSlots(), 3);
+// 깬 목록 순서와 상관없이(이상하게 저장돼도) 계산은 같다
+Meta.data.cleared = ['s8'];
+assert(Meta.hasLord('gold_king') && Meta.hasRelic('key') && Meta.isOpen('s9') && !Meta.isOpen('s2'), 'computed per stage');
+assert(!('lords' in Meta.data) && !('relics' in Meta.data) && !('slots' in Meta.data) && !('souls' in Meta.data), 'unlocks are not stored');
 
-// ----- 영혼석: 막은 웨이브 x2, 승리 +15. 결과 화면에 받은 양과 새 기록 -----
-assert(Meta.soulsFor(0, false) === 0 && Meta.soulsFor(4, false) === 8 && Meta.soulsFor(WAVES.length, true) === WAVES.length * 2 + 15, 'souls formula');
+// ----- 판 결과: 판 수, 승리 수, 깬 스테이지, 최고 스테이지. 처음 깰 때만 해금 -----
+freshWindow();
 {
-    const r0 = playRun(0, false);
-    same(r0, { souls: 0, total: 0, waves: 0, bestWave: false, firstWin: false }, 'no wave cleared');
-    const r1 = playRun(4, false);
-    same(r1, { souls: 8, total: 8, waves: 4, bestWave: true, firstWin: false }, 'four waves');
-    const r2 = playRun(2, false);
-    assert(r2.souls === 4 && r2.total === 12 && !r2.bestWave, 'not a new best');
-    // 판이 끝난 뒤 다시 끝내도 한 번만 받는다
-    Game.finish(false);
-    damageThrone(1);
-    assert.strictEqual(Meta.data.souls, 12, 'paid once per run');
-    const r3 = playRun(0, true);
-    same(r3, { souls: WAVES.length * 2 + 15, total: 12 + WAVES.length * 2 + 15, waves: WAVES.length, bestWave: true, firstWin: true }, 'victory');
-    const r4 = playRun(0, true);
-    assert(!r4.firstWin && !r4.bestWave, 'second win is not new');
-    assert(Meta.data.runs === 5 && Meta.data.wins === 2 && Meta.data.bestWave === WAVES.length, 'run records');
+    const r0 = Meta.finishRun('s1', false, 2);
+    same(r0, { stage: 's1', victory: false, waves: 2, firstClear: false, unlocks: [], bestStage: false }, 'defeat');
+    const r1 = Meta.finishRun('s1', true, 3);
+    same(r1, { stage: 's1', victory: true, waves: 3, firstClear: true, unlocks: STAGES[0].unlocks, bestStage: true }, 'first clear');
+    const r2 = Meta.finishRun('s1', true, 3);
+    assert(!r2.firstClear && r2.unlocks.length === 0 && !r2.bestStage, 'replay gives nothing');
+    const r3 = Meta.finishRun(null, true, WAVES.length);
+    assert(r3.stage === null && !r3.firstClear, 'run without a stage (test tools) counts only');
+    same(Meta.data.cleared, ['s1'], 'cleared once');
+    assert(Meta.data.runs === 4 && Meta.data.wins === 3 && Meta.data.bestStage === 1, 'run records');
     same(stored(), Meta.data, 'saved after each run');
-    assert.strictEqual(stored().version, 1, 'version saved');
-}
-assert.strictEqual(Meta.data.souls, 82);
-
-// ----- 해금과 잔액 차감 -----
-btn('retry');
-btn('lord_gold_king');
-btn('unlock');
-assert(Meta.hasLord('gold_king') && Meta.data.souls === 62 && UI.loadout.lord === 'gold_king' && UI.unlockFocus === null, 'lord bought and picked');
-btn('relic_shackles');
-btn('unlock');
-assert(Meta.hasRelic('shackles') && Meta.data.souls === 48 && UI.loadout.relics.join() === 'shackles', 'relic bought and put in the only slot');
-// 유물 칸 사기: 30 → 2칸, 다음 80은 모자라 꺼진다
-btn('buy_slot');
-assert(Meta.relicSlots() === 2 && Meta.data.souls === 18, 'second slot');
-assert(hasBtn('picked1') && btnOf('buy_slot').slotBuy === 80 && btnOf('buy_slot').disabled && !hasBtn('slotLocked2'), 'third slot locked');
-btn('buy_slot');
-assert(Meta.relicSlots() === 2 && Meta.data.souls === 18, 'refused when short');
-btn('relic_dice');
-btn('unlock');
-same(UI.loadout.relics, ['shackles', 'dice'], 'bought relic fills the free slot');
-assert.strictEqual(Meta.data.souls, 10);
-same(stored().lords, ['gold_king']);
-same(stored().relics, ['shackles', 'dice']);
-assert.strictEqual(stored().slots, 2);
-// 산 것으로 시작하면 효과가 붙는다
-btn('begin');
-assert(Game.lord === 'gold_king' && Game.relics.join() === 'shackles,dice' && Game.summonCost() === 20, 'bought loadout applies');
-// 칸 최대치: 3번째 칸까지 사면 더 살 수 없다
-Meta.data.souls = 200;
-assert(Meta.buySlot().ok && Meta.relicSlots() === 3 && Meta.data.souls === 120, 'third slot 80');
-same(Meta.buySlot(), { ok: false, reason: 'max' }, 'max three slots');
-assert(Meta.slotPrice() === null);
-Game.hp = 1;
-damageThrone(1);
-btn('retry');
-assert(['picked0', 'picked1', 'picked2'].every(hasBtn) && !hasBtn('buy_slot') && !UI.buttons.some(b => b.lockedSlot), 'three owned slots');
-
-// ----- 저장과 다시 읽기: 창을 새로 열어도 그대로 -----
-{
+    assert.strictEqual(stored().version, 2, 'version saved');
+    // 다시 열어도 그대로
     const before = JSON.stringify(Meta.data);
     freshWindow(localStorage);
     assert.strictEqual(JSON.stringify(Meta.data), before, 'reloaded record');
-    btn('start');
-    same(UI.loadout, { lord: 'gold_king', relics: ['shackles', 'dice'] }, 'saved loadout with bought items');
 }
 
-// ----- 잠긴 직전 선택은 기본값으로: 기록이 없고 직전 선택만 남은 경우 -----
+// ----- 버전 1 저장 이전: 몬스터와 조합식 기록과 판 수만 옮기고, 산 항목과 영혼석은 버린다 -----
 {
     const storage = memoryStorage();
-    storage.data['dungeonGuard.loadout'] = JSON.stringify({ lord: 'bone_queen', relics: ['bottle', 'pouch', 'eye'] });
+    storage.data['dungeonGuard.meta'] = JSON.stringify({ version: 1, souls: 82, lords: ['gold_king', 'bone_queen'], relics: ['eye', 'bottle', 'pouch'], slots: 3,
+        seen: ['orc_guard', 'bone_knight', 'nope'], recipes: ['orc_berserker+skeleton_archer', 'bad'], runs: 9, wins: 4, bestWave: 10 });
+    storage.data['dungeonGuard.loadout'] = JSON.stringify({ lord: 'gold_king', relics: ['bottle', 'pouch'] });
     freshWindow(storage);
-    btn('start');
-    same(UI.loadout, { lord: 'rift', relics: ['pouch'] }, 'locked lord and relics reset to defaults');
+    same(Meta.data, Object.assign(Meta.fresh(), { seen: ['orc_guard', 'bone_knight'], recipes: ['orc_berserker+skeleton_archer'], runs: 9 }), 'v1 migrated');
+    same(Meta.lordsOwned(), ['rift'], 'bought lords dropped');
+    assert(Meta.relicsOwned().length === 0 && Meta.relicSlots() === 0, 'bought relics and slots dropped');
+    // 직전 선택의 산 마왕과 유물도 기본값으로
+    UI.openSelect(null);
+    same(UI.loadout, { lord: 'rift', relics: [] }, 'v1 loadout cleaned');
     btn('begin');
-    assert(Game.lord === 'rift' && Game.relics.join() === 'pouch', 'game uses the cleaned loadout');
-    // Game.reset에 잠긴 것을 바로 넘겨도 쓰지 않는다
-    Game.reset({ lord: 'gold_king', relics: ['bottle'] });
-    assert(Game.lord === 'rift' && Game.relics.length === 0, 'reset ignores locked items');
+    assert(Game.state === 'prep' && Game.lord === 'rift' && Game.relics.length === 0, 'plays after migration');
+    // 저장할 때는 버전 2로
+    Meta.save();
+    assert(stored().version === 2 && !('souls' in stored()) && !('lords' in stored()), 'saved as v2');
 }
 
 // ----- 망가진 값: 고쳐 쓰고 모르는 id는 버린다 -----
@@ -3103,18 +3044,22 @@ for (const [raw, want] of [
     ['null', {}],
     ['[1,2]', {}],
     ['"x"', {}],
-    [JSON.stringify({ version: 1, souls: -5, lords: ['gold_king', 'nope', 'gold_king', 'toString'], relics: 'eye', slots: 99,
-        seen: ['orc_guard', 'toString', 7], recipes: ['bad', 'orc_berserker+skeleton_archer', 'orc_berserker+skeleton_archer'],
-        runs: '3', wins: 5, bestWave: 999, extra: 1 }),
-        { lords: ['gold_king'], slots: 3, seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], bestWave: WAVES.length }],
-    [JSON.stringify({ souls: 12.7, slots: 0, runs: 4, wins: 2, bestWave: 3.5 }), { souls: 12, runs: 4, wins: 2, bestWave: 3 }],
-    [JSON.stringify({ souls: Infinity, slots: 2, runs: 1, wins: 9 }), { slots: 2, runs: 1, wins: 1 }]
+    ['7', {}],
+    [JSON.stringify({ version: 2, cleared: ['s2', 'nope', 's2', 'toString', 5], seen: ['orc_guard', 'toString', 7],
+        recipes: ['bad', 'orc_berserker+skeleton_archer', 'orc_berserker+skeleton_archer'], runs: '3', wins: 5, bestStage: 999, extra: 1 }),
+        { cleared: ['s2'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], bestStage: 12 }],
+    [JSON.stringify({ version: 2, cleared: 's1', runs: 4.7, wins: 2, bestStage: 3.5 }), { runs: 4, wins: 2, bestStage: 3 }],
+    [JSON.stringify({ version: 2, cleared: ['s3'], runs: Infinity, wins: 9, bestStage: -1 }), { cleared: ['s3'], bestStage: 3 }],
+    [JSON.stringify({ version: 99, cleared: ['s1'], runs: 2 }), { runs: 2 }],
+    [JSON.stringify({ souls: 12.7, slots: 2, runs: 4, wins: 2 }), { runs: 4 }]
 ]) {
     const storage = memoryStorage();
     storage.data['dungeonGuard.meta'] = raw;
     freshWindow(storage);
     same(Meta.data, Object.assign(Meta.fresh(), want), 'clean ' + raw);
-    btn('start');
+    UI.openStoryMap();
+    assert(Game.state === 'story' && Meta.isOpen('s1'), 'story map with ' + raw);
+    UI.openSelect(null);
     btn('begin');
     assert(Game.state === 'prep', 'plays with ' + raw);
 }
@@ -3125,14 +3070,8 @@ for (const storage of [brokenStorage, undefined]) {
     else delete globalThis.localStorage;
     Meta.load();
     same(Meta.data, Meta.fresh(), 'fresh without storage');
-    UI.loadout = null;
-    Game.state = 'title';
-    btn('start');
-    btn('begin');
-    Game.waveIndex = WAVES.length - 1;
-    Game.finish(true);
-    assert(Game.runResult.souls === Meta.soulsFor(WAVES.length, true) && Meta.data.souls === Game.runResult.souls, 'souls kept in memory');
-    assert(Meta.buy('lord', 'bone_queen').ok && Meta.hasLord('bone_queen'), 'buy works in memory');
+    const r = Meta.finishRun('s1', true, 3);
+    assert(r.firstClear && Meta.relicSlots() === 1 && Meta.hasRelic('pouch'), 'clear kept in memory');
     Meta.wipe();
     same(Meta.data, Meta.fresh(), 'wipe works without storage');
 }
@@ -3169,7 +3108,7 @@ same(stored().seen, ['orc_guard', 'bone_knight', 'curse_shooter', 'dark_mage'], 
 freshWindow(localStorage);
 assert(Meta.hasSeen('bone_knight') && Meta.hasRecipe(MONSTER_RECIPES[3]), 'records survive reload');
 
-// ----- 도감 화면: 타이틀과 선택 화면에서 연다. 탭 3개, 표를 읽어 칸을 만든다 -----
+// ----- 도감 화면: 타이틀, 스토리 지도, 선택 화면에서 연다. 탭 3개, 표를 읽어 칸을 만든다 -----
 btn('collection');
 assert(UI.collection && UI.collection.tab === 'monster' && Game.state === 'title', 'opened from title');
 assert(['col_tab_monster', 'col_tab_recipe', 'col_tab_record', 'col_close'].every(hasBtn) && !hasBtn('start'), 'collection buttons');
@@ -3207,6 +3146,13 @@ assert(hasBtn('col_wipe'), 'wipe button on the record tab');
 assert(!hasBtn('col_prev'), 'record tab has one page');
 UI.onKey('Escape');
 assert(UI.collection === null && hasBtn('start'), 'Esc closes');
+// 스토리 지도에서도 연다
+UI.openStoryMap();
+btn('collection');
+assert(UI.collection && Game.state === 'story', 'opened from the story map');
+UI.onKey('Escape');
+assert(UI.collection === null && hasBtn('stage_go'), 'back to the map');
+Game.state = 'title';
 // 쪽 넘김: 몬스터가 더 늘면 쪽이 더 생긴다(표에 줄을 더해 본다)
 {
     const extra = [];
@@ -3226,18 +3172,20 @@ assert(UI.collection === null && hasBtn('start'), 'Esc closes');
 
 // ----- 기록 지우기: 두 번 눌러야 지우고, 지운 뒤 바로 처음 상태 -----
 {
-    Meta.data.souls = 50;
-    assert(Meta.buy('lord', 'bone_queen').ok && Meta.buy('relic', 'eye').ok);
-    Game.state = 'title';
-    btn('start');
+    Meta.data.cleared = ids(STAGES).slice(0, 5); // 스테이지 5까지: 뼈의 여왕, 유물 칸 1개
+    Meta.data.runs = 6;
+    Meta.save();
+    UI.openSelect('s6');
     btn('lord_bone_queen');
-    btn('relic_eye');
-    same(UI.loadout, { lord: 'bone_queen', relics: ['eye'] });
+    btn('relic_eye'); // 아직 잠김(스테이지 6)
+    btn('relic_candle');
+    same(UI.loadout, { lord: 'bone_queen', relics: ['candle'] });
     btn('collection');
     assert(UI.collection && Game.state === 'select', 'opened from select');
     btn('col_tab_record');
     btn('col_wipe');
     assert(Meta.hasLord('bone_queen') && UI.wipeArmed > 0, 'first press only arms');
+    assert(btnOf('col_wipe').sub.includes('스테이지'), 'wipe warns about story progress');
     // 시간이 지나면 다시 두 번 눌러야 한다
     UI.update(WIPE_ARM_TIME + 0.1);
     btn('col_wipe');
@@ -3247,19 +3195,377 @@ assert(UI.collection === null && hasBtn('start'), 'Esc closes');
     same(stored(), Meta.fresh(), 'wiped in storage');
     same(UI.loadout, { lord: 'rift', relics: [] }, 'loadout back to defaults');
     assert(UI.collection.tab === 'record' && UI.toast.text.includes('지웠'), 'stays on the record tab');
+    assert.strictEqual(UI.stageId, 's1', 'locked stage falls back to the first stage');
     UI.onKey('Escape');
-    assert(btnOf('lord_bone_queen').locked && btnOf('buy_slot').slotBuy === 30, 'select screen back to the first state');
+    assert(btnOf('lord_bone_queen').locked && !hasBtn('picked0') && hasBtn('slotLocked0'), 'select screen back to the first state');
 }
 
 delete globalThis.localStorage;
 Meta.data = Meta.fresh();
-console.log('smoke ok: meta collection');
+console.log('smoke ok: meta record');
 }`, ctx, { filename: 'smoke-meta' });
+
+// 메인 스토리: 표, 흐름(지도 → 대화 → 고르기 → 전투 → 승리 대화 → 해금 카드 → 결과), 열림 순서, 다시 깨기, 패배,
+// 웨이브 범위와 보스 덮어쓰기, 체력 배율, 대화 넘기기와 건너뛰기, 고르기 건너뛰기, 유물 칸 0개, 12번까지 끝까지 깨기
+vm.runInContext(`{
+const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
+const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
+const btnOf = id => { UI.update(0); return UI.buttons.find(b => b.id === id); };
+const btn = id => { const b = btnOf(id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
+const near = (a, b, msg) => assert(Math.abs(a - b) < 1e-9, (msg || '') + ': ' + a + ' != ' + b);
+const memoryStorage = () => {
+    const data = {};
+    return { data, getItem: k => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); } };
+};
+const freshWindow = () => {
+    globalThis.localStorage = memoryStorage();
+    Meta.load();
+    UI.loadout = null;
+    UI.collection = null;
+    UI.dialogue = null;
+    UI.unlockCards = null;
+    UI.afterRun = null;
+    UI.stageId = null;
+    UI.toast = null;
+    Game.state = 'title';
+};
+const ids = list => list.map(s => s.id);
+// 이번 판을 이긴다: 마지막 웨이브를 막은 것처럼(실제 endWave 경로)
+const winRun = () => {
+    Game.waveIndex = Game.waves.length - 1;
+    Game.state = 'wave';
+    Game.heroes = [];
+    Game.bossDefeated = false;
+    Game.update(1 / 30);
+    assert.strictEqual(Game.state, 'victory', 'won');
+    UI.update(0);
+};
+const loseRun = () => { Game.hp = 1; damageThrone(1); assert.strictEqual(Game.state, 'defeat'); UI.update(0); };
+// 대화를 끝까지 넘긴다(클릭으로). 넘긴 클릭 수를 돌려준다
+const clickThrough = () => {
+    let n = 0;
+    while (UI.dialogue && n < 100) { click(GAME_WIDTH / 2, 500); n++; }
+    return n;
+};
+
+// ----- 표 -----
+same(STORY_CHAPTERS.map(c => c.name), ['1장 집들이', '2장 빚쟁이', '3장 용사단 본대'], 'chapters');
+same(STAGES.map(s => s.no), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 'twelve stages');
+same(STAGES.map(s => s.chapter), [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3], 'chapters per stage');
+same(STAGES.map(s => s.name), ['첫 손님', '마을 자경단', '도굴꾼 소동', '건너편 세입자', '왕국 정찰대', '은빛 검 기사단', '두 갈래 습격', '수금하러 왔다',
+    '선봉대', '끝없는 행렬', '왕좌 앞 전투', '부대장의 최후'], 'stage names');
+assert.strictEqual(new Set(ids(STAGES)).size, 12, 'unique ids');
+// 웨이브 범위(표의 인덱스)와 수
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+same(STAGES.map(s => s.waves), [range(0, 2), range(0, 3), range(1, 5), range(2, 6), range(2, 7), range(3, 8), range(2, 8), range(3, 9),
+    range(2, 9), range(1, 9), range(0, 9), range(0, 9)], 'wave ranges');
+same(STAGES.map(s => s.waves.length), [3, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 10], 'wave counts');
+// 보스 덮어쓰기: 4·8·11은 대마도사, 12는 부대장이 마지막 웨이브. 8~11은 보스 없는 표
+const bosses = s => stageWaves(s).map(w => w.boss || null);
+const before = JSON.stringify(WAVES);
+same(bosses(STAGES[0]), [null, null, null], 's1 no boss');
+same(bosses(STAGES[2]), [null, null, null, 'archmage', null], 's3 keeps the archmage of the table (mid boss, reward)');
+same(bosses(STAGES[3]), [null, null, 'archmage', null, 'archmage'], 's4 ends with the archmage');
+same(bosses(STAGES[7]), [null, null, null, null, null, null, 'archmage'], 's8: boss-less table, archmage last');
+same(bosses(STAGES[8]), [null, null, null, null, null, null, null, null], 's9: boss-less table');
+same(bosses(STAGES[9]), [null, null, null, null, null, null, null, null, null], 's10: boss-less table');
+same(bosses(STAGES[10]), [null, null, null, null, null, null, null, null, null, 'archmage'], 's11: archmage last');
+same(bosses(STAGES[11]), [null, null, null, null, 'archmage', null, null, null, null, 'fallen_knight'], 's12: mid archmage, captain last');
+assert.strictEqual(JSON.stringify(WAVES), before, 'WAVES untouched');
+// 나머지 값은 WAVES 그대로(파티, 인원, 정예, 입구)
+for (const s of STAGES) {
+    stageWaves(s).forEach((w, i) => {
+        const src = WAVES[s.waves[i]];
+        assert.strictEqual(w.level, s.waves[i]);
+        for (const k of ['party', 'members', 'elites', 'entry']) same(w[k], src[k], s.id + ' wave ' + i + ' ' + k);
+    });
+}
+// 체력 배율: 1번 0.6에서 12번 1.0까지 차츰 오른다
+assert(STAGES[0].hpMul === 0.6 && STAGES[11].hpMul === 1, 'hp 0.6 to 1.0');
+for (let i = 1; i < STAGES.length; i++) assert(STAGES[i].hpMul > STAGES[i - 1].hpMul, 'hp rises');
+for (let i = 1; i < STAGES.length; i++) assert(STAGES[i].goldBonus >= STAGES[i - 1].goldBonus && STAGES[i].goldBonus >= 0, 'gold bonus');
+// 해금 표: 스테이지마다 표대로, 마왕 2명과 유물 16종이 한 번씩, 칸 3개(1·7·11번), 엔딩은 12번
+const un = s => s.unlocks.map(u => u.kind === 'slot' || u.kind === 'ending' ? u.kind : u.kind + ':' + u.id);
+same(STAGES.map(un), [
+    ['slot', 'relic:pouch'], ['relic:horn', 'relic:heart'], ['relic:chalice', 'relic:dice'], ['lord:bone_queen', 'relic:shackles'],
+    ['relic:candle', 'relic:tablet'], ['relic:drum', 'relic:eye'], ['slot', 'relic:handgem'], ['lord:gold_king', 'relic:key'],
+    ['relic:hourglass', 'relic:banner'], ['relic:bottle'], ['slot', 'relic:mirror'], ['ending']], 'unlock table');
+{
+    const all = STAGES.flatMap(s => s.unlocks);
+    const relics = all.filter(u => u.kind === 'relic').map(u => u.id);
+    const lords = all.filter(u => u.kind === 'lord').map(u => u.id);
+    same(relics.slice().sort(), Object.keys(RELICS).sort(), 'every relic exactly once');
+    assert.strictEqual(new Set(relics).size, 16);
+    same(lords, ['bone_queen', 'gold_king'], 'two lords');
+    assert(!lords.includes(DEFAULT_LORD), 'default lord is free');
+    assert.strictEqual(all.filter(u => u.kind === 'slot').length, 3, 'three slots');
+    same([1, 2, 3].map(n => unlockStage('slot', n).no), [1, 7, 11], 'slot stages');
+    assert(unlockStage('relic', 'mirror').no === 11 && unlockStage('lord', 'gold_king').no === 8 && unlockStage('lord', 'rift') === null, 'unlock stage lookup');
+}
+// 대화: 스테이지마다 시작 전과 승리 3~6줄, 말하는 사람은 등장인물 표에 있고 초상이 있다
+for (const s of STAGES) {
+    for (const lines of [s.intro, s.outro]) {
+        assert(lines.length >= 3 && lines.length <= 6, s.id + ' 3~6 lines');
+        for (const [who, text] of lines) {
+            assert(STORY_CAST[who] && castPortrait(who), s.id + ' cast ' + who);
+            assert(typeof text === 'string' && text.length > 0 && text.length <= 60, s.id + ' line length');
+        }
+    }
+    assert(Array.isArray(s.map) && s.map[0] > 60 && s.map[0] < 1860 && s.map[1] > 110 && s.map[1] < 770, s.id + ' stamp on the map');
+}
+same(Object.keys(STORY_CAST), ['rift', 'bone_queen', 'gold_king', 'goblin', 'warrior', 'archmage', 'captain'], 'cast');
+for (const c of Object.values(STORY_CAST)) {
+    const p = c.lord ? DEMON_LORDS[c.lord].portrait : c.portrait;
+    assert(p && p.sprite && p.crop.length === 3, c.name + ' portrait crop');
+}
+// 동료가 되는 마왕은 자기 스테이지 대화에 나온다
+assert(STAGES[3].intro.some(l => l[0] === 'bone_queen') && STAGES[7].intro.some(l => l[0] === 'gold_king'), 'lords join in their stage');
+// 코드에 스테이지별 분기가 없다(id 문자열은 데이터에만)
+{
+    const src = ${JSON.stringify(['js/game/game.js', 'js/game/meta.js', 'js/game/hero.js', 'js/ui/ui.js', 'js/main.js'].map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'))};
+    for (const s of STAGES) assert(!new RegExp("['\\"\`]" + s.id + "['\\"\`]").test(src), 'no branch on stage ' + s.id);
+}
+
+// ----- 스토리 없는 판(시험 도구, tools/simulate.js)은 지금 그대로 -----
+Game.reset();
+assert(Game.stage === null && Game.waves === WAVES && Game.heroHpMul === 1 && Game.gold === COMBAT_RULES.startGold, 'no story: WAVES as is');
+near(createHero('warrior', 3, 0, false).hp, HEROES.warrior.hp * (1 + COMBAT_RULES.hpPerWave * 3), 'hero hp unchanged');
+
+// ----- 스테이지 판: 웨이브 목록, 체력 배율, 시작 골드 보너스 -----
+freshWindow();
+Meta.data.cleared = ids(STAGES); // 모두 열어 둔다(판 값만 본다)
+for (const s of STAGES) {
+    Game.reset(null, s.id);
+    assert(Game.stage === s.id && Game.waves.length === s.waves.length && Game.heroHpMul === s.hpMul, s.id + ' run');
+    assert.strictEqual(Game.gold, COMBAT_RULES.startGold + s.goldBonus, s.id + ' start gold');
+}
+Game.reset(null, 's1');
+near(createHero('warrior', 0, 0, false).hp, HEROES.warrior.hp * 0.6, 'stage 1 hero hp x0.6');
+near(createHero(null, 0, 0, 'archmage').hp, HEROES[BOSSES.archmage.base].hp * BOSSES.archmage.hpMultiplier * 0.6 * (BOSSES.archmage.waveHpMul || 1), 'boss hp x0.6');
+// 웨이브를 시작하면 용사 체력은 원래 웨이브 단계(level)와 스테이지 배율로
+Game.reset(null, 's5');
+Game.startWave();
+{
+    const w = Game.waves[0];
+    assert.strictEqual(w.level, 2);
+    const h = Game.heroes.find(x => x.type === 'rogue');
+    near(h.maxHp, HEROES.rogue.hp * (1 + COMBAT_RULES.hpPerWave * 2) * 0.75, 's5 wave 1 is table wave 3');
+}
+// 마지막 웨이브의 보스는 스테이지 보스. 그 웨이브가 끝나면 보상 없이 승리
+Game.reset(null, 's4');
+Game.waveIndex = 4;
+Game.startWave();
+{
+    const boss = Game.heroes.find(h => h.boss);
+    assert(boss && boss.bossKey === 'archmage', 's4 last wave boss');
+    near(boss.maxHp, HEROES[BOSSES.archmage.base].hp * BOSSES.archmage.hpMultiplier * (1 + COMBAT_RULES.hpPerWave * 6) * 0.71 * (BOSSES.archmage.waveHpMul || 1), 'boss hp with stage');
+    damageHero(boss, 1e9);
+    Game.heroes = [];
+    Game.update(1 / 30);
+    assert(Game.state === 'victory' && !Game.bossReward, 'last-wave boss: victory without reward');
+}
+// 마지막 웨이브가 아닌 보스(4번의 3번째 웨이브): 지금 규칙대로 보상 3택
+Game.reset(null, 's4');
+Game.waveIndex = 2;
+Game.startWave();
+{
+    const boss = Game.heroes.find(h => h.boss);
+    assert(boss && boss.bossKey === 'archmage', 's4 mid boss');
+    damageHero(boss, 1e9);
+    Game.heroes = [];
+    Game.update(1 / 30);
+    assert(Game.state === 'prep' && Game.bossReward && Game.bossReward.cards.length === 3, 'mid boss reward');
+}
+Meta.data = Meta.fresh();
+
+// ----- 첫 실행 흐름: 타이틀 → 지도 → 대화 → (고르기 건너뜀) → 전투 → 승리 대화 → 해금 카드 → 결과 → 지도 -----
+freshWindow();
+UI.update(0);
+assert.strictEqual(btnOf('start').label, '시작하기', 'title says start on a fresh record');
+btn('start');
+assert.strictEqual(Game.state, 'story');
+assert.strictEqual(UI.storyPick, 's1', 'first stage picked');
+UI.update(0);
+assert.strictEqual(UI.buttons.filter(b => b.stamp).length, 12, 'twelve stamps');
+assert(!btnOf('stage_go').disabled && btnOf('stage_go').label === '출전', 'go');
+// 잠긴 도장은 고르지 못하고 조건을 알린다
+btn('stage_s3');
+assert(UI.storyPick === 's1' && UI.toast.text.includes('스테이지 2'), 'locked stamp');
+UI.onKey('ArrowRight');
+assert.strictEqual(UI.storyPick, 's1', 'arrow stays on open stages');
+// 출전: 시작 전 대화. 맵은 비우고 위에 대화
+Game.monsters.push(createMonster('orc_guard', 3, 4)); // 이전 판의 흔적
+btn('stage_go');
+assert(UI.dialogue && UI.dialogue.index === 0 && UI.dialogue.chars === 0, 'intro dialogue starts');
+assert.strictEqual(Game.monsters.length, 0, 'field cleared before the intro');
+assert.strictEqual(UI.dialogue.lines, STAGES[0].intro);
+UI.update(0);
+same(UI.buttons.map(b => b.id), ['dlg_skip'], 'only the skip button during dialogue');
+// 글자는 한 글자씩: 시간이 지나면 늘고, 클릭하면 끝까지, 다시 클릭하면 다음 줄
+UI.update(0.1);
+assert(UI.dialogue.chars > 0 && UI.dialogue.chars < STAGES[0].intro[0][1].length, 'typing');
+click(900, 400);
+assert(UI.dialogue.index === 0 && UI.dialogue.chars === STAGES[0].intro[0][1].length, 'click finishes the line');
+click(900, 400);
+assert(UI.dialogue.index === 1 && UI.dialogue.chars === 0, 'click goes to the next line');
+UI.onKey('Space');
+UI.onKey('Space');
+assert.strictEqual(UI.dialogue.index, 2, 'Space works the same');
+UI.update(10);
+assert.strictEqual(UI.dialogue.chars, STAGES[0].intro[2][1].length, 'typing stops at the end');
+// 대화 중에는 판의 단축키를 받지 않는다
+UI.onKey('KeyS');
+assert(UI.dialogue && Game.state === 'story', 'no game keys during dialogue');
+// Esc 건너뛰기 → 쓸 수 있는 마왕이 하나이고 유물이 없어 고르기를 건너뛰고 바로 판
+UI.onKey('Escape');
+assert(!UI.dialogue && Game.state === 'prep' && Game.stage === 's1', 'skip → straight to the run');
+assert(Game.lord === 'rift' && Game.relics.length === 0 && Meta.relicSlots() === 0, 'zero slots');
+// 칸 0개로도 판이 돈다: 마왕 탭에 유물 칸이 없고 스킬 칸이 넓다
+UI.setTab('demon');
+UI.update(0);
+assert(!UI.buttons.some(b => b.barRelic !== undefined) && hasBtn('lightning') && hasBtn('roar'), 'no relic slot in the bar');
+assert(btnOf('roar').x + btnOf('roar').w <= btnOf('bag0').x, 'skills fit');
+UI.setTab('monster');
+assert(Game.summon().ok, 'summon works');
+UI.update(0);
+assert.strictEqual(Game.waves.length, 3, 'stage 1 has three waves');
+// 진다 → 다시 도전(대화 없이, 고르기도 건너뛰고) 또는 지도
+loseRun();
+assert(hasBtn('retry') && hasBtn('to_map') && !hasBtn('next_stage'), 'defeat buttons');
+assert(!Meta.isCleared('s1') && Meta.data.runs === 1 && Meta.data.wins === 0 && !UI.dialogue, 'defeat keeps nothing');
+btn('retry');
+assert(Game.state === 'prep' && Game.stage === 's1' && !UI.dialogue && Game.monsters.length === 0, 'retry skips the dialogue');
+// 이긴다 → 승리 대화 → 해금 카드(유물 칸, 황금 주머니) → 결과(다음 스테이지)
+winRun();
+assert(UI.dialogue && UI.dialogue.lines === STAGES[0].outro, 'victory dialogue');
+assert(Meta.isCleared('s1') && Meta.relicSlots() === 1 && Meta.hasRelic('pouch'), 'unlocked on first clear');
+assert(!hasBtn('next_stage'), 'result buttons wait for the dialogue');
+clickThrough();
+assert(UI.unlockCards && UI.unlockCards.index === 0, 'unlock cards');
+same(UI.unlockCards.list, STAGES[0].unlocks);
+assert.strictEqual(btnOf('unlock_ok').label, '다음');
+UI.onKey('Space');
+assert(UI.unlockCards.index === 1 && btnOf('unlock_ok').label === '확인', 'second card');
+btn('unlock_ok');
+assert(!UI.unlockCards && hasBtn('next_stage') && hasBtn('to_map'), 'result after the cards');
+assert(btnOf('next_stage').sub.includes('마을 자경단'), 'next stage button names it');
+// 지도로: 깬 스테이지는 붉은 밀랍, 다음이 열린다
+btn('to_map');
+assert(Game.state === 'story' && UI.storyPick === 's2' && Meta.isOpen('s2') && !Meta.isOpen('s3'), 'map after the first clear');
+assert.strictEqual(Game.monsters.length, 0, 'field cleared on the map');
+// 다시 깨기: 대화는 다시 나오고 건너뛸 수 있다. 해금 카드는 없다
+btn('stage_s1');
+assert.strictEqual(btnOf('stage_go').label, '다시 하기', 'replay label');
+btn('stage_go');
+assert(UI.dialogue, 'replay dialogue');
+btn('dlg_skip');
+// 이제 유물 칸 1개와 황금 주머니가 있어 고르기 화면이 나온다
+assert(Game.state === 'select' && UI.stageId === 's1', 'select screen with a relic to pick');
+assert(hasBtn('picked0') && hasBtn('slotLocked1') && hasBtn('slotLocked2') && hasBtn('select_back'), 'one slot, two locked slots');
+assert(btnOf('relic_pouch').locked === false && btnOf('relic_horn').locked, 'only pouch');
+UI.toast = null;
+btn('relic_horn');
+assert(UI.toast.text.includes('스테이지 2에서 해금') && UI.loadout.relics.length === 0, 'locked relic says its stage');
+btn('lord_gold_king');
+assert(UI.toast.text.includes('스테이지 8에서 해금') && UI.loadout.lord === 'rift', 'locked lord says its stage');
+btn('relic_pouch');
+assert(btnOf('begin').sub.includes('첫 손님'), 'begin names the stage');
+btn('begin');
+assert(Game.state === 'prep' && Game.relics.join() === 'pouch' && Game.gold === COMBAT_RULES.startGold + 100, 'pouch applies');
+const runs = Meta.data.runs;
+winRun();
+clickThrough();
+assert(!UI.unlockCards && Meta.data.cleared.length === 1 && Meta.data.runs === runs + 1, 'replay: no unlock cards');
+assert(Game.runResult.firstClear === false && Game.runResult.unlocks.length === 0, 'replay result');
+// 결과 화면에서 Space는 다음 스테이지(시작 전 대화)
+UI.onKey('Space');
+assert(UI.dialogue && UI.stageId === 's2' && UI.dialogue.lines === STAGES[1].intro, 'next stage from the result');
+// 고르기 화면 Esc는 지도로
+UI.onKey('Escape');
+assert(Game.state === 'select' && UI.stageId === 's2');
+UI.onKey('Escape');
+assert(Game.state === 'story', 'Esc back to the map');
+UI.onKey('Escape');
+assert(Game.state === 'title', 'Esc from the map to the title');
+UI.update(0);
+assert.strictEqual(btnOf('start').label, '이어하기', 'title says continue');
+
+// ----- 12번까지 끝까지 깬다: 표대로 마왕 2명, 유물 16종, 칸 3개가 모두 풀리고 엔딩 -----
+freshWindow();
+{
+    const seenCards = [];
+    btn('start');
+    for (const s of STAGES) {
+        assert.strictEqual(UI.storyPick, s.id, 'map picks the next stage ' + s.id);
+        assert(Meta.isOpen(s.id) && !Meta.isCleared(s.id), s.id + ' open');
+        if (s.no < 12) assert(!Meta.isOpen(STAGES[s.no].id), 'stage after ' + s.id + ' still locked');
+        btn('stage_go');
+        assert(UI.dialogue && UI.dialogue.lines === s.intro);
+        clickThrough();
+        if (Game.state === 'select') {
+            // 고를 수 있는 것은 모두 골라 시작한다(칸 수만큼)
+            UI.loadout.relics = [];
+            const owned = Meta.relicsOwned();
+            for (const id of owned.slice(0, Meta.relicSlots())) btn('relic_' + id);
+            const lords = Meta.lordsOwned();
+            btn('lord_' + lords[lords.length - 1]);
+            btn('begin');
+        }
+        assert(Game.state === 'prep' && Game.stage === s.id && Game.waves.length === s.waves.length, s.id + ' started');
+        assert(Game.relics.length <= Meta.relicSlots() && Game.relics.every(id => Meta.hasRelic(id)), s.id + ' relics fit');
+        // 판 위 표지판에 스테이지 이름을 쓴다(Game.stage에서)
+        assert(stageDef(Game.stage).name === s.name);
+        winRun();
+        clickThrough();
+        assert(UI.unlockCards, s.id + ' unlock cards');
+        while (UI.unlockCards) { seenCards.push(UI.unlockCards.list[UI.unlockCards.index]); btn('unlock_ok'); }
+        assert(Meta.isCleared(s.id), s.id + ' cleared');
+        if (s.no < 12) {
+            assert(hasBtn('next_stage') && hasBtn('to_map'));
+            btn('to_map');
+        } else {
+            assert(!hasBtn('next_stage') && hasBtn('to_map') && btnOf('to_map').theme === 'gold', 'last stage: map is the main button');
+        }
+    }
+    same(Meta.lordsOwned(), ['rift', 'bone_queen', 'gold_king'], 'three lords');
+    same(Meta.relicsOwned(), Object.keys(RELICS), 'sixteen relics');
+    assert.strictEqual(Meta.relicSlots(), 3, 'three slots');
+    same(seenCards, STAGES.flatMap(s => s.unlocks), 'every unlock card shown once in order');
+    assert(seenCards[seenCards.length - 1].kind === 'ending', 'ending card last');
+    assert(Meta.data.cleared.length === 12 && Meta.data.bestStage === 12 && Meta.data.wins === 12 && Meta.data.runs === 12, 'records');
+    btn('to_map');
+    assert(Game.state === 'story' && UI.storyPick === 's12' && STAGES.every(s => Meta.isCleared(s.id)), 'all cleared');
+    // 다 깬 뒤 고르기 화면: 잠긴 것이 없다
+    UI.openSelect('s12');
+    UI.update(0);
+    assert(!UI.buttons.some(b => b.locked) && !UI.buttons.some(b => b.lockedSlot) && ['picked0', 'picked1', 'picked2'].every(hasBtn), 'nothing locked');
+}
+
+// ----- 유물 칸 0개인데 마왕이 둘(이상한 저장): 고르기 화면이 동작한다 -----
+freshWindow();
+Meta.data.cleared = ['s4']; // 뼈의 여왕만(칸 없음)
+assert(Meta.relicSlots() === 0 && Meta.lordsOwned().length === 2 && !UI.canSkipSelect(), 'select shown');
+UI.openSelect('s5');
+assert(!hasBtn('picked0') && ['slotLocked0', 'slotLocked1', 'slotLocked2'].every(hasBtn), 'all slots locked');
+UI.toast = null;
+btn('relic_shackles');
+assert(UI.loadout.relics.length === 0 && UI.toast.text.includes('스테이지 1'), 'no slot: says where slots unlock');
+btn('lord_bone_queen');
+btn('begin');
+assert(Game.state === 'prep' && Game.lord === 'bone_queen' && Game.relics.length === 0, 'plays with zero slots');
+
+delete globalThis.localStorage;
+Meta.data = Meta.fresh();
+UI.stageId = null;
+Game.state = 'title';
+console.log('smoke ok: story');
+}`, ctx, { filename: 'smoke-story' });
 
 // UI 배치: 모든 화면과 탭에서 버튼이 화면 안에 있고 서로 겹치지 않는다. 왼쪽 아래 체력 막대는 체력 값을 따라간다
 vm.runInContext(`{
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-// allow(a, b)가 참이면 일부러 포갠 버튼이다(잠긴 마왕 포스터 위의 해금 버튼)
+// allow(a, b)가 참이면 일부러 포갠 버튼이다
 const check = (name, allow) => {
     UI.update(0);
     const list = UI.buttons;
@@ -3276,34 +3582,49 @@ const check = (name, allow) => {
     return list;
 };
 const ids = () => { UI.update(0); return UI.buttons.map(b => b.id); };
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
 delete globalThis.localStorage;
 Meta.data = Meta.fresh();
 UI.loadout = null;
 UI.collection = null;
-UI.unlockFocus = null;
+UI.dialogue = null;
+UI.unlockCards = null;
+UI.afterRun = null;
 Game.paused = false;
 Game.state = 'title';
 check('title');
+// 스토리 지도, 시작 전 대화, 해금 카드
+UI.openStoryMap();
+check('story map');
+Meta.data.cleared = STAGES.slice(0, 6).map(s => s.id);
+UI.openStoryMap();
+check('story map, six cleared');
+UI.enterStage('s7');
+check('dialogue');
+UI.endDialogue();
+check('select from a stage');
+assert(ids().includes('select_back'), 'back to the map');
+UI.unlockCards = { list: STAGES[3].unlocks.slice(), index: 0 };
+check('unlock card');
+UI.unlockCards = null;
+Meta.data = Meta.fresh();
 UI.openCollection();
 for (const t of COL_TABS) {
     UI.setCollectionTab(t.key);
     check('collection ' + t.key);
 }
 UI.closeCollection();
-UI.openSelect();
-check('select');
+UI.openSelect(null);
+check('select, zero slots');
 UI.pickLord('bone_queen');
-assert(ids().includes('unlock'), 'unlock button for a locked lord');
-check('select, locked lord', (a, b) => a.id === 'unlock' && b.id === 'lord_bone_queen');
 UI.toggleRelic('mirror');
-check('select, locked relic');
-UI.unlockFocus = null;
-Meta.data.slots = 3;
+assert(!ids().includes('unlock') && !ids().includes('buy_slot'), 'no unlock or slot buying buttons');
+Meta.data.cleared = STAGES.map(s => s.id);
 check('select, three slots');
 UI.openCollection();
 check('collection from select');
 UI.closeCollection();
-Meta.data.slots = 1;
+Meta.data.cleared = ['s1'];
 UI.beginRun();
 assert.strictEqual(Game.state, 'prep');
 for (const tab of ['monster', 'demon']) {
@@ -3342,6 +3663,16 @@ Game.finish(true);
 check('victory');
 Game.state = 'defeat';
 check('defeat');
-UI.openSelect();
+// 스테이지 결과: 승리(다음 스테이지와 지도), 마지막 스테이지 승리(지도만), 패배(다시 도전과 지도)
+Meta.data.cleared = ['s1'];
+for (const [stage, state, want] of [['s1', 'victory', ['next_stage', 'to_map']], ['s12', 'victory', ['to_map']], ['s2', 'defeat', ['retry', 'to_map']]]) {
+    Game.reset(null, stage);
+    UI.afterRun = null;
+    Game.state = state;
+    Game.runResult = Meta.finishRun(stage, state === 'victory', 1);
+    same(check('result ' + stage + ' ' + state).map(b => b.id), want, 'result buttons ' + stage);
+}
+Meta.data = Meta.fresh();
+UI.openSelect(null);
 console.log('smoke ok: ui layout');
 }`, ctx, { filename: 'smoke-ui' });

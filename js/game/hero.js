@@ -10,7 +10,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
     const bossDef = key ? BOSSES[key] : null;
     if (bossDef) type = bossDef.base;
     const def = HEROES[type];
-    const scale = 1 + COMBAT_RULES.hpPerWave * waveIndex;
+    const scale = (1 + COMBAT_RULES.hpPerWave * waveIndex) * Game.heroHpMul; // 스테이지 체력 배율(스토리 없으면 1)
     const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) : def.hp * scale;
     const src = bossDef || def;
     return {

@@ -48,7 +48,7 @@ function frame(now) {
     }
 
     UI.update(dt);
-    if (Game.state === 'title' || Game.state === 'select') {
+    if (!Game.inPlay()) { // 타이틀, 스토리 지도, 선택 화면, 결과: 연출 시간만 흐른다
         Game.update(dt);
     } else if (!Game.paused) {
         // Why: 2배속도 한 번에 큰 시간을 넘기지 않아야 충돌과 조준이 어긋나지 않는다.
