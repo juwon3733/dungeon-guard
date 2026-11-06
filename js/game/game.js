@@ -9,7 +9,7 @@ const Game = {
     state: 'title', // title | prep | wave | victory | defeat
     gold: 0, hp: 0, waveIndex: 0, prepTimer: 0, speed: 1, paused: false,
     summonCount: 0, // 이번 판 소환 횟수. 소환 비용이 여기에 따라 오른다
-    discovered: new Set(), // 찾은 히든 조합식(재료 열쇠). 이번 시험판은 저장하지 않고 창을 닫으면 사라진다
+    runResult: null, // 판이 끝날 때 받은 영혼석과 새 기록(Meta.finishRun). 결과 화면이 보여 준다
     bossDefeated: false, // 이번 웨이브에 보스를 처치했는지. 웨이브가 끝날 때 보상 카드로 바뀐다
     bossReward: null, // 고를 보스 보상: { cards: [{ kind: 'monster', type } | { kind: 'equip', id } | { kind: 'gold', gold }] }. 있는 동안 준비 시간이 멈춘다
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
@@ -43,6 +43,7 @@ const Game = {
         this.bossDefeated = false;
         this.bossReward = null;
         this.equipBag = [];
+        this.runResult = null;
         this.monsters = [];
         this.heroes = [];
         this.units = [];
@@ -196,6 +197,7 @@ const Game = {
         const m = createMonster(type, cell.col, cell.row);
         this.monsters.push(m);
         this.stats.summoned++;
+        Meta.seeMonster(type);
         const grade = MONSTERS[type].grade;
         Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type, grade });
         Sfx.play('summon', GRADE_ORDER.indexOf(grade));
@@ -343,6 +345,7 @@ const Game = {
         if (!cell) return { ok: false, reason: 'full' };
         const m = createMonster(card.type, cell.col, cell.row);
         this.monsters.push(m);
+        Meta.seeMonster(card.type);
         const grade = MONSTERS[card.type].grade;
         Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type: card.type, grade });
         Sfx.play('summon', GRADE_ORDER.indexOf(grade));
@@ -417,12 +420,10 @@ const Game = {
         if (plan.kind === 'none') return { ok: false, reason: plan.reason };
         const type = plan.kind === 'recipe' ? plan.result : randItem(gradePool(plan.grade));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
-        let discovered = false;
-        if (hidden) {
-            const key = [plan.recipe.a, plan.recipe.b].sort().join('+');
-            discovered = !this.discovered.has(key);
-            this.discovered.add(key);
-        }
+        // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
+        const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;
+        const discovered = hidden && found;
+        Meta.seeMonster(type);
         const from = [this.fxPoint(src), this.fxPoint(dst)];
         this.removeMonster(src.monster);
         const old = dst.monster;
@@ -549,9 +550,11 @@ const Game = {
         return true;
     },
 
+    // 판 끝: 막은 웨이브 수(승리면 전부)로 영혼석과 기록을 남긴다(Meta.finishRun). 한 판에 한 번만
     finish(victory) {
         if (this.state === 'victory' || this.state === 'defeat') return;
         this.state = victory ? 'victory' : 'defeat';
+        this.runResult = Meta.finishRun(victory ? WAVES.length : this.waveIndex, victory);
         Sfx.play(victory ? 'victory' : 'defeat');
     },
 

@@ -109,6 +109,7 @@ window.addEventListener('keydown', e => {
 
 fitCanvas();
 loadSettings();
+Meta.load(); // 영구 수집 기록(못 읽으면 초기값)
 Assets.loadAll(() => {
     Render.buildMap();
     ready = true;
