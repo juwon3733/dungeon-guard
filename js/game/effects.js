@@ -17,7 +17,7 @@ const Fx = {
     reduce: false,
     goldPulse: 0,
     banner: null,
-    pops: [], // 소환과 합치기 연출. 대기 칸 위에도 그려야 해서 UI가 화면 맨 위에 그린다
+    pops: [], // 소환과 합치기 연출. 다른 몬스터와 HUD 위에도 보이도록 UI가 화면 맨 위에 그린다
     discovery: null, // "히든 조합 발견!" 연출
 
     reset() {
@@ -32,18 +32,15 @@ const Fx = {
         this.pendingShakes = [];
     },
 
-    // kind: 'summon' | 'merge'. to와 from의 점은 { bench: 칸 번호 } 또는 세계 좌표 { x, y }
+    // kind: 'summon' | 'merge'. to와 from의 점은 세계 좌표 { x, y }(몬스터가 서 있는 곳)
     pop(opts) {
         const g = GRADE_FX[opts.grade] || GRADE_FX.common;
         const delay = opts.kind === 'merge' ? MERGE_REVEAL : 0;
         this.pops.push(Object.assign({ age: 0, delay, life: delay + g.pop + 0.4, seed: Math.random() * 10 }, opts));
-        if (opts.to.x !== undefined) {
-            // 맵 위 결과 자리에는 세계 효과도 함께 남긴다(빛이 터지는 순간에 맞춘다)
-            this.pendingBursts.push({ t: delay, x: opts.to.x, y: opts.to.y, grade: opts.grade });
-        } else if (delay === 0) {
-            this.addShake(g.shake * 0.6);
-        }
+        // 결과 자리에는 세계 효과도 함께 남긴다(빛이 터지는 순간에 맞춘다)
+        this.pendingBursts.push({ t: delay, x: opts.to.x, y: opts.to.y, grade: opts.grade });
         if (delay > 0) this.pendingShakes.push({ t: delay, amount: g.shake });
+        else this.addShake(g.shake * 0.6);
     },
     pendingBursts: [],
     pendingShakes: [],

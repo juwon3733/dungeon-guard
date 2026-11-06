@@ -20,21 +20,21 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
-    // 시작 버튼을 눌러 준비 단계로 들어간 첫 화면: 빈 대기 칸 5개와 소환 버튼, 첫 안내 문구
+    // 시작 버튼을 눌러 준비 단계로 들어간 첫 화면: 소환 버튼(현재 비용)과 맵 몬스터 수 0/24, 첫 안내 문구
     prep: {
         setup: () => { pressButton('start'); },
         // 건설 칸 테두리는 Game.time으로 깜빡인다. 가장 밝은 순간(sin = 1)에 멈춘다
         afterFreeze: () => { Game.time = Math.PI / 6; }
     },
 
-    // 소환: 대기 칸 넷을 채운 뒤 다섯째 칸에 영웅(해골 기사)이 나오는 순간. 소환 버튼에 마우스를 올려 확률 설명을 띄운다
+    // 소환: 몬스터 넷을 맵에 소환한 뒤 다섯째로 영웅(해골 기사)이 길 옆 칸에 나오는 순간. 소환 버튼에 마우스를 올려 확률 설명을 띄운다
     summon: {
         setup: () => {
             pressButton('start');
             Game.gold = 400;
-            for (const r of [[0.1, 0.1], [0.5, 0.5], [0.1, 0.9], [0.8, 0.9]]) withRandom(r, () => pressButton('summon'));
+            for (const r of [[0.1, 0.1, 0.2], [0.5, 0.5, 0.4], [0.1, 0.9, 0.3], [0.8, 0.9, 0.5]]) withRandom(r, () => pressButton('summon'));
             advance(1.5);
-            withRandom([0.97, 0], () => pressButton('summon'));
+            withRandom([0.97, 0, 0.45], () => pressButton('summon'));
             advance(0.22);
             const b = UI.buttons.find(x => x.id === 'summon');
             UI.onMove(b.x + 40, b.y + 40);
@@ -42,12 +42,12 @@ const SCENES = {
         }
     },
 
-    // 끌기: 대기 칸의 암흑 마법사를 빈 길 옆 칸 위로 끄는 중. 칸 표시, 반투명 그림, 사거리와
-    // 맵·대기 칸의 합칠 수 있는 몬스터 배지(조합식은 결과 그림, 같은 등급은 ?)가 보인다
+    // 끌기: 맵의 암흑 마법사(3,5)를 빈 길 옆 칸 위로 끄는 중. 칸 표시, 반투명 그림, 사거리와
+    // 합칠 수 있는 몬스터 배지(조합식은 결과 그림, 같은 등급은 ?)가 보인다
     drag: {
         setup: () => {
             setupBoard();
-            dragHold(benchCenter(0), cellCenter(9, 5));
+            dragHold(cellCenter(3, 5), cellCenter(9, 5));
             freezeScene();
         },
         afterFreeze: () => { Game.time = Math.PI / 6; }
@@ -58,7 +58,7 @@ const SCENES = {
         setup: () => {
             setupBoard();
             const m = Game.monsterAt(6, 4);
-            dragHold(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            dragHold(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             freezeScene();
         },
         afterFreeze: () => { Game.time = Math.PI / 6; }
@@ -69,7 +69,7 @@ const SCENES = {
         setup: () => {
             setupBoard();
             const m = Game.monsterAt(6, 4);
-            dragDrop(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            dragDrop(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(0.28);
             freezeScene();
         }
@@ -80,19 +80,18 @@ const SCENES = {
         setup: () => {
             setupBoard();
             const m = Game.monsterAt(6, 4);
-            dragDrop(benchCenter(0), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            dragDrop(cellCenter(3, 5), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.12);
             freezeScene();
         }
     },
 
-    // 영웅 합치기(대기 칸): 희귀 2마리가 해골 기사가 되는 순간. 가장 화려한 등급 연출
+    // 영웅 합치기(맵): 희귀 2마리(저주 사수 위에 오크 광전사)가 해골 기사가 되는 순간. 가장 화려한 등급 연출
     mergeEpic: {
         setup: () => {
             setupBoard();
-            Game.bench[3] = 'curse_shooter';
-            Game.bench[4] = 'orc_berserker';
-            dragDrop(benchCenter(4), benchCenter(3));
+            const b = Game.monsterAt(9, 2);
+            dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], cellCenter(11, 5));
             advance(MERGE_REVEAL + 0.16);
             freezeScene();
         }
@@ -102,19 +101,19 @@ const SCENES = {
     hidden: {
         setup: () => {
             setupBoard();
-            Game.bench[1] = 'orc_berserker';
+            const b = Game.monsterAt(9, 2);
             const m = Game.monsterAt(6, 4);
-            dragDrop(benchCenter(1), [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
+            dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.7);
             freezeScene();
         }
     },
 
-    // 대기 칸 몬스터를 누른 정보 팝업: 이름, 등급, 역할, 수치, 함께 합칠 수 있는 몬스터, 판매
+    // 맵의 암흑 마법사를 누른 정보 팝업: 이름, 등급, 역할, 수치, 함께 합칠 수 있는 몬스터, 판매
     popup: {
         setup: () => {
             setupBoard();
-            const c = benchCenter(0);
+            const c = cellCenter(3, 5);
             UI.onMove(c[0], c[1]);
             UI.onDown(c[0], c[1]);
             UI.onUp(c[0], c[1]);
@@ -138,6 +137,28 @@ const SCENES = {
             if (UI.selectedMonster !== m) throw new Error('해골 기사를 고르지 못했습니다');
             freezeScene();
         }
+    },
+
+    // 몬스터 20마리 넘게 소환해 맵에 깔고(22/24) 7번째 웨이브를 붙인 장면. 용사와 체력바가 몬스터 사이에서 보이는지 본다
+    crowded: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 5000;
+            seededRandom(7, () => { for (let i = 0; i < 22; i++) pressButton('summon'); });
+            if (Game.monsters.length < 20) throw new Error(`몬스터가 ${Game.monsters.length}마리뿐입니다`);
+            UI.onMove(GAME_WIDTH / 2, 600); // 소환 버튼의 확률 설명이 화면을 가리지 않게 마우스를 치운다
+            Fx.reset();
+            Game.waveIndex = 6;
+            Game.startWave();
+            Fx.reset();
+            const step = 1 / 30;
+            for (let i = 0; i < 30 * 20; i++) {
+                UI.update(step);
+                Game.update(step);
+                if (Game.heroes.filter(h => !h.waiting).length >= 14 && Game.monsters.some(m => Game.heroes.some(h => h.blocker === m))) break;
+            }
+        },
+        settleMs: 400
     },
 
     // 몬스터 3종을 길 옆에 놓고 웨이브를 시작한 뒤, 오크가 길로 나가 용사를 붙잡을 때까지 시간을 빨리 돌린다
@@ -317,26 +338,41 @@ const PAGE_HELPERS = () => {
         UI.onMove(b.x + 5, b.y + 5);
         UI.onClick(b.x + 5, b.y + 5);
     };
-    // Math.random 고정(배열이면 차례로). 소환 결과를 장면마다 같게 만든다
+    // Math.random 고정(배열이면 차례로, 다 쓰면 0.5). 소환 결과를 장면마다 같게 만든다
     window.withRandom = (v, fn) => {
         const old = Math.random;
         const list = Array.isArray(v) ? v.slice() : null;
-        Math.random = () => (list ? list.shift() : v);
+        Math.random = () => (list ? (list.length ? list.shift() : 0.5) : v);
+        try { return fn(); } finally { Math.random = old; }
+    };
+    // 씨앗으로 정한 난수열(mulberry32)로 바꿔 여러 번 소환해도 장면이 매번 같게 한다
+    window.seededRandom = (seed, fn) => {
+        const old = Math.random;
+        let a = seed >>> 0;
+        Math.random = () => {
+            a = (a + 0x6D2B79F5) >>> 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
         try { return fn(); } finally { Math.random = old; }
     };
     window.advance = seconds => {
         for (let i = 0; i < Math.round(seconds * 60); i++) { UI.update(1 / 60); Game.update(1 / 60); }
     };
-    window.benchCenter = i => { const r = UI.benchRect(i); return [r.x + r.w / 2, r.y + r.h / 2]; };
     window.cellCenter = (c, r) => [tileX(c) * WORLD_ZOOM, tileY(r) * WORLD_ZOOM];
-    // 끌기 장면 공통 판: 맵에 오크 경비병(6,6)·스켈레톤 궁수(6,4)·암흑 마법사(10,5), 대기 칸에 일반 셋과 희귀 하나
+    // 끌기 장면 공통 판: 오크 경비병(6,6)·스켈레톤 궁수(6,4)·암흑 마법사(10,5)와 끌어 쓸 암흑 마법사(3,5),
+    // 오크 경비병(13,6), 저주 사수(11,5), 오크 광전사(9,2)
     window.setupBoard = () => {
         pressButton('start');
         Game.gold = 300;
         Game.place('orc_guard', 6, 6);
         Game.place('skeleton_archer', 6, 4);
         Game.place('dark_mage', 10, 5);
-        Game.bench = ['dark_mage', 'orc_guard', 'skeleton_archer', 'curse_shooter', null];
+        Game.place('dark_mage', 3, 5);
+        Game.place('orc_guard', 13, 6);
+        Game.place('curse_shooter', 11, 5);
+        Game.place('orc_berserker', 9, 2);
         advance(1.6); // 오크가 길로 걸어 나가고 설치 효과가 사라진다
         Fx.reset();
     };
