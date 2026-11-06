@@ -212,8 +212,8 @@ function monsterDeathAbilities(m) {
 
 function createMonster(type, col, row) {
     const m = {
-        kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: tileX(col), y: tileY(row),
-        homeX: tileX(col), homeY: tileY(row), rally: null, moving: false,
+        kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: monsterHomeX(type, col), y: monsterHomeY(type, row),
+        homeX: monsterHomeX(type, col), homeY: monsterHomeY(type, row), rally: null, moving: false,
         tier: 1, branch: null, invested: MONSTERS[type].cost,
         rank: 0, xp: 0, rankUp: 0, // rank는 MONSTER_RANKS 번호, rankUp은 랭크가 오른 연출의 남은 초
         equip: null, // 낀 장비 id(EQUIPMENT)
@@ -222,7 +222,7 @@ function createMonster(type, col, row) {
     };
     // 발끝이 용사가 걷는 길 선에 오도록 칸 가운데 기준 위치를 발 높이만큼 올려 둔다
     if (m.blocks) {
-        const r = rallyPoint(col, row);
+        const r = nearestPathPoint(m.homeX, m.homeY);
         m.rally = { route: r.route, d: r.d, x: r.x, y: r.y - MONSTER_FOOT + 10 };
     }
     applyMonsterStats(m, true);

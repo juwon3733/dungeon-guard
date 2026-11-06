@@ -607,8 +607,31 @@ const Render = {
     // 서 있는 몬스터 한 마리: 그림자와 그림. 건설 모드의 반투명 그림에도 쓴다
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
-        this.shadow(ctx, m.x, footY - 2, 33, 12);
+        const w = def.art.cells ? def.art.cells[0] : 1;
+        this.shadow(ctx, m.x, footY - 2, w > 1 ? 44 * w : 33, w > 1 ? 15 * w : 12);
+        ctx.save();
+        this.monsterMotion(ctx, def, m, footY);
         this.plSprite(ctx, img, def.art, clip, m.dir, m.x, footY);
+        ctx.restore();
+    },
+
+    // 프레임이 적은 Asteria 그림(art.breathe)의 움직임: 발끝을 기준으로 숨 쉬고, 공격 때 앞으로 내지른다
+    monsterMotion(ctx, def, m, footY) {
+        if (!def.art.breathe) return;
+        let dx = 0;
+        let dy = 0;
+        let grow = 0;
+        if (m.atkPose > 0) {
+            const k = Math.sin(Math.PI * (1 - m.atkPose / (m.atkPoseMax || m.atkPose)));
+            const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[m.dir] || [0, 1];
+            dx = dir[0] * k * 18;
+            dy = dir[1] * k * 9;
+            grow = k * 0.05;
+        }
+        const breath = m.moving ? Math.abs(Math.sin(m.anim * 9)) * 0.03 : Math.sin(Game.time * 2.2 + m.homeX * 0.013) * 0.016;
+        ctx.translate(m.x + dx, footY + dy);
+        ctx.scale(1 + grow - breath * 0.5, 1 + grow + breath);
+        ctx.translate(-m.x, -footY);
     },
 
     drawMonster(ctx, m) {
@@ -664,6 +687,7 @@ const Render = {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
             ctx.globalAlpha = 0.45 + Math.sin(Game.time * 9 + m.x) * 0.15;
+            this.monsterMotion(ctx, def, m, footY);
             this.plSprite(ctx, Assets.tinted(name, '#ff2a12', 1), def.art, clip, m.dir, m.x, footY);
             ctx.restore();
         }
@@ -928,7 +952,7 @@ const Render = {
                 const name = `${MONSTERS[p.fromTypes[i]].sprite}/rotations/south`;
                 const white = Math.round(Math.min(1, k * 1.6) * 4) / 4; // 색 입힌 사본 캐시가 늘지 않게 4단계로 끊는다
                 const img = white > 0 ? Assets.tinted(name, '#ffffff', white) : Assets.get(name);
-                this.sprite(ctx, img, x, y + 60 * (1 - 0.6 * e), PIXEL_SCALE * (1 - 0.6 * e));
+                this.sprite(ctx, img, x, y + 60 * (1 - 0.6 * e), MONSTERS[p.fromTypes[i]].art.scale * (1 - 0.6 * e));
             });
             return;
         }
@@ -999,7 +1023,7 @@ const Render = {
             const name = `${MONSTERS[p.type].sprite}/rotations/south`;
             ctx.save();
             ctx.globalAlpha = 1 - t / 0.3;
-            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 60, PIXEL_SCALE + (1 - t / 0.3) * 1.8);
+            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 60, MONSTERS[p.type].art.scale * (1 + (1 - t / 0.3) * 0.6));
             ctx.restore();
         }
         // 결과 이름과 등급: 합치기는 언제나, 소환은 희귀 이상만
@@ -1239,13 +1263,15 @@ const Render = {
         const cell = UI.drag && UI.hoverCell;
         if (!cell || Game.state === 'title') return;
         const ok = UI.canPlaceAt(cell.col, cell.row);
+        // 큰 몬스터는 차지할 칸 전체를 보여 준다
+        const [cw, ch] = monsterCells(UI.drag.type);
         const x = cell.col * TILE;
-        const y = MAP_TOP + cell.row * TILE;
+        const y = MAP_TOP + (cell.row - ch + 1) * TILE;
         ctx.lineWidth = 4;
         ctx.strokeStyle = ok ? '#ffe08a' : '#ff5a6e';
-        ctx.strokeRect(x + 5, y + 5, TILE - 10, TILE - 10);
+        ctx.strokeRect(x + 5, y + 5, TILE * cw - 10, TILE * ch - 10);
         ctx.fillStyle = ok ? 'rgba(255,224,138,0.18)' : 'rgba(255,60,80,0.3)';
-        ctx.fillRect(x + 5, y + 5, TILE - 10, TILE - 10);
+        ctx.fillRect(x + 5, y + 5, TILE * cw - 10, TILE * ch - 10);
     },
 
     rangeRing(ctx, x, y, radius, color) {

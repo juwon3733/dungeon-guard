@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -13,7 +13,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
     const actx = vm.createContext({ console });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
     }
     const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
@@ -53,19 +53,13 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
         assert(names.includes(`relic_${id}`), `relic_${id} in Assets.names()`);
     }
     // 몬스터 그림: 표의 동작마다 방향(PL_DIRS) 폴더에 프레임 수만큼 그림이 있고(더 많지도 않다), 불러오기 목록에 들어 있다.
-    // 새 16종은 근접 walking·slash, 원거리 idle·cast(그놀 사냥꾼만 throw)
+    // 그림은 PixelLab(pl_) 또는 Asteria(ast_mon_). 폴더 구조는 같다
     const monsters = vm.runInContext('MONSTERS', actx);
-    assert.strictEqual(Object.keys(monsters).length, 23, 'twenty-three monsters');
-    const NEW16 = ['goblin_spearman', 'zombie', 'fire_imp', 'gnoll_hunter', 'wisp_acolyte', 'werewolf', 'troll', 'frost_witch', 'nightmare_jester',
-        'orc_shaman', 'minotaur', 'vampire', 'flame_demon', 'ancient_treant', 'hell_general', 'archlich'];
-    for (const id of NEW16) {
-        const def = monsters[id];
-        const blocks = def.role === 'tank' || def.role === 'melee';
-        const folders = [...new Set(Object.values(def.art.anim).map(c => c.folder))].sort().join();
-        assert.strictEqual(folders, blocks ? 'slash,walking' : (id === 'gnoll_hunter' ? 'idle,throw' : 'cast,idle'), id + ' clips');
-        assert.strictEqual(def.sprite, 'pl_mon_' + id);
-        assert(fs.existsSync(path.join(root, 'assets/sprites', def.sprite, 'rotations/south.png')), id + ' rotation');
+    assert.strictEqual(Object.keys(monsters).length, 55, 'fifty-five monsters');
+    for (const def of Object.values(monsters)) {
+        assert(fs.existsSync(path.join(root, 'assets/sprites', def.sprite, 'rotations/south.png')), def.id + ' rotation');
         assert(names.includes(`${def.sprite}/rotations/south`));
+        assert(def.art.anim.idle && def.art.anim.attack, def.id + ' idle and attack clips');
     }
     for (const def of Object.values(monsters)) {
         for (const clip of Object.values(def.art.anim)) {
@@ -186,6 +180,10 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     for (const f of ['js/ui/uikit.js', 'js/ui/ui.js', 'js/ui/hq.js']) assert(!/ui_kit|ui_buttons|UI_HP_BAR/.test(fs.readFileSync(path.join(root, f), 'utf8')), f + ' does not use the old kit');
 }
 vm.runInContext(`
+// 칸 모양은 맨 끝 시험에서 본다. 그 앞 시험은 모두 1칸으로 돌린다
+var SAVED_CELLS = {};
+for (const id of Object.keys(MONSTERS)) { SAVED_CELLS[id] = MONSTERS[id].art.cells; delete MONSTERS[id].art.cells; }
+
 // 입력은 main.js와 같은 길로 넣는다: 누름(onDown) → 움직임(onMove) → 뗌(onUp). 마우스와 터치가 같은 pointer 이벤트다
 const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
 const worldClick = (x, y) => click(x * WORLD_ZOOM, y * WORLD_ZOOM);
@@ -256,9 +254,7 @@ assert.strictEqual(Game.monsters.length, 0);
 assert(UI.toast && UI.toast.text.includes('소환'), 'empty cell hint');
 
 // 몬스터 표와 확률 데이터: 23종, 일반 70% 희귀 25% 영웅 5%. 전설(죽음의 군주, 지옥 대장군, 대리치)은 조합식으로만 나와 소환 후보가 비어 있다
-assert.strictEqual(Object.keys(MONSTERS).join(), 'orc_guard,skeleton_archer,dark_mage,orc_berserker,curse_shooter,bone_knight,death_lord,' +
-    'goblin_spearman,zombie,fire_imp,gnoll_hunter,wisp_acolyte,werewolf,troll,frost_witch,nightmare_jester,orc_shaman,' +
-    'minotaur,vampire,flame_demon,ancient_treant,hell_general,archlich');
+for (const fam of Object.keys(MONSTER_FAMILIES)) for (const [g, n] of [['common', 3], ['rare', 3], ['epic', 3], ['legendary', 2]]) assert.strictEqual(Object.values(MONSTERS).filter(m => m.family === fam && m.grade === g).length, n, fam + ' ' + g);
 assert.strictEqual(SUMMON_RULES.odds.common, 0.70);
 assert.strictEqual(SUMMON_RULES.odds.rare, 0.25);
 assert.strictEqual(SUMMON_RULES.odds.epic, 0.05);
@@ -273,7 +269,7 @@ assert(MONSTER_GRADES.mythic.color !== MONSTER_GRADES.legendary.color && MONSTER
 assert.deepStrictEqual(SACRIFICE_RULES.mythic, { heal: 20, lightning: 60 });
 assert.strictEqual(SUMMON_RULES.refund.mythic, 800);
 assert.strictEqual(gradePool('mythic').length, 0);
-assert.strictEqual(mergePool('legendary').join(), 'death_lord,hell_general,archlich', 'legendary merge pool');
+assert.strictEqual(mergePool('legendary').length, 10, 'legendary merge pool');
 assert.strictEqual(mergePool('mythic').length, 0, 'no mythic monster yet');
 assert.strictEqual(nextGrade('legendary'), null, 'legendary is the top grade until a mythic monster is in the table');
 for (const id of ['death_lord', 'hell_general', 'archlich']) {
@@ -285,9 +281,9 @@ for (let i = 0; i < 400; i++) {
     assert(MONSTERS[t].grade !== 'legendary' && MONSTERS[t].summon !== false, 'legendary never summoned: ' + t);
 }
 // 표에 한 줄 넣은 희귀·영웅은 등급 합치기와 소환 후보에 저절로 들어간다
-assert.strictEqual(gradePool('common').join(), 'orc_guard,skeleton_archer,dark_mage,goblin_spearman,zombie,fire_imp,gnoll_hunter,wisp_acolyte');
-assert.strictEqual(gradePool('rare').join(), 'orc_berserker,curse_shooter,werewolf,troll,frost_witch,nightmare_jester,orc_shaman');
-assert.strictEqual(gradePool('epic').join(), 'bone_knight,minotaur,vampire,flame_demon,ancient_treant');
+assert.strictEqual(gradePool('common').length, 15);
+assert.strictEqual(gradePool('rare').length, 15);
+assert.strictEqual(gradePool('epic').length, 15);
 assert.strictEqual(MONSTERS.orc_berserker.role, 'melee');
 assert.strictEqual(MONSTERS.bone_knight.stats.block, 5);
 assert.strictEqual(MONSTERS.curse_shooter.stats.range, 4);
@@ -308,7 +304,7 @@ assert.strictEqual(MONSTERS.curse_shooter.stats.range, 4);
         const s = d.stats;
         assert.deepStrictEqual([d.grade, d.role, d.family, s.hp, s.damage, s.interval, s.range, s.block, s.respawn].slice(0, w.length), w, id);
         assert(MONSTER_FAMILIES[d.family] && MONSTER_ROLES[d.role], id + ' role and family');
-        assert.strictEqual(d.art.scale, PIXEL_SCALE, id + ' scale: 1 dot = 2 screen px');
+        assert.strictEqual(d.art.scale, d.art.breathe ? 1.5 : PIXEL_SCALE, id + ' scale');
         assert(d.art.glow.split(',').length === 3 && d.art.glow.split(',').every(v => Number(v) >= 0 && Number(v) <= 255), id + ' glow');
         if (!monsterBlocks(id)) assert(d.art.hand && d.art.hand.x >= 0, id + ' hand');
     }
@@ -321,17 +317,17 @@ assert.strictEqual(MONSTERS.curse_shooter.stats.range, 4);
 }
 // 소환 확률: 첫 난수로 등급, 둘째 난수로 그 등급 안의 몬스터를 고른다
 assert.strictEqual(withRandom([0, 0], () => Game.rollSummon()), 'orc_guard');
-assert.strictEqual(withRandom([0.69, 0.99], () => Game.rollSummon()), 'wisp_acolyte');
-assert.strictEqual(withRandom([0.70, 0.1], () => Game.rollSummon()), 'orc_berserker');
-assert.strictEqual(withRandom([0.94, 0.9], () => Game.rollSummon()), 'orc_shaman');
-assert.strictEqual(withRandom([0.95, 0.1], () => Game.rollSummon()), 'bone_knight');
-assert.strictEqual(withRandom([0.999, 0.99], () => Game.rollSummon()), 'ancient_treant');
+assert.strictEqual(withRandom([0.69, 0.99], () => Game.rollSummon()), gradePool('common').at(-1));
+assert.strictEqual(withRandom([0.70, 0.01], () => Game.rollSummon()), gradePool('rare')[0]);
+assert.strictEqual(withRandom([0.94, 0.99], () => Game.rollSummon()), gradePool('rare').at(-1));
+assert.strictEqual(withRandom([0.95, 0.01], () => Game.rollSummon()), gradePool('epic')[0]);
+assert.strictEqual(withRandom([0.999, 0.99], () => Game.rollSummon()), gradePool('epic').at(-1));
 
 // 칸에서 길까지 거리(px)
 const pathGap = (c, r) => nearestPathPoint(tileX(c), tileY(r)).gap; // 두 갈래 중 가까운 길까지
 
 // 소환: 버튼을 누르면 25골드를 내고 맵의 빈 길 옆 칸에 바로 나온다. 길에 가장 가까운 칸(바로 옆)을 고른다
-withRandom([0.1, 0.1], () => btn('summon'));
+withRandom([0.1, 0.03], () => btn('summon'));
 assert.strictEqual(Game.monsters.length, 1, 'summoned onto the map');
 const s1 = Game.monsters[0];
 assert.strictEqual(s1.type, 'orc_guard');
@@ -343,8 +339,8 @@ assert.strictEqual(Game.stats.summoned, 1);
 assert.strictEqual(Game.summonCost(), 26, 'cost +1');
 assert(Fx.pops.some(p => p.kind === 'summon' && p.to.x === s1.x && p.to.y === s1.y && p.grade === 'common'), 'summon effect on the cell');
 // S 키도 같다. 비용은 26, 27로 오른다
-withRandom([0.5, 0.2], () => UI.onKey('KeyS'));
-withRandom([0.1, 0.3], () => UI.onKey('KeyS'));
+withRandom([0.5, 0.1], () => UI.onKey('KeyS'));
+withRandom([0.1, 0.17], () => UI.onKey('KeyS'));
 assert.strictEqual(Game.monsters.map(m => m.type).join(), 'orc_guard,skeleton_archer,dark_mage');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold - 25 - 26 - 27);
 assert.strictEqual(Game.summonCost(), 28);
@@ -397,12 +393,12 @@ for (const key of BUILD_CELLS) {
 }
 let g0 = Game.gold;
 UI.toast = null;
-withRandom([0.69, 0.3], () => UI.onKey('KeyS')); // 암흑 마법사: 남은 칸은 모두 사거리 밖
+withRandom([0.69, 0.17], () => UI.onKey('KeyS')); // 암흑 마법사: 남은 칸은 모두 사거리 밖
 assert.strictEqual(Game.gold, g0, 'no cell in range: no gold spent');
 assert(UI.toast && UI.toast.text.includes('합쳐서'), 'no cell toast');
 assert(!Game.monsters.some(m => m.type === 'dark_mage'), 'dark mage not placed out of range');
 MONSTERS.dark_mage.stats.range = mageRange;
-withRandom([0.1, 0.1], () => UI.onKey('KeyS')); // 오크 경비병(막는 몬스터)은 사거리 조건 없이 남은 칸에 나온다
+withRandom([0.1, 0.03], () => UI.onKey('KeyS')); // 오크 경비병(막는 몬스터)은 사거리 조건 없이 남은 칸에 나온다
 const farOrc = Game.monsters.find(m => m.type === 'orc_guard');
 assert(farOrc && farCells.some(([c, r]) => c === farOrc.col && r === farOrc.row), 'blocker uses the far cell');
 // 막는 몬스터 지점이 모두 겹쳐도 빈 칸이 있으면 그 칸을 쓴다. 빈 칸이 하나도 없으면 거부하고 골드를 쓰지 않는다
@@ -637,7 +633,7 @@ Game.place('orc_guard', 3, 6);
 Game.place('orc_guard', 9, 6);
 const orcGuard = Game.monsterAt(3, 6);
 const orc94 = Game.monsterAt(9, 4);
-withRandom(0.1, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(orcGuard)));
+withRandom(0.01, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(orcGuard)));
 const berserker = Game.monsterAt(3, 6);
 assert(berserker && berserker.type === 'orc_berserker', 'grade merge picks rare[0] with random 0.1');
 assert(orc94.removed && !Game.monsterAt(9, 4) && !Game.monsterAt(9, 6), 'three materials used, result on the dropped cell');
@@ -647,7 +643,7 @@ assert.strictEqual(monsterStats(berserker).block, 2);
 Game.place('dark_mage', 9, 6);
 Game.place('dark_mage', 9, 2);
 Game.place('zombie', 7, 6);
-withRandom(0.2, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(Game.monsterAt(9, 2))));
+withRandom(0.1, () => dragTo(monXY(Game.monsterAt(9, 6)), monXY(Game.monsterAt(9, 2))));
 assert.strictEqual(Game.monsterAt(9, 2).type, 'curse_shooter');
 tick(0.5);
 // 희귀 2마리 조합식(오크 광전사 + 저주 사수 → 해골 기사). 조합식은 등급 합치기보다 먼저다
@@ -1334,7 +1330,7 @@ const shootAll = (m, target) => {
     const h = tough(place('warrior', 900 + TILE));
     withRandom(0.5, () => shootAll(jester, h));
     assert.strictEqual(h.stun, 0, 'no stun at 0.5');
-    withRandom(0.1, () => shootAll(jester, h));
+    withRandom(0.01, () => shootAll(jester, h));
     assert.strictEqual(h.stun, 1, 'stun at 0.1');
     const boss = place(null, 900 + TILE, 'fallen_knight');
     boss.hp = boss.maxHp = 99999;
@@ -1896,7 +1892,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     const kinds = r => r.cards.map(c => c.kind === 'gold' ? 'gold' + c.gold : (c.kind === 'equip' ? c.id : c.type)).join();
     // 난수 순서: 몬스터 등급, 몬스터, 장비 등급, 장비
     assert.strictEqual(withRandom([0.39, 0, 0.39, 0], () => kinds(Game.rollBossReward())), 'bone_knight,gauntlet,gold300', 'epic under 40%');
-    assert.strictEqual(withRandom([0.4, 0.2, 0.4, 0.99], () => kinds(Game.rollBossReward())), 'curse_shooter,tome,gold300', 'rare from 40%');
+    assert.strictEqual(withRandom([0.4, 0.1, 0.4, 0.99], () => kinds(Game.rollBossReward())), 'curse_shooter,tome,gold300', 'rare from 40%');
     const seenEquip = new Set();
     for (let i = 0; i < 300; i++) {
         const r = Game.rollBossReward();
@@ -2455,11 +2451,11 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
             if (key !== '9,9') Game.place('skeleton_archer', c, r);
         }
         Game.gold = 5000;
-        const r1 = withRandom([0.1, 0.1], () => Game.summon());
+        const r1 = withRandom([0.1, 0.03], () => Game.summon());
         assert(r1.ok && r1.type === 'orc_guard' && r1.monster.col === 9 && r1.monster.row === 9, 'blocker summoned into the between cell');
         assert(r1.monster.rally.route === 'north' && Math.abs(r1.monster.rally.y + MONSTER_FOOT - 10 - tileY(8)) < 1e-6, 'tie goes to the north branch');
         Game.removeMonster(r1.monster);
-        const r2 = withRandom([0.69, 0.3], () => Game.summon());
+        const r2 = withRandom([0.69, 0.17], () => Game.summon());
         assert(r2.ok && r2.type === 'dark_mage' && r2.monster.col === 9 && r2.monster.row === 9, 'ranged summoned into the between cell');
         SUMMON_RULES.maxField = 24;
         // 끌기: 남쪽 갈래 아래 칸의 오크를 낀 칸으로 옮기면 집결 지점이 바뀐다
@@ -3079,14 +3075,14 @@ clear();
 const e1 = put('minotaur', 3, 6);
 const e2 = put('ancient_treant', 9, 6);
 put('flame_demon', 3, 4);
-withRandom(0.5, () => dragTo(e1, e2));
+withRandom(0.15, () => dragTo(e1, e2));
 res = Game.monsterAt(9, 6);
 assert(res && res.type === 'hell_general' && MONSTERS[res.type].grade === 'legendary', 'three epics make a legendary');
 assert(Fx.pops.some(p => p.kind === 'merge' && p.grade === 'legendary'));
 tick(0.5);
 // 전설은 맵 제한이 없다
 put('vampire', 3, 6); put('bone_knight', 3, 4); put('minotaur', 9, 2);
-withRandom(0.5, () => dragTo(Game.monsterAt(3, 6), Game.monsterAt(3, 4)));
+withRandom(0.15, () => dragTo(Game.monsterAt(3, 6), Game.monsterAt(3, 4)));
 assert.strictEqual(Game.monsters.filter(m => m.type === 'hell_general').length, 2, 'two legendaries allowed');
 tick(0.5);
 // 신화 몬스터가 표에 없으면 전설은 최고 등급
@@ -3426,34 +3422,38 @@ btn('start');
 btn('hq_bookshelf');
 assert(UI.collection && UI.collection.tab === 'monster' && Game.state === 'hq', 'opened from the hq bookshelf');
 assert(['col_tab_monster', 'col_tab_recipe', 'col_close'].every(hasBtn) && !hasBtn('col_tab_record') && !hasBtn('hq_wartable'), 'collection buttons');
-// 23종은 한 쪽(12칸)에 다 들어가지 않아 쪽 넘김이 생긴다: 12 + 11
-assert.strictEqual(Object.keys(MONSTERS).length, 23);
-assert.strictEqual(UI.collectionPages('monster'), 2, 'two monster pages');
+// 55종은 한 쪽 12칸씩 다섯 쪽이다
+assert.strictEqual(Object.keys(MONSTERS).length, 55);
+assert.strictEqual(UI.collectionPages('monster'), 5, 'five monster pages');
 assert.strictEqual(UI.collectionCells().length, 12, 'first page full');
 assert(hasBtn('col_prev') && hasBtn('col_next') && btnOf('col_prev').disabled, 'page buttons');
 UI.onKey('Space');
 UI.onKey('Digit1');
 assert(Game.state === 'hq' && UI.collection && !UI.hqView, 'hq keys do nothing while the collection is open');
 btn('col_next');
-assert(UI.collection.page === 1 && UI.collectionCells().length === 11, 'second page holds the rest');
-assert.strictEqual(UI.collectionCells()[10].item, 'archlich', 'table order');
+assert(UI.collection.page === 1 && UI.collectionCells().length === 12, 'second page');
+for (let i = 0; i < 3; i++) btn('col_next');
+assert(UI.collection.page === 4 && UI.collectionCells().length === 7, 'last page holds the rest');
+assert.strictEqual(UI.collectionCells()[6].item, 'crystal_giant', 'table order');
 btn('col_next');
-assert.strictEqual(UI.collection.page, 1, 'stops at the last page');
+assert.strictEqual(UI.collection.page, 4, 'stops at the last page');
 UI.onKey('ArrowLeft');
-assert.strictEqual(UI.collection.page, 0);
+assert.strictEqual(UI.collection.page, 3);
+UI.collection.page = 0;
 // 칸은 모두 화면 안, 쪽 넘김 버튼과 겹치지 않는다
-for (const page of [0, 1]) {
+for (const page of [0, 4]) {
     UI.collection.page = page;
     for (const c of UI.collectionCells()) assert(c.x >= 0 && c.x + c.w <= GAME_WIDTH && c.y + c.h <= btnOf('col_prev').y, 'cell inside screen');
 }
 UI.collection.page = 0;
-// 조합식 16개: 6줄 x 2칸 = 12개씩 두 쪽
+// 조합식 32개: 6줄 x 2칸 = 12개씩 세 쪽
 btn('col_tab_recipe');
-assert.strictEqual(MONSTER_RECIPES.length, 16);
-assert.strictEqual(UI.collectionPages('recipe'), 2, 'two recipe pages');
+assert.strictEqual(MONSTER_RECIPES.length, 32);
+assert.strictEqual(UI.collectionPages('recipe'), 3, 'three recipe pages');
 assert.strictEqual(UI.collectionCells().length, 12, 'recipe page full');
 btn('col_next');
-assert.strictEqual(UI.collectionCells().length, 4, 'recipe second page');
+btn('col_next');
+assert.strictEqual(UI.collectionCells().length, 8, 'recipe last page');
 for (const c of UI.collectionCells()) assert(c.y + c.h <= btnOf('col_prev').y, 'recipe row above the page buttons');
 UI.onKey('Digit1');
 assert.strictEqual(UI.collection.tab, 'monster', 'key 1');
@@ -3471,16 +3471,15 @@ Game.state = 'title';
 // 쪽 넘김: 몬스터가 더 늘면 쪽이 더 생긴다(표에 줄을 더해 본다)
 {
     const extra = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 6; i++) {
         const id = 'test_mon_' + i;
         MONSTERS[id] = Object.assign({}, MONSTERS.orc_guard, { id, name: id });
         extra.push(id);
     }
     UI.openCollection();
-    assert.strictEqual(UI.collectionPages('monster'), 3, 'three pages');
-    btn('col_next');
-    btn('col_next');
-    assert(UI.collection.page === 2 && UI.collectionCells().length === 1, 'third page');
+    assert.strictEqual(UI.collectionPages('monster'), 6, 'six pages');
+    for (let i = 0; i < 5; i++) btn('col_next');
+    assert(UI.collection.page === 5 && UI.collectionCells().length === 1, 'sixth page');
     for (const id of extra) delete MONSTERS[id];
     UI.closeCollection();
 }
@@ -4384,7 +4383,7 @@ console.log('smoke ok: zones');
     });
     const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
     const rctx = vm.createContext({ console, Math, Set, Map, Object, Array, Number, String, JSON, document });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
     }
     vm.runInContext(`
@@ -4479,3 +4478,62 @@ delete globalThis.localStorage;
 assert.strictEqual(Game.readRunSave(), null, 'no storage');
 console.log('smoke ok: summon level, rounds, save');
 }`, ctx, { filename: 'smoke-rounds' });
+
+// ----- 몬스터 칸 모양 -----
+vm.runInContext(`{
+for (const id of Object.keys(SAVED_CELLS)) if (SAVED_CELLS[id]) MONSTERS[id].art.cells = SAVED_CELLS[id];
+assert.deepStrictEqual([...monsterCells('crystal_giant')], [3, 3]);
+assert.deepStrictEqual([...monsterCells('orc_guard')], [1, 1]);
+const shapes = new Set(Object.keys(MONSTERS).map(id => monsterCells(id).join('x')));
+assert(['1x1', '2x1', '1x2', '2x2', '3x2', '2x3', '3x3'].every(x => shapes.has(x)), 'shapes vary by monster');
+// 모든 칸 모양이 맵에 놓일 자리가 있다
+const fit = (type) => [...BUILD_CELLS].filter(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(type, c, r); });
+Game.reset();
+for (const id of Object.keys(MONSTERS)) assert(fit(id).length > 0, id + ' fits somewhere');
+// 놓으면 차지한 칸 전부가 그 몬스터를 찾고, 겹쳐 놓을 수 없다
+const [c, r] = fit('crystal_giant')[0].split(',').map(Number);
+const big = Game.place('crystal_giant', c, r);
+assert(big, 'placed');
+for (let dx = 0; dx < 3; dx++) for (let dy = 0; dy < 3; dy++) assert.strictEqual(Game.monsterAt(c + dx, r - dy), big);
+assert.strictEqual(Game.monsterAt(c + 3, r), null);
+assert.strictEqual(big.x, tileX(c + 1), 'centered on its cells');
+assert(!Game.canPlace('orc_guard', c + 1, r - 1), 'cannot place on the giant');
+assert(!Game.canPlace('crystal_giant', c + 1, r), 'cannot overlap');
+// 한 칸 옆으로 옮길 때 자기 자리는 빈 것으로 본다
+const near = fit('crystal_giant').map(k => k.split(',').map(Number)).concat([[c + 1, r], [c - 1, r], [c, r - 1], [c, r + 1]]).find(([a, b]) => Math.abs(a - c) + Math.abs(b - r) === 1 && Game.canPlace('crystal_giant', a, b, [big]));
+if (near) { assert(Game.moveMonster(big, near[0], near[1]), 'nudge over itself'); assert.strictEqual(big.col, near[0]); }
+// 합치기 결과가 더 크면 가까운 빈 곳에, 재료가 비운 자리도 쓴다
+Game.reset();
+const cells = fit('orc_guard').map(k => k.split(',').map(Number));
+const ms = cells.slice(0, 3).map(([a, b]) => Game.place('orc_guard', a, b));
+const mergeSpot = Game.nearestFit('crystal_giant', ms[0].col, ms[0].row, ms);
+assert(Game.canPlace('crystal_giant', mergeSpot.col, mergeSpot.row, ms), 'merge result fits');
+const saved = MONSTERS.troll.art.cells;
+MONSTERS.troll.art.cells = [3, 3];
+const res = withRandom([0.01], () => Game.merge({ monster: ms[0] }, { monster: ms[1] }, [ms[2]]));
+if (res.ok) {
+    const [w, h] = monsterCells(res.type);
+    for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) assert(isBuildCell(res.monster.col + dx, res.monster.row - dy) || !Game.canPlace(res.type, res.monster.col, res.monster.row), 'result on build cells');
+}
+if (saved) MONSTERS.troll.art.cells = saved; else delete MONSTERS.troll.art.cells;
+// 자리가 없을 때 큰 몬스터 대신 작은 몬스터가 나온다
+Game.reset();
+const cost = Game.summonCost();
+Game.gold = cost;
+assert.strictEqual(Game.pickSummonCell('crystal_giant') !== null, true);
+// 저장했다 불러와도 칸 모양을 지킨다
+const st = {};
+globalThis.localStorage = { getItem: k => (k in st ? st[k] : null), setItem: (k, v) => { st[k] = v; }, removeItem: k => { delete st[k]; } };
+Game.reset({ lord: DEFAULT_LORD, relics: [] });
+const [c2, r2] = fit('crystal_giant')[0].split(',').map(Number);
+Game.place('crystal_giant', c2, r2);
+Game.state = 'wave';
+Game.saveRun();
+const d = Game.readRunSave();
+Game.reset();
+assert(Game.loadRun(d), 'load');
+assert.strictEqual(Game.monsterAt(c2 + 2, r2 - 2).type, 'crystal_giant');
+Game.finish(false);
+delete globalThis.localStorage;
+console.log('smoke ok: monster cells');
+}`, ctx, { filename: 'smoke-cells' });

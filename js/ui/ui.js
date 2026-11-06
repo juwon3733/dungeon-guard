@@ -860,7 +860,7 @@ const UI = {
         if (!this.drag) return false;
         const src = this.drag.src;
         if (src.monster && src.monster.col === col && src.monster.row === row) return true;
-        return Game.canPlace(this.drag.type, col, row);
+        return Game.canPlace(this.drag.type, col, row, src.monster ? [src.monster] : null);
     },
 
     // 화면 좌표 아래 놓을 곳: { throne } | { monster } | { cell: {col, row} } | null(하단 바 등)
@@ -873,7 +873,9 @@ const UI = {
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
         const m = Game.monsterAt(col, row) || Game.monsterNear(wx, wy);
-        if (m) return { monster: m };
+        // 큰 몬스터를 자기 칸 위로 조금 옮길 때는 자기 자신이 아니라 칸에 놓는 것이다
+        const self = this.drag && this.drag.src.monster === m;
+        if (m && !self) return { monster: m };
         return { cell: { col, row } };
     },
 
@@ -895,7 +897,7 @@ const UI = {
         }
         const { col, row } = t.cell;
         if (src.monster.col === col && src.monster.row === row) return { action: 'back' };
-        if (Game.canPlace(d.type, col, row)) return { action: 'place', col, row };
+        if (Game.canPlace(d.type, col, row, [src.monster])) return { action: 'place', col, row };
         let reason = 'cell';
         if (isPathCell(col, row)) reason = 'path';
         return { action: 'invalid', reason, col, row };
@@ -2164,6 +2166,19 @@ const UI = {
         ctx.restore();
     },
 
+    // 초상 그림 한 장: PixelLab은 도트 격자가 깨지지 않게 정수 배율로(가운데가 몸통), Asteria 그림은 크기가 제각각이라 전체가 들어가게 맞춘다
+    drawIconImage(ctx, img, def, x, y, size) {
+        if (def.art.breathe) {
+            const k = Math.min(size * 0.94 / img.width, size * 0.94 / img.height);
+            const w = img.width * k;
+            const h = img.height * k;
+            ctx.drawImage(img, x + (size - w) / 2, y + (size - h) / 2, w, h);
+            return;
+        }
+        const s = img.width * Math.max(1, Math.floor(size / img.width));
+        ctx.drawImage(img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+    },
+
     // 몬스터의 rotations/south 그림을 size 크기 네모 안에 그리고, 굵은 등급 테두리를 두른다
     drawMonsterIcon(ctx, type, x, y, size, noFrame) {
         const def = MONSTERS[type];
@@ -2180,8 +2195,7 @@ const UI = {
             ctx.rect(x, y, size, size);
             ctx.clip();
             ctx.imageSmoothingEnabled = false;
-            const s = img.width * Math.max(1, Math.floor(size / img.width)); // 도트 격자가 깨지지 않게 정수 배율로 그린다
-            ctx.drawImage(img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+            this.drawIconImage(ctx, img, def, x, y, size);
             ctx.restore();
         }
         if (noFrame) return;
@@ -3318,8 +3332,7 @@ const UI = {
             ctx.rect(x, y, size, size);
             ctx.clip();
             ctx.imageSmoothingEnabled = false;
-            const s = img.width * Math.max(1, Math.floor(size / img.width));
-            ctx.drawImage(this.silhouette(img), x + (size - s) / 2, y + (size - s) / 2, s, s);
+            this.drawIconImage(ctx, this.silhouette(img), MONSTERS[type], x, y, size);
             ctx.restore();
         }
         UIKit.gradeFrame(ctx, x, y, size, size, '#3a4868', 3);

@@ -156,3 +156,7 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 
 1. 용사 3종, 오크, 몬스터 23종, 정예 4종, 보스 2종, 마왕 3명, 맵 타일, 소품, 장비, 유물, UI 아이콘을 만들어 연결했다.
 2. UI는 Asteria 구성(남색 창, 금선, 은청색 버튼, 금테 칸)으로 바꿨다(`ui_window` 등 48px 틀, `uiicon_*`, 규칙은 `docs/ART_BIBLE.md`).
+
+### Asteria 몬스터 그림 (2026-11-07)
+
+`assets/sprites/ast_mon_<id>/`는 사용자 게임 Asteria 빌드의 몹·보스 그림이다. PixelLab과 같은 폴더 구조이고 `tools/import_asteria_monsters.py`로 다시 만든다. 어떤 몬스터에 어떤 원본을 쓰는지는 그 스크립트의 `ART` 표에 있다.
