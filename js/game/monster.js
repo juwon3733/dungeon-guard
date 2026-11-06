@@ -1,4 +1,4 @@
-// 배치한 몬스터와 몬스터가 쏜 투사체. 동작은 몬스터 id가 아니라 역할(blocks)과 수치로 정한다.
+// 배치한 몬스터와 몬스터가 쏜 투사체. 동작은 몬스터 id가 아니라 역할(blocks), 수치, 능력 종류(abilities)로 정한다.
 // 모든 몬스터는 길 옆 칸(col, row, 곧 homeX, homeY)에 놓는다. x, y는 지금 서 있는 곳이다.
 //   막는 몬스터: 가장 가까운 길 지점(rally)으로 걸어 나가 용사를 붙잡고 싸운다. 쓰러지면 respawn초 뒤 놓은 칸에서 다시 나온다.
 //   그 밖: 놓은 칸에서 사거리 안의 가장 앞선 용사를 공격한다. 공격받지 않는다.
@@ -29,7 +29,40 @@ function monsterStats(m) {
         if (b.beam) stats.beam = true;
         if (b.heavy) stats.heavy = true;
     }
+    const enrage = monsterEnrage(m);
+    if (enrage) stats.interval *= enrage.intervalMul;
     return stats;
+}
+
+// 광폭화 중이면 그 능력을, 아니면 null. 체력이 없는 몬스터(팝업 미리보기, 원거리)와 쓰러진 몬스터는 걸리지 않는다
+function monsterEnrage(m) {
+    const a = monsterAbility(m.type, 'enrage');
+    if (!a || !(m.maxHp > 0) || m.down > 0) return null;
+    return m.hp / m.maxHp <= a.below ? a : null;
+}
+
+// 몬스터의 공격이 용사에게 맞음: 맞은 뒤 걸리는 능력(저주)을 적용한다. 피해를 준 다음에 부른다
+function monsterHitHero(type, hero) {
+    if (hero.dead) return;
+    const curse = monsterAbility(type, 'curseShot');
+    if (curse) curseHero(hero, curse.duration, curse.takenMul);
+}
+
+// 쓰러질 때 능력: 반경 안 용사 기절(보스 제외)
+function monsterDeathAbilities(m) {
+    const a = monsterAbility(m.type, 'deathStun');
+    if (!a) return;
+    for (const h of Game.heroes) {
+        if (h.dead || h.waiting || h.boss) continue;
+        const p = heroWorld(h);
+        if (distance(m.x, m.y + MONSTER_FOOT, p.x, p.y) > a.radius * TILE) continue;
+        applyStun(h, a.duration);
+        Fx.burst(p.x, p.y - 40, '#d9c8ff', 6, 200, 0.4, 5);
+    }
+    Fx.ring(m.x, m.y + MONSTER_FOOT, a.radius * TILE, '#d9c8ff', 0.45);
+    Fx.ring(m.x, m.y + MONSTER_FOOT, a.radius * TILE * 0.6, '#9a6bff', 0.35);
+    Fx.burst(m.x, m.y - 20, '#cdb8ff', 26, 520, 0.5, 6);
+    Fx.addShake(8);
 }
 
 function createMonster(type, col, row) {
@@ -107,6 +140,7 @@ function updateBlockMonster(m, dt) {
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
     damageHero(target, stats.damage, m.x, m.y, '#ffb76b');
+    monsterHitHero(m.type, target);
     Sfx.play('slash');
 }
 
@@ -138,25 +172,26 @@ function fireMonsterShot(m, stats, target) {
     const tp = heroWorld(target);
     const hand = monsterHand(m);
     if (stats.beam) {
-        fireBeam(hand.x, hand.y, stats, tp);
+        fireBeam(hand.x, hand.y, stats, tp, m.type);
     } else if (stats.splash > 0) {
         Game.projectiles.push({
             kind: 'orb', x: hand.x, y: hand.y, tx: tp.x, ty: tp.y - 30, sx: hand.x, sy: hand.y,
             age: 0, time: clamp(distance(hand.x, hand.y, tp.x, tp.y) / 760, 0.25, 0.6),
-            damage: stats.damage, splash: stats.splash * TILE
+            damage: stats.damage, splash: stats.splash * TILE, src: m.type
         });
         Fx.glow(hand.x, hand.y, 50, 'rgba(190,110,255,1)', 0.18);
         Sfx.play('orb');
     } else {
         Game.projectiles.push({
-            kind: 'arrow', x: hand.x, y: hand.y, target, damage: stats.damage,
-            speed: stats.heavy ? 2200 : 1300, big: stats.heavy, trail: 0
+            kind: 'arrow', x: hand.x, y: hand.y, target, damage: stats.damage, src: m.type,
+            speed: stats.heavy ? 2200 : 1300, big: stats.heavy, trail: 0,
+            curse: !!monsterAbility(m.type, 'curseShot') // 저주 화살은 보랏빛 꼬리를 남긴다
         });
         Sfx.play(stats.heavy ? 'snipe' : 'arrow');
     }
 }
 
-function fireBeam(ox, oy, stats, tp) {
+function fireBeam(ox, oy, stats, tp, src) {
     const len = distance(ox, oy, tp.x, tp.y - 30) || 1;
     const dx = (tp.x - ox) / len;
     const dy = (tp.y - 30 - oy) / len;
@@ -171,7 +206,10 @@ function fireBeam(ox, oy, stats, tp) {
         const along = (p.x - ox) * dx + (p.y - 30 - oy) * dy;
         if (along < 0 || along > reach) continue;
         const off = Math.abs((p.x - ox) * dy - (p.y - 30 - oy) * dx);
-        if (off < 42) damageHero(h, stats.damage, ox, oy, '#d7a8ff');
+        if (off < 42) {
+            damageHero(h, stats.damage, ox, oy, '#d7a8ff');
+            monsterHitHero(src, h);
+        }
     }
     Sfx.play('beam');
 }
@@ -184,6 +222,7 @@ function knockDownMonster(m) {
     m.atkPose = 0;
     m.target = null;
     for (const h of Game.heroes) if (h.blocker === m) h.blocker = null;
+    monsterDeathAbilities(m); // 집으로 돌아가기 전, 쓰러진 자리에서 터진다
     Fx.anim('fx_explosion', m.x, m.y - 30, 150, 0.4);
     Fx.burst(m.x, m.y - 40, '#d59560', 14, 320, 0.45, 7);
     Sfx.play('unitDown');
@@ -213,7 +252,9 @@ function updateProjectile(p, dt) {
         const step = p.speed * dt;
         p.angle = Math.atan2(ty - p.y, tx - p.x);
         if (len <= step + 8) {
-            damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : '#ffe36b');
+            damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'));
+            // 타락 유닛의 화살에는 src가 없다
+            if (p.src) monsterHitHero(p.src, t);
             if (p.big) Fx.addShake(5);
             Sfx.play('hit');
             p.done = true;
@@ -226,7 +267,7 @@ function updateProjectile(p, dt) {
             p.trail = 0;
             Fx.particles.push({
                 x: p.x, y: p.y, vx: 0, vy: 0, life: 0.14, max: 0.14,
-                size: p.big ? 6 : 4, color: p.big ? '#ffb07a' : '#b89dff', gravity: 0
+                size: p.big || p.curse ? 6 : 4, color: p.big ? '#ffb07a' : (p.curse ? '#b05cff' : '#b89dff'), gravity: 0
             });
         }
     } else {
@@ -241,7 +282,7 @@ function updateProjectile(p, dt) {
             });
         }
         if (t >= 1) {
-            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff');
+            splashDamage(p.tx, p.ty + 30, p.splash, p.damage, '#d7a8ff', h => monsterHitHero(p.src, h));
             Fx.ring(p.tx, p.ty + 30, p.splash, '#c28bff', 0.3);
             Fx.anim('fx_blastViolet', p.tx, p.ty + 10, p.splash * 2.8, 0.42);
             Fx.glow(p.tx, p.ty, p.splash * 1.5, 'rgba(170,90,255,1)', 0.24);

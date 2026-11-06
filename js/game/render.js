@@ -231,7 +231,9 @@ const Render = {
             this.healthBar(ctx, p.x, p.y - (def.barY || 64), h.hp / h.maxHp, 40, '#ff5a5a');
         }
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 1.4 : 1);
-        if (h.stun > 0) this.stunStars(ctx, p.x, p.y - (h.boss ? BOSSES[h.bossKey].starY : (HEROES[h.type].barY || 64) + 8));
+        const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : (HEROES[h.type].barY || 64) + 8);
+        if (h.stun > 0) this.stunStars(ctx, p.x, headY);
+        if (h.curse > 0) this.curseMark(ctx, p.x, headY - 30, h.curse);
     },
 
     // 직업 그림 보스(대마도사): Asteria 직업 그림을 크게 그린다. 경고(windup) 동안은 주문 동작, 공격은 공격 동작이다
@@ -477,11 +479,21 @@ const Render = {
             ctx.fill();
             ctx.restore();
         }
+        const enraged = !!monsterEnrage(m);
+        if (enraged) this.enrageAura(ctx, m.x, footY, m.x * 0.01);
         const { clip, name } = this.monsterFrame(def, m);
         let img = Assets.get(name);
         if (m.flash > 0) img = Assets.tinted(name, '#ffffff', 0.85);
         else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
         this.monsterBody(ctx, def, m, img, clip);
+        // 광폭화: 몸 위에 붉은 빛을 더한다(밝기는 맥박처럼 오르내린다)
+        if (enraged && !(m.flash > 0)) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.45 + Math.sin(Game.time * 9 + m.x) * 0.15;
+            this.plSprite(ctx, Assets.tinted(name, '#ff2a12', 1), def.art, clip, m.dir, m.x, footY);
+            ctx.restore();
+        }
 
         // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
         this.gradeMark(ctx, m.x, footY + 20, def.grade);
@@ -498,6 +510,60 @@ const Render = {
             this.stunStars(ctx, m.x, footY - def.art.barY - 14);
             UIKit.text(ctx, '정지', m.x, footY - def.art.barY - 40, Math.round(22 / WORLD_ZOOM), '#9fdcff', 'center');
         }
+    },
+
+    // 광폭화 몬스터 발밑과 등 뒤의 붉은 빛, 위로 날리는 불티
+    enrageAura(ctx, x, footY, seed) {
+        const t = Game.time + seed;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const pulse = 0.5 + Math.sin(t * 9) * 0.12;
+        const back = ctx.createRadialGradient(x, footY - 44, 6, x, footY - 44, 86);
+        back.addColorStop(0, `rgba(255,60,30,${pulse * 0.7})`);
+        back.addColorStop(1, 'rgba(255,40,20,0)');
+        ctx.fillStyle = back;
+        ctx.fillRect(x - 86, footY - 130, 172, 172);
+        ctx.fillStyle = `rgba(255,70,40,${pulse * 0.5})`;
+        ctx.beginPath();
+        ctx.ellipse(x, footY, 42, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < 5; i++) {
+            const k = (t * 1.3 + i / 5) % 1;
+            const ex = Math.round(x + Math.sin(i * 2.7 + seed * 3) * 26);
+            const ey = Math.round(footY - 10 - k * 90);
+            ctx.fillStyle = `rgba(255,${120 + i * 20},60,${(1 - k) * 0.9})`;
+            ctx.fillRect(ex - 3, ey - 3, 6, 6);
+        }
+        ctx.restore();
+    },
+
+    // 저주 표식: 용사 머리 위에 떠 있는 보라 눈 문양. 남은 시간이 1초 아래면 깜빡인다
+    curseMark(ctx, x, y, left) {
+        if (left < 1 && Math.floor(Game.time * 8) % 2) return;
+        const bob = Math.round(Math.sin(Game.time * 4 + x) * 3);
+        const cy = y + bob;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(x, cy, 2, x, cy, 30);
+        g.addColorStop(0, 'rgba(190,80,255,0.55)');
+        g.addColorStop(1, 'rgba(190,80,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 30, cy - 30, 60, 60);
+        ctx.restore();
+        // 도트 문양: 어두운 테두리, 보라 마름모, 가운데 밝은 눈
+        const s = 5;
+        const diamond = (r, color) => {
+            ctx.fillStyle = color;
+            for (let i = -r; i <= r; i++) {
+                const w = r - Math.abs(i);
+                ctx.fillRect(x - (w + 1) * s + s / 2, cy + i * s - s / 2, (w * 2 + 1) * s, s);
+            }
+        };
+        diamond(4, '#1a0726');
+        diamond(3, '#a24bff');
+        diamond(1, '#f2d4ff');
+        ctx.fillStyle = '#3a0a52';
+        ctx.fillRect(x - s / 2, cy - s / 2, s, s);
     },
 
     // 등급 마름모: 일반은 작고 흐리게, 희귀 이상은 크고 빛나게

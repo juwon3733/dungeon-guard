@@ -317,6 +317,51 @@ const SCENES = {
         }
     },
 
+    // 몬스터 능력 3개: 광폭화한 오크 광전사(붉은 빛), 저주 사수에게 맞은 용사(머리 위 보라 표식),
+    // 막 쓰러진 해골 기사(고리와 입자, 주변 용사 기절 별. 보스는 기절하지 않는다)
+    abilities: {
+        setup: () => {
+            pressButton('start');
+            Game.gold = 2000;
+            // 셋을 서로 다른 길 옆에 떨어뜨려 놓아 효과가 겹치지 않게 한다
+            const bz = Game.place('orc_berserker', 6, 6);
+            const cs = Game.place('curse_shooter', 9, 5);
+            const bk = Game.place('bone_knight', 14, 7);
+            if (!bz || !cs || !bk) throw new Error('몬스터를 놓지 못했습니다');
+            advance(1.6); // 막는 몬스터가 길로 걸어 나간다
+            Game.waveIndex = 6;
+            Game.startWave();
+            const put = (type, d, lane, bossKey) => {
+                const h = createHero(type, Game.waveIndex, 0, bossKey);
+                Object.assign(h, { waiting: false, d, lane, cast: 99, song: 99 });
+                h.hp = h.maxHp = 99999; // 장면 동안 쓰러지지 않게 한다
+                return h;
+            };
+            const csD = nearestPathDistance(cs.x, cs.y);
+            const kD = bk.rally.d;
+            Game.heroes = [
+                // 광전사가 붙잡은 용사 둘. 광전사가 가리지 않게 길 위쪽(뒤)에 세운다
+                put('warrior', bz.rally.d - 0.6 * TILE, -30), put('rogue', bz.rally.d - 0.3 * TILE, -45),
+                // 저주 사수 앞을 걷는 용사들
+                put('mage', csD - 1.6 * TILE, -10), put('warrior', csD + 0.2 * TILE, 15),
+                // 해골 기사 둘레: 일반 용사 셋은 기절하고, 반경 안의 보스는 기절하지 않는다
+                put('warrior', kD - 0.6 * TILE, -10), put('rogue', kD + 0.7 * TILE, 20),
+                put('mage', kD - 1.5 * TILE, 15), put(null, kD + 1.8 * TILE, 0, 'fallen_knight')
+            ];
+            for (const h of Game.heroes) h.speed = 0; // 자리를 지키게 한다(장면용)
+            for (let i = 0; i < 40; i++) { UI.update(1 / 60); Game.update(1 / 60); }
+            bz.hp = bz.maxHp * 0.4; // 광폭화
+            // 저주 사수에게 맞은 용사(실제 능력 경로로 건다)
+            for (const h of Game.heroes.slice(2, 4)) monsterHitHero(cs.type, h);
+            advance(0.4);
+            knockDownMonster(bk); // 해골 기사 쓰러짐: 단말마(deathStun)
+            advance(0.1);
+            Fx.numbers = []; // 체력을 크게 잡은 용사의 피해 숫자가 화면을 가리지 않게 한다
+            Fx.shake = 0;
+            freezeScene();
+        }
+    },
+
     // 대마도사 이름 배너(보스 웨이브 시작 연출)
     archmageIntro: {
         setup: () => {
