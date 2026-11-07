@@ -392,5 +392,5 @@
 
 - 판은 늘 `GAME_TICK`(1/60초) 단위로 돌린다. 판 결과를 바꾸는 난수는 `rng(흐름)`이고, 연출 난수는 `randRange`, `randItem`(Math.random)이다. 흐름은 summon, cell, merge, reward, spawn, battle이다.
 - 플레이어 입력은 모두 `Game.act`로 들어오고 도전 중에는 `Game.record.inputs`에 틱과 함께 남는다. `replayChallenge(record)`가 처음부터 다시 돌려 같은 점수를 낸다(서버 검증에 쓴다).
-- 일일 도전(`js/data/challenge.js`): 한국 시간 자정에 바뀌는 날짜로 시드, 마왕 1, 유물 2, 규칙 카드 3(어렵게 2, 쉽게 1), 지역을 정한다. 40라운드라 신화까지 닿을 수 있다. 시도는 무제한이고 최고 기록만 남는다. 점수는 `SCORE_RULES`다.
+- 일일 도전(`js/data/challenge.js`): 한국 시간 자정에 바뀌는 날짜로 시드, 마왕 1, 유물 2, 규칙 카드 3(어렵게 2, 쉽게 1), 지역을 정한다. 무한 라운드다(`ENDLESS_RULES`: 인원 상한, 30라운드부터 용사 체력이 라운드마다 1.06배). 시도는 무제한이고 최고 점수만 남는다. 점수는 처치와 라운드 완료, 남은 시간에 라운드 배율(r x 1.04^r)을 곱해 쌓는다(`SCORE_RULES`).
 - 기록은 아직 이 컴퓨터에만 남는다(`Meta.data.daily`, 입력 기록은 `dungeonGuard.dailyRecord`). 랭킹 제출은 Supabase 연결 뒤에 붙인다.

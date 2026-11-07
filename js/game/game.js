@@ -37,6 +37,7 @@ const Game = {
         this.challengeResult = null;
         this.challengeBest = null;
         this.tick = 0;
+        this.score = 0;
         this.nextUid = 1;
         this.record = null;
         if (!challenge) Rng.stop(); // 스토리와 시험 판은 Math.random
@@ -63,7 +64,7 @@ const Game = {
         this.heroHpMul = stage ? stage.hpMul : 1;
         if (challenge) {
             this.zone = challenge.zone;
-            this.waves = WAVES.slice(0, challenge.rounds);
+            this.waves = WAVES.slice();
             this.heroHpMul = this.mods.heroHp;
         }
         this.gold = COMBAT_RULES.startGold + this.mods.startGold + (stage ? stage.goldBonus || 0 : 0);
@@ -685,6 +686,33 @@ const Game = {
         return Object.assign(this.mergePlanFor(src, m, null, true), { src, dst: m });
     },
 
+    // 무한 라운드: 다음 라운드가 늘 표에 있게 한다
+    extendRounds() {
+        if (!this.challenge) return;
+        while (this.waves.length < this.waveIndex + 3) this.waves.push(buildRound(this.waves.length + 1));
+    },
+
+    // 무한 라운드의 추가 체력 배율. 곱셈을 되풀이한다(Math.pow는 엔진마다 값이 다를 수 있어 입력 재생이 어긋난다)
+    endlessHpMul(waveIndex) {
+        if (!this.challenge) return 1;
+        let mul = 1;
+        for (let r = ENDLESS_RULES.hpFrom; r < waveIndex; r++) mul *= ENDLESS_RULES.hpGrowth;
+        return mul;
+    },
+
+    // 도전 점수: 처치와 라운드마다 라운드 배율만큼 쌓인다
+    addScore(base) {
+        if (!this.challenge) return 0;
+        const gain = Math.floor(base * scoreMul(this.waveIndex + 1));
+        this.score += gain;
+        return gain;
+    },
+
+    scoreKill(hero) {
+        const S = SCORE_RULES;
+        this.addScore(S.kill * (hero.boss ? S.bossMul : (hero.elite ? S.eliteMul : 1)));
+    },
+
     // 입력 기록 한 줄: 몬스터는 개체 번호(uid)로 적는다. 실패한 입력도 적는다(소환 실패도 난수를 쓰므로 그대로 재생해야 같다)
     encodeInput(cmd) {
         const out = { t: this.tick };
@@ -925,8 +953,7 @@ const Game = {
         if (this.challenge) {
             // 도전은 스토리 저장을 건드리지 않고 최고 기록만 남긴다
             const c = this.challenge;
-            const r = { rounds: victory ? this.waves.length : this.waveIndex, hp: Math.max(0, this.hp), kills: this.stats.kills, time: this.stats.time, victory };
-            r.score = challengeScore(c, r);
+            const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score };
             this.challengeResult = r;
             if (!this.replaying) this.challengeBest = Meta.finishDaily(c.date, r, this.record);
             if (!this.replaying) Sfx.play(victory ? 'victory' : 'defeat');
@@ -1043,12 +1070,14 @@ const Game = {
         const n = this.waveIndex + 1;
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
         const calledEarly = this.roundTimer > 0;
+        this.addScore(SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
         this.gold += reward;
         this.payInterest();
         Fx.goldPulse = 1;
         this.waveIndex = n;
+        this.extendRounds();
         if (bossDown || n % BOSS_REWARD_RULES.roundEvery === 0) this.bossReward = this.rollBossReward();
         this.saveRun();
         this.state = 'prep'; // startWave는 준비 단계에서 시작한다
@@ -1063,6 +1092,9 @@ const Game = {
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
+        // 다 잡고 끝낸 라운드: 완료 점수와 남은 시간 점수
+        const scored = this.addScore(SCORE_RULES.clear + SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
+        this.extendRounds();
         if (n >= this.waves.length) {
             this.finish(true); // 마지막 보스는 보상 없이 승리
             return;
@@ -1070,7 +1102,7 @@ const Game = {
         this.gold += reward;
         this.payInterest();
         Fx.goldPulse = 1;
-        Fx.banner = { name: `라운드 ${n} 완료`, sub: `+${reward} 골드`, age: 0, life: 1.6, small: true };
+        Fx.banner = { name: `라운드 ${n} 완료`, sub: scored ? `+${reward} 골드 · +${scored.toLocaleString()}점` : `+${reward} 골드`, age: 0, life: 1.6, small: true };
         Sfx.play('waveClear');
         this.waveIndex = n;
         this.prepTimer = COMBAT_RULES.prepTime;

@@ -24,8 +24,9 @@ function mergePair(G) {
     }
     return best;
 }
-function play(bot, stageId) {
-    Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
+function play(bot, stageId, daily) {
+    if (daily) { Game.reset(null, null, dailyChallenge(daily)); Game.state = 'prep'; }
+    else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
     let guard = 0, thinkMerge = 0;
@@ -61,7 +62,7 @@ function play(bot, stageId) {
         }
         G.update(DT);
     }
-    return { win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
+    return { score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
         n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
 }
 `, context);
@@ -86,3 +87,9 @@ function batch(name, bot, stage) {
 }
 for (const k of Object.keys(BOTS)) if (!only || k.includes(only)) batch(k, BOTS[k]);
 if (!only) for (const st of ['s1', 's3', 's6']) batch('합치기+강화+장비+번개', BOTS['합치기+강화+장비+번개'], st);
+if (process.argv[4] === 'daily') {
+    for (const d of ['2026-11-07', '2026-11-08', '2026-11-09']) {
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play(${BOTS['합치기+강화+장비+번개']}, null, '${d}'))`, context));
+        console.log(`일일 ${d} | 라운드 ${r.wave} | ${R(r.time / 60)}분 | 점수 ${r.score.toLocaleString()} | 소환 ${r.summons} 합치기 ${r.merges} | 최고 ${GRADES[r.top]} 전설첫 ${r.legendWave}`);
+    }
+}

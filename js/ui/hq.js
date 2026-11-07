@@ -61,7 +61,7 @@ const HQ_FACILITIES = [
 // 도전의 문 콘텐츠. 스토리를 다 깨지 않아도 문에는 처음부터 들어간다. 콘텐츠마다 unlockStage(스테이지 번호)를 깨면 열리고,
 // 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
 const HQ_CONTENTS = [
-    { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판입니다 · 시도는 무제한, 최고 기록만 남습니다', enter: () => UI.startDaily() }
+    { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판, 무한 라운드입니다 · 시도는 무제한, 최고 점수만 남습니다', enter: () => UI.startDaily() }
 ];
 
 // 고블린 비서의 말풍선: 깬 스테이지 수가 cleared 이상인 마지막 줄. {no}, {name}은 다음 스테이지 번호와 이름
@@ -706,7 +706,7 @@ Object.assign(UI, {
         const x = GAME_WIDTH / 2 - 560;
         const y = 400;
         UIKit.panel(ctx, x, y, 1120, 520);
-        UIKit.ink(ctx, `오늘의 판 · ${c.date} · ${c.rounds}라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        UIKit.ink(ctx, `오늘의 판 · ${c.date} · 무한 라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const best = Meta.data.daily[c.date];
         UIKit.ink(ctx, best ? `오늘 최고 ${best.score.toLocaleString()}점 · ${best.rounds}라운드` : '아직 오늘 기록이 없습니다', x + 1080, y + 50, 24, best ? T.ink : T.inkSoft, 'right', 'bold');
         const lord = DEMON_LORDS[c.lord];

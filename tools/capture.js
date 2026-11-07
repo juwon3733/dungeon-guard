@@ -78,6 +78,11 @@ const SCENES = {
     dailyPlay: {
         setup: () => {
             UI.startDaily();
+            Game.gold = 3000;
+            for (let i = 0; i < 12; i++) Game.act({ kind: 'summon' });
+            Game.waveIndex = 41;
+            Game.score = 482913650;
+            UI.scoreShown = Game.score;
             Game.act({ kind: 'startWave' });
             advance(6);
         }
@@ -85,8 +90,9 @@ const SCENES = {
     dailyResult: {
         setup: () => {
             UI.startDaily();
-            Game.waveIndex = 23;
-            Game.stats.kills = 412;
+            Game.waveIndex = 87;
+            Game.stats.kills = 4120;
+            Game.score = 6284913650;
             Game.finish(false);
         }
     },
