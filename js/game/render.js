@@ -644,6 +644,96 @@ const Render = {
         return { clip, name: this.plFrame(def, clip, m.dir, i) };
     },
 
+    // 모든 몬스터 주변을 떠다니는 종족 효과(도트). 등급이 높을수록 조금 많다. 시간과 자리로만 정해 판 결과와 무관하다
+    //   악마 불티는 빠르게 솟고, 언데드 혼불은 흔들리며 천천히 오르고, 정령은 제자리에서 반짝이고,
+    //   야수는 발밑에서 풀잎과 흙먼지가 옆으로 날리고, 오크는 발밑에서 먼지가 피어오른다
+    familyAmbient(ctx, m, def, footY, front) {
+        const t = Game.time;
+        const seed = (m.homeX || m.x) * 0.0137 + (m.homeY || m.y) * 0.0071;
+        const [cw] = def.art.cells || [1, 1];
+        const bodyW = def.art.hand ? def.art.hand.x / 0.3 : TILE * cw;
+        const halfW = Math.max(TILE * 0.3, bodyW * 0.45);
+        const bodyH = (def.art.barY || 120) * 0.85;
+        const unit = ART_SCALE;
+        const n = 7 + GRADE_ORDER.indexOf(def.grade) * 3;
+        const fam = def.family;
+        // 발밑의 종족 색 도트 바닥(바둑판 무늬가 천천히 흐른다): 그림자와 함께 몬스터가 땅에 서 있게 보인다
+        if (!front) {
+            const base = { demon: '#ff6a1a', undead: '#9a6cff', spirit: '#6fd8ff', beast: '#8fc45a', orc: '#c9a46b' }[fam] || '#c9a46b';
+            const rx = halfW * 1.1;
+            const ry = rx * 0.34;
+            const cell = 2 * unit;
+            const shift = Math.floor(t * 3) % 2;
+            ctx.fillStyle = base;
+            for (let dy = -ry; dy < ry; dy += cell) {
+                const row = Math.round(dy / cell);
+                const half = rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry)));
+                for (let dx = -half; dx < half; dx += cell) {
+                    const col = Math.round(dx / cell);
+                    if ((row + col + shift) % 2) continue;
+                    const edge = 1 - Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+                    ctx.globalAlpha = 0.12 + (1 - edge) * 0.28; // 가장자리가 진한 고리
+                    ctx.fillRect(snapWorld(m.x + dx), snapWorld(footY + dy), cell, cell);
+                }
+            }
+            ctx.globalAlpha = 1;
+        }
+        for (let i = 0; i < n; i++) {
+            if ((i % 2 === 1) !== front) continue;
+            const r1 = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+            const rnd = r1 - Math.floor(r1); // 이 불티만의 고정 값
+            let x, y, size, color, alpha;
+            if (fam === 'demon') {
+                const k = ((t * (0.9 + rnd * 0.6) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.6 + Math.sin(t * 5 + i) * 4;
+                y = footY - k * bodyH * 1.1;
+                size = (rnd > 0.6 ? 3 : 2) * unit * 3;
+                color = ['#ff7a1a', '#ffd23d', '#ff3d1a'][i % 3];
+                alpha = 1 - k;
+            } else if (fam === 'undead') {
+                const k = ((t * (0.25 + rnd * 0.15) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.8 + Math.sin(t * 1.6 + i * 1.7) * 14;
+                y = footY - 6 - k * bodyH;
+                size = 3 * unit * 3;
+                color = i % 3 === 0 ? '#b48cff' : '#7dffb0';
+                alpha = Math.sin(k * Math.PI);
+            } else if (fam === 'spirit') {
+                const ang = rnd * Math.PI * 2 + t * 0.4;
+                x = m.x + Math.cos(ang) * halfW * (0.7 + rnd * 0.5);
+                y = footY - bodyH * (0.25 + rnd * 0.65) + Math.sin(t * 2 + i) * 6;
+                const blink = (Math.sin(t * (2.5 + rnd * 2) + i * 2.1) + 1) / 2;
+                size = 2 * unit * 3;
+                color = ['#bff6ff', '#ffffff', '#9fd8ff'][i % 3];
+                alpha = blink;
+                if (blink > 0.85) {
+                    ctx.globalAlpha = blink;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(snapWorld(x - size), snapWorld(y), size * 3, unit * 2);
+                    ctx.fillRect(snapWorld(x + size / 2 - unit), snapWorld(y - size), unit * 2, size * 3);
+                }
+            } else if (fam === 'beast') {
+                const k = ((t * (0.35 + rnd * 0.2) + rnd) % 1);
+                const dir = rnd > 0.5 ? 1 : -1;
+                x = m.x + dir * (k * halfW * 1.4) + (rnd - 0.5) * 20;
+                y = footY - 4 - Math.sin(k * Math.PI) * 22 - rnd * 10;
+                size = 2 * unit * 3;
+                color = i % 2 ? '#a8d86b' : '#c9a46b';
+                alpha = Math.sin(k * Math.PI);
+            } else {
+                const k = ((t * (0.5 + rnd * 0.3) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.6;
+                y = footY - 2 - k * 30;
+                size = (2 + Math.floor(k * 2)) * unit * 3;
+                color = '#8a7a66';
+                alpha = (1 - k) * 0.85;
+            }
+            ctx.globalAlpha = clamp(alpha, 0, 1);
+            ctx.fillStyle = color;
+            ctx.fillRect(snapWorld(x), snapWorld(y), size, size);
+        }
+        ctx.globalAlpha = 1;
+    },
+
     // 영웅 이상 몬스터의 존재감: 등급 색 윤곽선, 피어오르는 도트 불티, 전설부터 발밑의 도는 점 고리.
     // 등급이 높을수록 많고 진하다(영웅 fx 1, 전설 2, 신화 3). front가 거짓이면 몸 뒤, 참이면 몸 앞을 그린다
     //   모두 시간과 몬스터 자리로 정해 판 결과와 무관하다
@@ -689,7 +779,7 @@ const Render = {
             ctx.restore();
         }
         // 피어오르는 도트 불티: 반은 몸 뒤, 반은 몸 앞
-        const motes = [0, 6, 10, 16][fx];
+        const motes = [0, 3, 6, 10][fx];
         for (let i = 0; i < motes; i++) {
             if ((i % 2 === 1) !== front) continue;
             const k = ((t * (0.35 + (i % 3) * 0.08) + i / motes + seed) % 1 + 1) % 1;
@@ -714,7 +804,11 @@ const Render = {
         const footY = m.y + MONSTER_FOOT;
         const w = def.art.cells ? def.art.cells[0] : 1;
         const pose = this.monsterPose(def, m);
-        this.shadow(ctx, m.x + pose.dx * 0.6, footY - 2, 24 * w + 6, 7 * w + 3);
+        const bodyW = def.art.hand ? def.art.hand.x / 0.3 : TILE * w;
+        const rx = Math.max(TILE * 0.3, bodyW * 0.42);
+        const sx = m.x + pose.dx * 0.6;
+        this.shadow(ctx, sx, footY - 2, rx, rx * 0.3, 0.42);
+        this.shadow(ctx, sx, footY - 2, rx * 0.55, rx * 0.16, 0.4); // 발이 닿는 곳은 더 진하다
         this.posedSprite(ctx, img, def.art, clip, m.dir, m.x, footY, pose);
     },
 
@@ -821,8 +915,10 @@ const Render = {
         if (m.flash > 0) img = Assets.tinted(name, '#ffffff', 0.85);
         else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
         const fx = gradeInfo(def.grade, 'fx', 0);
+        this.familyAmbient(ctx, m, def, footY, false);
         if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, false);
         this.monsterBody(ctx, def, m, img, clip);
+        this.familyAmbient(ctx, m, def, footY, true);
         if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, true);
         // 광폭화: 몸 위에 붉은 빛을 더한다(밝기는 맥박처럼 오르내린다)
         if (enraged && !(m.flash > 0)) {
