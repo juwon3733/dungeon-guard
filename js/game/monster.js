@@ -194,7 +194,7 @@ function monsterHitHero(type, hero, owner) {
     if (slow) slowHero(hero, slow.duration, slow.speedMul);
     const stun = monsterAbility(type, 'stunShot');
     // 보스는 걸리지 않는다(난수도 쓰지 않는다)
-    if (stun && !hero.boss && Math.random() < stun.chance) {
+    if (stun && !hero.boss && rng('battle') < stun.chance) {
         applyStun(hero, stun.duration);
         const p = heroWorld(hero);
         Fx.ring(p.x, p.y - 30, 90, '#ff9cf2', 0.35);
@@ -277,7 +277,7 @@ function castMonsterSkill(m, s, stats) {
             for (let i = 0; i < s.count; i++) {
                 const alive = list.filter(h => !h.dead);
                 if (!alive.length) break;
-                const h = randItem(alive);
+                const h = rngItem('battle', alive);
                 const p = heroWorld(h);
                 if (i < 8) Fx.anim('fx_hit_lightning', p.x, p.y - 60, 240, 0.4);
                 skillHit(m, s, stats, h, color);
@@ -363,7 +363,7 @@ function updateMonsterSkills(m, dt) {
 
 function createMonster(type, col, row) {
     const m = {
-        kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: monsterHomeX(type, col), y: monsterHomeY(type, row),
+        kind: 'monster', uid: Game.nextUid++, type, blocks: monsterBlocks(type), col, row, x: monsterHomeX(type, col), y: monsterHomeY(type, row),
         homeX: monsterHomeX(type, col), homeY: monsterHomeY(type, row), rally: null, moving: false,
         tier: 1, branch: null, invested: MONSTERS[type].cost,
         rank: 0, xp: 0, rankUp: 0, // rank는 MONSTER_RANKS 번호, rankUp은 랭크가 오른 연출의 남은 초

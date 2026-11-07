@@ -19,3 +19,4 @@
 - 몬스터 55종(5종족), Asteria 몹·보스 그림, 몬스터별 칸 모양(1x1~3x3). 자세한 규칙은 `docs/MONSTER_DESIGN.md`
 - 신화 12종(합성 8, 히든 4), 전설과 신화의 특수 스킬. 자세한 규칙은 `docs/MONSTER_DESIGN.md`
 - 유물 19종(대가 없이 약한 효과). 표는 `docs/MONSTER_DESIGN.md`
+- 일일 도전: 본부 도전의 문. 날짜별 고정 시드, 입력 기록과 재생 검증. 규칙은 `docs/MONSTER_DESIGN.md`

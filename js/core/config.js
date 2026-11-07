@@ -19,6 +19,39 @@ function tileY(row) { return MAP_TOP + row * TILE + TILE / 2; }
 // 세계 좌표를 화면 정수 픽셀에 맞춘다(도트가 고르게 보이게)
 function snapWorld(v) { return Math.round(v * WORLD_ZOOM) / WORLD_ZOOM; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function distance(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+// 제곱근은 어느 브라우저에서나 같은 값이 나온다(Math.hypot은 엔진마다 다를 수 있어 입력 재생이 어긋난다)
+function distance(ax, ay, bx, by) { return Math.sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by)); }
 function randRange(lo, hi) { return lo + Math.random() * (hi - lo); }
 function randItem(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+// randRange와 randItem은 연출용이다(판 결과에 영향이 없다). 판 결과를 바꾸는 난수는 아래 rng를 쓴다.
+// 도전 콘텐츠는 게임을 고정 시간 단위(GAME_TICK)로 돌리고 난수를 시드로 고정해 같은 입력이면 같은 판이 나오게 한다.
+// 난수 흐름(stream)을 소환, 칸, 합치기, 보상, 등장, 전투로 나눈다. 앞선 행동이 뒤 소환 결과를 흔들지 않아 N번째 소환이 모두에게 같다
+const GAME_TICK = 1 / 60;
+
+function hashSeed(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+    return h | 0;
+}
+
+const Rng = {
+    on: false,
+    seed: '',
+    streams: {},
+    start(seed) { this.on = true; this.seed = String(seed); this.streams = {}; },
+    stop() { this.on = false; this.streams = {}; },
+    next(stream) {
+        const cur = this.streams[stream] === undefined ? hashSeed(`${this.seed}/${stream}`) : this.streams[stream];
+        const s = (cur + 0x6D2B79F5) | 0;
+        this.streams[stream] = s;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+};
+
+// 시드가 없는 판(스토리)은 그대로 Math.random이다
+function rng(stream) { return Rng.on ? Rng.next(stream) : Math.random(); }
+function rngRange(stream, lo, hi) { return lo + rng(stream) * (hi - lo); }
+function rngItem(stream, list) { return list[Math.floor(rng(stream) * list.length)]; }

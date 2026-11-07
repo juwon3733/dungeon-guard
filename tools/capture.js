@@ -66,6 +66,31 @@ const SCENES = {
         }
     },
 
+    // 도전의 문: 오늘의 일일 도전 조건
+    dailyPortal: {
+        setup: () => {
+            Game.state = 'hq';
+            UI.hqView = 'portal';
+        }
+    },
+
+    // 일일 도전 전투와 결과
+    dailyPlay: {
+        setup: () => {
+            UI.startDaily();
+            Game.act({ kind: 'startWave' });
+            advance(6);
+        }
+    },
+    dailyResult: {
+        setup: () => {
+            UI.startDaily();
+            Game.waveIndex = 23;
+            Game.stats.kills = 412;
+            Game.finish(false);
+        }
+    },
+
     // 신화와 전설 스킬이 쓰이는 전투(정보 창은 히든 신화)
     mythicSkills: {
         setup: () => {

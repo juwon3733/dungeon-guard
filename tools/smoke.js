@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -3239,7 +3239,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -3986,7 +3986,7 @@ for (const f of HQ_FACILITIES) {
     assert(HQ_ROOM.decor.every(d => Number.isInteger(d.scale)), 'decor integer scale');
     assert(HQ_ROOM.wall.length * 192 >= GAME_WIDTH, 'wall covers the width');
 }
-assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.length === 0, 'no contents yet');
+assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.length === 1 && HQ_CONTENTS[0].id === 'daily', 'daily challenge in the portal');
 
 // ----- 첫 실행: 타이틀 → 본부. 작전 테이블에 느낌표, 도전의 문은 처음부터 들어간다(준비 중) -----
 freshWindow();
@@ -3997,12 +3997,12 @@ assert(Game.state === 'hq' && !UI.hqView, 'title to the hq');
 UI.update(0);
 same(UI.buttons.filter(b => b.facility).map(b => b.key), [1, 2, 3, 4, 5, 6], 'number keys on the plates');
 assert(news('wartable'), 'first stage badge on the war table');
-assert(['bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk', 'portal'].every(id => !news(id)), 'nothing else is new');
+assert(['bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk'].every(id => !news(id)) && news('portal'), 'only the first stage and the open daily challenge are new');
 assert(hqGoblinLine().includes('작전 테이블'), 'goblin tells what to do first');
 btn('hq_portal');
 assert(UI.hqView === 'portal' && hasBtn('hq_close'), 'portal open on the first run');
 UI.update(0);
-assert(!UI.buttons.some(b => b.content), 'no contents: only the notice');
+same(UI.buttons.filter(b => b.content).map(b => b.id), ['content_daily'], 'daily challenge card');
 UI.onKey('Escape');
 assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the portal');
 
@@ -4120,6 +4120,7 @@ assert(!news('wartable'), 'no storage: kept in memory');
 
 // ----- 도전의 문 콘텐츠: unlockStage가 없으면 처음부터, 있으면 그 스테이지를 깨야 열린다 -----
 freshWindow();
+const dailyContent = HQ_CONTENTS.splice(0); // 이 시험은 시험용 항목만 둔다
 HQ_CONTENTS.push({ id: 'test_open', name: '시험 처음', desc: '처음부터 열림' }, { id: 'test_s2', name: '시험 둘', desc: '2번 뒤', unlockStage: 2 },
     { id: 'test_s6', name: '시험 여섯', desc: '6번 뒤', unlockStage: 6 });
 {
@@ -4157,6 +4158,7 @@ HQ_CONTENTS.push({ id: 'test_open', name: '시험 처음', desc: '처음부터 �
     }
 }
 HQ_CONTENTS.length = 0;
+HQ_CONTENTS.push(...dailyContent);
 
 // ----- 장식과 고블린 대사: 진행에 따라 -----
 freshWindow();
@@ -4387,7 +4389,7 @@ console.log('smoke ok: zones');
     });
     const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
     const rctx = vm.createContext({ console, Math, Set, Map, Object, Array, Number, String, JSON, document });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
     }
     vm.runInContext(`
@@ -4891,4 +4893,120 @@ seed('smith_hammer');
 }
 console.log('smoke ok: relic effects');
 }`, ctx, { filename: 'smoke-relics' });
+
+// ----- 고정 난수, 입력 기록, 일일 도전 -----
+vm.runInContext(`{
+const near = (a, b, msg) => assert(Math.abs(a - b) < 1e-9, msg + ': ' + a + ' vs ' + b);
+// 난수: 시드가 같으면 같고, 흐름끼리 서로 흔들지 않는다
+Rng.start('a');
+const s1 = [rng('summon'), rng('summon')];
+Rng.start('a');
+rng('battle'); rng('battle'); rng('merge');
+assert.strictEqual(rng('summon'), s1[0], 'streams are independent');
+assert.strictEqual(rng('summon'), s1[1]);
+Rng.start('b');
+assert.notStrictEqual(rng('summon'), s1[0], 'other seed');
+for (let i = 0; i < 2000; i++) { const v = rng('x'); assert(v >= 0 && v < 1, 'range'); }
+Rng.stop();
+{
+    const orig = Math.random;
+    Math.random = () => 0.25;
+    assert.strictEqual(rng('summon'), 0.25, 'no seed: Math.random');
+    Math.random = orig;
+}
+// 일일 도전: 날짜가 같으면 같고, 날짜가 다르면 달라진다
+assert.strictEqual(kstDate(Date.UTC(2026, 10, 7, 14, 59)), '2026-11-07');
+assert.strictEqual(kstDate(Date.UTC(2026, 10, 7, 15, 0)), '2026-11-08', 'midnight KST');
+const c = dailyChallenge('2026-11-07');
+assert.strictEqual(JSON.stringify(c), JSON.stringify(dailyChallenge('2026-11-07')));
+const seen = new Set();
+for (let d = 1; d <= 28; d++) seen.add(JSON.stringify(dailyChallenge('2026-11-' + String(d).padStart(2, '0')).cards));
+assert(seen.size > 15, 'cards change by day');
+for (let d = 1; d <= 28; d++) {
+    const x = dailyChallenge('2026-12-' + String(d).padStart(2, '0'));
+    assert(DEMON_LORDS[x.lord] && x.relics.length === 2 && new Set(x.relics).size === 2 && x.relics.every(r => RELICS[r]), 'lord and relics');
+    assert(x.cards.length === 3 && new Set(x.cards).size === 3 && x.cards.every(r => RULE_CARDS[r]), 'cards');
+    assert(ZONES[x.zone], 'zone');
+}
+for (const card of Object.values(RULE_CARDS)) for (const k of Object.keys(card.effects)) assert(LORD_EFFECTS[k], card.id + ' key');
+// 조건 적용: 잠긴 마왕과 유물도 쓴다(모두 같은 조건)
+Game.reset(null, null, c);
+assert.strictEqual(Game.lord, c.lord);
+assert.strictEqual(Game.relics.join(), c.relics.join());
+assert.strictEqual(Game.waves.length, 40);
+assert.strictEqual(Game.zone, c.zone);
+assert(Rng.on && Game.record && Game.tick === 0);
+Game.reset();
+assert(!Rng.on && !Game.record && !Game.challenge, 'story run has no seed');
+// 점수: 라운드가 먼저, 다 막으면 빠를수록 높다
+const sc = (r) => challengeScore(c, r);
+assert(sc({ rounds: 11, hp: 0, kills: 0, time: 0 }) > sc({ rounds: 10, hp: 5, kills: 100, time: 0 }), 'rounds first');
+assert(sc({ rounds: 40, hp: 5, kills: 10, time: 600, victory: true }) > sc({ rounds: 40, hp: 5, kills: 10, time: 900, victory: true }), 'faster is better');
+
+// 입력 기록: 봇으로 끝까지 둔 판을 난수를 망가뜨린 채 재생해도 결과가 같다
+function botPlay(date) {
+    const C = dailyChallenge(date);
+    Game.reset(null, null, C);
+    Game.state = 'prep';
+    let guard = 0;
+    while (Game.inPlay() && guard++ < 60 * 60 * 40) {
+        if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+        if (Game.tick % 20 === 0 && Game.waveIndex < 14) {
+            if (!Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+            const ms = Game.monsters.filter(m => !m.removed);
+            for (const a of ms) {
+                const b = ms.find(o => o !== a && MONSTERS[o.type].grade === MONSTERS[a.type].grade && Game.mergePlanFor(a, o).kind !== 'none');
+                if (b) { Game.act({ kind: 'merge', src: a, dst: b }); break; }
+            }
+            if (ms[0] && Game.tick % 200 === 0) Game.act({ kind: 'lightning', x: 700, y: 500 });
+        }
+        Game.update(GAME_TICK);
+    }
+    return { result: Game.challengeResult, record: Game.record, gold: Game.gold, kills: Game.stats.kills, types: Game.monsters.map(m => m.type + ':' + m.col + ',' + m.row).join() };
+}
+const store = {};
+globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+store['dungeonGuard.runSave'] = 'keep';
+const before = JSON.stringify(store[RUN_SAVE_KEY]);
+const A = botPlay('2026-11-07');
+assert(A.result && A.record.inputs.length > 20, 'bot played');
+assert.strictEqual(JSON.stringify(store[RUN_SAVE_KEY]), before, 'story save untouched');
+assert(Meta.data.daily['2026-11-07'].score === A.result.score && Game.challengeBest.isBest, 'best kept');
+const saved = JSON.parse(store[DAILY_RECORD_KEY]);
+assert(saved.date === '2026-11-07' && saved.score === A.result.score, 'record saved');
+const runsBefore = Meta.data.runs;
+{
+    const orig = Math.random;
+    let x = 0.123;
+    Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
+    const R = replayChallenge(JSON.parse(JSON.stringify(A.record)));
+    Math.random = orig;
+    assert.strictEqual(JSON.stringify(R), JSON.stringify(A.result), 'replay gives the same result');
+    assert.strictEqual(Game.gold, A.gold, 'same gold');
+    assert.strictEqual(Game.monsters.map(m => m.type + ':' + m.col + ',' + m.row).join(), A.types, 'same field');
+}
+assert.strictEqual(Meta.data.runs, runsBefore, 'replay leaves no record');
+// 같은 날 N번째 소환은 누구에게나 같다(앞서 합쳤든 안 합쳤든)
+const firstSummons = doMerge => {
+    Game.reset(null, null, dailyChallenge('2026-11-09'));
+    Game.state = 'wave';
+    Game.gold = 99999;
+    const out = [];
+    for (let i = 0; i < 6; i++) {
+        out.push(Game.act({ kind: 'summon' }).type);
+        if (doMerge) rng('merge');
+    }
+    return out.join();
+};
+assert.strictEqual(firstSummons(true), firstSummons(false), 'nth summon');
+// 낮은 점수는 최고 기록을 덮지 않는다
+const b0 = Meta.data.daily['2026-11-07'].score;
+assert.strictEqual(Meta.finishDaily('2026-11-07', { score: b0 - 1, rounds: 1, victory: false }, { inputs: [] }).isBest, false);
+assert.strictEqual(Meta.data.daily['2026-11-07'].score, b0);
+// 기록 정리: 깨진 값은 버린다
+assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, daily: { 'x': { score: 1, rounds: 1 }, '2026-01-01': { score: 'a', rounds: 1 }, '2026-01-02': { score: 5, rounds: 2 } } }).daily), JSON.stringify({ '2026-01-02': { score: 5, rounds: 2, victory: false } }));
+delete globalThis.localStorage;
+Game.reset();
+console.log('smoke ok: seeded runs and daily challenge');
+}`, ctx, { filename: 'smoke-daily' });
 
