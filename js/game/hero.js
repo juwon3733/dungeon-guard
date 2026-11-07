@@ -172,7 +172,7 @@ function updateHero(h, dt) {
         if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
-            G.leak = (G.leak || 0) + h.throneDamage * (G.power('ward') ? 0.8 : 1);
+            G.leak = (G.leak || 0) + h.throneDamage * (G.power('ward') || G.power('goldWard') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;

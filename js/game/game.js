@@ -24,7 +24,7 @@ const Game = {
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     hazards: [], // 땅에 남는 장판(불 장판 burnGround): { kind, x, y, radius(px), dps, life, age, tick, owner }
-    skills: { lightning: 0, roar: 0, portal: 0 },
+    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0 },
     mana: 0, // 마력(권능을 찍는다). 판이 끝나면 사라진다
     powers: {}, // 찍은 권능: { 항목 id: true }
     powerSeed: '', // 권능 지도의 시드
@@ -94,7 +94,9 @@ const Game = {
         this.equipBag = [];
         this.runResult = null;
         this.clearField();
-        this.skills = { lightning: 0, roar: 0, portal: 0 };
+        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0 };
+        this.graves = [];
+        this.corpseCount = 0;
         this.mana = 0;
         this.powers = {};
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
@@ -131,7 +133,14 @@ const Game = {
     maxHp() { return Math.max(1, COMBAT_RULES.maxHp + this.mods.maxHp); },
 
     // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
-    skillCooldown(key) { return COMBAT_RULES[key].cooldown * this.mods.skillCooldown * (key === 'lightning' && this.power('quick') ? 0.85 : 1) * (key === 'roar' && this.power('roarDrill') ? 0.7 : 1) * (key === 'lightning' ? this.mods.lightningCooldown : 1); },
+    skillCooldown(key) {
+        if (key === 'roar' && this.power('bribeRoar')) return COMBAT_RULES.bribeRoar.cooldown;
+        let mul = this.mods.skillCooldown;
+        if (key === 'lightning') mul *= this.mods.lightningCooldown * (this.power('quick') || this.power('coinCool') ? 0.85 : 1);
+        if (key === 'roar' && this.power('roarDrill')) mul *= 0.7;
+        if (key === 'raise' && this.power('raiseFast')) mul *= 0.6;
+        return COMBAT_RULES[key].cooldown * mul;
+    },
 
     // 이번 판 마왕의 패시브가 kind이면 그 표를, 아니면 null
     lordPassive(kind) {
@@ -140,22 +149,33 @@ const Game = {
     },
 
     // 뼈의 여왕: 처치 수마다 앞선 용사들을 망령이 때린다
-    soulVolley() {
+    soulVolley(force) {
         const p = this.lordPassive('soulVolley');
-        if (!p || this.stats.kills % p.every !== 0 || this.volleying) return;
+        if (!p || this.volleying) return;
+        const every = this.power('volleyFast') ? 20 : p.every;
+        if (!force && this.stats.kills % every !== 0) return;
         this.volleying = true;
-        const list = this.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b)).slice(0, p.count);
-        const damage = p.base + p.perRound * this.waveIndex;
-        for (const h of list) {
-            const w = heroWorld(h);
-            Fx.anim('fx_blastViolet', w.x, w.y - 30, 200, 0.35);
-            damageHero(h, damage, w.x, w.y, '#c9a6ff');
+        const score = h => remainingDistance(h) - (this.power('volleyBoss') && (h.boss || h.elite) ? 1e6 : 0);
+        const count = p.count + (this.power('volleyWide') ? 3 : 0);
+        const list = this.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => score(a) - score(b)).slice(0, count);
+        const damage = (p.base + p.perRound * this.waveIndex) * (this.power('volleyHeavy') ? 1.5 : 1);
+        for (let shot = 0; shot < (this.power('volleyTwin') ? 2 : 1); shot++) {
+            for (const h of list) {
+                if (h.dead) continue;
+                const w = heroWorld(h);
+                Fx.anim('fx_blastViolet', w.x, w.y - 30, 200, 0.35);
+                damageHero(h, damage, w.x, w.y, '#c9a6ff');
+                if (h.dead) continue;
+                if (this.power('volleyCurse')) curseHero(h, 3, 1.2);
+                if (this.power('volleyFear')) h.stun = Math.max(h.stun, 1.5);
+            }
         }
+        if (this.power('volleyCharge')) for (const key of Object.keys(this.skills)) this.skills[key] = Math.max(0, this.skills[key] - 3);
         this.volleying = false;
     },
 
     // 호통을 아직 쓸 수 없는지(체력 조건). 유물 광기의 북이 있으면 언제나 쓴다
-    roarLocked() { return this.power('frenzy') || (!this.mods.roarAnytime && this.hp > COMBAT_RULES.roar.unlockHp); },
+    roarLocked() { return this.power('frenzy') || (!this.mods.roarAnytime && !this.power('bribeRoar') && this.hp > COMBAT_RULES.roar.unlockHp); },
 
     // 이번 판 마왕의 권능 갈래 목록(없는 마왕은 빈 목록)
     lordPowers() { return LORD_POWERS[this.lord] || []; },
@@ -198,11 +218,31 @@ const Game = {
     },
     // 지금 찍을 수 있는 항목이 있는지
     powerReady() { return this.lordPowers().some(b => b.tiers.some(t => t.some(n => this.powerCheck(n.id).ok))); },
+    // 지금 열린 3번째 스킬: POWER_SKILLS의 한 줄. 없으면 null
+    thirdSkill() {
+        const id = Object.keys(POWER_SKILLS).find(k => this.power(k));
+        return id ? POWER_SKILLS[id] : null;
+    },
+    // 항목의 수치 효과를 판의 효과표에 더한다
+    addNodeMods(node) {
+        for (const [key, v] of Object.entries(node.mods || {})) {
+            if (LORD_EFFECTS[key].mode === 'mul') this.mods[key] *= v;
+            else this.mods[key] += v;
+        }
+    },
+    // 효과표를 새로 만든 뒤 찍은 항목을 모두 다시 더한다
+    applyPowerMods() {
+        for (const id of Object.keys(this.powers)) {
+            const at = this.powerNode(id);
+            if (at) this.addNodeMods(at.node);
+        }
+    },
     buyPower(id) {
         const c = this.powerCheck(id);
         if (!c.ok) return c;
         this.mana -= c.cost;
         this.powers[id] = true;
+        this.addNodeMods(this.powerNode(id).node);
         Sfx.play('charge');
         return c;
     },
@@ -212,7 +252,7 @@ const Game = {
         this.mana += n;
         if (x !== undefined) Fx.number({}, x, y, `+${n} 마력`, '#c9a6ff', false);
     },
-    lightningRadius() { return COMBAT_RULES.lightning.radius + (this.power('wide') ? 0.5 : 0); },
+    lightningRadius() { return COMBAT_RULES.lightning.radius + (this.power('wide') || this.power('coinWide') ? 0.5 : 0); },
 
     // 유물의 조건부 몬스터 피해 합(비율). 판 상황에 따라 바뀌어 monsterStats가 매번 읽는다
     relicDamage(m) {
@@ -229,7 +269,7 @@ const Game = {
 
     // 유물 고리대금 장부: 라운드 보상을 받은 뒤 가진 골드의 이자
     payInterest() {
-        const pay = Math.min(RELIC_LIMITS.interestMax, Math.floor(this.gold * this.mods.interest));
+        const pay = Math.min(RELIC_LIMITS.interestMax * (this.power('compound') ? 2 : 1), Math.floor(this.gold * this.mods.interest));
         if (pay > 0) this.gold += pay;
     },
 
@@ -848,6 +888,7 @@ const Game = {
         if (this.mutations.length >= want) return;
         while (this.mutations.length < want) this.mutations.push(abyssMutation(c.seed, this.mutations.length));
         this.mods = buildMods(c.lord, c.relics, this.mutations);
+        this.applyPowerMods(); // 다시 만든 표에 찍은 권능을 더한다
         // 약해지는 변이가 겹쳐도 몬스터가 아예 못 싸우게 되지는 않는다
         this.mods.attackSpeed = Math.max(-0.5, this.mods.attackSpeed);
         this.mods.damage = Math.max(-0.5, this.mods.damage);
@@ -912,6 +953,8 @@ const Game = {
             case 'lightning': return { ok: !!castLightning(cmd.x, cmd.y) };
             case 'roar': return { ok: !!castRoar() };
             case 'portal': return { ok: !!castPortal() };
+            case 'raise': return { ok: !!castRaise() };
+            case 'goldBomb': return { ok: !!castGoldBomb() };
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
@@ -1020,6 +1063,18 @@ const Game = {
         this.removeMonster(m);
         const equip = this.returnEquip(m); // 장비는 보관함으로(자리가 없으면 골드)
         this.stats.sacrificed++;
+        // 권능 제물 갈래
+        if (this.power('sacRage')) {
+            for (const o of this.monsters) {
+                if (o.removed) continue;
+                o.buffT = 8;
+                o.buff = { speed: 0.25 };
+            }
+        }
+        if (this.power('sacMana')) this.addMana(1);
+        if (this.power('sacGold')) this.gold += this.summonCost() * 2;
+        if (this.power('sacRoar')) this.skills.roar = 0;
+        if (this.power('sacSoul')) this.soulVolley(true);
         // 연출: 몬스터가 왕좌로 빨려 들어간 뒤(MERGE_REVEAL) 마왕이 빛나고 체력 막대가 차오른다
         const tx = tileX(THRONE_TILE.col);
         const ty = tileY(THRONE_TILE.row);
@@ -1138,7 +1193,7 @@ const Game = {
         this.stats.time += dt;
         if (this.autoMerge && this.tick % AUTO_MERGE_TICKS === 0) this.autoMergeStep();
 
-        for (const key of ['lightning', 'roar', 'portal']) this.skills[key] = Math.max(0, this.skills[key] - dt);
+        for (const key of Object.keys(this.skills)) this.skills[key] = Math.max(0, this.skills[key] - dt);
         this.streakTimer = Math.max(0, this.streakTimer - dt);
         if (this.streakTimer === 0) this.streak = 0;
 
@@ -1217,9 +1272,10 @@ const Game = {
             this.summonLevel = clamp(d.summonLevel || 0, 0, SUMMON_LEVELS.length - 1);
             this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
             this.bossReward = d.bossReward || null;
-            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0 }, d.skills);
+            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0 }, d.skills);
             this.mana = d.mana || 0;
             this.powers = d.powers || {};
+            this.applyPowerMods();
             if (d.powerSeed) this.powerSeed = d.powerSeed;
             this.arrivals = d.arrivals || 0;
             if (d.stats) this.stats = d.stats;
@@ -1269,6 +1325,7 @@ const Game = {
         this.bossDefeated = false;
         // 왕좌가 맞지 않고 다 잡은 라운드는 마력을 준다
         if (!this.roundHit) this.addMana(POWER_RULES.manaCleanRound + (this.power('circuit') ? 1 : 0));
+        if (this.power('goldMana') && this.gold >= 500) this.addMana(1);
         // 다 잡고 끝낸 라운드: 완료 점수와 남은 시간 점수
         const scored = this.addScore(SCORE_RULES.clear + SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
         this.extendRounds();
