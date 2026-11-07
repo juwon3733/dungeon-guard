@@ -100,10 +100,7 @@ function hqGoblinLine() {
 
 // 장비 얻는 법: 정예 드롭은 일반과 희귀, 보스 보상 카드는 희귀와 영웅(EQUIP_RULES와 game.js의 뽑기 규칙)
 function equipSources(grade) {
-    const out = [];
-    if (grade === 'common' || grade === 'rare') out.push(grade === 'rare' ? '정예 처치(드물게)' : '정예 처치');
-    if (grade === 'rare' || grade === 'epic') out.push(grade === 'epic' ? '보스 보상(드물게)' : '보스 보상');
-    return out.join(' · ');
+    return { common: '재료 · 정예 처치', rare: '조합 · 보스 보상', epic: '조합 · 보스 보상(드물게)' }[grade];
 }
 
 // 본부 안 화면의 칸 격자(진열장 유물, 무기고 장비): 8열 2줄, 등급 색 테두리 칸. 오른쪽은 금테 상세 창(HQ_DETAIL)
@@ -626,38 +623,36 @@ Object.assign(UI, {
         ctx.drawImage(img, Math.round(x), Math.round(y), 96, 96);
     },
 
-    // 무기고: 위쪽 등급별 얻는 법, 장비 16종 칸(등급 색 테두리), 오른쪽 금테 상세 창. 얻은 적 없는 것은 그림자와 ???
+    // 무기고: 재료 6종의 조합표(가로세로 재료, 칸은 완성 장비)와 오른쪽 상세 창. 얻은 적 없는 것은 그림자와 ???
     drawHqArmory(ctx) {
         const T = UI_THEME;
         const ids = Object.keys(EQUIPMENT);
         this.drawHqTitle(ctx, 'hq_weapon_rack', '무기고', `얻은 장비 ${ids.filter(id => Meta.hasEquip(id)).length} / ${ids.length}`);
-        // 얻는 법 요약
-        UIKit.panel(ctx, 70, 150, 1198, 330);
-        ['common', 'rare', 'epic'].forEach((g, i) => {
-            const y = 214 + i * 72;
-            const grade = MONSTER_GRADES[g];
-            const cw = this.drawGradeChip(ctx, g, 110, y, 22);
-            UIKit.text(ctx, `${equipPool(g).length}종`, 110 + cw + 14, y + 1, 22, T.creamSoft, 'left', 'bold');
-            UIKit.text(ctx, equipSources(g), 330, y + 1, 24, grade.light, 'left', 'bold');
+        const size = 118;
+        const gap = 8;
+        const x0 = 70;
+        const y0 = 130;
+        UIKit.panel(ctx, x0 - 16, y0 - 16, (size + gap) * 7 + 24, (size + gap) * 7 + 24);
+        const cell = (col, row) => ({ x: x0 + col * (size + gap), y: y0 + row * (size + gap), w: size, h: size });
+        const rects = [];
+        EQUIP_BASES.forEach((b, i) => {
+            rects.push(Object.assign({ id: b, base: true }, cell(i + 1, 0)));
+            rects.push(Object.assign({ id: b, base: true }, cell(0, i + 1)));
+            EQUIP_BASES.forEach((c, j) => { if (j >= i) rects.push(Object.assign({ id: craftResult(b, c) }, cell(j + 1, i + 1))); });
         });
-        UIKit.text(ctx, `정예 용사 처치 ${Math.round(EQUIP_RULES.eliteDrop * 100)}% · 보스 보상의 장비 카드`, 110, 440, 19, T.creamSoft);
-        const rects = ids.map((id, i) => Object.assign({ id }, this.hqGridRect(i)));
         const hot = this.hqHotCell(rects);
         for (const r of rects) {
-            const def = EQUIPMENT[r.id];
-            const grade = MONSTER_GRADES[def.grade];
-            this.drawHqCell(ctx, r, {
-                owned: Meta.hasEquip(r.id), hot: hot === r, name: def.name, color: grade.color, light: grade.light, gradeName: grade.name,
-                draw: (x, y) => this.drawEquipIcon(ctx, r.id, x, y, 2),
-                shadow: (x, y) => this.drawShadowIcon(ctx, `equip_${r.id}`, x, y, 96)
-            });
+            const owned = r.base || Meta.hasEquip(r.id);
+            UIKit.slot(ctx, r.x, r.y, r.w, r.h, r.base ? 'gold' : 'iron', hot === r ? 'hover' : null);
+            if (owned) this.drawEquipIcon(ctx, r.id, r.x + (size - 96) / 2, r.y + (size - 96) / 2, 2);
+            else this.drawShadowIcon(ctx, `equip_${r.id}`, r.x + (size - 96) / 2, r.y + (size - 96) / 2, 96);
         }
         const D = HQ_DETAIL;
         this.drawDetailFrame(ctx, D.x, D.y, D.w, D.h);
         const pick = hot || rects.find(r => Meta.hasEquip(r.id)) || rects[0];
         const def = EQUIPMENT[pick.id];
         const grade = MONSTER_GRADES[def.grade];
-        const known = Meta.hasEquip(pick.id);
+        const known = pick.base || Meta.hasEquip(pick.id);
         const x = D.x + 32;
         let y = D.y + 40;
         UIKit.ink(ctx, '장비', x, y, 20, T.inkSoft);

@@ -1,0 +1,146 @@
+{
+"equipment": {
+"sword": {
+"id": "sword",
+"name": "저주받은 검",
+"grade": "common",
+"effects": {
+"damage": 0.2
+}
+},
+"bow": {
+"id": "bow",
+"name": "뼈 활",
+"grade": "common",
+"effects": {
+"range": 0.15
+}
+},
+"armor": {
+"id": "armor",
+"name": "강철 흉갑",
+"grade": "common",
+"effects": {
+"damage": 0.15
+}
+},
+"ring": {
+"id": "ring",
+"name": "보랏빛 반지",
+"grade": "common",
+"effects": {
+"speed": 0.15
+}
+},
+"boots": {
+"id": "boots",
+"name": "날개 장화",
+"grade": "common",
+"effects": {
+"speed": 0.1,
+"range": 0.05
+}
+},
+"elixir": {
+"id": "elixir",
+"name": "초록 비약",
+"grade": "common",
+"effects": {
+"damage": 0.175
+}
+},
+"axe": {
+"id": "axe",
+"name": "룬 전투 도끼",
+"grade": "rare",
+"effects": {
+"damage": 0.4
+}
+},
+"shield": {
+"id": "shield",
+"name": "해골 방패",
+"grade": "rare",
+"effects": {
+"damage": 0.3
+}
+},
+"helmet": {
+"id": "helmet",
+"name": "뿔 투구",
+"grade": "rare",
+"effects": {
+"damage": 0.35
+}
+},
+"amulet": {
+"id": "amulet",
+"name": "핏빛 목걸이",
+"grade": "rare",
+"effects": {
+"speed": 0.3
+}
+},
+"tome": {
+"id": "tome",
+"name": "고대 주문서",
+"grade": "rare",
+"effects": {
+"range": 0.25,
+"damage": 0.15
+}
+},
+"gauntlet": {
+"id": "gauntlet",
+"name": "악마 손아귀",
+"grade": "epic",
+"effects": {
+"damage": 0.6,
+"speed": 0.15
+}
+},
+"staff": {
+"id": "staff",
+"name": "해골 지팡이",
+"grade": "epic",
+"effects": {
+"damage": 0.4,
+"range": 0.3
+}
+},
+"cape": {
+"id": "cape",
+"name": "어둠의 망토",
+"grade": "epic",
+"effects": {
+"damage": 0.4,
+"speed": 0.15
+}
+},
+"crystal": {
+"id": "crystal",
+"name": "영혼 수정",
+"grade": "epic",
+"effects": {
+"speed": 0.3,
+"xp": 1
+}
+},
+"crown": {
+"id": "crown",
+"name": "뼈 왕관",
+"grade": "epic",
+"effects": {
+"damage": 0.6,
+"xp": 0.5
+}
+}
+},
+"rules": {
+"slots": 6,
+"fullGold": 30,
+"rewardEpicChance": 0.4,
+"eliteDrop": 0.25,
+"eliteRareChance": 0.25
+}
+}
