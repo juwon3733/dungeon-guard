@@ -186,6 +186,8 @@ const ENTRY_50_50 = { north: 0.5, south: 0.5 };
 // 라운드 표(60라운드). 앞 라운드일수록 적게, 뒤로 갈수록 많이. 10라운드마다 보스, 5라운드마다 정예 묶음.
 // 이름은 앞 30개를 뒤 30라운드에 "재집결"로 다시 쓴다. 수치는 플레이 후 고칠 초안이다
 const ROUND_NAMES = ['신참 원정대', '마을 자경단', '날쌘 도굴꾼', '수상한 혼성대', '견습 마법사와 친구들', '보물 사냥단', '왕국 정찰대', '은빛 검 기사단', '최후의 선봉대', '대마도사의 제자들', '국경 수비대', '현상금 사냥꾼', '마법 학회 원정대', '왕실 근위대', '용병 대부대', '야습대', '성기사단', '전쟁 마법사단', '왕국 선봉군', '부대장 친위대', '복수의 원정대', '그림자 추적대', '대마법 연합', '철의 군단', '왕국 총동원령', '끝없는 행렬', '성전의 기사들', '현자의 군세', '왕국 최정예', '용사단 본대'];
+// 무한 라운드: 인원은 maxCount에서 멈추고(화면과 속도), hpFrom 라운드부터 용사 체력이 라운드마다 hpGrowth배로 늘어 언젠가 무너진다
+const ENDLESS_RULES = { maxCount: 90, maxElites: 8, hpFrom: 30, hpGrowth: 1.06 };
 const ROUND_RULES = {
     count: r => Math.round(8 + r * 1.1),                     // 일반 용사 수(r은 1부터)
     // 구성 순환: 전사 위주, 도적 무리, 혼성, 마법사 많음
@@ -194,26 +196,24 @@ const ROUND_RULES = {
     elites: ['elite_tamer', 'elite_swordsman', 'elite_stormcaller', 'elite_rhapsodist'],
     bosses: ['archmage', 'fallen_knight'],                  // 10라운드마다 번갈아
 };
-const WAVES = (function buildRounds() {
-    const out = [];
-    for (let r = 1; r <= 60; r++) {
-        const R = ROUND_RULES;
-        const mix = R.mix[r <= 2 ? 0 : (r - 1) % R.mix.length];
-        const total = R.count(r);
-        const members = {};
-        for (const k of Object.keys(mix)) members[k] = Math.max(1, Math.round(total * mix[k]));
-        const w = { party: (r > 30 ? '재집결 ' : '') + ROUND_NAMES[(r - 1) % 30], members };
-        if (r >= 3) w.entry = r < 5 ? ENTRY_70_30 : (r < 8 ? ENTRY_60_40 : ENTRY_50_50);
-        if (r >= 3 && (r % R.eliteEvery === 0 || r === 3)) {
-            const n = R.eliteBase + Math.floor(r / R.elitePer);
-            w.elites = {};
-            for (let i = 0; i < n; i++) { const e = R.elites[(r + i) % R.elites.length]; w.elites[e] = (w.elites[e] || 0) + 1; }
-        }
-        if (r % 10 === 0) w.boss = R.bosses[(r / 10 - 1) % R.bosses.length];
-        out.push(w);
+// r번째 라운드(1부터). 무한 라운드도 이 함수로 끝없이 만든다
+function buildRound(r) {
+    const R = ROUND_RULES;
+    const mix = R.mix[r <= 2 ? 0 : (r - 1) % R.mix.length];
+    const total = Math.min(ENDLESS_RULES.maxCount, R.count(r));
+    const members = {};
+    for (const k of Object.keys(mix)) members[k] = Math.max(1, Math.round(total * mix[k]));
+    const w = { party: (r > 30 ? '재집결 ' : '') + ROUND_NAMES[(r - 1) % 30], members };
+    if (r >= 3) w.entry = r < 5 ? ENTRY_70_30 : (r < 8 ? ENTRY_60_40 : ENTRY_50_50);
+    if (r >= 3 && (r % R.eliteEvery === 0 || r === 3)) {
+        const n = Math.min(ENDLESS_RULES.maxElites, R.eliteBase + Math.floor(r / R.elitePer));
+        w.elites = {};
+        for (let i = 0; i < n; i++) { const e = R.elites[(r + i) % R.elites.length]; w.elites[e] = (w.elites[e] || 0) + 1; }
     }
-    return out;
-})();
+    if (r % 10 === 0) w.boss = R.bosses[(r / 10 - 1) % R.bosses.length];
+    return w;
+}
+const WAVES = Array.from({ length: 60 }, (_, i) => buildRound(i + 1));
 
 // 정예를 HEROES와 CORRUPTED에 같은 직업 기준으로 채워 넣는다. 다른 코드는 HEROES[type]으로 똑같이 읽는다.
 for (const [type, elite] of Object.entries(ELITES)) {

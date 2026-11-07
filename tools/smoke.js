@@ -4329,6 +4329,18 @@ m.equip = 'sword';
 UI.selectedMonster = m;
 check('popup');
 assert(ids().includes('sell') && ids().includes('unequip'), 'popup buttons');
+// 정보 창은 맵 어느 칸에서 열어도 다른 버튼과 겹치지 않는다
+{
+    const [hx, hy] = [m.x, m.y];
+    for (const key of BUILD_CELLS) {
+        const [c, r] = key.split(',').map(Number);
+        m.x = tileX(c);
+        m.y = tileY(r);
+        check('popup at ' + key);
+    }
+    m.x = hx;
+    m.y = hy;
+}
 UI.clearSelection();
 Game.paused = true;
 check('paused');
@@ -4933,15 +4945,46 @@ for (const card of Object.values(RULE_CARDS)) for (const k of Object.keys(card.e
 Game.reset(null, null, c);
 assert.strictEqual(Game.lord, c.lord);
 assert.strictEqual(Game.relics.join(), c.relics.join());
-assert.strictEqual(Game.waves.length, 40);
+assert(Game.waves.length >= 60, 'rounds table');
 assert.strictEqual(Game.zone, c.zone);
 assert(Rng.on && Game.record && Game.tick === 0);
 Game.reset();
 assert(!Rng.on && !Game.record && !Game.challenge, 'story run has no seed');
-// 점수: 라운드가 먼저, 다 막으면 빠를수록 높다
-const sc = (r) => challengeScore(c, r);
-assert(sc({ rounds: 11, hp: 0, kills: 0, time: 0 }) > sc({ rounds: 10, hp: 5, kills: 100, time: 0 }), 'rounds first');
-assert(sc({ rounds: 40, hp: 5, kills: 10, time: 600, victory: true }) > sc({ rounds: 40, hp: 5, kills: 10, time: 900, victory: true }), 'faster is better');
+// 점수: 뒤 라운드일수록 커진다. 처치와 라운드 완료로 쌓인다
+assert(scoreMul(50) > scoreMul(10) * 20, 'score grows fast');
+assert.strictEqual(scoreMul(1), 1.04);
+Game.reset(null, null, c);
+Game.state = 'wave';
+const gHero = createHero('warrior', 0, 0, null, 'north');
+gHero.waiting = false;
+Game.heroes.push(gHero);
+const s0 = Game.score;
+Game.scoreKill(gHero);
+assert.strictEqual(Game.score - s0, Math.floor(1000 * scoreMul(1)), 'kill score');
+gHero.elite = true;
+const s2 = Game.score;
+Game.scoreKill(gHero);
+assert.strictEqual(Game.score - s2, Math.floor(5000 * scoreMul(1)), 'elite score');
+gHero.elite = false;
+// 무한 라운드: 표 끝을 넘어 계속 이어지고, 체력이 늘고, 인원은 상한에서 멈춘다
+Game.heroes = [];
+Game.waveIndex = 58;
+Game.state = 'wave';
+Game.roundTimer = 0;
+assert(Game.nextRound(), 'next round near the end of the table');
+assert.strictEqual(Game.waveIndex, 59);
+Game.heroes = [];
+Game.roundTimer = 0;
+assert(Game.nextRound(), 'next round past the table');
+assert(Game.waves.length >= 63 && Game.waveIndex === 60, 'rounds extended');
+Game.heroes = [];
+assert(Game.endlessHpMul(100) > 10 && Game.endlessHpMul(20) === 1, 'hp grows after hpFrom');
+assert(Object.values(buildRound(500).members).reduce((a, b) => a + b, 0) <= ENDLESS_RULES.maxCount + 2, 'count capped');
+assert.strictEqual(buildRound(30).party, WAVES[29].party, 'same table');
+Game.reset();
+assert.strictEqual(Game.endlessHpMul(100), 1, 'story has no endless hp');
+Game.scoreKill(gHero);
+assert.strictEqual(Game.score, 0, 'story has no score');
 
 // 입력 기록: 봇으로 끝까지 둔 판을 난수를 망가뜨린 채 재생해도 결과가 같다
 function botPlay(date) {
@@ -4949,7 +4992,7 @@ function botPlay(date) {
     Game.reset(null, null, C);
     Game.state = 'prep';
     let guard = 0;
-    while (Game.inPlay() && guard++ < 60 * 60 * 40) {
+    while (Game.inPlay() && guard++ < 60 * 60 * 120) {
         if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
         if (Game.tick % 20 === 0 && Game.waveIndex < 14) {
             if (!Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
@@ -4969,7 +5012,8 @@ globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setIte
 store['dungeonGuard.runSave'] = 'keep';
 const before = JSON.stringify(store[RUN_SAVE_KEY]);
 const A = botPlay('2026-11-07');
-assert(A.result && A.record.inputs.length > 20, 'bot played');
+assert(A.result && A.record.inputs.length > 20 && A.result.score > 100000, 'bot played to the end');
+assert.strictEqual(A.result.victory, false, 'endless has no victory');
 assert.strictEqual(JSON.stringify(store[RUN_SAVE_KEY]), before, 'story save untouched');
 assert(Meta.data.daily['2026-11-07'].score === A.result.score && Game.challengeBest.isBest, 'best kept');
 const saved = JSON.parse(store[DAILY_RECORD_KEY]);

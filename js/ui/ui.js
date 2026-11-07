@@ -621,7 +621,12 @@ const UI = {
         // 칸 오른쪽을 우선으로, 화면 밖으로 나가면 왼쪽에 연다
         let x = cx + 64;
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
-        const y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
+        let y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
+        // 다음 라운드 버튼을 가리지 않는다: 위로 올리고, 자리가 없으면 왼쪽에 연다
+        if (x + w > NEXT_BTN_X && y + h > NEXT_BTN_Y) {
+            if (NEXT_BTN_Y - 8 - h >= 80) y = NEXT_BTN_Y - 8 - h;
+            else x = cx - 64 - w;
+        }
         return { x, y };
     },
 
@@ -1466,6 +1471,7 @@ const UI = {
         }
         this.drawBottomBar(ctx);
         this.drawTopBar(ctx);
+        this.drawChallengeScore(ctx);
         this.drawParty(ctx);
         this.drawGateCounts(ctx);
         this.drawBossBar(ctx);
@@ -1839,6 +1845,16 @@ const UI = {
         }
     },
 
+    // 도전 점수: 위쪽 이름판 아래 큰 숫자. 숫자가 빠르게 따라 올라간다
+    drawChallengeScore(ctx) {
+        const G = Game;
+        if (!G.challenge || !G.inPlay()) return;
+        const T = UI_THEME;
+        this.scoreShown = Math.min(G.score, (this.scoreShown || 0) + Math.max(1, Math.ceil((G.score - (this.scoreShown || 0)) * 0.12)));
+        if (G.score < this.scoreShown) this.scoreShown = G.score;
+        UIKit.bigText(ctx, this.scoreShown.toLocaleString(), GAME_WIDTH / 2, 118, 46, T.gold, 'center', '#fff4c0');
+    },
+
     // 위쪽 이름판: 금테 육각 판에 지역 이름, 스테이지, 라운드(Asteria 던전 이름판처럼)
     drawTopBar(ctx) {
         const G = Game;
@@ -1862,7 +1878,7 @@ const UI = {
             ctx.fillRect(bx + 2, by + 2, Math.round((w - 4) * clamp(G.roundTimer / full, 0, 1)), 6);
         }
         const n = String(Math.min(G.waveIndex + 1, G.waves.length));
-        const total = ` / ${G.waves.length}`;
+        const total = G.challenge ? ' / 무한' : ` / ${G.waves.length}`;
         ctx.font = `20px ${UI_FONT}`;
         const tw = ctx.measureText(total).width;
         UIKit.text(ctx, total, x + PLATE.w - 44, cy + 3, 20, T.creamSoft, 'right');
@@ -3065,7 +3081,8 @@ const UI = {
         const cx = GAME_WIDTH / 2;
         UIKit.panel(ctx, cx - 440, 130, 880, 740);
         const st = stageDef(G.stage);
-        UIKit.bigText(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
+        if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드까지 막았습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        else UIKit.bigText(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
         if (st) UIKit.ink(ctx, `스테이지 ${st.no} · ${st.name}`, cx, 248, 24, T.inkSoft, 'center', 'bold');
         const lord = G.lordDef();
         const portrait = Assets.get(lord.sprite);
@@ -3083,7 +3100,7 @@ const UI = {
             ['소환 / 합치기', `${G.stats.summoned} / ${G.stats.merged}`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ].filter(Boolean);
-        if (!win) rows.splice(0, 1, ['막아 낸 라운드', `${G.waveIndex} / ${G.waves.length}`]);
+        if (!win) rows.splice(0, 1, ['막아 낸 라운드', G.challenge ? `${G.waveIndex}라운드` : `${G.waveIndex} / ${G.waves.length}`]);
         rows.forEach(([k, v], i) => {
             UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
             UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');

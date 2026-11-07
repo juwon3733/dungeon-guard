@@ -27,6 +27,7 @@ function killHero(hero, pos, attacker) {
     const bounty = Math.round(hero.bounty * G.mods.bounty); // 마왕과 유물의 처치 골드(bounty)
     G.gold += bounty;
     G.stats.kills++;
+    G.scoreKill(hero);
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
     Fx.coin(pos.x, pos.y - 60, bounty);
     // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)

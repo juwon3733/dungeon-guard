@@ -20,11 +20,19 @@ const RULE_CARDS = {
     elite_hunt: { id: 'elite_hunt', name: '정예 사냥', kind: 'boon', effects: { eliteDrop: 0.2 } }
 };
 
-// 일일 도전: rounds 라운드, 유물 relics개, 규칙 카드 hard + boon장. 신화까지 닿을 수 있는 길이다
-const DAILY_RULES = { rounds: 40, relics: 2, hard: 2, boon: 1, parTime: 1200 };
+// 일일 도전: 무한 라운드. 유물 relics개, 규칙 카드 hard + boon장
+const DAILY_RULES = { relics: 2, hard: 2, boon: 1 };
 
-// 점수: 막은 라운드가 먼저이고, 같으면 남은 체력과 처치, 다 막으면 빨리 끝낼수록 높다
-const SCORE_RULES = { round: 1000, hp: 100, kill: 2, victory: 5000, timePerSecond: 2 };
+// 점수: 처치와 라운드마다 쌓이고 뒤 라운드일수록 커진다. 기준값 x scoreMul(라운드)
+//   kill: 일반 처치(eliteMul, bossMul을 곱한다), clear: 라운드를 다 잡음, earlySecond: 남은 시간 1초
+const SCORE_RULES = { kill: 1000, eliteMul: 5, bossMul: 100, clear: 50000, earlySecond: 5000, roundGrowth: 1.04 };
+
+// 라운드 r의 점수 배율: r x 1.04^r. 곱셈을 되풀이한다(Math.pow는 엔진마다 값이 다를 수 있어 입력 재생이 어긋난다)
+function scoreMul(r) {
+    let mul = r;
+    for (let i = 0; i < r; i++) mul *= SCORE_RULES.roundGrowth;
+    return mul;
+}
 
 // 한국 시간 기준 오늘 날짜 'YYYY-MM-DD'. 자정에 함께 바뀐다
 function kstDate(now) {
@@ -48,20 +56,12 @@ function dailyChallenge(date) {
     const seed = `daily-${date}`;
     const cards = id => Object.keys(RULE_CARDS).filter(k => RULE_CARDS[k].kind === id);
     return {
-        kind: 'daily', id: seed, name: '일일 도전', date, seed, rounds: DAILY_RULES.rounds, parTime: DAILY_RULES.parTime,
+        kind: 'daily', id: seed, name: '일일 도전', date, seed,
         lord: seededPick(seed, 'lord', Object.keys(DEMON_LORDS), 1)[0],
         relics: seededPick(seed, 'relics', Object.keys(RELICS), DAILY_RULES.relics),
         cards: [...seededPick(seed, 'hard', cards('hard'), DAILY_RULES.hard), ...seededPick(seed, 'boon', cards('boon'), DAILY_RULES.boon)],
         zone: seededPick(seed, 'zone', ZONE_IDS, 1)[0]
     };
-}
-
-// 판 결과의 점수
-function challengeScore(c, r) {
-    const R = SCORE_RULES;
-    let score = r.rounds * R.round + r.hp * R.hp + r.kills * R.kill;
-    if (r.victory) score += R.victory + Math.max(0, Math.round(c.parTime - r.time)) * R.timePerSecond;
-    return score;
 }
 
 // 입력 기록을 처음부터 다시 돌려 결과를 낸다(뒤에 서버가 점수를 검증할 때 쓴다). 저장과 기록을 남기지 않는다
@@ -72,7 +72,7 @@ function replayChallenge(record, maxTicks) {
         Game.reset(null, null, c);
         Game.state = 'prep';
         let i = 0;
-        const limit = maxTicks || 60 * 60 * 90;
+        const limit = maxTicks || 60 * 60 * 60 * 6; // 판 시간 6시간
         while (Game.inPlay() && Game.tick < limit) {
             while (i < record.inputs.length && record.inputs[i].t <= Game.tick) Game.applyInput(record.inputs[i++]);
             Game.update(GAME_TICK);
