@@ -12,7 +12,7 @@ function monsterStats(m) {
     const def = MONSTERS[m.type];
     const base = def.stats;
     const stats = {
-        hp: base.hp || 0, damage: base.damage, interval: base.interval, range: base.range, splash: base.splash || 0,
+        hp: base.hp || 0, damage: base.damage, interval: base.interval, range: monsterReach(m.type), splash: base.splash || 0,
         block: base.block || 0, respawn: base.respawn || 0, armor: 0, beam: false, heavy: false
     };
     if (m.tier >= 2) {
@@ -56,6 +56,13 @@ function monsterStats(m) {
     }
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
+    // 격분: 처치 뒤 잠시 빨라진다
+    if (m.frenzyT > 0) stats.interval *= m.frenzyMul;
+    // 유물: 근접 몬스터
+    if (MONSTER_ROLES[def.role].melee) {
+        stats.damage *= 1 + mods.meleeDamage;
+        stats.range += mods.meleeRange;
+    }
     // 스킬 buff(전쟁의 함성 등). 최대 체력은 건드리지 않는다
     if (m.buffT > 0 && m.buff) {
         stats.damage *= 1 + (m.buff.damage || 0);
@@ -411,6 +418,11 @@ function monsterXpToNext(m) {
 // 몬스터가 용사를 쓰러뜨림: 처치 경험치를 받고, 넘친 만큼 랭크를 올린다(체력은 비율을 유지한다).
 // 합쳐지거나 팔려 사라진 몬스터의 투사체가 마무리했으면 아무도 받지 않는다
 function monsterKilledHero(m, hero) {
+    // 격분: 처치하면 잠시 빨라진다
+    if (m && m.kind === 'monster' && !m.removed) {
+        const fr = monsterAbility(m.type, 'frenzy');
+        if (fr) { m.frenzyT = fr.duration; m.frenzyMul = fr.intervalMul; }
+    }
     if (!m || m.kind !== 'monster' || m.removed) return;
     // 약탈(goldOnKill): 처치 골드와 따로 더 받는다
     const loot = monsterAbility(m.type, 'goldOnKill');
@@ -455,6 +467,7 @@ function updateMonster(m, dt) {
     m.healFx = Math.max(0, (m.healFx || 0) - dt);
     m.thornsFx = Math.max(0, (m.thornsFx || 0) - dt);
     m.buffT = Math.max(0, (m.buffT || 0) - dt);
+    m.frenzyT = Math.max(0, (m.frenzyT || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;
@@ -538,7 +551,28 @@ function updateSideMonster(m, dt) {
     m.shot = { target, t: m.atkPoseMax * MONSTER_RELEASE };
 }
 
+// 근접 몬스터: 투사체 없이 사거리 안에서 가장 앞선 용사부터 stats.block명을 함께 때린다(사실상 사거리가 짧은 공격)
+function monsterMelee(m, stats, first) {
+    const inReach = Game.heroes.filter(h => !h.dead && !h.waiting && h !== first).filter(h => {
+        const p = heroWorld(h);
+        return distance(m.x, m.y, p.x, p.y) <= stats.range * TILE;
+    }).sort((a, b) => remainingDistance(a) - remainingDistance(b));
+    const targets = [first, ...inReach.slice(0, Math.max(1, stats.block) - 1)];
+    for (const h of targets) {
+        const p = heroWorld(h);
+        Fx.anim('fx_cleave', p.x, p.y - 10, 130);
+        monsterDealt(m, damageHero(h, stats.damage, m.x, m.y, '#ffb76b', m));
+        monsterHitHero(m.type, h, m);
+    }
+    monsterCleave(m, first, stats.damage);
+    Sfx.play('slash');
+}
+
 function fireMonsterShot(m, stats, target) {
+    if (MONSTER_ROLES[MONSTERS[m.type].role].melee) {
+        monsterMelee(m, stats, target);
+        return;
+    }
     const tp = heroWorld(target);
     const hand = monsterHand(m);
     if (stats.beam) {

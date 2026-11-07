@@ -77,20 +77,20 @@ const EQUIP_EFFECTS = { hp: '체력', damage: '피해', speed: '공격 속도', 
 const EQUIPMENT = {
     sword: { id: 'sword', name: '저주받은 검', grade: 'common', effects: { damage: 0.2 } },
     bow: { id: 'bow', name: '뼈 활', grade: 'common', effects: { range: 0.15 } },
-    armor: { id: 'armor', name: '강철 흉갑', grade: 'common', effects: { hp: 0.3 } },
+    armor: { id: 'armor', name: '강철 흉갑', grade: 'common', effects: { damage: 0.15 } },
     ring: { id: 'ring', name: '보랏빛 반지', grade: 'common', effects: { speed: 0.15 } },
     boots: { id: 'boots', name: '날개 장화', grade: 'common', effects: { speed: 0.1, range: 0.05 } },
-    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { hp: 0.15, damage: 0.1 } },
+    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { damage: 0.175 } },
     axe: { id: 'axe', name: '룬 전투 도끼', grade: 'rare', effects: { damage: 0.4 } },
-    shield: { id: 'shield', name: '해골 방패', grade: 'rare', effects: { hp: 0.6 } },
-    helmet: { id: 'helmet', name: '뿔 투구', grade: 'rare', effects: { hp: 0.3, damage: 0.2 } },
+    shield: { id: 'shield', name: '해골 방패', grade: 'rare', effects: { damage: 0.3 } },
+    helmet: { id: 'helmet', name: '뿔 투구', grade: 'rare', effects: { damage: 0.35 } },
     amulet: { id: 'amulet', name: '핏빛 목걸이', grade: 'rare', effects: { speed: 0.3 } },
     tome: { id: 'tome', name: '고대 주문서', grade: 'rare', effects: { range: 0.25, damage: 0.15 } },
     gauntlet: { id: 'gauntlet', name: '악마 손아귀', grade: 'epic', effects: { damage: 0.6, speed: 0.15 } },
     staff: { id: 'staff', name: '해골 지팡이', grade: 'epic', effects: { damage: 0.4, range: 0.3 } },
-    cape: { id: 'cape', name: '어둠의 망토', grade: 'epic', effects: { hp: 0.8, speed: 0.15 } },
+    cape: { id: 'cape', name: '어둠의 망토', grade: 'epic', effects: { damage: 0.4, speed: 0.15 } },
     crystal: { id: 'crystal', name: '영혼 수정', grade: 'epic', effects: { speed: 0.3, xp: 1 } },
-    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { hp: 0.4, damage: 0.4, xp: 0.5 } }
+    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { damage: 0.6, xp: 0.5 } }
 };
 
 // 장비 얻기와 보관함
@@ -133,12 +133,12 @@ const SACRIFICE_RULES = {
 // 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
 const MONSTER_UPGRADE_ENABLED = false;
 
-// 역할: 모든 몬스터는 길 옆 칸(BUILD_CELLS)에 놓는다.
+// 역할: 모든 몬스터는 길 옆 칸(BUILD_CELLS)에 놓고 그 자리에서 공격한다. 근접(melee)은 사거리가 짧고 stats.block명을 한 번에 때린다.
 //   blocks가 true면 놓은 칸에서 가장 가까운 길 지점으로 걸어 나가 용사를 막고, 쓰러지면 놓은 칸에서 다시 나온다.
 //   false면 놓은 칸에 서서 사거리 안을 공격한다. 지원(support)도 그렇게 서서 약하게 공격하며 오라(aura 능력)를 낸다
 const MONSTER_ROLES = {
-    tank: { name: '탱커', blocks: true },
-    melee: { name: '근접 공격', blocks: true },
+    tank: { name: '근접 광역', blocks: false, melee: true },
+    melee: { name: '근접', blocks: false, melee: true },
     ranged: { name: '원거리 단일', blocks: false },
     area: { name: '원거리 광역', blocks: false },
     support: { name: '지원', blocks: false }
@@ -163,6 +163,7 @@ const MONSTER_FAMILIES = { undead: '언데드', orc: '오크', demon: '악마', 
 //   thorns: 막는 몬스터가 용사에게 맞으면 받은 피해의 ratio를 그 용사에게 돌려준다
 //   chain: 맞은 용사에서 jump칸 안 다음 용사로 count번 이어지며 피해의 ratio(이미 맞은 용사는 건너뛴다)
 //   goldOnKill: 이 몬스터가 용사를 쓰러뜨리면 골드 +gold(처치 골드와 따로)
+//   frenzy: 용사를 쓰러뜨리면 duration초 동안 공격 간격 x intervalMul
 //   burnGround: 광역 공격이 떨어진 자리에 duration초 동안 반경 radius칸 불 장판(초당 dps, 방어력 무시)
 // 특수 스킬: 전설과 신화의 skills에 { kind, name, cooldown, ...값 }으로 적는다. 재사용 대기(cooldown초)마다 맞는 용사가 있으면 저절로 쓴다(js/game/monster.js).
 //   nova: 몬스터 둘레 radius칸('map'이면 맵 전체) 용사에게 공격력 x mul. stun, slow, burn, curse는 그 효과의 초(기절은 보스 제외)
@@ -202,6 +203,7 @@ function abilityName(a) { return a.name || ABILITY_KINDS[a.kind].name; }
 
 const AURA_STATS = { heal: '체력 회복', damage: '피해', attackSpeed: '공격 속도' };
 const ABILITY_KINDS = {
+    frenzy: { name: '격분', desc: a => `용사를 쓰러뜨리면 ${a.duration}초간 공격 간격 x${a.intervalMul}` },
     enrage: { name: '광폭화', desc: a => `체력 ${Math.round(a.below * 100)}% 이하면 공격 간격 x${a.intervalMul}` },
     curseShot: { name: '저주', desc: a => `맞은 용사가 ${a.duration}초간 받는 피해 +${Math.round((a.takenMul - 1) * 100)}%` },
     deathStun: { name: '단말마', desc: a => `쓰러지면 ${a.radius}칸 안 용사 ${a.duration}초 기절(보스 제외)` },
@@ -250,6 +252,13 @@ function astArt(id, opts) {
 // 몬스터가 차지하는 칸(가로, 세로). 놓은 칸(col, row)이 왼쪽 아래 칸이다
 function monsterCells(type) { return MONSTERS[type].art.cells || [1, 1]; }
 
+// 공격이 닿는 칸 수. 근접 몬스터는 사거리가 짧은 대신 몸이 클수록 조금 더 닿는다
+function monsterReach(type) {
+    const base = MONSTERS[type].stats.range;
+    if (!MONSTER_ROLES[MONSTERS[type].role].melee) return base;
+    return base + (Math.max(...monsterCells(type)) - 1) * 0.5;
+}
+
 // 차지하는 칸 전체의 가운데 x와 발끝 기준 y(맨 아래 줄 가운데)
 function monsterHomeX(type, col) { return tileX(col) + (monsterCells(type)[0] - 1) * TILE / 2; }
 function monsterHomeY(type, row) {
@@ -274,9 +283,9 @@ const MONSTERS = {
     orc_guard: {
         id: 'orc_guard', name: '오크 경비병', role: 'tank', family: 'orc', grade: 'common',
         sprite: 'pl_orc_guard', cost: 70,
-        stats: { hp: 120, damage: 8, interval: 1.0, range: 0.8, block: 3, respawn: 8 },
+        stats: { hp: 120, damage: 8, interval: 1.0, range: 2, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
-        desc: '길로 걸어 나가 용사를 3명까지 붙잡습니다.',
+        desc: '길 옆에 서서 곁을 지나는 용사 3명을 한꺼번에 때립니다.',
         branches: {
             A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
             B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
@@ -322,9 +331,9 @@ const MONSTERS = {
     orc_berserker: {
         id: 'orc_berserker', name: '오크 광전사', role: 'melee', family: 'orc', grade: 'rare',
         sprite: 'pl_mon_orc_berserker', cost: 120,
-        stats: { hp: 180, damage: 22, interval: 0.7, range: 0.8, block: 2, respawn: 8 },
-        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.5 }], unlock: 'start',
-        desc: '길로 걸어 나가 용사 2명을 붙잡고 빠르게 벱니다.',
+        stats: { hp: 180, damage: 22, interval: 0.7, range: 2.4, block: 2, respawn: 8 },
+        abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
+        desc: '곁의 용사 2명을 빠르게 베고, 쓰러뜨릴수록 더 빨라집니다.',
         art: {
             scale: PIXEL_SCALE, barY: 138, idleFps: 0, glow: '255,110,60',
             anim: {
@@ -345,18 +354,18 @@ const MONSTERS = {
     bone_knight: {
         id: 'bone_knight', name: '해골 기사', role: 'tank', family: 'undead', grade: 'epic',
         sprite: ASTERIA_ART.bone_knight.sprite, cost: 250,
-        stats: { hp: 500, damage: 30, interval: 1.0, range: 0.9, block: 5, respawn: 6 },
-        abilities: [{ kind: 'deathStun', radius: 2, duration: 1.5 }], unlock: 'start',
-        desc: '길로 걸어 나가 용사를 5명까지 붙잡고 오래 버팁니다.',
+        stats: { hp: 500, damage: 30, interval: 1.0, range: 2, block: 5, respawn: 6 },
+        abilities: [{ kind: 'stunShot', chance: 0.15, duration: 1 }], unlock: 'start',
+        desc: '곁의 용사 5명을 베고, 가끔 기절시킵니다.',
         art: astArt('bone_knight', { glow: '170,120,255' })
     },
     death_lord: {
         id: 'death_lord', name: '죽음의 군주', role: 'tank', family: 'undead', grade: 'legendary',
         sprite: ASTERIA_ART.death_lord.sprite, cost: 500, summon: false,
-        stats: { hp: 900, damage: 60, interval: 0.9, range: 0.9, block: 8, respawn: 5 },
-        abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
+        stats: { hp: 900, damage: 60, interval: 0.9, range: 2, block: 8, respawn: 5 },
+        abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1.2 }], unlock: 'start',
         skills: [{ kind: 'barrage', name: '망자의 군세', cooldown: 14, count: 6, mul: 1.2, reach: 6 }],
-        desc: '길로 걸어 나가 용사를 8명까지 붙잡고, 쓰러지면 주변을 기절시킵니다.',
+        desc: '곁의 용사 8명을 한꺼번에 베고, 가끔 기절시킵니다.',
         art: astArt('death_lord', { glow: '255,200,90' })
     },
 
@@ -364,9 +373,9 @@ const MONSTERS = {
     goblin_spearman: {
         id: 'goblin_spearman', name: '고블린 창병', role: 'melee', family: 'orc', grade: 'common',
         sprite: 'pl_mon_goblin_spearman', cost: 60,
-        stats: { hp: 70, damage: 12, interval: 0.7, range: 0.9, block: 1, respawn: 6 },
+        stats: { hp: 70, damage: 12, interval: 0.7, range: 2.4, block: 1, respawn: 6 },
         abilities: [], unlock: 'start',
-        desc: '길로 걸어 나가 용사 하나를 붙잡고 창으로 빠르게 찌릅니다.',
+        desc: '길 옆에 서서 지나가는 용사를 창으로 빠르게 찌릅니다.',
         art: {
             scale: PIXEL_SCALE, barY: 156, idleFps: 0, glow: '130,235,80',
             anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
@@ -375,9 +384,9 @@ const MONSTERS = {
     zombie: {
         id: 'zombie', name: '좀비', role: 'tank', family: 'undead', grade: 'common',
         sprite: ASTERIA_ART.zombie.sprite, cost: 60,
-        stats: { hp: 170, damage: 6, interval: 1.2, range: 0.8, block: 3, respawn: 7 },
-        abilities: [{ kind: 'regen', perSec: 3 }], unlock: 'start',
-        desc: '느리게 때리지만 상처가 저절로 아물며 길을 오래 막습니다.',
+        stats: { hp: 170, damage: 6, interval: 1.2, range: 2, block: 3, respawn: 7 },
+        abilities: [{ kind: 'slowShot', name: '붙잡는 손', speedMul: 0.85, duration: 1.5 }], unlock: 'start',
+        desc: '곁을 지나는 용사 3명을 움켜쥐어 느리게 합니다.',
         art: astArt('zombie', { glow: '150,220,120' })
     },
     fire_imp: {
@@ -403,16 +412,16 @@ const MONSTERS = {
         id: 'wisp_acolyte', name: '도깨비불 수련사', role: 'support', family: 'spirit', grade: 'common',
         sprite: ASTERIA_ART.wisp_acolyte.sprite, cost: 60,
         stats: { hp: 30, damage: 3, interval: 1.5, range: 2 },
-        abilities: [{ kind: 'aura', stat: 'heal', radius: 2, value: 3 }], unlock: 'start',
-        desc: '등불을 들고 서서 둘레 몬스터의 상처를 천천히 낫게 합니다.',
+        abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 2, value: 0.05 }], unlock: 'start',
+        desc: '둘레 몬스터의 공격 속도를 조금 올립니다.',
         art: astArt('wisp_acolyte', { glow: '90,240,255', shot: 'bolt' })
     },
     werewolf: {
         id: 'werewolf', name: '늑대인간', role: 'melee', family: 'beast', grade: 'rare',
         sprite: 'pl_mon_werewolf', cost: 120,
-        stats: { hp: 170, damage: 24, interval: 0.6, range: 0.8, block: 2, respawn: 7 },
-        abilities: [{ kind: 'lifesteal', ratio: 0.3 }], unlock: 'start',
-        desc: '용사 2명을 붙잡고 물어뜯어 그 피로 버팁니다.',
+        stats: { hp: 170, damage: 24, interval: 0.6, range: 2.4, block: 2, respawn: 7 },
+        abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
+        desc: '곁의 용사 2명을 물어뜯고, 쓰러뜨리면 더 사나워집니다.',
         art: {
             scale: PIXEL_SCALE, barY: 141, idleFps: 0, glow: '140,160,255',
             anim: { idle: plClip('walking', 6, 54, 63, 54), walk: plClip('walking', 6, 54, 63, 54), attack: plClip('slash', 6, 54, 57, 53) }
@@ -421,9 +430,9 @@ const MONSTERS = {
     troll: {
         id: 'troll', name: '동굴 트롤', role: 'tank', family: 'orc', grade: 'rare',
         sprite: 'pl_mon_troll', cost: 120,
-        stats: { hp: 320, damage: 14, interval: 1.2, range: 0.8, block: 4, respawn: 7 },
-        abilities: [{ kind: 'regen', perSec: 10 }], unlock: 'start',
-        desc: '용사 4명을 붙잡고, 맞아도 금세 상처가 아뭅니다.',
+        stats: { hp: 320, damage: 14, interval: 1.2, range: 2, block: 4, respawn: 7 },
+        abilities: [{ kind: 'slowShot', name: '육중한 일격', speedMul: 0.8, duration: 2 }], unlock: 'start',
+        desc: '곁의 용사 4명을 내리쳐 느리게 합니다.',
         art: {
             scale: PIXEL_SCALE, barY: 144, idleFps: 0, glow: '70,230,180',
             anim: { idle: plClip('walking', 6, 62, 63, 63), walk: plClip('walking', 6, 62, 63, 63), attack: plClip('slash', 6, 56, 57, 56) }
@@ -462,9 +471,9 @@ const MONSTERS = {
     minotaur: {
         id: 'minotaur', name: '미노타우로스', role: 'melee', family: 'beast', grade: 'epic',
         sprite: 'pl_mon_minotaur', cost: 250,
-        stats: { hp: 480, damage: 50, interval: 1.2, range: 1, block: 3, respawn: 6 },
+        stats: { hp: 480, damage: 50, interval: 1.2, range: 2.4, block: 3, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
-        desc: '큰 도끼를 휘둘러 붙잡은 용사와 그 둘레를 함께 벱니다.',
+        desc: '큰 도끼를 휘둘러 곁의 용사와 그 둘레를 함께 벱니다.',
         art: {
             scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '255,140,50',
             anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
@@ -489,18 +498,18 @@ const MONSTERS = {
     ancient_treant: {
         id: 'ancient_treant', name: '고대 나무 정령', role: 'tank', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.ancient_treant.sprite, cost: 250,
-        stats: { hp: 700, damage: 20, interval: 1.3, range: 0.9, block: 6, respawn: 6 },
-        abilities: [{ kind: 'thorns', ratio: 0.3 }], unlock: 'start',
-        desc: '용사 6명을 붙잡고, 때리는 용사는 가시에 찔립니다.',
+        stats: { hp: 700, damage: 20, interval: 1.3, range: 2, block: 6, respawn: 6 },
+        abilities: [{ kind: 'slowShot', name: '뿌리 묶기', speedMul: 0.7, duration: 2 }], unlock: 'start',
+        desc: '곁의 용사 6명을 뿌리로 묶어 느리게 합니다.',
         art: astArt('ancient_treant', { glow: '140,255,100' })
     },
     hell_general: {
         id: 'hell_general', name: '지옥 대장군', role: 'melee', family: 'demon', grade: 'legendary',
         sprite: ASTERIA_ART.hell_general.sprite, cost: 500, summon: false,
-        stats: { hp: 800, damage: 110, interval: 0.8, range: 1, block: 4, respawn: 5 },
-        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
+        stats: { hp: 800, damage: 110, interval: 0.8, range: 2.4, block: 4, respawn: 5 },
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '지옥불 강타', cooldown: 12, reach: 5, radius: 2, mul: 3, burn: 3 }],
-        desc: '불타는 대검으로 둘레를 쓸어 버리고, 다치면 더 빨라집니다.',
+        desc: '곁의 용사를 불칼로 쓸어버립니다.',
         art: astArt('hell_general', { glow: '255,170,40' })
     },
     archlich: {
@@ -517,17 +526,17 @@ const MONSTERS = {
     grave_keeper: {
         id: 'grave_keeper', name: '묘지기', role: 'tank', family: 'undead', grade: 'common',
         sprite: ASTERIA_ART.grave_keeper.sprite, cost: 60,
-        stats: { hp: 150, damage: 7, interval: 1.1, range: 0.8, block: 2, respawn: 7 },
-        abilities: [{ kind: 'thorns', ratio: 0.15 }], unlock: 'start',
-        desc: '등불을 들고 길을 막으며, 맞으면 받은 피해 일부를 돌려줍니다.',
+        stats: { hp: 150, damage: 7, interval: 1.1, range: 2, block: 2, respawn: 7 },
+        abilities: [{ kind: 'curseShot', name: '무덤의 저주', duration: 2, takenMul: 1.1 }], unlock: 'start',
+        desc: '등불로 곁을 지나는 용사 2명에게 저주를 겁니다.',
         art: astArt('grave_keeper', { glow: '150,190,255' })
     },
     wraith_swordsman: {
         id: 'wraith_swordsman', name: '망령 검사', role: 'melee', family: 'undead', grade: 'rare',
         sprite: ASTERIA_ART.wraith_swordsman.sprite, cost: 120,
-        stats: { hp: 190, damage: 20, interval: 0.7, range: 0.8, block: 2, respawn: 7 },
-        abilities: [{ kind: 'lifesteal', ratio: 0.2 }], unlock: 'start',
-        desc: '벤 만큼 체력을 빨아들이는 그림자 기사입니다.',
+        stats: { hp: 190, damage: 20, interval: 0.7, range: 2.4, block: 2, respawn: 7 },
+        abilities: [{ kind: 'frenzy', duration: 2, intervalMul: 0.7 }], unlock: 'start',
+        desc: '곁의 용사 2명을 베고, 쓰러뜨리면 잠시 더 빨라집니다.',
         art: astArt('wraith_swordsman', { glow: '150,110,255' })
     },
     plague_ghoul: {
@@ -557,9 +566,9 @@ const MONSTERS = {
     orc_charger: {
         id: 'orc_charger', name: '돌격대장', role: 'melee', family: 'orc', grade: 'epic',
         sprite: ASTERIA_ART.orc_charger.sprite, cost: 250,
-        stats: { hp: 460, damage: 44, interval: 0.9, range: 1, block: 3, respawn: 6 },
-        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
-        desc: '다칠수록 사납게 휘두르는 멧돼지 전사입니다.',
+        stats: { hp: 460, damage: 44, interval: 0.9, range: 2.4, block: 3, respawn: 6 },
+        abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.65 }], unlock: 'start',
+        desc: '곁의 용사 3명을 들이받고, 쓰러뜨리면 더 사나워집니다.',
         art: astArt('orc_charger', { glow: '255,150,80' })
     },
     war_drummer: {
@@ -573,7 +582,7 @@ const MONSTERS = {
     ogre_crusher: {
         id: 'ogre_crusher', name: '오우거 파쇄자', role: 'melee', family: 'orc', grade: 'epic',
         sprite: 'pl_mon_ogre_crusher', cost: 250,
-        stats: { hp: 560, damage: 60, interval: 1.4, range: 1, block: 4, respawn: 7 },
+        stats: { hp: 560, damage: 60, interval: 1.4, range: 2.4, block: 4, respawn: 7 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.8 }], unlock: 'start',
         desc: '느리지만 한 번에 여럿을 부수는 거한입니다.',
         art: PL_NEW_ART.ogre_crusher
@@ -581,7 +590,7 @@ const MONSTERS = {
     orc_high_chief: {
         id: 'orc_high_chief', name: '대족장', role: 'melee', family: 'orc', grade: 'legendary',
         sprite: ASTERIA_ART.orc_high_chief.sprite, cost: 500, summon: false,
-        stats: { hp: 1000, damage: 95, interval: 0.9, range: 1, block: 6, respawn: 5 },
+        stats: { hp: 1000, damage: 95, interval: 0.9, range: 2.4, block: 6, respawn: 5 },
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.5 }, { kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '전쟁의 함성', cooldown: 20, duration: 8, damage: 0.3 }],
         desc: '철퇴를 휘두르며 둘레 몬스터를 함께 강하게 만듭니다.',
@@ -590,18 +599,18 @@ const MONSTERS = {
     giant_king: {
         id: 'giant_king', name: '거인 왕', role: 'tank', family: 'orc', grade: 'legendary',
         sprite: ASTERIA_ART.giant_king.sprite, cost: 500, summon: false,
-        stats: { hp: 1400, damage: 70, interval: 1.3, range: 1, block: 10, respawn: 6 },
-        abilities: [{ kind: 'deathStun', radius: 3, duration: 2 }, { kind: 'thorns', ratio: 0.3 }], unlock: 'start',
+        stats: { hp: 1400, damage: 70, interval: 1.3, range: 2, block: 10, respawn: 6 },
+        abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1.2 }, { kind: 'cleave', radius: 1.5, ratio: 0.4 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '대지 강타', cooldown: 15, radius: 3, mul: 1.5, stun: 2 }],
-        desc: '용사 10명을 붙잡는 산 같은 거인입니다.',
+        desc: '곁의 용사 10명을 한꺼번에 내리치는 거인입니다.',
         art: astArt('giant_king', { glow: '255,140,60' })
     },
     hellhound_warrior: {
         id: 'hellhound_warrior', name: '지옥견', role: 'melee', family: 'demon', grade: 'common',
         sprite: ASTERIA_ART.hellhound_warrior.sprite, cost: 60,
-        stats: { hp: 90, damage: 13, interval: 0.7, range: 0.8, block: 1, respawn: 6 },
-        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.7 }], unlock: 'start',
-        desc: '불타는 사냥개입니다. 다치면 더 빨리 뭅니다.',
+        stats: { hp: 90, damage: 13, interval: 0.7, range: 2.4, block: 1, respawn: 6 },
+        abilities: [{ kind: 'frenzy', duration: 2, intervalMul: 0.7 }], unlock: 'start',
+        desc: '불타는 사냥개입니다. 쓰러뜨리면 더 빨리 뭅니다.',
         art: astArt('hellhound_warrior', { glow: '255,120,50' })
     },
     succubus: {
@@ -615,16 +624,16 @@ const MONSTERS = {
     flame_archer: {
         id: 'flame_archer', name: '화염 궁수', role: 'tank', family: 'demon', grade: 'rare',
         sprite: ASTERIA_ART.flame_archer.sprite, cost: 120,
-        stats: { hp: 240, damage: 18, interval: 1.0, range: 0.8, block: 3, respawn: 7 },
-        abilities: [{ kind: 'thorns', ratio: 0.2 }], unlock: 'start',
-        desc: '불타는 방패로 막으며 때린 용사를 태웁니다.',
+        stats: { hp: 240, damage: 18, interval: 1.0, range: 2, block: 3, respawn: 7 },
+        abilities: [{ kind: 'burnShot', dps: 6, duration: 2 }], unlock: 'start',
+        desc: '곁의 용사 3명을 불로 때려 태웁니다.',
         art: astArt('flame_archer', { glow: '255,110,50' })
     },
     executioner: {
         id: 'executioner', name: '심판의 처형자', role: 'melee', family: 'demon', grade: 'epic',
         sprite: ASTERIA_ART.executioner.sprite, cost: 250,
-        stats: { hp: 420, damage: 70, interval: 1.3, range: 1.2, block: 2, respawn: 6 },
-        abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.6 }, { kind: 'cleave', radius: 1.5, ratio: 0.5 }], unlock: 'start',
+        stats: { hp: 420, damage: 70, interval: 1.3, range: 2.4, block: 2, respawn: 6 },
+        abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.65 }, { kind: 'cleave', radius: 1.5, ratio: 0.5 }], unlock: 'start',
         desc: '큰 낫으로 둘레를 함께 베는 사신입니다.',
         art: astArt('executioner', { glow: '190,90,255' })
     },
@@ -648,7 +657,7 @@ const MONSTERS = {
     boar_warrior: {
         id: 'boar_warrior', name: '멧돼지 전사', role: 'tank', family: 'beast', grade: 'common',
         sprite: ASTERIA_ART.boar_warrior.sprite, cost: 60,
-        stats: { hp: 160, damage: 8, interval: 1.1, range: 0.8, block: 2, respawn: 7 },
+        stats: { hp: 160, damage: 8, interval: 1.1, range: 2, block: 2, respawn: 7 },
         abilities: [], unlock: 'start',
         desc: '튼튼한 멧돼지가 길을 막습니다.',
         art: astArt('boar_warrior', { glow: '255,160,80' })
@@ -664,9 +673,9 @@ const MONSTERS = {
     bear_warrior: {
         id: 'bear_warrior', name: '곰 전사', role: 'tank', family: 'beast', grade: 'rare',
         sprite: ASTERIA_ART.bear_warrior.sprite, cost: 120,
-        stats: { hp: 360, damage: 16, interval: 1.2, range: 0.8, block: 4, respawn: 7 },
-        abilities: [{ kind: 'regen', perSec: 5 }], unlock: 'start',
-        desc: '두꺼운 털로 버티며 상처가 저절로 아뭅니다.',
+        stats: { hp: 360, damage: 16, interval: 1.2, range: 2, block: 4, respawn: 7 },
+        abilities: [{ kind: 'slowShot', name: '곰의 앞발', speedMul: 0.8, duration: 1.5 }], unlock: 'start',
+        desc: '곁의 용사 4명을 앞발로 후려 느리게 합니다.',
         art: astArt('bear_warrior', { glow: '190,225,255' })
     },
     eagle_hunter: {
@@ -680,9 +689,9 @@ const MONSTERS = {
     saber_warrior: {
         id: 'saber_warrior', name: '검치호 전사', role: 'melee', family: 'beast', grade: 'epic',
         sprite: ASTERIA_ART.saber_warrior.sprite, cost: 250,
-        stats: { hp: 420, damage: 56, interval: 0.8, range: 1, block: 3, respawn: 6 },
-        abilities: [{ kind: 'lifesteal', ratio: 0.25 }], unlock: 'start',
-        desc: '물어뜯은 만큼 회복하는 맹수입니다.',
+        stats: { hp: 420, damage: 56, interval: 0.8, range: 2.4, block: 3, respawn: 6 },
+        abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
+        desc: '곁의 용사 3명을 할퀴고, 쓰러뜨리면 더 빨라집니다.',
         art: astArt('saber_warrior', { glow: '255,215,120' })
     },
     hydra_warrior: {
@@ -696,10 +705,10 @@ const MONSTERS = {
     earth_behemoth: {
         id: 'earth_behemoth', name: '대지의 거수', role: 'tank', family: 'beast', grade: 'legendary',
         sprite: ASTERIA_ART.earth_behemoth.sprite, cost: 500, summon: false,
-        stats: { hp: 1500, damage: 55, interval: 1.2, range: 1, block: 9, respawn: 6 },
-        abilities: [{ kind: 'thorns', ratio: 0.5 }, { kind: 'regen', perSec: 15 }], unlock: 'start',
+        stats: { hp: 1500, damage: 55, interval: 1.2, range: 2, block: 9, respawn: 6 },
+        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.5 }, { kind: 'slowShot', name: '가시 덩굴', speedMul: 0.7, duration: 2 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '가시 폭풍', cooldown: 14, radius: 3.5, mul: 2, slow: 3 }],
-        desc: '때릴수록 가시에 찔리는 거대한 짐승입니다.',
+        desc: '곁의 용사 9명을 가시로 찔러 느리게 합니다.',
         art: astArt('earth_behemoth', { glow: '220,90,80' })
     },
     phoenix_lord: {
@@ -707,14 +716,14 @@ const MONSTERS = {
         sprite: ASTERIA_ART.phoenix_lord.sprite, cost: 500, summon: false,
         stats: { hp: 150, damage: 90, interval: 1.6, range: 4.5, splash: 2 },
         abilities: [{ kind: 'burnGround', name: '불바다', radius: 1.2, dps: 20, duration: 4 }], unlock: 'start',
-        skills: [{ kind: 'heal', name: '재생의 불꽃', cooldown: 25, ratio: 0.25, revive: true }],
+        skills: [{ kind: 'buff', name: '재생의 불꽃', cooldown: 25, duration: 8, damage: 0.25 }],
         desc: '지나간 자리를 불바다로 만듭니다.',
         art: astArt('phoenix_lord', { glow: '255,150,50', shot: 'bolt' })
     },
     rock_spirit: {
         id: 'rock_spirit', name: '바위 정령', role: 'tank', family: 'spirit', grade: 'common',
         sprite: ASTERIA_ART.rock_spirit.sprite, cost: 60,
-        stats: { hp: 190, damage: 5, interval: 1.3, range: 0.8, block: 3, respawn: 8 },
+        stats: { hp: 190, damage: 5, interval: 1.3, range: 2, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
         desc: '느리지만 잘 버티는 흙과 바위의 정령입니다.',
         art: astArt('rock_spirit', { glow: '190,170,120' })
@@ -731,8 +740,8 @@ const MONSTERS = {
         id: 'water_spirit', name: '물의 정령', role: 'support', family: 'spirit', grade: 'rare',
         sprite: ASTERIA_ART.water_spirit.sprite, cost: 120,
         stats: { hp: 60, damage: 6, interval: 1.5, range: 2.5 },
-        abilities: [{ kind: 'aura', stat: 'heal', radius: 3, value: 8 }], unlock: 'start',
-        desc: '둘레 몬스터의 체력을 채워 줍니다.',
+        abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.1 }], unlock: 'start',
+        desc: '둘레 몬스터의 공격 속도를 올립니다.',
         art: astArt('water_spirit', { glow: '110,210,255', shot: 'bolt' })
     },
     lightning_spirit: {
@@ -747,8 +756,8 @@ const MONSTERS = {
         id: 'moon_priestess', name: '달의 사제', role: 'support', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.moon_priestess.sprite, cost: 250,
         stats: { hp: 90, damage: 14, interval: 1.4, range: 3 },
-        abilities: [{ kind: 'aura', stat: 'heal', radius: 3, value: 20 }], unlock: 'start',
-        desc: '달빛으로 둘레 몬스터를 크게 회복시킵니다.',
+        abilities: [{ kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
+        desc: '달빛으로 둘레 몬스터의 피해를 크게 올립니다.',
         art: astArt('moon_priestess', { glow: '200,220,255', shot: 'bolt' })
     },
     storm_archer: {
@@ -771,10 +780,10 @@ const MONSTERS = {
     crystal_giant: {
         id: 'crystal_giant', name: '수정 거인', role: 'tank', family: 'spirit', grade: 'legendary',
         sprite: ASTERIA_ART.crystal_giant.sprite, cost: 500, summon: false,
-        stats: { hp: 1600, damage: 50, interval: 1.3, range: 1, block: 10, respawn: 6 },
-        abilities: [{ kind: 'thorns', ratio: 0.4 }, { kind: 'deathStun', radius: 3, duration: 2 }], unlock: 'start',
-        skills: [{ kind: 'buff', name: '수정 방벽', cooldown: 20, duration: 6, armor: 0.3 }],
-        desc: '수정 몸으로 받아 내고 부서질 때 주변을 멈춥니다.',
+        stats: { hp: 1600, damage: 50, interval: 1.3, range: 2, block: 10, respawn: 6 },
+        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.4 }, { kind: 'stunShot', chance: 0.2, duration: 1.2 }], unlock: 'start',
+        skills: [{ kind: 'buff', name: '수정 공명', cooldown: 20, duration: 6, damage: 0.2 }],
+        desc: '곁의 용사 10명을 수정 주먹으로 내리칩니다.',
         art: astArt('crystal_giant', { glow: '150,180,255' })
     },
 
@@ -818,10 +827,10 @@ const MONSTERS = {
     kraken: {
         id: 'kraken', name: '심연의 크라켄', role: 'tank', family: 'beast', grade: 'mythic',
         sprite: ASTERIA_ART.kraken.sprite, cost: 1000,
-        stats: { hp: 2400, damage: 90, interval: 1.1, range: 1.2, block: 14, respawn: 5 },
-        abilities: [{ kind: 'thorns', ratio: 0.4 }], unlock: 'start',
+        stats: { hp: 2400, damage: 90, interval: 1.1, range: 2, block: 14, respawn: 5 },
+        abilities: [{ kind: 'slowShot', name: '먹물', speedMul: 0.6, duration: 2.5 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '촉수 붙잡기', cooldown: 14, radius: 4, mul: 1.5, stun: 2.5 }, { kind: 'push', name: '소용돌이', cooldown: 20, radius: 5, mul: 1, tiles: 2 }],
-        desc: '용사 14명을 촉수로 붙잡습니다.',
+        desc: '곁의 용사 14명을 촉수로 후려칩니다.',
         art: astArt('kraken', { glow: '130,110,230' })
     },
     frost_queen: {
@@ -829,7 +838,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.frost_queen.sprite, cost: 1000,
         stats: { hp: 220, damage: 150, interval: 1.6, range: 5, splash: 2.2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.5, duration: 3 }], unlock: 'start',
-        skills: [{ kind: 'nova', name: '절대 영도', cooldown: 20, radius: 'map', mul: 0.8, slow: 6 }, { kind: 'buff', name: '얼음 갑옷', cooldown: 18, duration: 6, armor: 0.3 }],
+        skills: [{ kind: 'nova', name: '절대 영도', cooldown: 20, radius: 'map', mul: 0.8, slow: 6 }, { kind: 'buff', name: '얼음 숨결', cooldown: 18, duration: 6, speed: 0.25 }],
         desc: '맵 전체를 얼려 용사의 발을 묶습니다.',
         art: astArt('frost_queen', { glow: '160,220,255', shot: 'bolt' })
     },
@@ -858,8 +867,8 @@ const MONSTERS = {
         sprite: ASTERIA_ART.sun_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
         stats: { hp: 400, damage: 270, interval: 1.4, range: 6, splash: 2.6 },
         abilities: [{ kind: 'burnGround', name: '태양의 불길', radius: 1.5, dps: 40, duration: 4 }], unlock: 'start',
-        skills: [{ kind: 'nova', name: '태양 폭발', cooldown: 16, radius: 'map', mul: 2.5, burn: 5 }, { kind: 'heal', name: '여명', cooldown: 24, ratio: 0.4, revive: true }],
-        desc: '히든 신화. 맵 전체를 불태우고 쓰러진 몬스터를 일으킵니다.',
+        skills: [{ kind: 'nova', name: '태양 폭발', cooldown: 16, radius: 'map', mul: 2.5, burn: 5 }, { kind: 'buff', name: '여명', cooldown: 24, duration: 8, speed: 0.3 }],
+        desc: '히든 신화. 맵 전체를 불태우고 몬스터를 빛으로 북돋웁니다.',
         art: astArt('sun_god', { glow: '255,210,110', shot: 'bolt' })
     },
     moon_god: {
@@ -867,14 +876,14 @@ const MONSTERS = {
         sprite: ASTERIA_ART.moon_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
         stats: { hp: 380, damage: 290, interval: 0.9, range: 6.5 },
         abilities: [{ kind: 'chain', count: 4, ratio: 0.6, jump: 3 }], unlock: 'start',
-        skills: [{ kind: 'timeStop', name: '달빛 정지', cooldown: 20, duration: 3 }, { kind: 'buff', name: '달의 장막', cooldown: 18, duration: 8, armor: 0.4 }],
-        desc: '히든 신화. 시간을 멈추고 몬스터를 달빛으로 감쌉니다.',
+        skills: [{ kind: 'timeStop', name: '달빛 정지', cooldown: 20, duration: 3 }, { kind: 'buff', name: '달의 장막', cooldown: 18, duration: 8, damage: 0.3 }],
+        desc: '히든 신화. 시간을 멈추고 몬스터를 달빛으로 강하게 합니다.',
         art: astArt('moon_god', { glow: '200,220,255', shot: 'bolt' })
     },
     death_god: {
         id: 'death_god', name: '죽음의 신', role: 'melee', family: 'undead', grade: 'mythic',
         sprite: ASTERIA_ART.death_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
-        stats: { hp: 2800, damage: 320, interval: 0.8, range: 1.3, block: 8, respawn: 4 },
+        stats: { hp: 2800, damage: 320, interval: 0.8, range: 2.4, block: 8, respawn: 4 },
         abilities: [{ kind: 'cleave', radius: 2.5, ratio: 0.8 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '사신의 낫', cooldown: 10, reach: 'map', below: 0.35, gold: 2 }, { kind: 'barrage', name: '저승의 군세', cooldown: 14, count: 15, mul: 1.2, reach: 'map' }],
         desc: '히든 신화. 약해진 용사는 맵 어디에 있어도 거둡니다.',
@@ -883,7 +892,7 @@ const MONSTERS = {
     god_king: {
         id: 'god_king', name: '신왕', role: 'melee', family: 'spirit', grade: 'mythic',
         sprite: ASTERIA_ART.god_king.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
-        stats: { hp: 3600, damage: 300, interval: 0.9, range: 1.3, block: 12, respawn: 4 },
+        stats: { hp: 3600, damage: 300, interval: 0.9, range: 2.4, block: 12, respawn: 4 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 5, value: 0.3 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '신왕의 칙령', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }, { kind: 'barrage', name: '천벌', cooldown: 15, count: 20, mul: 1.5, reach: 'map' }],
         desc: '히든 신화. 맵의 모든 몬스터를 강하게 하고 하늘의 벌을 내립니다.',

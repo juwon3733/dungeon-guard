@@ -1327,6 +1327,13 @@ const UI = {
                 Render.mergeRing(ctx, down ? m.homeX : m.x, (down ? m.homeY : m.y) + MONSTER_FOOT, color, this.equipTarget === m);
             }
         }
+        // 마우스를 올린 몬스터의 사거리: 누르지 않아도 보인다
+        if (!this.drag && !this.selectedMonster && Game.inPlay() && this.mouse) {
+            const wx = this.mouse.x / WORLD_ZOOM;
+            const wy = this.mouse.y / WORLD_ZOOM;
+            const hover = Game.monsterAt(Math.floor(wx / TILE), Math.floor((wy - MAP_TOP) / TILE));
+            if (hover) Render.rangeRing(ctx, hover.x, hover.y, monsterStats(hover).range * TILE, 'rgba(255,224,138,0.75)');
+        }
         // 끄는 동안 왕좌에 제물 표시
         if (this.drag) Render.sacrificeMark(ctx, !!(this.dropTarget && this.dropTarget.throne));
         const cell = this.drag && this.hoverCell;
@@ -1342,7 +1349,7 @@ const UI = {
                 if (ok) this.drawRallyPath(ctx, ghost.x, ghost.y + MONSTER_FOOT, r.x, r.y + 10);
                 Render.rangeRing(ctx, r.x, r.y + 10, def.stats.range * TILE, color);
             } else {
-                Render.rangeRing(ctx, ghost.x, ghost.y, def.stats.range * TILE, color);
+                Render.rangeRing(ctx, ghost.x, ghost.y, monsterReach(type) * TILE, color);
             }
             if (ok) this.drawAuraRanges(ctx, type, ghost.x, ghost.y);
             const { clip, name } = Render.monsterFrame(def, ghost);
@@ -2323,8 +2330,8 @@ const UI = {
             sx += 130;
         }
         UIKit.ink(ctx, `${num(stats.interval)}초마다`, sx, sy + 2, 20, T.inkSoft);
-        const line2 = monsterBlocks(p.type) ? `막기 ${stats.block}명 · 쓰러지면 ${stats.respawn}초 뒤 다시 나옴`
-            : (stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림');
+        const melee = MONSTER_ROLES[def.role].melee;
+        const line2 = melee ? `한 번에 ${stats.block}명 타격 · 사거리 ${num(stats.range)}칸` : (stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림');
         UIKit.ink(ctx, line2, p.x + 22, top + 138 + POPUP_RANK_H + 14, 17, T.inkSoft);
 
         // 장비 줄: 칸(마우스를 올리면 설명), 이름과 등급, 효과. 빼기 버튼은 layoutMonsterMenu가 놓는다

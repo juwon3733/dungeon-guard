@@ -9,14 +9,14 @@ const RULE_CARDS = {
     narrow_field: { id: 'narrow_field', name: '좁은 전장', kind: 'hard', effects: { fieldMax: -4 } },
     broken_bolt: { id: 'broken_bolt', name: '번개 고장', kind: 'hard', effects: { lightningCooldown: 2 } },
     costly_pact: { id: 'costly_pact', name: '비싼 계약', kind: 'hard', effects: { summonBase: 8 } },
-    slow_revival: { id: 'slow_revival', name: '느린 부활', kind: 'hard', effects: { respawn: 1.5 } },
+    weak_arms: { id: 'weak_arms', name: '약한 팔', kind: 'hard', effects: { damage: -0.1 } },
     dull_hands: { id: 'dull_hands', name: '둔한 손', kind: 'hard', effects: { attackSpeed: -0.1 } },
     full_vault: { id: 'full_vault', name: '넉넉한 금고', kind: 'boon', effects: { startGold: 200 } },
     wide_field: { id: 'wide_field', name: '넓은 전장', kind: 'boon', effects: { fieldMax: 4 } },
     war_fever: { id: 'war_fever', name: '전쟁 열기', kind: 'boon', effects: { damage: 0.1 } },
     rich_spoils: { id: 'rich_spoils', name: '쌓이는 전리품', kind: 'boon', effects: { bounty: 1.2 } },
     cheap_summon: { id: 'cheap_summon', name: '할인 소환', kind: 'boon', effects: { summonBase: -5 } },
-    fast_revival: { id: 'fast_revival', name: '빠른 부활', kind: 'boon', effects: { respawn: 0.7 } },
+    keen_eyes: { id: 'keen_eyes', name: '날카로운 눈', kind: 'boon', effects: { range: 0.1 } },
     elite_hunt: { id: 'elite_hunt', name: '정예 사냥', kind: 'boon', effects: { eliteDrop: 0.2 } }
 };
 
