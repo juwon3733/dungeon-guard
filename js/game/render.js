@@ -655,8 +655,9 @@ const Render = {
         const halfW = Math.max(TILE * 0.3, bodyW * 0.45);
         const bodyH = (def.art.barY || 120) * 0.85;
         const unit = ART_SCALE;
-        const n = 7 + GRADE_ORDER.indexOf(def.grade) * 3;
+        const n = 5 + GRADE_ORDER.indexOf(def.grade) * 3;
         const fam = def.family;
+        const pal = MONSTER_PALETTES[m.type] || ['#5a3a6a', '#9a6cff', '#e2b0ff', '#ffffff'];
         // 발밑의 종족 얼룩: 잡음으로 만든 불규칙한 도트 자국(원이 아니다). 몬스터 종류마다 모양이 다르고 한 번 만들어 둔다
         if (!front) this.drawGroundMark(ctx, m, def, footY, halfW);
         // 몸 둘레를 도는 종족 효과(뒤쪽 반은 몸 뒤, 앞쪽 반은 몸 앞)
@@ -670,23 +671,23 @@ const Render = {
                 const k = ((t * (0.9 + rnd * 0.6) + rnd) % 1);
                 x = m.x + (rnd - 0.5) * halfW * 1.6 + Math.sin(t * 5 + i) * 4;
                 y = footY - k * bodyH * 1.1;
-                size = (rnd > 0.6 ? 3 : 2) * unit * 3;
-                color = ['#ff7a1a', '#ffd23d', '#ff3d1a'][i % 3];
+                size = (rnd > 0.6 ? 2 : 1) * unit * 2;
+                color = [pal[2], pal[3], '#ffd23d'][i % 3];
                 alpha = 1 - k;
             } else if (fam === 'undead') {
                 const k = ((t * (0.25 + rnd * 0.15) + rnd) % 1);
                 x = m.x + (rnd - 0.5) * halfW * 1.8 + Math.sin(t * 1.6 + i * 1.7) * 14;
                 y = footY - 6 - k * bodyH;
-                size = 3 * unit * 3;
-                color = i % 3 === 0 ? '#b48cff' : '#7dffb0';
+                size = 2 * unit * 2;
+                color = i % 3 === 0 ? pal[3] : pal[2];
                 alpha = Math.sin(k * Math.PI);
             } else if (fam === 'spirit') {
                 const ang = rnd * Math.PI * 2 + t * 0.4;
                 x = m.x + Math.cos(ang) * halfW * (0.7 + rnd * 0.5);
                 y = footY - bodyH * (0.25 + rnd * 0.65) + Math.sin(t * 2 + i) * 6;
                 const blink = (Math.sin(t * (2.5 + rnd * 2) + i * 2.1) + 1) / 2;
-                size = 2 * unit * 3;
-                color = ['#bff6ff', '#ffffff', '#9fd8ff'][i % 3];
+                size = 2 * unit;
+                color = [pal[2], '#ffffff', pal[3]][i % 3];
                 alpha = blink;
                 if (blink > 0.85) {
                     ctx.globalAlpha = blink;
@@ -699,14 +700,14 @@ const Render = {
                 const dir = rnd > 0.5 ? 1 : -1;
                 x = m.x + dir * (k * halfW * 1.4) + (rnd - 0.5) * 20;
                 y = footY - 4 - Math.sin(k * Math.PI) * 22 - rnd * 10;
-                size = 2 * unit * 3;
-                color = i % 2 ? '#a8d86b' : '#c9a46b';
+                size = 2 * unit;
+                color = i % 2 ? pal[2] : pal[1];
                 alpha = Math.sin(k * Math.PI);
             } else {
                 const k = ((t * (0.5 + rnd * 0.3) + rnd) % 1);
                 x = m.x + (rnd - 0.5) * halfW * 1.6;
                 y = footY - 2 - k * 30;
-                size = (2 + Math.floor(k * 2)) * unit * 3;
+                size = (1 + Math.floor(k * 2)) * unit * 2;
                 color = '#8a7a66';
                 alpha = (1 - k) * 0.85;
             }
@@ -774,49 +775,74 @@ const Render = {
         ctx.globalAlpha = 1;
     },
 
-    // 몸 둘레를 도는 종족 오브젝트(도트 그림과 꼬리). 기울어진 타원 궤도를 돌아 뒤로 갈 때는 몸 뒤에 그린다
+    // 몸 둘레를 도는 종족 오브젝트: 전설부터. 몬스터 그림에서 뽑은 색(MONSTER_PALETTES)으로 명암을 넣은 작은 도트 그림이고,
+    // 몬스터와 같은 밀도(그림 1px = 화면 1px)다. 신화는 수가 많고 두 겹 궤도를 돌며 빛 꼬리를 남긴다
+    orbiterImage(fam, pal) {
+        const key = `orb|${fam}|${pal.join()}`;
+        this.orbCache = this.orbCache || new Map();
+        if (this.orbCache.has(key)) return this.orbCache.get(key);
+        const art = ORBITER_ART[fam] || ORBITER_ART.spirit;
+        const h = art.length;
+        const w = art[0].length;
+        if (typeof document === 'undefined') return null;
+        const cv = document.createElement('canvas');
+        cv.width = w + 2;
+        cv.height = h + 2;
+        const g = cv.getContext('2d');
+        const tone = { d: pal[0], m: pal[1], l: pal[2], w: '#ffffff', a: pal[3] };
+        const filled = (x, y) => y >= 0 && y < h && x >= 0 && x < w && art[y][x] !== '.';
+        // 테두리: 칠한 칸 둘레를 아주 어두운 색으로
+        g.fillStyle = '#140c10';
+        for (let y = -1; y <= h; y++) for (let x = -1; x <= w; x++) {
+            if (filled(x, y)) continue;
+            if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) g.fillRect(x + 1, y + 1, 1, 1);
+        }
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const ch = art[y][x];
+            if (ch === '.') continue;
+            g.fillStyle = tone[ch];
+            g.fillRect(x + 1, y + 1, 1, 1);
+        }
+        this.orbCache.set(key, cv);
+        return cv;
+    },
+
     drawOrbiters(ctx, m, def, footY, halfW, bodyH, front) {
-        const fam = def.family;
+        const fx = gradeInfo(def.grade, 'fx', 0);
+        if (fx < 2) return; // 전설부터
+        const pal = MONSTER_PALETTES[m.type] || ['#5a3a6a', '#9a6cff', '#e2b0ff', '#ffffff'];
+        const img = this.orbiterImage(def.family, pal);
+        if (!img) return;
         const t = Game.time;
-        const u = 3 * ART_SCALE;
-        const shapes = {
-            demon: { n: 3, speed: 1.6, art: ['.#.', '###', '.#.'], colors: ['#ffd23d', '#ff7a1a'], trail: '#ff3d1a' },
-            undead: { n: 3, speed: 0.9, art: ['.##.', '####', '#..#'], colors: ['#7dffb0', '#b48cff'], trail: '#4a2e6a' },
-            spirit: { n: 4, speed: 1.2, art: ['.#.', '###', '###', '.#.'], colors: ['#bff6ff', '#ffffff'], trail: '#6fd8ff' },
-            beast: { n: 3, speed: 1.1, art: ['..#', '.##', '##.'], colors: ['#a8d86b', '#d8c06b'], trail: '#5a7a32' },
-            orc: { n: 2, speed: 0.8, art: ['##', '##'], colors: ['#c9a46b', '#8a7a66'], trail: '#5a4632' }
-        }[fam];
-        if (!shapes) return;
-        const extra = Math.max(0, GRADE_ORDER.indexOf(def.grade) - 1); // 영웅부터 하나씩 더
-        const n = shapes.n + extra;
+        const s = ART_SCALE;
         const seed = (m.homeX || m.x) * 0.013;
-        const rx = Math.max(halfW * 1.55, TILE * 0.6); // 몸 그림 바깥을 돈다
-        const ry = rx * 0.32;
-        const cy = footY - bodyH * 0.42;
-        const drawShape = (x, y, color, alpha) => {
-            ctx.globalAlpha = alpha;
-            const cells = [];
-            shapes.art.forEach((row, r) => [...row].forEach((ch, k) => { if (ch === '#') cells.push([x + (k - row.length / 2) * u, y + (r - shapes.art.length / 2) * u]); }));
-            // 어두운 테두리를 먼저 깔아 어느 바닥 위에서도 보이게 한다
-            ctx.fillStyle = '#120a0c';
-            for (const [cx, cy2] of cells) ctx.fillRect(snapWorld(cx - ART_SCALE), snapWorld(cy2 - ART_SCALE), u + ART_SCALE * 2, u + ART_SCALE * 2);
-            ctx.fillStyle = color;
-            for (const [cx, cy2] of cells) ctx.fillRect(snapWorld(cx), snapWorld(cy2), u, u);
-        };
-        for (let i = 0; i < n; i++) {
-            const ang = t * shapes.speed + i / n * Math.PI * 2 + seed;
-            if ((Math.sin(ang) > 0) !== front) continue;
-            const bob = Math.sin(t * 2.3 + i * 1.7) * 8;
-            const x = m.x + Math.cos(ang) * rx;
-            const y = cy + Math.sin(ang) * ry + bob;
-            // 꼬리: 지나온 자리에 옅은 점 셋
-            for (let k = 1; k <= 3; k++) {
-                const a2 = ang - k * 0.16;
-                ctx.globalAlpha = 0.45 - k * 0.12;
-                ctx.fillStyle = shapes.trail;
-                ctx.fillRect(snapWorld(m.x + Math.cos(a2) * rx), snapWorld(cy + Math.sin(a2) * ry + Math.sin(t * 2.3 + i * 1.7 - k * 0.1) * 8), u * 1.5, u * 1.5);
+        const rings = fx >= 3 ? [{ n: 4, speed: 1.1, rx: 1.6, lift: 0.42 }, { n: 3, speed: -1.6, rx: 1.15, lift: 0.7 }] : [{ n: 3, speed: 1.2, rx: 1.5, lift: 0.45 }];
+        for (const [ri, ring] of rings.entries()) {
+            const rx = Math.max(halfW * ring.rx, TILE * 0.6);
+            const ry = rx * 0.3;
+            const cy = footY - bodyH * ring.lift;
+            for (let i = 0; i < ring.n; i++) {
+                const ang = t * ring.speed + i / ring.n * Math.PI * 2 + seed + ri;
+                if ((Math.sin(ang) > 0) !== front) continue;
+                const bob = Math.sin(t * 2.3 + i * 1.7 + ri) * 6;
+                const at = a => ({ x: m.x + Math.cos(a) * rx, y: cy + Math.sin(a) * ry + bob });
+                // 꼬리: 지나온 자리에 같은 그림을 점점 옅게(신화는 길게)
+                const tail = fx >= 3 ? 5 : 3;
+                for (let k = tail; k >= 1; k--) {
+                    const q = at(ang - Math.sign(ring.speed) * k * 0.09);
+                    ctx.globalAlpha = 0.5 * (1 - k / (tail + 1));
+                    ctx.drawImage(img, snapWorld(q.x - img.width * s / 2), snapWorld(q.y - img.height * s / 2), img.width * s, img.height * s);
+                }
+                const p = at(ang);
+                ctx.globalAlpha = 1;
+                ctx.drawImage(img, snapWorld(p.x - img.width * s / 2), snapWorld(p.y - img.height * s / 2), img.width * s, img.height * s);
+                // 신화: 가끔 하얀 반짝임
+                if (fx >= 3 && Math.floor(t * 3 + i + ri) % 4 === 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(snapWorld(p.x - 3 * s), snapWorld(p.y - img.height * s / 2 - 2 * s), 7 * s, s);
+                    ctx.fillRect(snapWorld(p.x), snapWorld(p.y - img.height * s / 2 - 5 * s), s, 7 * s);
+                }
             }
-            drawShape(x, y, shapes.colors[Math.floor(t * 4 + i) % 2], 0.95);
         }
         ctx.globalAlpha = 1;
     },
@@ -866,7 +892,7 @@ const Render = {
             ctx.restore();
         }
         // 피어오르는 도트 불티: 반은 몸 뒤, 반은 몸 앞
-        const motes = [0, 3, 6, 10][fx];
+        const motes = [0, 0, 6, 12][fx];
         for (let i = 0; i < motes; i++) {
             if ((i % 2 === 1) !== front) continue;
             const k = ((t * (0.35 + (i % 3) * 0.08) + i / motes + seed) % 1 + 1) % 1;
