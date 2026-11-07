@@ -40,7 +40,7 @@ const Meta = {
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
+        return { version: META_VERSION, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -57,7 +57,17 @@ const Meta = {
             }
         }
         if (raw.raid && typeof raw.raid === 'object') d.raid = { week: typeof raw.raid.week === 'string' ? raw.raid.week : '', bestTier: metaCount(raw.raid.bestTier), bestScore: metaCount(raw.raid.bestScore) };
-        if (raw.abyss && typeof raw.abyss === 'object') d.abyss = { week: typeof raw.abyss.week === 'string' ? raw.abyss.week : '', bestFloor: metaCount(raw.abyss.bestFloor), bestScore: metaCount(raw.abyss.bestScore) };
+        if (raw.abyss && typeof raw.abyss === 'object') {
+            // 난이도별 { floor, hp }. 예전 기록(난이도 없음)은 조항이 없던 판이라 노말로 옮긴다
+            const levels = {};
+            const src = raw.abyss.levels && typeof raw.abyss.levels === 'object' ? raw.abyss.levels : {};
+            for (const L of ABYSS_LEVELS) {
+                const v = src[L.id];
+                if (v && typeof v === 'object' && metaCount(v.floor) > 0) levels[L.id] = { floor: metaCount(v.floor), hp: metaCount(v.hp) };
+            }
+            if (!raw.abyss.levels && metaCount(raw.abyss.bestFloor) > 0) levels[DEFAULT_ABYSS_LEVEL] = { floor: metaCount(raw.abyss.bestFloor), hp: 0 };
+            d.abyss = { week: typeof raw.abyss.week === 'string' ? raw.abyss.week : '', levels };
+        }
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
         d.runs = metaCount(raw.runs);
@@ -211,27 +221,33 @@ const Meta = {
         return { best: a.bestTier, bestScore: a.bestScore, isBest };
     },
 
-    // 이번 주 심연 기록. 주가 바뀌면 새로 겨루므로 비운다
-    abyssBest(week) {
+    // 이번 주 심연 기록: 난이도(ABYSS_LEVELS)별 { floor: 가장 깊은 층, hp: 그 판의 남은 왕좌 체력 }. 주가 바뀌면 비운다
+    abyssBest(week, level) {
         const a = this.data.abyss;
-        if (a.week !== week) { a.week = week; a.bestFloor = 0; a.bestScore = 0; }
-        return a;
+        if (a.week !== week) { a.week = week; a.levels = {}; }
+        return a.levels[abyssLevelOf(level).id] || { floor: 0, hp: 0 };
     },
 
-    // 끝없는 심연 판 끝: 그 주의 가장 깊은 층과 최고 점수를 남기고, 최고 층이면 입력 기록도 남긴다
-    // { best: 최고 층, bestScore, isBest: 이번이 가장 깊은지(같은 층이면 점수가 높을 때) }
-    finishAbyss(week, result, record) {
+    // 끝없는 심연 판 끝: 그 난이도의 가장 깊은 층을 남긴다(같은 층이면 남은 왕좌 체력이 많을 때). 최고면 입력 기록도 남긴다
+    // { best: 최고 층, isBest }
+    finishAbyss(week, level, result, record) {
         const d = this.data;
         d.runs++;
-        const a = this.abyssBest(week);
-        const isBest = result.rounds > a.bestFloor || (result.rounds === a.bestFloor && result.score > a.bestScore);
+        const id = abyssLevelOf(level).id;
+        const a = this.abyssBest(week, id);
+        const isBest = result.rounds > a.floor || (result.rounds === a.floor && result.hp > a.hp);
         if (isBest) {
-            a.bestFloor = result.rounds;
-            a.bestScore = result.score;
-            try { localStorage.setItem(ABYSS_RECORD_KEY, JSON.stringify({ week, score: result.score, floor: result.rounds, record })); } catch (e) { /* 저장소 없음 */ }
+            d.abyss.levels[id] = { floor: result.rounds, hp: result.hp };
+            try {
+                const saved = JSON.parse(localStorage.getItem(ABYSS_RECORD_KEY) || '{}');
+                const all = saved && saved.week === week && saved.levels ? saved.levels : {};
+                all[id] = { floor: result.rounds, hp: result.hp, record };
+                localStorage.setItem(ABYSS_RECORD_KEY, JSON.stringify({ week, levels: all }));
+            } catch (e) { /* 저장소 없음 */ }
         }
         this.save();
-        return { best: a.bestFloor, bestScore: a.bestScore, isBest };
+        const best = d.abyss.levels[id] || a;
+        return { best: best.floor, isBest };
     },
 
     finishRun(stageId, victory, waves) {

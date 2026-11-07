@@ -48,7 +48,17 @@ const LORD_EFFECTS = {
     hpSummon: { name: '골드가 모자라면 체력 1로 소환', mode: 'add', unit: '회', text: v => `골드 부족 시 체력 1로 소환(판당 ${v}회)` },
     mergedSlow: { name: '합류 뒤 용사 이동 속도', mode: 'mul', low: true },
     // 규칙 카드 전용
-    heroHp: { name: '용사 체력', mode: 'mul', low: true }
+    heroHp: { name: '용사 체력', mode: 'mul', low: true },
+    // 금단의 계약 조항 전용(심연 난이도). 판 규칙을 바꾼다
+    heroShield: { name: '방패 든 용사', mode: 'ratio', low: true, text: v => `일반 용사 ${Math.round(v * 100)}%가 첫 공격을 막는 방패를 듦` },
+    heroRevive: { name: '되살아나는 용사', mode: 'ratio', low: true, text: v => `일반 용사 ${Math.round(v * 100)}%가 한 번 되살아남(체력 절반)` },
+    heroRegen: { name: '사제 동행', mode: 'ratio', low: true, text: v => `용사가 초당 체력 ${Math.round(v * 1000) / 10}% 회복` },
+    eliteSplit: { name: '분열하는 정예', mode: 'add', low: true, text: v => `정예가 쓰러지면 용사 ${v}명으로 갈라짐` },
+    roundTime: { name: '라운드 시간', mode: 'mul', low: true, text: v => `다음 무리가 ${Math.round(COMBAT_RULES.roundTime * v)}초 만에 옴` },
+    summonPerRound: { name: '라운드당 소환', mode: 'add', low: true, text: v => `라운드마다 소환 ${v}번까지` },
+    powerSeal: { name: '권능 봉인', mode: 'add', low: true, text: () => '마력을 얻지 못함(권능 봉인)' },
+    bossEvery5: { name: '잦은 보스', mode: 'add', low: true, text: () => '5라운드마다 보스' },
+    bossFury: { name: '격노한 보스', mode: 'add', low: true, text: () => '보스가 패턴을 두 배로 씀' }
 };
 
 // 마왕 권능 지도: 왕좌를 가운데 둔 연결망. 큰 갈래 3개가 뻗고, 갈래마다 4겹에 2개씩 있다. 판 안에서 마력을 써서 찍는다.

@@ -3304,7 +3304,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -5297,15 +5297,20 @@ Game.reset();
     const ha = Game.endlessHpMul(60);
     Game.reset(null, null, dailyChallenge('2026-11-07'));
     assert(ha > Game.endlessHpMul(60), 'steeper than daily');
-    // 판 끝: 가장 깊은 층과 입력 기록, 얕은 판은 덮지 않는다
-    Meta.data.abyss = { week: '', bestFloor: 0, bestScore: 0 };
-    assert(Meta.finishAbyss('w1', { rounds: 30, score: 500 }, { inputs: [] }).isBest);
-    assert(!Meta.finishAbyss('w1', { rounds: 20, score: 99999 }, { inputs: [] }).isBest, 'shallower is not better');
-    assert(Meta.finishAbyss('w1', { rounds: 30, score: 501 }, { inputs: [] }).isBest, 'same floor, higher score');
-    assert.strictEqual(Meta.data.abyss.bestFloor, 30);
-    assert(Meta.finishAbyss('w2', { rounds: 5, score: 1 }, { inputs: [] }).isBest, 'new week starts over');
-    assert.strictEqual(Meta.data.abyss.bestFloor, 5);
-    assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, abyss: { week: 'w', bestFloor: 12, bestScore: 34 } }).abyss), JSON.stringify({ week: 'w', bestFloor: 12, bestScore: 34 }));
+    // 판 끝: 난이도마다 가장 깊은 층(같은 층이면 남은 왕좌 체력), 얕은 판은 덮지 않는다
+    Meta.data.abyss = { week: '', levels: {} };
+    assert(Meta.finishAbyss('w1', 9, { rounds: 30, hp: 3 }, { inputs: [] }).isBest);
+    assert(!Meta.finishAbyss('w1', 9, { rounds: 20, hp: 20 }, { inputs: [] }).isBest, 'shallower is not better');
+    assert(Meta.finishAbyss('w1', 9, { rounds: 30, hp: 4 }, { inputs: [] }).isBest, 'same floor, more throne hp');
+    assert(!Meta.finishAbyss('w1', 9, { rounds: 30, hp: 4 }, { inputs: [] }).isBest, 'a tie is not a new best');
+    assert(Meta.finishAbyss('w1', 0, { rounds: 12, hp: 20 }, { inputs: [] }).isBest, 'each level has its own board');
+    assert.strictEqual(Meta.abyssBest('w1', 9).floor, 30);
+    assert.strictEqual(Meta.abyssBest('w1', 0).floor, 12);
+    assert(Meta.finishAbyss('w2', 9, { rounds: 5, hp: 1 }, { inputs: [] }).isBest, 'new week starts over');
+    assert.strictEqual(Meta.abyssBest('w2', 0).floor, 0);
+    // 예전 기록(난이도 없음)은 조항이 없던 판이라 노말로 옮긴다
+    assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, abyss: { week: 'w', bestFloor: 12, bestScore: 34 } }).abyss), JSON.stringify({ week: 'w', levels: { [DEFAULT_ABYSS_LEVEL]: { floor: 12, hp: 0 } } }));
+    assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, abyss: { week: 'w', levels: { 9: { floor: 7, hp: 2 }, 42: { floor: 9 } } } }).abyss), JSON.stringify({ week: 'w', levels: { 9: { floor: 7, hp: 2 } } }), 'unknown levels dropped');
     // 이번 주 시드: 일주일 동안 같고 월요일 한국 시간 0시에 바뀐다(2026-11-09가 월요일)
     assert.strictEqual(abyssWeek(Date.UTC(2026, 10, 8, 15, 0)), '2026-11-09', 'monday midnight KST');
     assert.strictEqual(abyssWeek(Date.UTC(2026, 10, 8, 14, 59)), '2026-11-02', 'still last week');
@@ -6034,4 +6039,89 @@ console.log('smoke ok: equipment crafting');
     console.log('smoke ok: lord unlock order');
 }
 
+// 금단의 계약: 끝없는 심연의 난이도 10단계. 위 난이도는 아래 조항을 물려받는다(새 실행 환경에서)
+{
+    const pctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), pctx, { filename: f });
+    vm.runInContext('(' + (() => {
+    assert.deepStrictEqual(ABYSS_LEVELS.map(L => L.name), ['베이직', '베리 이지', '이지', '노말', '하드', '베리 하드', '익스퍼트', '익스트림', '나이트메어', '헬']);
+    assert.strictEqual(ABYSS_LEVELS[DEFAULT_ABYSS_LEVEL].cards.length, 0, 'normal has no clauses');
+    for (let i = 4; i < ABYSS_LEVELS.length; i++) {
+        const pact = ABYSS_LEVELS[i].cards;
+        assert(pact.every(id => RULE_CARDS[id] && RULE_CARDS[id].kind === 'pact'), ABYSS_LEVELS[i].name + ' only pact clauses');
+        assert(pact.length > ABYSS_LEVELS[i - 1].cards.filter(id => RULE_CARDS[id].kind === 'pact').length, ABYSS_LEVELS[i].name + ' adds clauses');
+        if (i < ABYSS_LEVELS.length - 1) assert(ABYSS_LEVELS[i].cards.filter(id => id !== 'pact_throne').every(id => ABYSS_LEVELS[i + 1].cards.includes(id)), ABYSS_LEVELS[i].name + ' inherited');
+    }
+    const hell = ABYSS_LEVELS[9].cards;
+    assert(hell.includes('pact_crumble') && !hell.includes('pact_throne'), 'hell swaps the cracked throne for the crumbling one');
+    assert(ABYSS_LEVELS.slice(0, 3).every(L => L.cards.every(id => RULE_CARDS[id].kind === 'boon')), 'easy levels only give boons');
+    assert(!ABYSS_LEVELS.some(L => L.cards.some(id => /hidden/.test(id))), 'no hidden-recipe ban');
+    // 일일 도전과 심연 변이는 계약 조항을 고르지 않는다
+    for (let i = 0; i < 40; i++) assert(RULE_CARDS[abyssMutation('m' + i, i % 12)].kind === 'hard');
+    for (const d of ['2026-11-01', '2026-11-02', '2026-11-03']) assert(dailyChallenge(d).cards.every(id => RULE_CARDS[id].kind !== 'pact'));
+    // 조항은 판 내내 붙어 있다(변이가 쌓여도)
+    const hc = abyssChallenge('pact-w', 'rift', [], 9);
+    assert.strictEqual(hc.level, 9);
+    assert.strictEqual(abyssChallenge('pact-w', 'rift', []).level, DEFAULT_ABYSS_LEVEL, 'no level is normal');
+    assert.strictEqual(challengeFromRecord({ kind: 'abyss', seed: 'pact-w', lord: 'rift', relics: [], level: 9 }).level, 9, 'record keeps the level');
+    Game.reset(null, null, hc);
+    assert.strictEqual(Game.record.level, 9);
+    assert.strictEqual(Game.maxHp(), COMBAT_RULES.maxHp - 15, 'hell throne');
+    assert(Game.mods.heroHp >= 2.5 && Game.mods.powerSeal && Game.mods.bossFury && Game.mods.summonPerRound === 8);
+    Game.waveIndex = 10;
+    Game.abyssStep();
+    assert(Game.mutations.length === 1 && Game.mods.powerSeal && Game.maxHp() === COMBAT_RULES.maxHp - 15, 'clauses survive mutations');
+    // 잦은 보스: 5, 15, 25라운드에도 보스
+    assert(Game.waves[4].boss === 'archmage' && Game.waves[14].boss === 'archmage' && Game.waves[9].boss, 'boss every five');
+    Game.reset(null, null, abyssChallenge('pact-w', 'rift', [], 3));
+    assert(!Game.waves[4].boss, 'normal keeps bosses every ten');
+    // 권능 봉인: 마력을 얻지 못한다
+    Game.reset(null, null, abyssChallenge('pact-w', 'rift', [], 8));
+    Game.addMana(5);
+    assert.strictEqual(Game.mana, 0, 'sealed powers');
+    // 소환 제한: 라운드마다 8번, 다음 라운드에 다시
+    Game.state = 'wave';
+    Game.gold = 1e6;
+    let made = 0;
+    for (let i = 0; i < 12; i++) if (Game.act({ kind: 'summon' }).ok) made++;
+    assert.strictEqual(made, 8, 'summon cap per round');
+    assert.strictEqual(Game.summon().reason, 'cap');
+    Game.startWave && (Game.roundSummons = 0);
+    assert(Game.summon().ok || Game.fieldFull(), 'cap resets each round');
+    // 방패: 첫 공격을 막는다. 되살아나기: 체력 절반으로 한 번 다시 선다. 분열: 정예가 일반 용사 셋으로
+    Game.reset(null, null, abyssChallenge('pact-w', 'rift', [], 9));
+    Game.state = 'wave';
+    Game.heroes.length = 0;
+    const s = createHero('warrior', 1, 0, false); s.waiting = false; s.d = 400; s.shield = 1; Game.heroes.push(s);
+    const hp0 = s.hp;
+    assert.strictEqual(damageHero(s, 5), 0, 'shield blocks');
+    assert(s.hp === hp0 && !s.shield, 'shield breaks');
+    damageHero(s, 5);
+    assert(s.hp < hp0, 'second hit lands');
+    const r = createHero('warrior', 1, 0, false); r.waiting = false; r.d = 500; r.revive = 1; Game.heroes.push(r);
+    damageHero(r, 1e9);
+    const risen = Game.heroes.filter(h => !h.dead && h.d === 500);
+    assert(risen.length === 1 && Math.abs(risen[0].hp - risen[0].maxHp / 2) < 1e-6 && !risen[0].revive, 'revives once at half hp');
+    const e = createHero('elite_swordsman', 1, 0, false); e.waiting = false; e.d = 600; Game.heroes.push(e);
+    damageHero(e, 1e9);
+    assert.strictEqual(Game.heroes.filter(h => !h.dead && h.d === 600 && h.type === 'warrior').length, Game.mods.eliteSplit, 'elite splits');
+    // 사제 동행: 용사가 서서히 회복한다
+    const p = createHero('warrior', 1, 0, false); p.waiting = false; p.d = 300; Game.heroes.push(p);
+    p.hp = p.maxHp / 2;
+    updateHero(p, 1);
+    assert(p.hp > p.maxHp / 2, 'priest heals');
+    // 격노한 보스: 패턴이 두 배
+    assert.strictEqual(bossPatterns('fallen_knight').length, BOSSES.fallen_knight.patterns.length * 2);
+    // 방패와 되살아나기는 시드 난수라 같은 판이면 같은 용사가 받는다
+    const shields = () => {
+        Game.reset(null, null, abyssChallenge('pact-s', 'rift', [], 9));
+        Game.startWave();
+        return Game.heroes.map(h => `${h.shield ? 1 : 0}${h.revive ? 1 : 0}`).join('');
+    };
+    const sh = shields();
+    assert(sh === shields() && sh.includes('1'), 'shields are seeded');
+    }).toString() + ')()', pctx);
+    console.log('smoke ok: forbidden pact');
+}
 require('./smoke_maps.js');

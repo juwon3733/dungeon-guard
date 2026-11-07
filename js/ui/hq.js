@@ -64,9 +64,12 @@ const HQ_FACILITIES = [
 
 // 도전의 문 콘텐츠. 스토리를 다 깨지 않아도 문에는 처음부터 들어간다. 콘텐츠마다 unlockStage(스테이지 번호)를 깨면 열리고,
 // 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
+// 도전의 문 아래 칸(콘텐츠 설명과 심연 계약서)
+const HQ_PORTAL_PANEL = { x: 1920 / 2 - 560, y: 320, w: 1120, h: 540 };
+
 const HQ_CONTENTS = [
     { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판', panel: 'drawDailyPanel', enter: () => UI.startDaily() },
-    { id: 'abyss', name: '끝없는 심연', desc: '이번 주 모두 같은 심연', panel: 'drawAbyssPanel', enter: () => UI.openAbyss() },
+    { id: 'abyss', name: '끝없는 심연', desc: '금단의 계약에 서명하고 끝없이', panel: 'drawAbyssPanel', enter: () => { UI.portalPick = 'abyss'; } },
     { id: 'raid', name: '주간 토벌전', desc: '이번 주 보스를 잡아라', panel: 'drawRaidPanel', enter: () => UI.startRaid() }
 ];
 
@@ -244,7 +247,22 @@ Object.assign(UI, {
                 const open = hqContentOpen(c);
                 this.button(`content_${c.id}`, r.x, r.y, r.w, r.h, { content: c, locked: !open, onClick: () => this.pickContent(c) });
             });
+            // 심연을 고르고 있으면 계약서: 난이도 열 줄과 서명 버튼
+            if ((this.portalPick || HQ_CONTENTS[0].id) === 'abyss') {
+                ABYSS_LEVELS.forEach(L => {
+                    const r = this.abyssLevelRect(L.id);
+                    this.button(`abyss_lv_${L.id}`, r.x, r.y, r.w, r.h, { abyssLevel: L.id, onClick: () => { this.abyssLevel = L.id; saveSettings(); Sfx.play('click'); } });
+                });
+                const P = HQ_PORTAL_PANEL;
+                this.button('abyss_sign', P.x + P.w - 300, P.y + P.h - 92, 270, 70, { label: '서명하고 입장', icon: 'retry', theme: 'gold', size: 28, onClick: () => this.openAbyss() });
+            }
         }
+    },
+
+    // 계약서 왼쪽의 난이도 줄(아래가 쉬움이 아니라 위에서부터 베이직 → 헬)
+    abyssLevelRect(i) {
+        const P = HQ_PORTAL_PANEL;
+        return { x: P.x + 28, y: P.y + 26 + i * 49, w: 290, h: 44 };
     },
 
     hqContentRect(i) {
@@ -765,25 +783,41 @@ Object.assign(UI, {
         });
     },
 
-    // 끝없는 심연의 규칙과 내 최고 기록
+    // 끝없는 심연의 금단의 계약서: 왼쪽은 난이도 열 줄(이번 주 최고 층), 오른쪽은 고른 난이도의 조항
     drawAbyssPanel(ctx) {
         const T = UI_THEME;
-        const x = GAME_WIDTH / 2 - 560;
-        const y = 320;
-        UIKit.panel(ctx, x, y, 1120, 540);
+        const P = HQ_PORTAL_PANEL;
+        UIKit.panel(ctx, P.x, P.y, P.w, P.h);
         const week = abyssWeek();
-        const a = Meta.abyssBest(week);
-        UIKit.ink(ctx, `이번 주 심연 · ${MAPS[abyssChallenge(week, DEFAULT_LORD, []).map].name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
-        UIKit.ink(ctx, a.bestFloor ? `이번 주 최고 ${a.bestFloor}층 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록 없음', x + 1080, y + 50, 24, a.bestFloor ? T.ink : T.inkSoft, 'right', 'bold');
-        const rows = [
-            '',
-            '',
-            `${ABYSS_RULES.mutateEvery}층마다 변이 +1, 지역 변경`,
-            `변이당 점수 +${Math.round(ABYSS_RULES.scorePerMutation * 100)}%`,
-            `${ABYSS_RULES.hpFrom}층부터 용사 급성장`,
-            ''
-        ];
-        rows.forEach((text, i) => UIKit.ink(ctx, text, x + 40, y + 120 + i * 58, 24, T.ink));
+        const level = abyssLevelOf(this.abyssLevel);
+        // 난이도 줄: 고른 줄은 금 칸, 위로 갈수록 붉다
+        for (const b of this.buttons) {
+            if (b.abyssLevel === undefined) continue;
+            const L = ABYSS_LEVELS[b.abyssLevel];
+            const picked = L.id === level.id;
+            const hover = this.hoverButton === b;
+            UIKit.slot(ctx, b.x, b.y, b.w, b.h, picked ? 'gold' : 'iron', hover ? 'hover' : null);
+            const hot = L.id / (ABYSS_LEVELS.length - 1);
+            const color = picked ? T.gold : (hot > 0.75 ? '#ff9a8a' : (hot > 0.4 ? T.cream : T.creamSoft));
+            UIKit.text(ctx, L.name, b.x + 18, b.y + b.h / 2 + 1, 22, color, 'left', 'bold');
+            const best = Meta.abyssBest(week, L.id);
+            UIKit.text(ctx, best.floor ? `${best.floor}층` : '-', b.x + b.w - 16, b.y + b.h / 2 + 1, 20, best.floor ? T.cream : T.creamSoft, 'right', 'bold');
+        }
+        const x = P.x + 352;
+        const map = MAPS[abyssChallenge(week, DEFAULT_LORD, [], level.id).map].name;
+        UIKit.ink(ctx, `금단의 계약서 · ${level.name}`, x, P.y + 50, 32, level.id >= 7 ? T.inkWax : T.gold, 'left', 'bold');
+        const best = Meta.abyssBest(week, level.id);
+        UIKit.ink(ctx, best.floor ? `이번 주 최고 ${best.floor}층` : '이번 주 기록 없음', P.x + P.w - 36, P.y + 50, 24, best.floor ? T.ink : T.inkSoft, 'right', 'bold');
+        UIKit.ink(ctx, `이번 주 심연 · ${map} · ${ABYSS_RULES.mutateEvery}층마다 변이`, x, P.y + 92, 20, T.inkSoft);
+        if (!level.cards.length) UIKit.ink(ctx, '조항 없음', x, P.y + 150, 26, T.ink, 'left', 'bold');
+        level.cards.forEach((id, i) => {
+            const card = RULE_CARDS[id];
+            const y = P.y + 140 + i * 30;
+            const boon = card.kind === 'boon';
+            UIKit.ink(ctx, `${boon ? '혜택' : `제${i + 1}조`}`, x, y, 18, T.inkSoft, 'left', 'bold');
+            UIKit.ink(ctx, card.name, x + 70, y, 21, T.ink, 'left', 'bold');
+            UIKit.ink(ctx, effectLines(card.effects).join(', '), x + 250, y, 18, boon ? T.inkGood : T.inkBad);
+        });
     },
 
     // 오늘의 일일 도전 조건과 내 최고 기록
