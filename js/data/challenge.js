@@ -64,9 +64,50 @@ function dailyChallenge(date) {
     };
 }
 
+// 끝없는 심연: 일주일 동안 모두 같은 시드(소환, 합치기, 변이 순서, 지역 순서)로 겨룬다. 해금한 마왕과 유물을 골라 들어가고, 겨루는 것은 얼마나 깊이 내려가는가다.
+//   mutateEvery: 이 층수마다 변이(어렵게 만드는 규칙 카드)가 하나씩 쌓이고 지역이 바뀐다
+//   hpFrom, hpGrowth: 이 층부터 용사 체력이 층마다 몇 배로 늘어나는가. 일일 도전보다 가파르다
+//   scorePerMutation: 쌓인 변이 하나당 점수 배율
+const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.07, scorePerMutation: 0.25 };
+
+// 이번 주의 시드: 한국 시간 월요일 날짜 'YYYY-MM-DD'. 월요일 0시에 함께 바뀐다
+function abyssWeek(now) {
+    const kst = new Date((now === undefined ? Date.now() : now) + 9 * 3600 * 1000);
+    const sinceMonday = (kst.getUTCDay() + 6) % 7;
+    return new Date(kst.getTime() - sinceMonday * 86400 * 1000).toISOString().slice(0, 10);
+}
+
+function abyssChallenge(seed, lord, relics) {
+    return {
+        kind: 'abyss', id: `abyss-${seed}`, name: '끝없는 심연', seed: String(seed), lord, relics: relics.slice(), cards: [],
+        hpFrom: ABYSS_RULES.hpFrom, hpGrowth: ABYSS_RULES.hpGrowth,
+        zone: seededPick(String(seed), 'zone', ZONE_IDS, 1)[0]
+    };
+}
+
+// i번째 변이(0부터). 시드로 섞은 어려운 카드를 차례로 쓰고 다 쓰면 되풀이한다.
+// 좁은 전장은 겹치면 몬스터를 둘 자리가 없어지므로 한 번만 나온다
+function abyssMutation(seed, i) {
+    const order = seededPick(seed, 'mutation', Object.keys(RULE_CARDS).filter(k => RULE_CARDS[k].kind === 'hard'), 99);
+    if (i < order.length) return order[i];
+    const again = order.filter(k => k !== 'narrow_field');
+    return again[(i - order.length) % again.length];
+}
+
+// 변이 수에 따른 지역: 시드에서 고른 첫 지역부터 차례로 바뀐다
+function abyssZone(seed, mutations) {
+    const first = ZONE_IDS.indexOf(seededPick(seed, 'zone', ZONE_IDS, 1)[0]);
+    return ZONE_IDS[(first + mutations) % ZONE_IDS.length];
+}
+
+// 기록에서 도전 조건을 다시 만든다
+function challengeFromRecord(record) {
+    return record.kind === 'abyss' ? abyssChallenge(record.seed, record.lord, record.relics) : dailyChallenge(record.date);
+}
+
 // 입력 기록을 처음부터 다시 돌려 결과를 낸다(뒤에 서버가 점수를 검증할 때 쓴다). 저장과 기록을 남기지 않는다
 function replayChallenge(record, maxTicks) {
-    const c = dailyChallenge(record.date);
+    const c = challengeFromRecord(record);
     Game.replaying = true;
     try {
         Game.reset(null, null, c);

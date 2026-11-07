@@ -10,6 +10,7 @@ const META_KEY = 'dungeonGuard.meta';
 const META_VERSION = 3;
 const DAILY_KEEP_DAYS = 30;
 const DAILY_RECORD_KEY = 'dungeonGuard.dailyRecord';
+const ABYSS_RECORD_KEY = 'dungeonGuard.abyssRecord';
 
 // 0 이상의 정수(아니면 0)
 function metaCount(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? Math.floor(v) : 0; }
@@ -38,7 +39,7 @@ const Meta = {
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, daily: {}, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
+        return { version: META_VERSION, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -54,6 +55,7 @@ const Meta = {
                 if (/^\d{4}-\d{2}-\d{2}$/.test(date) && v && Number.isFinite(v.score) && Number.isFinite(v.rounds)) d.daily[date] = { score: v.score, rounds: v.rounds, victory: !!v.victory };
             }
         }
+        if (raw.abyss && typeof raw.abyss === 'object') d.abyss = { week: typeof raw.abyss.week === 'string' ? raw.abyss.week : '', bestFloor: metaCount(raw.abyss.bestFloor), bestScore: metaCount(raw.abyss.bestScore) };
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
         d.runs = metaCount(raw.runs);
@@ -183,6 +185,29 @@ const Meta = {
         }
         this.save();
         return { best: d.daily[date].score, isBest };
+    },
+
+    // 이번 주 심연 기록. 주가 바뀌면 새로 겨루므로 비운다
+    abyssBest(week) {
+        const a = this.data.abyss;
+        if (a.week !== week) { a.week = week; a.bestFloor = 0; a.bestScore = 0; }
+        return a;
+    },
+
+    // 끝없는 심연 판 끝: 그 주의 가장 깊은 층과 최고 점수를 남기고, 최고 층이면 입력 기록도 남긴다
+    // { best: 최고 층, bestScore, isBest: 이번이 가장 깊은지(같은 층이면 점수가 높을 때) }
+    finishAbyss(week, result, record) {
+        const d = this.data;
+        d.runs++;
+        const a = this.abyssBest(week);
+        const isBest = result.rounds > a.bestFloor || (result.rounds === a.bestFloor && result.score > a.bestScore);
+        if (isBest) {
+            a.bestFloor = result.rounds;
+            a.bestScore = result.score;
+            try { localStorage.setItem(ABYSS_RECORD_KEY, JSON.stringify({ week, score: result.score, floor: result.rounds, record })); } catch (e) { /* 저장소 없음 */ }
+        }
+        this.save();
+        return { best: a.bestFloor, bestScore: a.bestScore, isBest };
     },
 
     finishRun(stageId, victory, waves) {

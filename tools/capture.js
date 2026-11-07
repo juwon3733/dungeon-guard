@@ -83,6 +83,39 @@ const SCENES = {
         freeze: false
     },
 
+    // 끝없는 심연: 도전의 문 설명, 고르기, 변이가 쌓인 전투
+    abyssPortal: {
+        setup: () => {
+            Game.state = 'hq';
+            UI.hqView = 'portal';
+            UI.portalPick = 'abyss';
+        }
+    },
+    abyssSelect: {
+        setup: () => {
+            unlockAll();
+            UI.openAbyss();
+            pressButton('relic_lone_crown');
+        }
+    },
+    abyssPlay: {
+        setup: () => {
+            unlockAll();
+            UI.openAbyss();
+            pressButton('begin');
+            Game.gold = 5000;
+            for (const t of ['crystal_giant', 'phoenix_lord', 'vampire', 'orc_guard', 'dark_mage', 'minotaur', 'succubus', 'troll']) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            Game.waveIndex = 30;
+            Game.score = 92841730;
+            UI.scoreShown = Game.score;
+            Game.startWave();
+            advance(4);
+        }
+    },
+
     // 도전의 문: 오늘의 일일 도전 조건
     dailyPortal: {
         setup: () => {

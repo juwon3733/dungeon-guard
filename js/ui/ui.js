@@ -265,6 +265,7 @@ const UI = {
     // 고르기 화면. stageId는 이번에 할 스토리 스테이지(없으면 스토리 없는 판). 직전 선택이 남아 있다(잠긴 마왕과 유물은 기본값으로)
     openSelect(stageId) {
         this.challenge = null;
+        this.abyssSelect = false;
         this.stageId = hasStage(stageId) ? stageId : null;
         this.loadout = cleanLoadout(this.loadout || this.loadLoadout());
         this.collection = null;
@@ -422,7 +423,7 @@ const UI = {
         const cx = GAME_WIDTH / 2;
         const win = G.state === 'victory';
         if (G.challenge) {
-            this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.startDaily() });
+            this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => (G.challenge.kind === 'abyss' ? this.startAbyssRun() : this.startDaily()) });
             this.button('to_hq', cx + 10, 770, 410, 90, { label: '본부로', icon: 'lord', size: 30, onClick: () => this.leaveChallenge() });
             return;
         }
@@ -470,6 +471,7 @@ const UI = {
     layoutSelect() {
         this.button('collection', 60, 22, 200, 68, { label: '도감', icon: 'book', size: 28, onClick: () => this.openCollection() });
         if (this.stageId) this.button('select_back', 280, 22, 200, 68, { label: '지도로', icon: 'close', size: 26, onClick: () => this.openStoryMap() });
+        else if (this.abyssSelect) this.button('select_back', 280, 22, 200, 68, { label: '본부로', icon: 'close', size: 26, onClick: () => this.leaveChallenge() });
         Object.keys(DEMON_LORDS).forEach((id, i) => {
             const r = this.lordCardRect(i);
             this.button(`lord_${id}`, r.x, r.y, r.w, r.h, { lordCard: id, locked: !Meta.hasLord(id), onClick: () => this.pickLord(id) });
@@ -610,6 +612,7 @@ const UI = {
 
     // 시작 버튼: 선택을 저장하고 그 마왕과 유물로 판을 시작한다
     beginRun() {
+        if (this.abyssSelect) return this.startAbyssRun();
         this.loadout = cleanLoadout(this.loadout);
         this.saveLoadout();
         this.startGame();
@@ -845,6 +848,22 @@ const UI = {
     leaveChallenge() {
         this.challenge = null;
         (this.openHQ())();
+    },
+
+    // 끝없는 심연: 고르기 화면에서 해금한 마왕과 유물을 고른다
+    openAbyss() {
+        this.hqView = null;
+        this.openSelect(null);
+        this.abyssSelect = true;
+    },
+
+    // 이번 주 시드로 심연을 시작한다. 스토리 중간 저장은 그대로 둔다
+    startAbyssRun() {
+        const L = cleanLoadout(this.loadout);
+        this.challenge = abyssChallenge(abyssWeek(), L.lord, L.relics);
+        this.abyssSelect = false;
+        this.stageId = null;
+        this.startGame(true);
     },
 
     // 도전의 문에서 오늘의 일일 도전을 시작한다. 스토리 중간 저장은 그대로 둔다
@@ -1221,6 +1240,7 @@ const UI = {
             if (id) this.pickLord(id);
             else if (code === 'Space' || code === 'Enter') this.beginRun();
             else if (code === 'Escape' && this.stageId) this.openStoryMap();
+            else if (code === 'Escape' && this.abyssSelect) this.leaveChallenge();
             return;
         }
         if (G.bossReward) {
@@ -1672,9 +1692,9 @@ const UI = {
         this.drawTable(ctx);
         UIKit.bigText(ctx, '마왕과 유물 고르기', GAME_WIDTH / 2, 50, 44, T.cream, 'center');
         const st = stageDef(this.stageId);
-        if (st) {
+        if (st || this.abyssSelect) {
             ctx.font = `26px ${UI_FONT}`;
-            const label = `스테이지 ${st.no} · ${st.name}`;
+            const label = st ? `스테이지 ${st.no} · ${st.name}` : '끝없는 심연';
             const w = Math.ceil(ctx.measureText(label).width) + 110;
             this.drawHexPlate(ctx, GAME_WIDTH - 60 - w, 22, w, 64);
             UIKit.text(ctx, label, GAME_WIDTH - 60 - w / 2, 55, 26, T.cream, 'center', 'bold');
@@ -1860,6 +1880,8 @@ const UI = {
         this.scoreShown = Math.min(G.score, (this.scoreShown || 0) + Math.max(1, Math.ceil((G.score - (this.scoreShown || 0)) * 0.12)));
         if (G.score < this.scoreShown) this.scoreShown = G.score;
         UIKit.bigText(ctx, this.scoreShown.toLocaleString(), GAME_WIDTH / 2, 118, 46, T.gold, 'center', '#fff4c0');
+        // 심연: 쌓인 변이 수와 점수 배율
+        if (G.mutations.length) UIKit.text(ctx, `변이 ${G.mutations.length} · 점수 x${1 + G.mutations.length * ABYSS_RULES.scorePerMutation}`, GAME_WIDTH / 2, 156, 20, '#ff9a8a', 'center', 'bold');
     },
 
     // 위쪽 이름판: 금테 육각 판에 지역 이름, 스테이지, 라운드(Asteria 던전 이름판처럼)
@@ -1892,7 +1914,7 @@ const UI = {
         UIKit.text(ctx, n, x + PLATE.w - 46 - tw, cy, 32, T.gold, 'right', 'bold');
         ctx.font = `bold 32px ${UI_FONT}`;
         const nw = ctx.measureText(n).width;
-        UIKit.text(ctx, '라운드', x + PLATE.w - 54 - tw - nw, cy + 1, 19, T.creamSoft, 'right');
+        UIKit.text(ctx, G.challenge && G.challenge.kind === 'abyss' ? '층' : '라운드', x + PLATE.w - 54 - tw - nw, cy + 1, 19, T.creamSoft, 'right');
         if (CORRUPTION_ENABLED) {
             const corrupt = G.units.filter(u => u.kind === 'corrupt').length;
             UIKit.text(ctx, `타락 ${corrupt}/${COMBAT_RULES.corruptMax}`, 22, 40, 26, '#d7a8ff');
@@ -3088,7 +3110,9 @@ const UI = {
         const cx = GAME_WIDTH / 2;
         UIKit.panel(ctx, cx - 440, 130, 880, 740);
         const st = stageDef(G.stage);
-        if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드까지 막았습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        const abyss = G.challenge && G.challenge.kind === 'abyss';
+        if (abyss) UIKit.bigText(ctx, `심연 ${G.waveIndex}층까지 내려갔습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        else if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드까지 막았습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
         else UIKit.bigText(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
         if (st) UIKit.ink(ctx, `스테이지 ${st.no} · ${st.name}`, cx, 248, 24, T.inkSoft, 'center', 'bold');
         const lord = G.lordDef();
@@ -3107,7 +3131,7 @@ const UI = {
             ['소환 / 합치기', `${G.stats.summoned} / ${G.stats.merged}`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ].filter(Boolean);
-        if (!win) rows.splice(0, 1, ['막아 낸 라운드', G.challenge ? `${G.waveIndex}라운드` : `${G.waveIndex} / ${G.waves.length}`]);
+        if (!win) rows.splice(0, 1, abyss ? ['내려간 층', `${G.waveIndex}층`] : ['막아 낸 라운드', G.challenge ? `${G.waveIndex}라운드` : `${G.waveIndex} / ${G.waves.length}`]);
         rows.forEach(([k, v], i) => {
             UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
             UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');
@@ -3118,7 +3142,7 @@ const UI = {
             ctx.fillStyle = T.parchmentDark;
             ctx.fillRect(cx - 390, 588, 780, 3);
             UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`, cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            UIKit.ink(ctx, abyss ? (best && best.isBest ? '가장 깊은 기록!' : `최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
             return;
         }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내

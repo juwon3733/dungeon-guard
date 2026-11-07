@@ -37,6 +37,7 @@ const Game = {
         this.challengeResult = null;
         this.challengeBest = null;
         this.tick = 0;
+        this.mutations = []; // 끝없는 심연에서 쌓인 변이(규칙 카드 id)
         this.leak = 0; // 아직 왕좌를 깎지 않은 일반 용사 피해
         this.goldLeft = 0; // 아직 주지 않은 처치 골드
         this.score = 0;
@@ -45,7 +46,7 @@ const Game = {
         if (!challenge) Rng.stop(); // 스토리와 시험 판은 Math.random
         if (challenge) {
             Rng.start(challenge.seed);
-            this.record = { id: challenge.id, date: challenge.date, inputs: [] };
+            this.record = { kind: challenge.kind, id: challenge.id, date: challenge.date, seed: challenge.seed, lord: challenge.lord, relics: challenge.relics.slice(), inputs: [] };
             this.lord = challenge.lord;
             this.relics = challenge.relics.slice();
             this.mods = buildMods(challenge.lord, challenge.relics, challenge.cards);
@@ -362,7 +363,7 @@ const Game = {
         this.monsters.push(m);
         this.stats.summoned++;
         // 유물 거울 쌍둥이: 같은 몬스터가 공짜로 1마리 더
-        if (this.mods.twinSummon && rng('summon') < this.mods.twinSummon && !this.fieldFull()) {
+        if (this.mods.twinSummon && rng('relic') < this.mods.twinSummon && !this.fieldFull()) {
             const spot = this.pickSummonCell(type);
             if (spot) {
                 const twin = createMonster(type, spot.col, spot.row);
@@ -697,15 +698,34 @@ const Game = {
     // 무한 라운드의 추가 체력 배율. 곱셈을 되풀이한다(Math.pow는 엔진마다 값이 다를 수 있어 입력 재생이 어긋난다)
     endlessHpMul(waveIndex) {
         if (!this.challenge) return 1;
+        const from = this.challenge.hpFrom || ENDLESS_RULES.hpFrom;
+        const growth = this.challenge.hpGrowth || ENDLESS_RULES.hpGrowth;
         let mul = 1;
-        for (let r = ENDLESS_RULES.hpFrom; r < waveIndex; r++) mul *= ENDLESS_RULES.hpGrowth;
+        for (let r = from; r < waveIndex; r++) mul *= growth;
         return mul;
+    },
+
+    // 끝없는 심연: 층이 깊어지면 변이가 쌓이고 지역이 바뀐다. 라운드를 시작할 때 부른다
+    abyssStep() {
+        const c = this.challenge;
+        if (!c || c.kind !== 'abyss') return;
+        const want = Math.floor(this.waveIndex / ABYSS_RULES.mutateEvery);
+        if (this.mutations.length >= want) return;
+        while (this.mutations.length < want) this.mutations.push(abyssMutation(c.seed, this.mutations.length));
+        this.mods = buildMods(c.lord, c.relics, this.mutations);
+        // 약해지는 변이가 겹쳐도 몬스터가 아예 못 싸우게 되지는 않는다
+        this.mods.attackSpeed = Math.max(-0.5, this.mods.attackSpeed);
+        this.mods.damage = Math.max(-0.5, this.mods.damage);
+        this.heroHpMul = this.mods.heroHp;
+        this.zone = abyssZone(c.seed, this.mutations.length);
+        const card = RULE_CARDS[this.mutations[this.mutations.length - 1]];
+        Fx.banner = { name: `심연 ${this.waveIndex + 1}층`, sub: `변이: ${card.name} · ${effectLines(card.effects).join(', ')}`, age: 0, life: 2.4, small: true };
     },
 
     // 도전 점수: 처치와 라운드마다 라운드 배율만큼 쌓인다
     addScore(base) {
         if (!this.challenge) return 0;
-        const gain = Math.floor(base * scoreMul(this.waveIndex + 1));
+        const gain = Math.floor(base * scoreMul(this.waveIndex + 1) * (1 + this.mutations.length * ABYSS_RULES.scorePerMutation));
         this.score += gain;
         return gain;
     },
@@ -903,6 +923,7 @@ const Game = {
 
     startWave() {
         this.earlyBoost = this.state === 'prep' && this.prepTimer > 0;
+        if (this.state === 'prep' && !this.bossReward) this.abyssStep();
         if (this.state !== 'prep' || this.bossReward) return false; // 보스 보상을 고르기 전에는 시작하지 않는다
         const bonus = Math.floor(Math.max(0, this.prepTimer)) * COMBAT_RULES.earlyGoldPerSecond;
         if (bonus > 0 && this.waveIndex > 0) {
@@ -957,7 +978,7 @@ const Game = {
             const c = this.challenge;
             const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score };
             this.challengeResult = r;
-            if (!this.replaying) this.challengeBest = Meta.finishDaily(c.date, r, this.record);
+            if (!this.replaying) this.challengeBest = c.kind === 'abyss' ? Meta.finishAbyss(c.seed, r, this.record) : Meta.finishDaily(c.date, r, this.record);
             if (!this.replaying) Sfx.play(victory ? 'victory' : 'defeat');
             return;
         }
