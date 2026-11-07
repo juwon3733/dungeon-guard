@@ -68,6 +68,37 @@ for hero, names in SKINS.items():
                     small.save(os.path.join(rot, 'south.png'))
         out[hero].append({'sprite': sprite, 'scale': 1.2, 'anim': {'walk': {'folder': 'walking', 'frames': 6, 'dirs': ['south', 'east', 'north'], 'footPx': foot}}})
     print(hero, len(out[hero]))
+
+# 정예: Asteria 모험가(걷기와 공격 동작이 있는 것)를 원본 크기로 쓴다(그림 1px = 화면 1px). 일반 용사보다 조금 크다
+ELITE_SKINS = {
+    'elite_swordsman': ('adv_nightExecutioner', 'atk'), 'elite_tamer': ('adv_mistBlade', 'atk'),
+    'elite_stormcaller': ('adv_twilightSage_sol', 'cast'), 'elite_rhapsodist': ('adv_eclipseArchsage_luna', 'cast'),
+}
+DIRS = {'south': 'down', 'east': 'left', 'north': 'up'}
+elites = {}
+for etype, (name, act) in ELITE_SKINS.items():
+    sprite = f'ast_elite_{name}'
+    shutil.rmtree(os.path.join(OUT, sprite), ignore_errors=True)
+    anim = {}
+    for clip, folder, frames in (('walk', 'walking', [f'pcm_walk_{name}_{{d}}{n}' for n in range(6)]), ('attack', 'attack', [f'pcm_act_{name}_{{d}}_{act}{n}' for n in range(2)])):
+        foot = {}
+        for facing, d in DIRS.items():
+            for n, pattern in enumerate(frames):
+                im = load(pattern.format(d=d))
+                if facing == 'east': im = im.transpose(Image.FLIP_LEFT_RIGHT)
+                dd = os.path.join(OUT, sprite, 'animations', folder, facing)
+                os.makedirs(dd, exist_ok=True)
+                im.save(os.path.join(dd, f'frame_{n:03d}.png'))
+                if n == 0: foot[facing] = alpha_bottom(im)[3]
+                if clip == 'walk' and n == 0 and facing == 'south':
+                    rot = os.path.join(OUT, sprite, 'rotations'); os.makedirs(rot, exist_ok=True)
+                    im.save(os.path.join(rot, 'south.png'))
+        anim[clip] = {'folder': folder, 'frames': len(frames), 'dirs': list(DIRS), 'footPx': foot}
+    elites[etype] = {'sprite': sprite, 'scale': 1.2, 'barY': 96, 'anim': anim}
+    print(etype, name)
 with open(os.path.join(ROOT, 'js', 'data', 'asteria_heroes.js'), 'w', encoding='utf8', newline='\n') as f:
     f.write('// tools/import_asteria_heroes.py가 만든 표다. 일반 용사의 생김새(떼가 복사한 듯 보이지 않게 섞는다).\n')
     f.write('const ASTERIA_HERO_SKINS = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ';\n')
+    f.write('// 정예 용사의 그림. balance.js의 HEROES에 덮어쓴다(쓰러지는 동작은 없어 걷기 그림으로 쓰러진다)\n')
+    f.write('const ASTERIA_ELITE_ART = ' + json.dumps(elites, ensure_ascii=False, separators=(',', ':')) + ';\n')
+    f.write('for (const [type, a] of Object.entries(ASTERIA_ELITE_ART)) if (HEROES[type]) Object.assign(HEROES[type], { sprite: a.sprite, scale: a.scale, barY: a.barY, anim: a.anim });\n')

@@ -344,17 +344,14 @@ const Render = {
 
     // 정예 표시: 발밑의 금색 빛 고리
     eliteRing(ctx, x, y) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const pulse = 0.55 + Math.sin(Game.time * 5) * 0.15;
-        ctx.fillStyle = `rgba(255,190,60,${pulse * 0.35})`;
-        ctx.beginPath();
-        ctx.ellipse(x, y, 62, 21, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = `rgba(255,215,100,${pulse})`;
-        ctx.stroke();
-        ctx.restore();
+        const px = 2 * ART_SCALE;
+        const t = Game.time;
+        ctx.fillStyle = '#ffc63d';
+        for (let i = 0; i < 16; i++) {
+            if ((i + Math.floor(t * 6)) % 4 === 0) continue;
+            const a = i / 16 * Math.PI * 2 + t * 0.9;
+            ctx.fillRect(snapWorld(x + Math.cos(a) * 46), snapWorld(y + Math.sin(a) * 15), px * 2, px * 2);
+        }
     },
 
     // 서 있는 그림: 다음 파티 목록에 쓴다
