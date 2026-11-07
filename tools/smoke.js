@@ -55,7 +55,8 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     // 몬스터 그림: 표의 동작마다 방향(PL_DIRS) 폴더에 프레임 수만큼 그림이 있고(더 많지도 않다), 불러오기 목록에 들어 있다.
     // 그림은 PixelLab(pl_) 또는 Asteria(ast_mon_). 폴더 구조는 같다
     const monsters = vm.runInContext('MONSTERS', actx);
-    assert.strictEqual(Object.keys(monsters).length, 55, 'fifty-five monsters');
+    assert.strictEqual(Object.values(monsters).filter(m => m.grade !== 'mythic').length, 55, 'fifty-five monsters');
+    assert.strictEqual(Object.values(monsters).filter(m => m.grade === 'mythic').length, 12, 'twelve mythics');
     for (const def of Object.values(monsters)) {
         assert(fs.existsSync(path.join(root, 'assets/sprites', def.sprite, 'rotations/south.png')), def.id + ' rotation');
         assert(names.includes(`${def.sprite}/rotations/south`));
@@ -182,6 +183,13 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
 vm.runInContext(`
 // 칸 모양은 맨 끝 시험에서 본다. 그 앞 시험은 모두 1칸으로 돌린다
 var SAVED_CELLS = {};
+// 신화 표와 특수 스킬도 맨 끝 시험에서 본다. 그 앞 시험은 신화가 비어 있고 스킬이 없는 표로 돌린다(신화 제한도 1마리)
+var SAVED_MYTHICS = {}, SAVED_SKILLS = {}, SAVED_RECIPES = [];
+for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].grade === 'mythic') { SAVED_MYTHICS[id] = MONSTERS[id]; delete MONSTERS[id]; }
+for (let i = MONSTER_RECIPES.length - 1; i >= 0; i--) if (SAVED_MYTHICS[MONSTER_RECIPES[i].result]) SAVED_RECIPES.unshift(MONSTER_RECIPES.splice(i, 1)[0]);
+for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].skills) { SAVED_SKILLS[id] = MONSTERS[id].skills; delete MONSTERS[id].skills; }
+var SAVED_FIELD_MAX = MONSTER_GRADES.mythic.fieldMax;
+MONSTER_GRADES.mythic.fieldMax = 1;
 for (const id of Object.keys(MONSTERS)) { SAVED_CELLS[id] = MONSTERS[id].art.cells; delete MONSTERS[id].art.cells; }
 
 // 입력은 main.js와 같은 길로 넣는다: 누름(onDown) → 움직임(onMove) → 뗌(onUp). 마우스와 터치가 같은 pointer 이벤트다
@@ -4537,3 +4545,163 @@ Game.finish(false);
 delete globalThis.localStorage;
 console.log('smoke ok: monster cells');
 }`, ctx, { filename: 'smoke-cells' });
+
+// ----- 신화와 특수 스킬 -----
+vm.runInContext(`{
+for (const id of Object.keys(SAVED_MYTHICS)) MONSTERS[id] = SAVED_MYTHICS[id];
+MONSTER_RECIPES.push(...SAVED_RECIPES);
+for (const id of Object.keys(SAVED_SKILLS)) MONSTERS[id].skills = SAVED_SKILLS[id];
+MONSTER_GRADES.mythic.fieldMax = SAVED_FIELD_MAX;
+assert.strictEqual(MONSTER_GRADES.mythic.fieldMax, 3);
+const mythics = Object.values(MONSTERS).filter(m => m.grade === 'mythic');
+const hiddenM = mythics.filter(m => m.hiddenMythic);
+assert.strictEqual(mythics.length, 12);
+assert.strictEqual(hiddenM.length, 4);
+assert.strictEqual(mergePool('mythic').length, 8, 'hidden mythics are not grade merge results');
+assert.strictEqual(nextGrade('legendary'), 'mythic');
+// 전설과 신화는 모두 스킬이 있고 히든은 2개, 표의 종류와 설명이 있다
+for (const m of Object.values(MONSTERS)) {
+    if (m.grade === 'legendary' || m.grade === 'mythic') assert((m.skills || []).length === (m.grade === 'mythic' ? 2 : 1), m.id + ' skills');
+    else assert(!m.skills, m.id + ' has no skill');
+    for (const s of m.skills || []) { assert(SKILL_KINDS[s.kind], s.kind); assert(s.name && s.cooldown > 0, m.id); assert(skillDesc(s).length > 5); }
+    for (const a of m.abilities) assert(ABILITY_KINDS[a.kind], m.id + ' ' + a.kind);
+}
+// 히든 신화는 S랭크 조합식으로만 나온다
+for (const m of hiddenM) {
+    const r = MONSTER_RECIPES.filter(x => x.result === m.id);
+    assert(r.length === 1 && r[0].hidden && r[0].aRank === 'S' && r[0].bRank === 'S', m.id + ' recipe');
+}
+// 합성 신화보다 히든이 강하다
+const power = m => m.stats.damage;
+const best = Math.max(...mythics.filter(m => !m.hiddenMythic && m.role !== 'melee').map(power));
+assert(hiddenM.filter(m => m.role !== 'melee').every(m => power(m) > best), 'hidden mythics are stronger');
+
+// 스킬: 대기가 차면 쓰고, 용사가 없으면 기다린다
+function field(type) {
+    Game.reset();
+    Game.state = 'wave';
+    const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(type, c, r); });
+    const [c, r] = key.split(',').map(Number);
+    return Game.place(type, c, r);
+}
+function hero(m, near) {
+    const h = createHero('warrior', 1, 0, null, 'north');
+    h.waiting = false;
+    h.delay = 0;
+    h.hp = h.maxHp = 100000;
+    h.speed = 0;
+    let best = 0, bd = Infinity;
+    const len = ROUTES.north.length;
+    for (let d = 0; d < len; d += 20) { h.d = d; const p = heroWorld(h); const dd = distance(p.x, p.y, m.x, m.y); if (dd < bd) { bd = dd; best = d; } }
+    h.d = near === false ? 0 : best;
+    Game.heroes.push(h);
+    return h;
+}
+const cast = (m, s) => castMonsterSkill(m, s, monsterStats(m));
+let m = field('giant_king');
+const sk = MONSTERS.giant_king.skills[0];
+assert.strictEqual(cast(m, sk), false, 'no hero, no cast');
+updateMonsterSkills(m, 0);
+m.skillCd[0] = 0.01;
+updateMonsterSkills(m, 0.05);
+assert.strictEqual(m.skillCd[0], 0, 'waits at zero without a target');
+let h = hero(m);
+let hp = h.hp;
+updateMonsterSkills(m, 0.05);
+assert.strictEqual(m.skillCd[0], sk.cooldown, 'cooldown restarts after a cast');
+assert(h.hp < hp && h.stun > 0, 'nova hits and stuns');
+assert(!h.dead);
+// 기절은 보스 제외
+h.boss = true; h.stun = 0;
+cast(m, sk);
+assert.strictEqual(h.stun, 0, 'boss not stunned');
+h.boss = false;
+// meteor: 효과와 피해
+m = field('hell_general'); h = hero(m); hp = h.hp;
+assert(cast(m, MONSTERS.hell_general.skills[0]) && h.hp < hp && h.burn > 0, 'meteor burns');
+// barrage: count번
+m = field('star_whale'); h = hero(m); hp = h.hp;
+const whale = MONSTERS.star_whale.skills[0];
+assert(cast(m, whale));
+assert(hp - h.hp > 0);
+// harvest: 약한 용사만, 보스 제외, 골드
+m = field('soul_devourer');
+const strong = hero(m);
+const weak = hero(m); weak.hp = weak.maxHp * 0.1;
+const bossy = hero(m); bossy.boss = true; bossy.hp = bossy.maxHp * 0.1;
+const g0 = Game.gold;
+assert(cast(m, MONSTERS.soul_devourer.skills[0]));
+assert(weak.dead && !strong.dead && !bossy.dead, 'harvest takes only the weak');
+assert(Game.gold >= g0 + 2, 'harvest pays');
+Game.heroes = Game.heroes.filter(x => x === strong);
+strong.hp = strong.maxHp;
+assert.strictEqual(cast(m, MONSTERS.soul_devourer.skills[0]), false, 'nobody to harvest');
+// timeStop: 보스는 느려지기만
+m = field('time_witch');
+const a1 = hero(m, false), b1 = hero(m, false); b1.boss = true;
+assert(cast(m, MONSTERS.time_witch.skills[0]));
+assert(a1.stun >= 3 && !b1.stun && b1.slow > 0, 'time stop');
+// push: 뒤로 밀고 보스는 그대로
+m = field('abyss_dragon_king');
+const p1 = hero(m), p2 = hero(m); p2.boss = true;
+p1.d = p2.d = 1000;
+assert(cast(m, MONSTERS.abyss_dragon_king.skills[0]));
+assert(p1.d === 1000 - 2.5 * TILE && p2.d === 1000, 'push');
+// buff: 수치가 오르고 시간이 끝나면 돌아온다
+m = field('orc_high_chief');
+const ally = Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace('orc_guard', c, r)));
+hero(m, false);
+const d0 = monsterStats(ally).damage;
+assert(cast(m, MONSTERS.orc_high_chief.skills[0]));
+assert(Math.abs(monsterStats(ally).damage - d0 * 1.3) < 1e-6, 'war cry');
+updateMonster(ally, 9);
+assert(Math.abs(monsterStats(ally).damage - d0) < 1e-6, 'buff ends');
+// armor buff
+m = field('crystal_giant'); hero(m, false);
+assert(cast(m, MONSTERS.crystal_giant.skills[0]));
+assert(Math.abs(monsterStats(m).armor - 0.3) < 1e-6, 'armor buff');
+// heal: 회복과 부활
+m = field('phoenix_lord');
+const hurt = Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace('orc_guard', c, r)));
+assert.strictEqual(cast(m, MONSTERS.phoenix_lord.skills[0]), false, 'nobody hurt');
+hurt.hp = 1;
+assert(cast(m, MONSTERS.phoenix_lord.skills[0]) && hurt.hp > 1, 'heals');
+hurt.down = 5;
+assert(cast(m, MONSTERS.phoenix_lord.skills[0]) && !(hurt.down > 0), 'revives');
+
+// 맵 제한: 서로 다른 신화면 3마리까지(히든도 같다), 같은 종은 1마리
+Game.reset();
+Game.state = 'prep';
+const seat = t => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace(t, c, r));
+const legend = t => { const mm = Game.place(t, ...seat(t)); setMonsterRank(mm, 4); return mm; };
+const myth1 = Game.place('time_witch', ...seat('time_witch'));
+// 결과 후보에서 맵에 있는 종은 빠진다
+assert(!Game.mergeResultPool('mythic', []).includes('time_witch'), 'same species excluded');
+assert.strictEqual(Game.mergeResultPool('mythic', [myth1]).length, 8, 'a material does not count');
+// S랭크 조합식으로 히든 신화
+const s1 = legend('death_lord'), s2 = legend('archlich');
+let plan = Game.mergePlanFor(s1, s2);
+assert(plan.kind === 'recipe' && plan.result === 'death_god', 'hidden recipe');
+setMonsterRank(s1, 3);
+plan = Game.mergePlanFor(s1, s2);
+assert(plan.kind !== 'recipe', 'rank A is not enough');
+setMonsterRank(s1, 4);
+const res = Game.merge({ monster: s1 }, { monster: s2 });
+assert(res.ok && res.type === 'death_god' && res.hidden);
+// 다른 히든 신화는 함께 둘 수 있다
+const s3 = legend('giant_king'), s4 = legend('crystal_giant');
+plan = Game.mergePlanFor(s3, s4);
+assert(plan.kind === 'recipe' && plan.result === 'god_king', 'second hidden mythic allowed');
+// 같은 히든 신화는 또 만들 수 없다
+const s6 = legend('death_lord'), s7 = legend('archlich');
+plan = Game.mergePlanFor(s6, s7);
+assert(plan.kind === 'none' && plan.reason === 'unique' && plan.sameKind, 'same mythic refused');
+// 3마리를 채우면 더 못 만든다
+Game.place('kraken', ...seat('kraken'));
+assert.strictEqual(Game.mergePlanFor(s3, s4).reason, 'unique', 'three mythics max');
+// 저장과 팝업: 스킬이 있는 몬스터의 팝업이 오류 없이 만들어진다
+const pm = Game.monsters.find(x => x.type === 'death_god');
+assert(MONSTERS[pm.type].skills.length === 2);
+console.log('smoke ok: mythics and skills');
+}`, ctx, { filename: 'smoke-mythic' });
+

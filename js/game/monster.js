@@ -54,6 +54,12 @@ function monsterStats(m) {
     }
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
+    // 스킬 buff(전쟁의 함성 등). 최대 체력은 건드리지 않는다
+    if (m.buffT > 0 && m.buff) {
+        stats.damage *= 1 + (m.buff.damage || 0);
+        stats.interval /= 1 + (m.buff.speed || 0);
+        stats.armor = 1 - (1 - stats.armor) * (1 - (m.buff.armor || 0));
+    }
     return stats;
 }
 
@@ -210,6 +216,149 @@ function monsterDeathAbilities(m) {
     Fx.addShake(8);
 }
 
+// ----- 특수 스킬(표: SKILL_KINDS) -----
+function skillHeroes(m, reach) {
+    return Game.heroes.filter(h => {
+        if (h.dead || h.waiting) return false;
+        if (reach === 'map') return true;
+        const p = heroWorld(h);
+        return distance(m.x, m.y, p.x, p.y) <= reach * TILE;
+    });
+}
+
+// 스킬 효과를 용사 한 명에게. stun은 보스 제외
+function skillAfflict(m, s, stats, h) {
+    if (h.dead) return;
+    if (s.stun && !h.boss) applyStun(h, s.stun);
+    if (s.slow) slowHero(h, s.slow, SKILL_SLOW_MUL);
+    if (s.curse) curseHero(h, s.curse, SKILL_CURSE_MUL);
+    if (s.burn) burnHero(h, s.burn, stats.damage * SKILL_BURN_DPS, m);
+}
+
+function skillHit(m, s, stats, h, color) {
+    monsterDealt(m, damageHero(h, stats.damage * s.mul, m.x, m.y, color, m));
+    skillAfflict(m, s, stats, h);
+}
+
+// 스킬을 쓸 수 있으면 쓰고 true. 맞을 대상이 없으면 false(대기가 0에서 기다린다)
+function castMonsterSkill(m, s, stats) {
+    const art = MONSTERS[m.type].art;
+    const color = `rgb(${art.glow})`;
+    switch (s.kind) {
+        case 'nova': {
+            const list = skillHeroes(m, s.radius);
+            if (!list.length) return false;
+            for (const h of list.slice()) skillHit(m, s, stats, h, color);
+            if (s.radius === 'map') Fx.anim('fx_adv_doomMelody_requiem', m.x, m.y - 40, 900, 0.75);
+            else {
+                Fx.ring(m.x, m.y, s.radius * TILE, color, 0.5);
+                Fx.anim('fx_blastViolet', m.x, m.y - 30, s.radius * TILE * 2, 0.5);
+            }
+            break;
+        }
+        case 'meteor': {
+            const t = foremostHero(m.x, m.y, s.reach * TILE);
+            if (!t) return false;
+            const c = heroWorld(t);
+            for (const h of Game.heroes.slice()) {
+                if (h.dead || h.waiting) continue;
+                const p = heroWorld(h);
+                if (distance(c.x, c.y, p.x, p.y) <= s.radius * TILE) skillHit(m, s, stats, h, color);
+            }
+            Fx.anim('fx_explosion', c.x, c.y - 40, s.radius * TILE * 2.4, 0.5);
+            Fx.ring(c.x, c.y, s.radius * TILE, color, 0.45);
+            break;
+        }
+        case 'barrage': {
+            const list = skillHeroes(m, s.reach);
+            if (!list.length) return false;
+            for (let i = 0; i < s.count; i++) {
+                const alive = list.filter(h => !h.dead);
+                if (!alive.length) break;
+                const h = randItem(alive);
+                const p = heroWorld(h);
+                if (i < 8) Fx.anim('fx_hit_lightning', p.x, p.y - 60, 240, 0.4);
+                skillHit(m, s, stats, h, color);
+            }
+            break;
+        }
+        case 'harvest': {
+            const list = skillHeroes(m, s.reach).filter(h => !h.boss && h.hp / h.maxHp <= s.below);
+            if (!list.length) return false;
+            for (const h of list) {
+                const p = heroWorld(h);
+                Fx.anim('fx_cleave', p.x, p.y - 20, 220, 0.4);
+                damageHero(h, h.hp + 1, m.x, m.y, color, m, true);
+                if (s.gold) { Game.gold += s.gold; Fx.coin(p.x, p.y - 60, s.gold); }
+            }
+            break;
+        }
+        case 'timeStop': {
+            const list = skillHeroes(m, 'map');
+            if (!list.length) return false;
+            for (const h of list) {
+                if (h.boss) slowHero(h, s.duration, SKILL_SLOW_MUL);
+                else applyStun(h, s.duration);
+            }
+            Fx.anim('fx_blastCyan', m.x, m.y - 60, 900, 0.6);
+            break;
+        }
+        case 'push': {
+            const list = skillHeroes(m, s.radius);
+            if (!list.length) return false;
+            for (const h of list.slice()) {
+                if (!h.boss) { h.d = Math.max(0, h.d - s.tiles * TILE); h.blocker = null; }
+                skillHit(m, s, stats, h, color);
+            }
+            Fx.anim('fx_blastCyan', m.x, m.y - 60, 900, 0.6);
+            break;
+        }
+        case 'buff': {
+            if (!skillHeroes(m, 'map').length) return false;
+            for (const o of Game.monsters) {
+                if (o.removed || o.down > 0) continue;
+                o.buffT = s.duration;
+                o.buff = s;
+                Fx.ring(o.x, o.y, 70, color, 0.35);
+            }
+            Fx.anim('fx_blastGold', m.x, m.y - 60, 600, 0.5);
+            break;
+        }
+        case 'heal': {
+            const hurt = Game.monsters.filter(o => !o.removed && (o.down > 0 ? s.revive : o.blocks && o.hp < o.maxHp));
+            if (!hurt.length) return false;
+            for (const o of hurt) {
+                if (o.down > 0) reviveMonster(o);
+                else healMonster(o, o.maxHp * s.ratio);
+                Fx.anim('fx_heal', o.x, o.y - 66, 150);
+            }
+            Fx.anim('fx_heal_aoe', m.x, m.y, 500);
+            break;
+        }
+        default: return false;
+    }
+    m.atkPose = m.atkPoseMax = ATTACK_POSE_TIME;
+    Fx.say(m.x, m.y - art.barY, s.name, 1.2);
+    Fx.addShake(5);
+    Sfx.play('upgrade');
+    return true;
+}
+
+// 쓰러졌거나 정지 중에는 부르지 않는다
+function updateMonsterSkills(m, dt) {
+    const skills = MONSTERS[m.type].skills;
+    if (!skills) return;
+    if (!m.skillCd) m.skillCd = skills.map(s => s.cooldown * 0.5); // 첫 사용은 대기의 절반 뒤
+    const stats = monsterStats(m);
+    skills.forEach((s, i) => {
+        m.skillCd[i] -= dt;
+        if (m.skillCd[i] <= 0) {
+            if (castMonsterSkill(m, s, stats)) m.skillCd[i] = s.cooldown;
+            else m.skillCd[i] = 0;
+        }
+    });
+}
+
 function createMonster(type, col, row) {
     const m = {
         kind: 'monster', type, blocks: monsterBlocks(type), col, row, x: monsterHomeX(type, col), y: monsterHomeY(type, row),
@@ -303,6 +452,7 @@ function updateMonster(m, dt) {
     m.rankUp = Math.max(0, (m.rankUp || 0) - dt);
     m.healFx = Math.max(0, (m.healFx || 0) - dt);
     m.thornsFx = Math.max(0, (m.thornsFx || 0) - dt);
+    m.buffT = Math.max(0, (m.buffT || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;
@@ -330,6 +480,7 @@ function updateMonster(m, dt) {
         m.shot = null;
         return;
     }
+    updateMonsterSkills(m, dt);
     if (m.blocks) updateBlockMonster(m, dt);
     else updateSideMonster(m, dt);
 }

@@ -674,6 +674,15 @@ const Render = {
             ctx.fill();
             ctx.restore();
         }
+        if (m.buffT > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(255,215,110,${0.28 + Math.sin(Game.time * 6) * 0.08})`;
+            ctx.beginPath();
+            ctx.ellipse(m.x, footY, 60, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
         this.drawAuraRunes(ctx, m, footY);
         const enraged = !!monsterEnrage(m);
         if (enraged) this.enrageAura(ctx, m.x, footY, m.x * 0.01);
