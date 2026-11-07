@@ -11,14 +11,15 @@ function createHero(type, waveIndex, delay, bossKey, route) {
     if (bossDef) type = bossDef.base;
     const def = HEROES[type];
     const scale = (1 + COMBAT_RULES.hpPerWave * waveIndex) * Game.heroHpMul * Game.endlessHpMul(waveIndex); // 스테이지 체력 배율(스토리 없으면 1)
-    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) : def.hp * scale;
+    const swarm = !bossDef && !def.elite; // 일반 용사는 떼로 나오는 만큼 한 명이 약하다(SWARM_RULES)
+    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) : def.hp * scale * (swarm ? SWARM_RULES.hpMul : 1);
     const src = bossDef || def;
     return {
         type,
         boss: !!bossDef,
         bossKey: bossDef ? key : null,
         elite: !bossDef && !!def.elite,
-        throneDamage: src.throneDamage || 1,
+        throneDamage: (src.throneDamage || 1) * (swarm ? SWARM_RULES.leak : 1),
         name: src.name,
         route: route || 'north',
         d: 0, // route 길 위에서 입구로부터 이동한 거리
@@ -28,7 +29,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         damage: src.damage,
         interval: src.interval,
         armor: src.armor || 0,
-        bounty: src.bounty,
+        bounty: src.bounty * (swarm ? SWARM_RULES.bountyMul : 1),
         delay,
         waiting: true,
         dir: 'right',
@@ -159,7 +160,15 @@ function updateHero(h, dt) {
         const w = heroWorld(h);
         if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 150, randItem(SPEECH.arrive), 1.5);
         if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
-        else damageThrone(h.throneDamage);
+        else {
+            // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
+            G.leak = (G.leak || 0) + h.throneDamage;
+            const whole = Math.floor(G.leak + 1e-9);
+            if (whole >= 1) {
+                G.leak -= whole;
+                damageThrone(whole);
+            }
+        }
     }
 }
 

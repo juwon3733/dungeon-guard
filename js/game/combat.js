@@ -10,8 +10,12 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
     const p = heroWorld(hero);
-    Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
-    if (!dot) {
+    const small = !hero.boss && !hero.elite; // 떼로 나오는 일반 용사는 숫자를 띄우지 않아 화면을 가리지 않는다
+    if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
+    if (!dot && small) {
+        hero.flash = 0.09;
+        Fx.burst(p.x, p.y - 22, color || '#ffd26a', 2, 200, 0.25, 4);
+    } else if (!dot) {
         hero.flash = 0.09;
         Fx.burst(p.x, p.y - (hero.boss ? 140 : 45), color || '#ffd26a', 4, 260, 0.3, 6);
         Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-21, 21), p.y - (hero.boss ? 140 : 48) + randRange(-18, 18), dealt >= 20 ? 225 : 135, 0.26);
@@ -24,11 +28,35 @@ function killHero(hero, pos, attacker) {
     hero.dead = true;
     if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
-    const bounty = Math.round(hero.bounty * G.mods.bounty); // 마왕과 유물의 처치 골드(bounty)
+    // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty;
+    const bounty = Math.floor(G.goldLeft + 1e-9);
+    G.goldLeft -= bounty;
     G.gold += bounty;
     G.stats.kills++;
     G.scoreKill(hero);
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
+    if (!hero.boss && !hero.elite) {
+        // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
+        const y = pos.y - 24;
+        if (bounty > 0) Fx.coin(pos.x, pos.y - 30, 1, 1);
+        Fx.anim('fx_explosion', pos.x, y, 170, 0.3);
+        Fx.burst(pos.x, y, '#ffffff', 5, 300, 0.35, 5);
+        Fx.burst(pos.x, y, '#ff9d4d', 5, 240, 0.4, 4);
+        Fx.addShake(1.5);
+        G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
+        G.streakTimer = 2.4;
+        if (G.streak >= 2) G.streakPop = 1;
+        // 연속 처치 글자는 10명마다
+        if (G.streak % 10 === 0) Fx.number({}, pos.x, pos.y - 150, `${G.streak} 연속!`, G.streak >= 50 ? '#ff7a5c' : '#9fe0ff', G.streak % 50 === 0);
+        Sfx.play('kill', G.streak);
+        // 시체는 쓰러지는 장식이라 많으면 오래된 것부터 지운다
+        const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
+        const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
+        if (!CORRUPTION_ENABLED && G.corpses.length >= 40) G.corpses.shift();
+        G.corpses.push({ type: hero.type, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir, age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul });
+        return;
+    }
     Fx.coin(pos.x, pos.y - 60, bounty);
     // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)
     const cy = pos.y - (hero.boss ? 140 : 45);

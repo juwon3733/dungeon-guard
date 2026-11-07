@@ -122,7 +122,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     const heroes = vm.runInContext('HEROES', actx);
     const bosses = vm.runInContext('BOSSES', actx);
     for (const def of [...Object.values(heroes), ...Object.values(bosses).map(b => b.art)]) {
-        assert.strictEqual(def.scale, 3, def.sprite + ' 1 dot = 2 screen px');
+        assert(def.scale === 3 || def.scale === vm.runInContext('SWARM_RULES.scale', actx), def.sprite + ' scale');
         assert(names.includes(`${def.sprite}/rotations/south`), def.sprite + ' rotation');
         for (const clip of Object.values(def.anim)) {
             for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {
@@ -188,6 +188,8 @@ var SAVED_MYTHICS = {}, SAVED_SKILLS = {}, SAVED_RECIPES = [];
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].grade === 'mythic') { SAVED_MYTHICS[id] = MONSTERS[id]; delete MONSTERS[id]; }
 for (let i = MONSTER_RECIPES.length - 1; i >= 0; i--) if (SAVED_MYTHICS[MONSTER_RECIPES[i].result]) SAVED_RECIPES.unshift(MONSTER_RECIPES.splice(i, 1)[0]);
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].skills) { SAVED_SKILLS[id] = MONSTERS[id].skills; delete MONSTERS[id].skills; }
+var SAVED_SWARM = Object.assign({}, SWARM_RULES);
+Object.assign(SWARM_RULES, { hpMul: 1, bountyMul: 1, leak: 1 });
 var SAVED_FIELD_MAX = MONSTER_GRADES.mythic.fieldMax;
 MONSTER_GRADES.mythic.fieldMax = 1;
 for (const id of Object.keys(MONSTERS)) { SAVED_CELLS[id] = MONSTERS[id].art.cells; delete MONSTERS[id].art.cells; }
@@ -2536,7 +2538,8 @@ Game.gold = 6000;
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
     [17,10,'orc_guard'],[20,9,'orc_guard'],[22,8,'orc_guard'],[19,10,'skeleton_archer'],[20,6,'dark_mage'],[23,6,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
-Game.heroHpMul = 0.15; // 규칙이 끝까지 도는지 보는 시험이라 난이도는 낮춘다
+Game.heroHpMul = 0.05; // 규칙이 끝까지 도는지 보는 시험이라 난이도는 낮춘다(용사가 떼로 나온다)
+SWARM_RULES.leak = 0.1;
 let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false, equipped = 0;
 const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
@@ -2567,6 +2570,7 @@ assert(sawCharge && sawStomp, 'boss patterns fired');
 assert(sawArchmage && rewards >= 11, 'archmage, a card reward every 5 rounds (rewards ' + rewards + ')');
 assert(eliteWaves.size >= 12, 'elites appeared every 5 rounds');
 assert(equipped >= 1, 'boss reward equipment was equipped');
+SWARM_RULES.leak = 1;
 console.log('smoke ok: waves', Game.waveIndex + 1, 'kills', Game.stats.kills, 'hp', Game.hp, 'time', Math.round(Game.stats.time));
 `, ctx, { filename: 'smoke' });
 
@@ -2725,7 +2729,7 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
         Game.heroes.push(h);
         const g0 = Game.gold;
         damageHero(h, 1e9);
-        assert.strictEqual(Game.gold - g0, Math.round(HEROES.warrior.bounty * 1.2), 'bounty x1.2');
+        assert.strictEqual(Game.gold - g0, Math.floor(HEROES.warrior.bounty * 1.2), 'bounty x1.2, the rest carries over');
     }
 
     // rareChance: 일반에서 희귀로 옮긴다
@@ -4908,6 +4912,7 @@ console.log('smoke ok: relic effects');
 
 // ----- 고정 난수, 입력 기록, 일일 도전 -----
 vm.runInContext(`{
+Object.assign(SWARM_RULES, SAVED_SWARM);
 const near = (a, b, msg) => assert(Math.abs(a - b) < 1e-9, msg + ': ' + a + ' vs ' + b);
 // 난수: 시드가 같으면 같고, 흐름끼리 서로 흔들지 않는다
 Rng.start('a');
@@ -5050,6 +5055,43 @@ assert.strictEqual(Meta.data.daily['2026-11-07'].score, b0);
 // 기록 정리: 깨진 값은 버린다
 assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, daily: { 'x': { score: 1, rounds: 1 }, '2026-01-01': { score: 'a', rounds: 1 }, '2026-01-02': { score: 5, rounds: 2 } } }).daily), JSON.stringify({ '2026-01-02': { score: 5, rounds: 2, victory: false } }));
 delete globalThis.localStorage;
+Game.reset();
+// 떼로 나오는 일반 용사
+Game.reset();
+Game.state = 'wave';
+{
+    const w = createHero('warrior', 0, 0, null, 'north');
+    assert.strictEqual(w.bounty, HEROES.warrior.bounty * SWARM_RULES.bountyMul, 'small bounty');
+    near(w.maxHp, HEROES.warrior.hp * SWARM_RULES.hpMul, 'small hp');
+    assert.strictEqual(HEROES.warrior.scale, SWARM_RULES.scale, 'small picture');
+    const e = createHero('elite_swordsman', 0, 0, null, 'north');
+    assert.strictEqual(e.throneDamage, HEROES.elite_swordsman.throneDamage, 'elites stay whole');
+    assert(HEROES.elite_swordsman.scale > SWARM_RULES.scale, 'elites stay big');
+    // 왕좌 피해와 골드는 모아서: 일반 용사 3명이 도착하면 약 1 깎인다
+    const hp0 = Game.hp;
+    for (let i = 0; i < 3; i++) {
+        const h = createHero('warrior', 0, 0, null, 'north');
+        h.waiting = false;
+        h.delay = 0;
+        h.d = ROUTES.north.length;
+        Game.heroes.push(h);
+        updateHero(h, GAME_TICK);
+    }
+    assert.strictEqual(Game.hp, hp0 - 1, 'three leaks cost one hp');
+    Game.heroes = [];
+    const g0 = Game.gold;
+    for (let i = 0; i < 3; i++) {
+        const h = createHero('rogue', 0, 0, null, 'north');
+        h.waiting = false;
+        Game.heroes.push(h);
+        damageHero(h, 1e6, 0, 0);
+    }
+    assert.strictEqual(Game.gold, g0 + 2, 'gold adds up: 2 x 0.35 x 3 = 2.1');
+    // 인원은 라운드가 늘수록 많고 상한에서 멈춘다
+    const cnt = r => Object.values(buildRound(r).members).reduce((a, b) => a + b, 0);
+    assert(cnt(1) >= 24 && cnt(60) > cnt(10), 'many heroes');
+    assert(cnt(500) <= ENDLESS_RULES.maxCount + 2, 'capped');
+}
 Game.reset();
 console.log('smoke ok: seeded runs and daily challenge');
 }`, ctx, { filename: 'smoke-daily' });

@@ -18,6 +18,10 @@ const ORC_ART = {
     }
 };
 
+// 떼로 몰려오는 일반 용사: 그림은 작게(1.5면 그림 1px이 화면 1px), 수는 countMul배, 대신 한 명의 체력, 처치 골드, 왕좌 피해를 나눈다.
+// 정예와 보스에는 쓰지 않는다
+const SWARM_RULES = { scale: 1.5, countMul: 3, hpMul: 0.35, bountyMul: 0.35, leak: 0.34 };
+
 const HEROES = {
     warrior: {
         // PixelLab 그림. barY는 체력바 높이(발 기준 위쪽 세계 px)
@@ -27,7 +31,7 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, footPx: 53 },
             death: { folder: 'falling_backward', frames: 7, footPx: 55 }
         },
-        name: '전사', sprite: 'pl_hero_warrior', scale: HERO_SCALE, barY: 126, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
+        name: '전사', sprite: 'pl_hero_warrior', scale: SWARM_RULES.scale, barY: 70, hp: 24, speed: 0.8, bounty: 3, damage: 4, interval: 1.0, armor: 2,
         counter: '갑옷, 강한 공격으로'
     },
     rogue: {
@@ -36,7 +40,7 @@ const HEROES = {
             attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 55, east: 53, north: 52 } },
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 55 }
         },
-        name: '도적', sprite: 'pl_hero_rogue', scale: HERO_SCALE, barY: 126, hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
+        name: '도적', sprite: 'pl_hero_rogue', scale: SWARM_RULES.scale, barY: 70, hp: 12, speed: 1.6, bounty: 2, damage: 3, interval: 0.6,
         counter: '빠름, 오크로 막기'
     },
     mage: {
@@ -46,7 +50,7 @@ const HEROES = {
             death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
         },
         atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
-        name: '마법사', sprite: 'pl_hero_mage', scale: HERO_SCALE, barY: 126, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
+        name: '마법사', sprite: 'pl_hero_mage', scale: SWARM_RULES.scale, barY: 70, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
         stunEvery: 6, stunRange: 3, stunTime: 2,
         counter: '몬스터 정지, 먼저 처치'
     }
@@ -187,9 +191,9 @@ const ENTRY_50_50 = { north: 0.5, south: 0.5 };
 // 이름은 앞 30개를 뒤 30라운드에 "재집결"로 다시 쓴다. 수치는 플레이 후 고칠 초안이다
 const ROUND_NAMES = ['신참 원정대', '마을 자경단', '날쌘 도굴꾼', '수상한 혼성대', '견습 마법사와 친구들', '보물 사냥단', '왕국 정찰대', '은빛 검 기사단', '최후의 선봉대', '대마도사의 제자들', '국경 수비대', '현상금 사냥꾼', '마법 학회 원정대', '왕실 근위대', '용병 대부대', '야습대', '성기사단', '전쟁 마법사단', '왕국 선봉군', '부대장 친위대', '복수의 원정대', '그림자 추적대', '대마법 연합', '철의 군단', '왕국 총동원령', '끝없는 행렬', '성전의 기사들', '현자의 군세', '왕국 최정예', '용사단 본대'];
 // 무한 라운드: 인원은 maxCount에서 멈추고(화면과 속도), hpFrom 라운드부터 용사 체력이 라운드마다 hpGrowth배로 늘어 언젠가 무너진다
-const ENDLESS_RULES = { maxCount: 90, maxElites: 8, hpFrom: 30, hpGrowth: 1.06 };
+const ENDLESS_RULES = { maxCount: 270, maxElites: 8, hpFrom: 30, hpGrowth: 1.06 };
 const ROUND_RULES = {
-    count: r => Math.round(8 + r * 1.1),                     // 일반 용사 수(r은 1부터)
+    count: r => Math.round((8 + r * 1.1) * SWARM_RULES.countMul),                     // 일반 용사 수(r은 1부터)
     // 구성 순환: 전사 위주, 도적 무리, 혼성, 마법사 많음
     mix: [{ warrior: 1 }, { warrior: 0.7, rogue: 0.3 }, { rogue: 1 }, { warrior: 0.6, mage: 0.4 }, { warrior: 0.5, rogue: 0.3, mage: 0.2 }],
     eliteEvery: 5, eliteBase: 1, elitePer: 15,              // 5라운드마다 정예: 1명 + 15라운드마다 1명
