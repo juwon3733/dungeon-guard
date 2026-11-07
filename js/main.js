@@ -51,6 +51,8 @@ function frame(now) {
     UI.update(dt);
     if (!Game.inPlay()) { // 타이틀, 스토리 지도, 선택 화면, 결과: 연출 시간만 흐른다
         Game.update(dt);
+    } else if (Fx.stop > 0) {
+        Fx.stop = Math.max(0, Fx.stop - dt);
     } else if (!Game.paused) {
         // Why: 판은 늘 같은 시간 단위로 돌린다. 화면 주사율과 배속이 달라도 같은 입력이면 같은 판이 나와 입력 재생으로 점수를 검증할 수 있다.
         tickLeft = Math.min(tickLeft + dt * Game.speed, GAME_TICK * 12);

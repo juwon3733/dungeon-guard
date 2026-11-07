@@ -36,6 +36,8 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         waiting: true,
         dir: 'right',
         anim: Math.random() * 4,
+        animRate: randRange(0.85, 1.18), // 걸음 빠르기 차이(연출만). 떼가 같은 박자로 걷지 않게 한다
+        kick: 0, kickX: 0, kickY: 0, // 맞았을 때 밀리는 연출(남은 초, 방향)
         atk: 0,
         atkPose: 0,
         atkPoseMax: ATTACK_POSE_TIME,
@@ -91,6 +93,7 @@ function updateHero(h, dt) {
         return;
     }
     h.flash = Math.max(0, h.flash - dt);
+    h.kick = Math.max(0, h.kick - dt);
     h.atkPose = Math.max(0, h.atkPose - dt);
     h.haste = Math.max(0, h.haste - dt);
     h.slip = Math.max(0, h.slip - dt);
@@ -109,7 +112,7 @@ function updateHero(h, dt) {
         }
         if (h.burn <= 0) h.burn = 0;
     }
-    h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1);
+    h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1) * (h.animRate || 1);
 
     if (h.boss) updateBossPatterns(h, dt);
     updateWindup(h, dt);

@@ -89,6 +89,8 @@ const UI = {
     popupEquipRect: null, // 팝업의 장비 칸(마우스를 올리면 설명)
     hoverCorpse: null,
     hoverButton: null,
+    popupAge: 1, // 정보 창이 열린 뒤 지난 초
+    rewardAge: 0, // 보스 보상 화면이 열린 뒤 지난 초
     goldShown: null, // 화면에 보이는 골드(굴러 올라간다)
     bossTrail: null, // 보스 체력 잔상
     hpShown: null, // 왼쪽 아래 체력 막대에 보이는 체력. 제물로 오를 때는 천천히 차오르고, 깎일 때는 바로 줄어든다
@@ -702,6 +704,7 @@ const UI = {
         const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
+        this.popupAge = 0;
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
         if (f.equip) {
             this.button('unequip', o.x + w - 120, o.y + POPUP_TOP + 166 + POPUP_RANK_H + 8, 104, 56, {
@@ -1320,6 +1323,8 @@ const UI = {
         // 끄는 몬스터가 맵에서 사라지면(판 종료 등) 끌기를 그만둔다
         if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
         // 체력 막대: 오를 때는 초당 6씩 차오르고, 깎이면 바로 맞춘다
+        this.popupAge += dt;
+        this.rewardAge = Game.bossReward ? this.rewardAge + dt : 0;
         // 골드 숫자는 실제 값을 빠르게 따라간다. 판 밖이나 씀(줄어듦)은 바로 맞춘다
         if (this.goldShown === null || Game.gold < this.goldShown || !Game.inPlay()) this.goldShown = Game.gold;
         else this.goldShown = Math.abs(Game.gold - this.goldShown) < 1 ? Game.gold : this.goldShown + (Game.gold - this.goldShown) * Math.min(1, dt * 10);
@@ -1546,7 +1551,15 @@ const UI = {
         this.drawBossBar(ctx);
         this.drawStreak(ctx);
         this.drawMergeBadges(ctx); // 맵 위 배지는 팝업 아래에 깔린다
-        if (this.popup) this.drawPopup(ctx);
+        if (this.popup) {
+            // 정보 창은 살짝 떠오르며 열린다
+            const e = clamp(this.popupAge / 0.1, 0, 1);
+            ctx.save();
+            ctx.globalAlpha = e;
+            ctx.translate(0, Math.round((1 - e) * 12));
+            this.drawPopup(ctx);
+            ctx.restore();
+        }
         this.drawButtons(ctx);
         this.drawEquipTips(ctx);
         if (!G.bossReward) {
@@ -2534,7 +2547,17 @@ const UI = {
         const cx = GAME_WIDTH / 2;
         UIKit.bigText(ctx, '보스 처치 보상', cx, REWARD_CARD_Y - 118, 68, UI_THEME.gold, 'center', '#fff2b8');
         UIKit.text(ctx, '하나를 고르세요 · 1, 2, 3', cx, REWARD_CARD_Y - 60, 26, UI_THEME.creamSoft, 'center');
-        for (const b of this.buttons) if (b.reward) this.drawRewardCard(ctx, b, this.hoverButton === b && !b.disabled);
+        let cardIndex = 0;
+        for (const b of this.buttons) if (b.reward) {
+            // 카드는 차례로 올라온다
+            const e = clamp((this.rewardAge - cardIndex * 0.09) / 0.2, 0, 1);
+            cardIndex++;
+            ctx.save();
+            ctx.globalAlpha = e;
+            ctx.translate(0, Math.round((1 - e) * (1 - e) * 80));
+            this.drawRewardCard(ctx, b, this.hoverButton === b && !b.disabled);
+            ctx.restore();
+        }
     },
 
     // 수치 칩: 아이콘(48)과 큰 숫자, 작은 이름. 다음 x를 돌려준다

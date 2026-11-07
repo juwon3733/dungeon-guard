@@ -101,6 +101,10 @@ const Fx = {
     ring(x, y, radius, color, life) { this.rings.push({ x, y, radius, color, age: 0, life }); },
     beam(ax, ay, bx, by, color, width, life) { this.beams.push({ ax, ay, bx, by, color, width, age: 0, life }); },
     glow(x, y, radius, color, life) { this.glows.push({ x, y, radius, color, age: 0, life }); },
+    // 큰 처치의 멈춤: 판 시간이 잠깐 멎는다. 화면 시간만 멈출 뿐 판 결과와 입력 재생은 그대로다(main.js)
+    stop: 0,
+    hitStop(sec) { if (!this.reduce) this.stop = Math.max(this.stop, sec); },
+
     addShake(amount) { if (!this.reduce) this.shake = Math.max(this.shake, amount); },
 
     // 번개는 위에서 아래로 내려오는 꺾은선. 매번 무작위 모양으로 만든다.
