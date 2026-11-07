@@ -12,7 +12,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
     const def = HEROES[type];
     const scale = (1 + COMBAT_RULES.hpPerWave * waveIndex) * Game.heroHpMul * Game.endlessHpMul(waveIndex); // 스테이지 체력 배율(스토리 없으면 1)
     const swarm = !bossDef && !def.elite; // 일반 용사는 떼로 나오는 만큼 한 명이 약하다(SWARM_RULES)
-    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) : def.hp * scale * (swarm ? SWARM_RULES.hpMul : 1);
+    const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) * Game.raidBossMul() : def.hp * scale * (swarm ? SWARM_RULES.hpMul : 1);
     const src = bossDef || def;
     return {
         type,

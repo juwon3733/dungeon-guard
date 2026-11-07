@@ -9,6 +9,7 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     const base = dot ? amount : Math.max(1, amount - (hero.armor || 0));
     const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
+    if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);
     const small = !hero.boss && !hero.elite; // 떼로 나오는 일반 용사는 숫자를 띄우지 않아 화면을 가리지 않는다
     if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
@@ -69,6 +70,7 @@ function killHero(hero, pos, attacker) {
     Fx.glow(pos.x, pos.y - 45, hero.boss ? 480 : 170, 'rgba(255,190,110,1)', 0.25);
     Fx.number({}, pos.x, pos.y - (hero.boss ? 360 : 200), `+${bounty}G`, '#ffd34d', hero.boss || hero.elite);
     if (hero.boss) {
+        if (G.challenge && G.challenge.kind === 'raid') G.raidTier++;
         G.bossDefeated = true; // 웨이브가 끝나면 보스 보상 3택(마지막 웨이브는 승리로 끝난다)
         Fx.addShake(26);
         Sfx.play('bossDown');

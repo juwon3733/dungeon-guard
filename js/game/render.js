@@ -408,6 +408,15 @@ const Render = {
         }
         const name = this.plFrame(art, clip, h.dir, i);
         this.shadow(ctx, p.x, p.y + 10, 84, 26);
+        // 걷는 그림이 한 장인 보스: 발끝을 기준으로 뒤뚱거린다
+        const bob = art.bob && !h.windup;
+        if (bob) {
+            ctx.save();
+            ctx.translate(p.x, p.y + 10);
+            ctx.rotate(Math.sin(h.anim * 0.9) * 0.03);
+            ctx.scale(1, 1 + Math.abs(Math.sin(h.anim * 0.9)) * 0.025);
+            ctx.translate(-p.x, -(p.y + 10));
+        }
         if (art.windupLoop) {
             // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다
             ctx.save();
@@ -433,6 +442,7 @@ const Render = {
         }
         const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
         this.plSprite(ctx, img, art, clip, h.dir, p.x, p.y + 10);
+        if (bob) ctx.restore();
     },
 
     // 음유시인 가속 표시: 발밑에서 떠오르는 초록 음표. 상태 없이 시간만으로 계산한다

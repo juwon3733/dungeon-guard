@@ -70,6 +70,40 @@ function dailyChallenge(date) {
 //   scorePerMutation: 쌓인 변이 하나당 점수 배율
 const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.07, scorePerMutation: 0.25 };
 
+// 주간 토벌전: 일주일 동안 모두 같은 시드, 같은 보스, 같은 조건으로 몇 단계까지 잡는지 겨룬다.
+//   tierEvery: 보스가 나오는 라운드 간격, tierHpGrowth: 보스를 잡을 때마다 다음 보스 체력 배율(곱해진다)
+//   bossDamageScore: 보스에게 준 피해 1당 기준 점수(라운드 배율을 곱한다). 잡지 못한 마지막 보스도 점수로 남는다
+const RAID_RULES = { tierEvery: 10, tierHpGrowth: 2, relics: 2, hard: 2, bossDamageScore: 20 };
+
+// 토벌 보스: 그림은 Asteria 보스. 패턴 표는 BOSSES와 같다. 체력은 전사 체력 x hpMultiplier x 라운드 배율 x 단계 배율이다
+const RAID_BOSSES = {
+    war_avatar: { name: '전쟁의 화신', note: '체력 50%에 돌진, 25%에 주변 정지', patterns: [{ at: 0.5, kind: 'charge', time: 3, speed: 2.2 }, { at: 0.25, kind: 'stomp', windup: 1.2, range: 3, stun: 3 }] },
+    sea_king: { name: '심해의 왕', note: '체력 50%·25%에 넓은 감전', patterns: [{ at: 0.5, kind: 'shock', windup: 1.0, range: 4, stun: 2.5 }, { at: 0.25, kind: 'shock', windup: 1.6, range: 5, stun: 3 }] },
+    judge: { name: '심판자', note: '체력 75%·50%·25%에 감전', patterns: [{ at: 0.75, kind: 'shock', windup: 1.0, range: 3, stun: 2 }, { at: 0.5, kind: 'shock', windup: 1.0, range: 3, stun: 2 }, { at: 0.25, kind: 'shock', windup: 1.0, range: 4, stun: 2.5 }] },
+    gatekeeper: { name: '문지기', note: '느리지만 단단하고, 25%에 주변 정지', speed: 0.5, hpMultiplier: 20, patterns: [{ at: 0.25, kind: 'stomp', windup: 1.0, range: 4, stun: 3 }] },
+    golden_boar: { name: '황금 멧돼지', note: '빠르고 체력 75%·40%에 돌진', speed: 1, hpMultiplier: 11, patterns: [{ at: 0.75, kind: 'charge', time: 2, speed: 2.4 }, { at: 0.4, kind: 'charge', time: 3, speed: 2.6 }] },
+    star_herald: { name: '별의 사도', note: '체력 60%에 감전, 30%에 돌진', patterns: [{ at: 0.6, kind: 'shock', windup: 1.2, range: 4, stun: 2.5 }, { at: 0.3, kind: 'charge', time: 3, speed: 2.2 }] }
+};
+for (const [id, b] of Object.entries(RAID_BOSSES)) {
+    const a = ASTERIA_BOSS_ART[id];
+    BOSSES[id] = Object.assign({
+        hpMultiplier: 15, armor: 4, base: 'warrior', speed: 0.7, bounty: 40, damage: 18, interval: 1.0, throneDamage: 5, entry: 'north', starY: a.height * 1.5 + 20,
+        portrait: { sprite: `${a.sprite}/rotations/south`, crop: a.crop }, art: { sprite: a.sprite, scale: a.scale, anim: a.anim, bob: true, windupLoop: false }
+    }, b);
+}
+
+function raidChallenge(week) {
+    const seed = `raid-${week}`;
+    const hard = Object.keys(RULE_CARDS).filter(k => RULE_CARDS[k].kind === 'hard');
+    return {
+        kind: 'raid', id: seed, name: '주간 토벌전', seed, week, hpFrom: 1e9, boss: seededPick(seed, 'boss', Object.keys(RAID_BOSSES), 1)[0],
+        lord: seededPick(seed, 'lord', Object.keys(DEMON_LORDS), 1)[0],
+        relics: seededPick(seed, 'relics', Object.keys(RELICS), RAID_RULES.relics),
+        cards: seededPick(seed, 'hard', hard, RAID_RULES.hard),
+        zone: seededPick(seed, 'zone', ZONE_IDS, 1)[0]
+    };
+}
+
 // 이번 주의 시드: 한국 시간 월요일 날짜 'YYYY-MM-DD'. 월요일 0시에 함께 바뀐다
 function abyssWeek(now) {
     const kst = new Date((now === undefined ? Date.now() : now) + 9 * 3600 * 1000);
@@ -102,6 +136,7 @@ function abyssZone(seed, mutations) {
 
 // 기록에서 도전 조건을 다시 만든다
 function challengeFromRecord(record) {
+    if (record.kind === 'raid') return raidChallenge(record.week);
     return record.kind === 'abyss' ? abyssChallenge(record.seed, record.lord, record.relics) : dailyChallenge(record.date);
 }
 

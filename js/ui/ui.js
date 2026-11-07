@@ -423,7 +423,7 @@ const UI = {
         const cx = GAME_WIDTH / 2;
         const win = G.state === 'victory';
         if (G.challenge) {
-            this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => (G.challenge.kind === 'abyss' ? this.startAbyssRun() : this.startDaily()) });
+            this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => (G.challenge.kind === 'raid' ? this.startRaid() : (G.challenge.kind === 'abyss' ? this.startAbyssRun() : this.startDaily())) });
             this.button('to_hq', cx + 10, 770, 410, 90, { label: '본부로', icon: 'lord', size: 30, onClick: () => this.leaveChallenge() });
             return;
         }
@@ -848,6 +848,14 @@ const UI = {
     leaveChallenge() {
         this.challenge = null;
         (this.openHQ())();
+    },
+
+    // 이번 주 토벌전을 시작한다. 조건은 모두 같다
+    startRaid() {
+        this.challenge = raidChallenge(abyssWeek());
+        this.stageId = null;
+        this.hqView = null;
+        this.startGame(true);
     },
 
     // 끝없는 심연: 고르기 화면에서 해금한 마왕과 유물을 고른다
@@ -1881,6 +1889,10 @@ const UI = {
         if (G.score < this.scoreShown) this.scoreShown = G.score;
         UIKit.bigText(ctx, this.scoreShown.toLocaleString(), GAME_WIDTH / 2, 118, 46, T.gold, 'center', '#fff4c0');
         // 심연: 쌓인 변이 수와 점수 배율
+        if (G.challenge.kind === 'raid') {
+            const next = (Math.floor(G.waveIndex / RAID_RULES.tierEvery) + 1) * RAID_RULES.tierEvery;
+            UIKit.text(ctx, `토벌 ${G.raidTier}단계 · 다음 ${BOSSES[G.challenge.boss].name} ${next}라운드`, GAME_WIDTH / 2, 156, 20, '#ffcf8a', 'center', 'bold');
+        }
         if (G.mutations.length) UIKit.text(ctx, `변이 ${G.mutations.length} · 점수 x${1 + G.mutations.length * ABYSS_RULES.scorePerMutation}`, GAME_WIDTH / 2, 156, 20, '#ff9a8a', 'center', 'bold');
     },
 
@@ -3111,7 +3123,9 @@ const UI = {
         UIKit.panel(ctx, cx - 440, 130, 880, 740);
         const st = stageDef(G.stage);
         const abyss = G.challenge && G.challenge.kind === 'abyss';
-        if (abyss) UIKit.bigText(ctx, `심연 ${G.waveIndex}층까지 내려갔습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        const raid = G.challenge && G.challenge.kind === 'raid';
+        if (raid) UIKit.bigText(ctx, `${BOSSES[G.challenge.boss].name} ${G.raidTier}단계 토벌`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        else if (abyss) UIKit.bigText(ctx, `심연 ${G.waveIndex}층까지 내려갔습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
         else if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드까지 막았습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
         else UIKit.bigText(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
         if (st) UIKit.ink(ctx, `스테이지 ${st.no} · ${st.name}`, cx, 248, 24, T.inkSoft, 'center', 'bold');
@@ -3142,7 +3156,7 @@ const UI = {
             ctx.fillStyle = T.parchmentDark;
             ctx.fillRect(cx - 390, 588, 780, 3);
             UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, abyss ? (best && best.isBest ? '가장 깊은 기록!' : `최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '가장 깊은 기록!' : `최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
             return;
         }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내

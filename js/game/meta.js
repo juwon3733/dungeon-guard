@@ -11,6 +11,7 @@ const META_VERSION = 3;
 const DAILY_KEEP_DAYS = 30;
 const DAILY_RECORD_KEY = 'dungeonGuard.dailyRecord';
 const ABYSS_RECORD_KEY = 'dungeonGuard.abyssRecord';
+const RAID_RECORD_KEY = 'dungeonGuard.raidRecord';
 
 // 0 이상의 정수(아니면 0)
 function metaCount(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? Math.floor(v) : 0; }
@@ -39,7 +40,7 @@ const Meta = {
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
+        return { version: META_VERSION, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -55,6 +56,7 @@ const Meta = {
                 if (/^\d{4}-\d{2}-\d{2}$/.test(date) && v && Number.isFinite(v.score) && Number.isFinite(v.rounds)) d.daily[date] = { score: v.score, rounds: v.rounds, victory: !!v.victory };
             }
         }
+        if (raw.raid && typeof raw.raid === 'object') d.raid = { week: typeof raw.raid.week === 'string' ? raw.raid.week : '', bestTier: metaCount(raw.raid.bestTier), bestScore: metaCount(raw.raid.bestScore) };
         if (raw.abyss && typeof raw.abyss === 'object') d.abyss = { week: typeof raw.abyss.week === 'string' ? raw.abyss.week : '', bestFloor: metaCount(raw.abyss.bestFloor), bestScore: metaCount(raw.abyss.bestScore) };
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
@@ -185,6 +187,28 @@ const Meta = {
         }
         this.save();
         return { best: d.daily[date].score, isBest };
+    },
+
+    // 이번 주 토벌전 기록. 주가 바뀌면 비운다
+    raidBest(week) {
+        const a = this.data.raid;
+        if (a.week !== week) { a.week = week; a.bestTier = 0; a.bestScore = 0; }
+        return a;
+    },
+
+    // 토벌전 판 끝: 그 주의 가장 높은 단계(같으면 점수)와 입력 기록을 남긴다
+    finishRaid(week, result, record) {
+        const d = this.data;
+        d.runs++;
+        const a = this.raidBest(week);
+        const isBest = result.tier > a.bestTier || (result.tier === a.bestTier && result.score > a.bestScore);
+        if (isBest) {
+            a.bestTier = result.tier;
+            a.bestScore = result.score;
+            try { localStorage.setItem(RAID_RECORD_KEY, JSON.stringify({ week, score: result.score, tier: result.tier, record })); } catch (e) { /* 저장소 없음 */ }
+        }
+        this.save();
+        return { best: a.bestTier, bestScore: a.bestScore, isBest };
     },
 
     // 이번 주 심연 기록. 주가 바뀌면 새로 겨루므로 비운다
