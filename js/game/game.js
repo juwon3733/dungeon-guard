@@ -556,6 +556,39 @@ const Game = {
         return plan;
     },
 
+    // 재료가 여럿인 히든 조합식(recipe.parts): m이 S랭크 핵심 재료(a)일 때 맵에서 나머지 재료를 고른다.
+    // 랭크가 낮고 장비가 없는 몬스터를 먼저 쓴다. 조합식이 없거나 재료가 모자라면 { kind: 'none', reason: 'none' | 'rank' | 'count' }
+    // 맵 제한에 걸리면 { kind: 'none', reason: 'unique', ... }. 합칠 수 있으면 merge에 그대로 넘기는 계획이다(dst가 m, src가 b)
+    fullRecipePlan(m) {
+        if (!m || m.removed || !this.monsters.includes(m)) return { kind: 'none', reason: 'none' };
+        const recipe = MONSTER_RECIPES.find(r => r.parts && r.a === m.type);
+        if (!recipe) return { kind: 'none', reason: 'none' };
+        if ((m.rank || 0) < rankIndex(recipe.aRank)) return { kind: 'none', reason: 'rank', recipe };
+        const used = [m];
+        const pick = (type, count) => {
+            const list = this.monsters.filter(o => o.type === type && !o.removed && !used.includes(o))
+                .sort((x, y) => (x.rank || 0) - (y.rank || 0) || (x.equip ? 1 : 0) - (y.equip ? 1 : 0));
+            if (list.length < count) return null;
+            const got = list.slice(0, count);
+            used.push(...got);
+            return got;
+        };
+        const b = pick(recipe.b, 1);
+        if (!b) return { kind: 'none', reason: 'count', recipe };
+        const extra = [];
+        for (const p of recipe.parts) {
+            const got = pick(p.type, p.count);
+            if (!got) return { kind: 'none', reason: 'count', recipe };
+            extra.push(...got);
+        }
+        const grade = MONSTERS[recipe.result].grade;
+        const others = this.monsters.filter(o => !o.removed && !used.includes(o));
+        if (others.some(o => o.type === recipe.result)) return { kind: 'none', reason: 'unique', grade, sameKind: true, recipe };
+        const max = MONSTER_GRADES[grade].fieldMax;
+        if (max !== undefined && others.filter(o => MONSTERS[o.type].grade === grade).length >= max) return { kind: 'none', reason: 'unique', grade, recipe };
+        return { kind: 'recipe', recipe, result: recipe.result, src: b[0], dst: m, extra };
+    },
+
     // 등급 합치기 결과 후보: 맵 제한이 있는 등급은 맵에 이미 있는 종을 뺀다(재료는 사라지므로 센다 않는다)
     mergeResultPool(grade, materials) {
         const pool = mergePool(grade);
@@ -578,6 +611,7 @@ const Game = {
     // 행동 하나: 입력(끌어 놓기, 버튼)과 처리를 이 함수로 모은다(뒤에 고정 난수와 입력 기록을 여기에 넣는다).
     //   { kind: 'merge', src, dst, extra? }  끌어 합치기(src, dst는 맵의 몬스터. extra는 고른 나머지 재료, 없으면 자동)
     //   { kind: 'quickMerge', monster }       팝업의 합치기 버튼
+    //   { kind: 'fullRecipe', monster }       재료가 여럿인 히든 조합식(monster는 S랭크 전설)
     //   { kind: 'summon' } | { kind: 'sell', monster } | { kind: 'sacrifice', monster } | { kind: 'move', monster, col, row }
     act(cmd) {
         switch (cmd.kind) {
@@ -587,6 +621,12 @@ const Game = {
                 const plan = this.quickMergePlan(cmd.monster);
                 if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
                 return this.merge({ monster: plan.src }, { monster: plan.dst }, plan.extra, true);
+            }
+            case 'fullRecipe': {
+                if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+                const plan = this.fullRecipePlan(cmd.monster);
+                if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
+                return this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
             }
             case 'summon': return this.summon();
             case 'upgradeSummon': return this.upgradeSummon();
@@ -601,12 +641,12 @@ const Game = {
     //   조합식: src와 dst 2마리. 등급 합치기: 같은 등급 gradeCount마리(나머지는 extra, 못 쓰면 자동으로 고른다)
     //   랭크는 재료 중 가장 낮은 값, 장비는 가장 좋은 것 하나를 잇고(같으면 끌어온 쪽, 놓은 쪽, 나머지 순) 나머지는 보관함으로
     // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' | 'count' }
-    merge(src, dst, extra, gradeOnly) {
+    merge(src, dst, extra, gradeOnly, fullPlan) {
         const a = this.typeAt(src);
         const b = this.typeAt(dst);
         if (!a || !b) return { ok: false, reason: 'empty' };
         if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
-        const plan = this.mergePlanFor(src.monster, dst.monster, extra, gradeOnly);
+        const plan = fullPlan || this.mergePlanFor(src.monster, dst.monster, extra, gradeOnly);
         if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
         const type = plan.kind === 'recipe' ? plan.result : randItem(this.mergeResultPool(plan.grade, [src.monster, dst.monster, ...(plan.extra || [])]));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
@@ -622,7 +662,8 @@ const Game = {
         const spot = this.nearestFit(type, old.col, old.row, materials);
         const monster = createMonster(type, spot.col, spot.row);
         // 랭크는 재료 중 가장 낮은 값을 이어받는다(합치기로 랭크가 오르지는 않는다)
-        setMonsterRank(monster, Math.min(...materials.map(m => m.rank || 0)));
+        // 재료가 여럿인 히든 조합식은 핵심 재료(놓은 쪽)의 랭크를 잇는다
+        setMonsterRank(monster, fullPlan ? (old.rank || 0) : Math.min(...materials.map(m => m.rank || 0)));
         // 장비는 가장 좋은 것 1개를 이어받고, 나머지는 보관함으로(자리가 없으면 골드)
         const equip = this.mergeEquipAll(materials);
         if (equip.keep) setMonsterEquip(monster, equip.keep);
@@ -641,7 +682,7 @@ const Game = {
             // 재료 줄에는 조합식의 랭크 조건도 적는다. 높은 등급(등급 표의 fx)은 더 오래 보여 준다
             const r = plan.recipe;
             const fx = gradeInfo(grade, 'fx', 0);
-            Fx.discovery = { a: r.a, aRank: r.aRank || null, b: r.b, bRank: r.bRank || null, type, grade,
+            Fx.discovery = { a: r.a, aRank: r.aRank || null, b: r.b, bRank: r.bRank || null, parts: r.parts || null, type, grade,
                 age: -MERGE_REVEAL, life: fx >= 3 ? 5.4 : (fx >= 2 ? 4.6 : 3.6) };
             Sfx.play('hidden');
         }
