@@ -171,7 +171,9 @@ const COMBAT_RULES = {
     corruptCostMul: 8,
     corruptMax: 3,
     lightning: { damage: 40, radius: 1.5, cooldown: 30 },
-    roar: { unlockHp: 10, duration: 3, cooldown: 60 }
+    roar: { unlockHp: 10, duration: 3, cooldown: 60 },
+    portal: { cooldown: 35, count: 8, back: 6 }, // 권능 균열 열기
+    chainStrike: { count: 3, radius: 0.75, damageMul: 0.4 } // 권능 연쇄 낙뢰
 };
 
 // 타락 유닛의 능력치. ranged는 길을 막지 않는다.

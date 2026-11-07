@@ -60,6 +60,9 @@ function killHero(hero, pos, attacker) {
     if (!hero.boss && !hero.elite) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
         const y = pos.y - 24;
+        // 권능 과부하: 처치가 번개를 충전한다
+        const charge = G.power('frenzy') ? 0.3 : (G.power('killCharge') ? 0.1 : 0);
+        if (charge) G.skills.lightning = Math.max(0, G.skills.lightning - charge);
         if (bounty > 0) Fx.coin(pos.x, pos.y - 30, 1, 1);
         // 처치한 몬스터의 등급만큼 크게 터진다. 흔들림은 영웅 이상만: 약한 처치까지 흔들면 화면이 늘 떨린다
         const killer = attacker && MONSTERS[attacker.type];
@@ -80,6 +83,8 @@ function killHero(hero, pos, attacker) {
         return;
     }
     Fx.coin(pos.x, pos.y - 60, bounty);
+    G.addMana(hero.boss ? POWER_RULES.manaBoss : POWER_RULES.manaElite, pos.x, pos.y - (hero.boss ? 300 : 140));
+    if (hero.elite && G.power('eliteCharge')) G.skills.lightning = 0;
     Fx.hitStop(hero.boss ? 0.2 : 0.06); // 큰 처치에는 시간이 잠깐 멎는다
     // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)
     const cy = pos.y - (hero.boss ? 140 : 45);
@@ -164,6 +169,7 @@ function splashDamage(x, y, radiusPx, damage, color, onHit, attacker, onDealt) {
 
 function damageThrone(amount, heroName) {
     const G = Game;
+    G.roundHit = true;
     G.hp = Math.max(0, G.hp - amount);
     G.throneFlash = 0.4;
     Fx.addShake(amount >= 5 ? 22 : 12);
@@ -219,21 +225,80 @@ function resolveStrike(strike) {
     Fx.anim('fx_hit_lightning', strike.x, strike.y - 10, 320, 0.4);
     Fx.bolt(strike.x + randRange(-24, 24), strike.y, '#9d7bff');
     Fx.addShake(24);
-    Fx.ring(strike.x, strike.y, rule.radius * TILE, '#d8f3ff', 0.34);
+    const radius = Game.lightningRadius() * TILE;
+    Fx.ring(strike.x, strike.y, radius, '#d8f3ff', 0.34);
     Fx.glow(strike.x, strike.y, 330, 'rgba(180,220,255,1)', 0.3);
     Fx.burst(strike.x, strike.y, '#d8f3ff', 42, 620, 0.5, 7);
-    Fx.decals.push({ kind: 'scorch', x: strike.x, y: strike.y, age: 0, life: 9, radius: rule.radius * TILE * 0.72 });
-    splashDamage(strike.x, strike.y, rule.radius * TILE, Game.lightningDamage(), '#bfe9ff');
+    Fx.decals.push({ kind: 'scorch', x: strike.x, y: strike.y, age: 0, life: 9, radius: radius * 0.72 });
+    // 맞기 전에 대상을 정해 둔다(이 번개에 쓰러진 용사는 뒤의 효과에서 빠진다)
+    const struck = Game.heroes.filter(h => !h.dead && !h.waiting && distance(strike.x, strike.y, heroWorld(h).x, heroWorld(h).y) <= radius);
+    splashDamage(strike.x, strike.y, radius, Game.lightningDamage() * (strike.mul || 1), '#bfe9ff');
+    // 권능: 맞은 용사에게 붙는 효과
+    const G = Game;
+    const stun = G.power('longTear') ? 2 : (G.power('tear') ? 1 : 0);
+    for (const h of struck) {
+        if (h.dead) continue;
+        if (G.power('smite') && (h.boss || h.elite)) {
+            const p = heroWorld(h);
+            damageHero(h, G.lightningDamage() * (strike.mul || 1), strike.x, strike.y, '#bfe9ff');
+            Fx.anim('fx_hit_crit', p.x, p.y - 30, 200, 0.3);
+            if (h.dead) continue;
+        }
+        if (stun) h.stun = Math.max(h.stun, stun);
+        if (G.power('static')) slowHero(h, 3, 0.7);
+        if (G.power('pull') && !h.boss) h.d = Math.max(0, h.d - 2 * TILE * (G.power('exile') ? 2 : 1));
+    }
+    // 권능 메아리: 1초 뒤 같은 자리에 약한 번개(메아리는 다시 메아리를 만들지 않는다)
+    if (G.power('echo') && !strike.mul) G.pendingStrikes.push({ x: strike.x, y: strike.y, t: 1, mul: 0.5 });
+    // 권능 연쇄 낙뢰: 범위 밖에서 가장 가까운 용사들에게 작은 번개
+    if (G.power('chain') && !strike.mul) {
+        const chain = COMBAT_RULES.chainStrike;
+        const rest = G.heroes.filter(h => !h.dead && !h.waiting && !struck.includes(h));
+        const dist = h => { const p = heroWorld(h); return distance(strike.x, strike.y, p.x, p.y); };
+        rest.sort((a, b) => dist(a) - dist(b));
+        for (const h of rest.slice(0, chain.count)) {
+            if (h.dead) continue;
+            const p = heroWorld(h);
+            Fx.bolt(p.x, p.y, '#d8f3ff');
+            Fx.anim('fx_hit_lightning', p.x, p.y - 10, 200, 0.35);
+            splashDamage(p.x, p.y, chain.radius * TILE, G.lightningDamage() * chain.damageMul, '#bfe9ff');
+        }
+    }
     // 균열의 군주: 번개에 맞은 용사에게 낙인
     const mark = Game.lordPassive('lightningCurse');
     if (mark) {
         for (const h of Game.heroes) {
             if (h.dead || h.waiting) continue;
             const p = heroWorld(h);
-            if (distance(strike.x, strike.y, p.x, p.y) <= rule.radius * TILE) curseHero(h, mark.duration, mark.takenMul);
+            if (distance(strike.x, strike.y, p.x, p.y) <= radius) curseHero(h, mark.duration + (Game.power('markLong') ? 3 : 0), mark.takenMul);
         }
     }
+    // 권능 심연의 손길(낙인보다 뒤에 걸어 배율을 정한다)
+    if (Game.power('abyss')) for (const h of struck) if (!h.dead) curseHero(h, 5, 1.4);
     Sfx.play('lightning');
+}
+
+// 권능 균열 열기: 왕좌에 가장 가까운 용사들을 뒤로 되돌린다(보스 제외)
+function castPortal() {
+    const G = Game;
+    const rule = COMBAT_RULES.portal;
+    if (!G.power('gate') || G.skills.portal > 0) return false;
+    const list = G.heroes.filter(h => !h.dead && !h.waiting && !h.boss);
+    if (!list.length) return false;
+    G.skills.portal = G.skillCooldown('portal');
+    list.sort((a, b) => remainingDistance(a) - remainingDistance(b));
+    for (const h of list.slice(0, rule.count)) {
+        const from = heroWorld(h);
+        Fx.anim('fx_blastViolet', from.x, from.y - 20, 180, 0.4);
+        h.d = Math.max(0, h.d - rule.back * TILE * (G.power('exile') ? 2 : 1));
+        if (G.power('abyss')) curseHero(h, 5, 1.4);
+        const to = heroWorld(h);
+        Fx.anim('fx_blastViolet', to.x, to.y - 20, 180, 0.4);
+    }
+    Fx.addShake(10);
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '다시 줄 서.', 2);
+    Sfx.play('charge');
+    return true;
 }
 
 function castRoar() {
@@ -241,6 +306,7 @@ function castRoar() {
     const rule = COMBAT_RULES.roar;
     if (G.roarLocked() || G.skills.roar > 0) return false;
     G.skills.roar = G.skillCooldown('roar');
+    if (G.power('rally')) G.skills.lightning = 0;
     for (const h of G.heroes) if (!h.dead) h.stun = Math.max(h.stun, rule.duration);
     const tx = tileX(THRONE_TILE.col);
     const ty = tileY(THRONE_TILE.row);

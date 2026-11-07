@@ -30,7 +30,7 @@ const ROUTE_IDS = ['north', 'south']; // 이 순서가 우선순위다(거리가
 const ROUTE_NAMES = { north: '북', south: '남' };
 const MERGE_TILE = { col: 8, row: 6 }; // 지금 맵의 합류점(setMap이 바꾼다)
 const THRONE_TILE = { col: 21, row: 5 };
-const LORD_SAY_Y = 360; // 마왕 말풍선 높이(왕좌 칸 가운데에서 위로, 세계 px). 마왕 머리 위
+const LORD_SAY_Y = 290; // 마왕 말풍선 높이(왕좌 칸 가운데에서 위로, 세계 px). 마왕 머리 위
 
 // 왕좌 둘레: 왕좌 칸의 좌우 1칸, 위 2칸, 아래 1칸. 몬스터를 여기로 끌어 놓으면 제물이다(Game.onThrone).
 // 마왕 그림(화면 256px)이 이 칸들을 덮으므로 건설 칸에서 빼고, 바닥은 길과 같은 벽돌로 깐다
