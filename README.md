@@ -20,3 +20,4 @@
 - 신화 12종(합성 8, 히든 4), 전설과 신화의 특수 스킬. 자세한 규칙은 `docs/MONSTER_DESIGN.md`
 - 유물 19종(대가 없이 약한 효과). 표는 `docs/MONSTER_DESIGN.md`
 - 일일 도전: 본부 도전의 문. 날짜별 고정 시드, 입력 기록과 재생 검증. 규칙은 `docs/MONSTER_DESIGN.md`
+- 끝없는 심연: 본부 도전의 문. 일주일마다 바뀌는 공통 시드, 고른 마왕과 유물, 10층마다 변이. 규칙은 `docs/MONSTER_DESIGN.md`

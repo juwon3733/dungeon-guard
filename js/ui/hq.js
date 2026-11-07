@@ -61,7 +61,8 @@ const HQ_FACILITIES = [
 // 도전의 문 콘텐츠. 스토리를 다 깨지 않아도 문에는 처음부터 들어간다. 콘텐츠마다 unlockStage(스테이지 번호)를 깨면 열리고,
 // 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
 const HQ_CONTENTS = [
-    { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판, 무한 라운드입니다 · 시도는 무제한, 최고 점수만 남습니다', enter: () => UI.startDaily() }
+    { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판', panel: 'drawDailyPanel', enter: () => UI.startDaily() },
+    { id: 'abyss', name: '끝없는 심연', desc: '이번 주 모두 같은 심연', panel: 'drawAbyssPanel', enter: () => UI.openAbyss() }
 ];
 
 // 고블린 비서의 말풍선: 깬 스테이지 수가 cleared 이상인 마지막 줄. {no}, {name}은 다음 스테이지 번호와 이름
@@ -237,7 +238,7 @@ Object.assign(UI, {
     },
 
     hqContentRect(i) {
-        return { x: GAME_WIDTH / 2 - 560, y: 250 + i * 150, w: 1120, h: 132 };
+        return { x: GAME_WIDTH / 2 - 560 + i * 282, y: 150, w: 274, h: 132 };
     },
 
     // 콘텐츠를 누른다: 잠겼으면 열리는 스테이지, 열렸으면 그 콘텐츠의 enter(아직 없으면 준비 중)
@@ -699,12 +700,33 @@ Object.assign(UI, {
         });
     },
 
+    // 끝없는 심연의 규칙과 내 최고 기록
+    drawAbyssPanel(ctx) {
+        const T = UI_THEME;
+        const x = GAME_WIDTH / 2 - 560;
+        const y = 310;
+        UIKit.panel(ctx, x, y, 1120, 520);
+        const week = abyssWeek();
+        const a = Meta.abyssBest(week);
+        UIKit.ink(ctx, `이번 주 심연 · ${week}부터`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        UIKit.ink(ctx, a.bestFloor ? `이번 주 최고 ${a.bestFloor}층 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestFloor ? T.ink : T.inkSoft, 'right', 'bold');
+        const rows = [
+            '이번 주는 모두 같은 시드입니다. 소환 순서와 변이 순서가 같습니다',
+            '스토리에서 해금한 마왕과 유물을 직접 골라 들어갑니다',
+            `${ABYSS_RULES.mutateEvery}층마다 어려운 변이가 하나씩 쌓이고 지역이 바뀝니다`,
+            `쌓인 변이 하나당 점수가 ${Math.round(ABYSS_RULES.scorePerMutation * 100)}%씩 늘어납니다`,
+            `${ABYSS_RULES.hpFrom}층부터 용사가 빠르게 강해집니다. 일일 도전보다 가파릅니다`,
+            '시도는 무제한이고 가장 깊은 기록만 남으며, 월요일에 새로 겨룹니다'
+        ];
+        rows.forEach((text, i) => UIKit.ink(ctx, text, x + 40, y + 120 + i * 58, 24, T.ink));
+    },
+
     // 오늘의 일일 도전 조건과 내 최고 기록
     drawDailyPanel(ctx) {
         const T = UI_THEME;
         const c = dailyChallenge(kstDate());
         const x = GAME_WIDTH / 2 - 560;
-        const y = 400;
+        const y = 310;
         UIKit.panel(ctx, x, y, 1120, 520);
         UIKit.ink(ctx, `오늘의 판 · ${c.date} · 무한 라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const best = Meta.data.daily[c.date];
@@ -750,20 +772,22 @@ Object.assign(UI, {
             UIKit.ink(ctx, '"사장님, 랭킹 게시판도 걸어 둘게요." - 고블린 비서', cx, 720, 21, T.inkFaint, 'center');
             return;
         }
-        this.drawDailyPanel(ctx);
+        // 아래 칸: 마우스를 올린 콘텐츠의 설명(없으면 고른 것, 처음은 첫 콘텐츠)
+        const hot = this.hoverButton && this.hoverButton.content;
+        if (hot) this.portalPick = hot.id;
+        const shown = HQ_CONTENTS.find(c => c.id === this.portalPick) || HQ_CONTENTS[0];
+        if (shown.panel) this[shown.panel](ctx);
         for (const b of this.buttons) {
             if (!b.content) continue;
             const c = b.content;
             const hover = this.hoverButton === b;
             UIKit.note(ctx, b.x, b.y, b.w, b.h, { pin: true, tint: b.locked ? 'shade' : (hover ? 'hover' : null) });
-            UIKit.ink(ctx, c.name, b.x + 40, b.y + 48, 34, b.locked ? T.inkFaint : T.gold, 'left', 'bold');
-            UIKit.ink(ctx, c.desc || '', b.x + 40, b.y + 92, 21, b.locked ? T.inkFaint : T.inkSoft);
+            UIKit.ink(ctx, c.name, b.x + 24, b.y + 48, 28, b.locked ? T.inkFaint : T.gold, 'left', 'bold');
+            UIKit.ink(ctx, c.desc || '', b.x + 24, b.y + 92, 18, b.locked ? T.inkFaint : T.inkSoft);
             if (b.locked) {
-                UIKit.icon(ctx, 'lock', b.x + b.w - 300, b.y + 42);
-                this.drawStageBadge(ctx, c.unlockStage, b.x + b.w - 222, b.y + 66, 18);
-                UIKit.ink(ctx, `스테이지 ${c.unlockStage} 깨면 열림`, b.x + b.w - 196, b.y + 68, 20, T.inkSoft, 'left', 'bold');
+                this.drawStageBadge(ctx, c.unlockStage, b.x + b.w - 32, b.y + 40, 16);
+                UIKit.ink(ctx, `스테이지 ${c.unlockStage} 깨면 열림`, b.x + 24, b.y + 118, 16, T.inkSoft, 'left', 'bold');
             } else {
-                UIKit.ink(ctx, '열림', b.x + b.w - 40, b.y + 68, 26, T.inkGood, 'right', 'bold');
             }
         }
     }

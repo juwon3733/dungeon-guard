@@ -3250,7 +3250,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -3997,7 +3997,7 @@ for (const f of HQ_FACILITIES) {
     assert(HQ_ROOM.decor.every(d => Number.isInteger(d.scale)), 'decor integer scale');
     assert(HQ_ROOM.wall.length * 192 >= GAME_WIDTH, 'wall covers the width');
 }
-assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.length === 1 && HQ_CONTENTS[0].id === 'daily', 'daily challenge in the portal');
+assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.map(c => c.id).join() === 'daily,abyss', 'contents in the portal');
 
 // ----- 첫 실행: 타이틀 → 본부. 작전 테이블에 느낌표, 도전의 문은 처음부터 들어간다(준비 중) -----
 freshWindow();
@@ -4013,7 +4013,7 @@ assert(hqGoblinLine().includes('작전 테이블'), 'goblin tells what to do fir
 btn('hq_portal');
 assert(UI.hqView === 'portal' && hasBtn('hq_close'), 'portal open on the first run');
 UI.update(0);
-same(UI.buttons.filter(b => b.content).map(b => b.id), ['content_daily'], 'daily challenge card');
+same(UI.buttons.filter(b => b.content).map(b => b.id), ['content_daily', 'content_abyss'], 'challenge cards');
 UI.onKey('Escape');
 assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the portal');
 
@@ -5117,6 +5117,112 @@ assert.strictEqual(Meta.data.daily['2026-11-07'].score, b0);
 assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, daily: { 'x': { score: 1, rounds: 1 }, '2026-01-01': { score: 'a', rounds: 1 }, '2026-01-02': { score: 5, rounds: 2 } } }).daily), JSON.stringify({ '2026-01-02': { score: 5, rounds: 2, victory: false } }));
 delete globalThis.localStorage;
 Game.reset();
+// ----- 끝없는 심연 -----
+{
+    const A1 = abyssChallenge('77', 'rift', ['sniper_mark']);
+    assert.strictEqual(JSON.stringify(A1), JSON.stringify(abyssChallenge('77', 'rift', ['sniper_mark'])), 'same seed, same run');
+    assert(ZONES[A1.zone]);
+    // 변이: 어려운 카드만, 좁은 전장은 한 번만
+    const ms = Array.from({ length: 40 }, (_, i) => abyssMutation('77', i));
+    assert(ms.every(m => RULE_CARDS[m] && RULE_CARDS[m].kind === 'hard'), 'hard cards');
+    assert.strictEqual(ms.filter(m => m === 'narrow_field').length, 1, 'narrow field once');
+    Game.reset(null, null, A1);
+    Game.state = 'prep';
+    assert.strictEqual(Game.lord, 'rift');
+    assert.strictEqual(Game.record.kind, 'abyss');
+    assert.strictEqual(Game.record.seed, '77');
+    near(Game.mods.range, 0.1, 'chosen relic');
+    Game.startWave();
+    assert.strictEqual(Game.mutations.length, 0, 'no mutation on floor 1');
+    // 10층에 들어가면 변이가 쌓이고 지역이 바뀌고 점수 배율이 오른다
+    const z0 = Game.zone;
+    const s0 = Game.addScore(1000);
+    Game.heroes = [];
+    Game.state = 'prep';
+    Game.waveIndex = 10;
+    Game.bossReward = null;
+    Game.startWave();
+    assert.strictEqual(Game.mutations.length, 1, 'mutation at floor 10');
+    assert.notStrictEqual(Game.zone, z0, 'zone changes');
+    assert(Fx.banner && Fx.banner.name.includes('심연'), 'banner');
+    const card = RULE_CARDS[Game.mutations[0]];
+    for (const [k, v] of Object.entries(card.effects)) {
+        const base = buildMods('rift', ['sniper_mark']);
+        assert(Math.abs(Game.mods[k] - (LORD_EFFECTS[k].mode === 'mul' ? base[k] * v : base[k] + v)) < 1e-9, 'mutation applied ' + k);
+    }
+    assert.strictEqual(Game.addScore(1000), Math.floor(1000 * scoreMul(11) * 1.25), 'score bonus per mutation');
+    // 건너뛰어도 빠짐없이 쌓이고, 다시 불러도 늘지 않는다
+    Game.heroes = [];
+    Game.state = 'prep';
+    Game.waveIndex = 35;
+    Game.abyssStep();
+    Game.abyssStep();
+    assert.strictEqual(Game.mutations.length, 3, 'catch up once');
+    // 약해지는 변이가 겹쳐도 하한이 있다
+    Game.mutations = Array(29).fill('dull_hands');
+    Game.waveIndex = 300;
+    Game.abyssStep();
+    assert(Game.mods.attackSpeed >= -0.5 && Game.mods.damage >= -0.5, 'floor on weakening');
+    // 일일 도전보다 체력이 가파르다
+    Game.reset(null, null, abyssChallenge('77', 'rift', []));
+    const ha = Game.endlessHpMul(60);
+    Game.reset(null, null, dailyChallenge('2026-11-07'));
+    assert(ha > Game.endlessHpMul(60), 'steeper than daily');
+    // 판 끝: 가장 깊은 층과 입력 기록, 얕은 판은 덮지 않는다
+    Meta.data.abyss = { week: '', bestFloor: 0, bestScore: 0 };
+    assert(Meta.finishAbyss('w1', { rounds: 30, score: 500 }, { inputs: [] }).isBest);
+    assert(!Meta.finishAbyss('w1', { rounds: 20, score: 99999 }, { inputs: [] }).isBest, 'shallower is not better');
+    assert(Meta.finishAbyss('w1', { rounds: 30, score: 501 }, { inputs: [] }).isBest, 'same floor, higher score');
+    assert.strictEqual(Meta.data.abyss.bestFloor, 30);
+    assert(Meta.finishAbyss('w2', { rounds: 5, score: 1 }, { inputs: [] }).isBest, 'new week starts over');
+    assert.strictEqual(Meta.data.abyss.bestFloor, 5);
+    assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, abyss: { week: 'w', bestFloor: 12, bestScore: 34 } }).abyss), JSON.stringify({ week: 'w', bestFloor: 12, bestScore: 34 }));
+    // 이번 주 시드: 일주일 동안 같고 월요일 한국 시간 0시에 바뀐다(2026-11-09가 월요일)
+    assert.strictEqual(abyssWeek(Date.UTC(2026, 10, 8, 15, 0)), '2026-11-09', 'monday midnight KST');
+    assert.strictEqual(abyssWeek(Date.UTC(2026, 10, 8, 14, 59)), '2026-11-02', 'still last week');
+    assert.strictEqual(abyssWeek(Date.UTC(2026, 10, 15, 14, 59)), '2026-11-09', 'same all week');
+    // 고른 마왕과 유물이 달라도 변이, 지역, N번째 소환은 같다
+    const first = (lord, relics) => {
+        Game.reset(null, null, abyssChallenge('w9', lord, relics));
+        Game.state = 'wave';
+        Game.gold = 99999;
+        const list = [];
+        for (let i = 0; i < 5; i++) list.push(Game.act({ kind: 'summon' }).type);
+        return list.join() + '|' + Game.zone + '|' + abyssMutation('w9', 0) + abyssMutation('w9', 1);
+    };
+    assert.strictEqual(first('rift', []), first('rift', ['sniper_mark']), 'same run for everyone');
+    // 입력 재생: 심연도 시드와 고른 조건으로 같은 결과가 나온다
+    const play = () => {
+        Game.reset(null, null, abyssChallenge('4242', 'gold_king', ['legion_banner', 'mad_dice']));
+        Game.state = 'prep';
+        let guard = 0;
+        while (Game.inPlay() && guard++ < 60 * 60 * 120) {
+            if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+            if (Game.tick % 20 === 0 && Game.waveIndex < 14) {
+                if (!Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+                const list = Game.monsters.filter(m => !m.removed);
+                for (const a of list) {
+                    const b = list.find(o => o !== a && MONSTERS[o.type].grade === MONSTERS[a.type].grade && Game.mergePlanFor(a, o).kind !== 'none');
+                    if (b) { Game.act({ kind: 'merge', src: a, dst: b }); break; }
+                }
+            }
+            Game.update(GAME_TICK);
+        }
+        return { r: JSON.stringify(Game.challengeResult), record: JSON.parse(JSON.stringify(Game.record)), muts: Game.mutations.join(), zone: Game.zone };
+    };
+    const P = play();
+    assert(P.muts.length > 0, 'mutations happened: ' + P.r);
+    const orig = Math.random;
+    let x = 0.31;
+    Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
+    const R2 = replayChallenge(P.record);
+    Math.random = orig;
+    assert.strictEqual(JSON.stringify(R2), P.r, 'abyss replay gives the same result');
+    assert.strictEqual(Game.mutations.join(), P.muts, 'same mutations');
+    assert.strictEqual(Game.zone, P.zone, 'same zone');
+}
+Game.reset();
+
 // 떼로 나오는 일반 용사
 Game.reset();
 Game.state = 'wave';
