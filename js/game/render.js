@@ -292,10 +292,12 @@ const Render = {
     },
 
     shadow(ctx, x, y, rx, ry, alpha) {
-        ctx.fillStyle = `rgba(0,14,8,${alpha === undefined ? 0.38 : alpha})`;
-        ctx.beginPath();
-        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
+        const px = 2 * ART_SCALE;
+        ctx.fillStyle = `rgba(0,0,0,${alpha === undefined ? 0.35 : alpha})`;
+        for (let dy = -ry; dy < ry; dy += px) {
+            const half = Math.floor(rx * Math.sqrt(Math.max(0, 1 - (dy + px / 2) * (dy + px / 2) / (ry * ry))) / px) * px;
+            ctx.fillRect(snapWorld(x - half), snapWorld(y + dy), half * 2, px);
+        }
     },
 
     // 공격 동작의 몇 번째 프레임인지: 남은 표시 시간(atkPose)을 처음 길이(atkPoseMax)로 나눠 계산한다
@@ -817,7 +819,7 @@ const Render = {
         ctx.fillRect(x - s / 2, cy - s / 2, s, s);
     },
 
-    // 등급 마름모: 초록 바닥에서도 보이게 진한 갈색 테두리를 굵게 두르고, 위쪽에 밝은 면을 낸다.
+    // 등급 마름모(도트): 진한 갈색 테두리에 등급 색.
     // 일반은 회백, 희귀 이상은 크고 바닥에 등급 빛. 등급 표 fx 2 이상(전설)은 더 큰 마름모에 반짝이는 테두리,
     // 신화(fx 3)는 가장 크고 붉은 무지개 빛
     gradeMark(ctx, x, y, grade) {
@@ -825,30 +827,23 @@ const Render = {
         const legend = fx >= 2;
         const s = grade === 'common' ? 6 : (fx >= 3 ? 11 : (legend ? 10 : 8));
         const color = UIKit.gradeFill(ctx, MONSTER_GRADES[grade].color, x - s, y - s, s * 2, s * 2);
+        const px = 2 * ART_SCALE;
         const diamond = r => {
-            ctx.beginPath();
-            ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
-            ctx.closePath();
-            ctx.fill();
+            const n = Math.ceil(r / px);
+            for (let i = -n; i <= n; i++) {
+                const half = (n - Math.abs(i)) * px;
+                ctx.fillRect(snapWorld(x - half - px / 2), snapWorld(y + i * px - px / 2), half * 2 + px, px);
+            }
         };
         ctx.save();
         ctx.fillStyle = '#1e120a';
-        diamond(s + 6);
+        diamond(s + 3);
         ctx.fillStyle = color;
         diamond(s);
-        // 위쪽 절반을 밝게(도트 면)
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
-        ctx.beginPath();
-        ctx.moveTo(x, y - s); ctx.lineTo(x + s / 2, y - s / 2); ctx.lineTo(x, y); ctx.lineTo(x - s / 2, y - s / 2);
-        ctx.closePath();
-        ctx.fill();
-        if (legend) {
-            ctx.strokeStyle = `rgba(255,248,214,${0.6 + Math.sin(Game.time * 6) * 0.3})`;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y);
-            ctx.closePath();
-            ctx.stroke();
+        // 전설 이상은 위쪽이 번쩍인다
+        if (legend && Math.floor(Game.time * 3) % 2 === 0) {
+            ctx.fillStyle = '#fff8d6';
+            ctx.fillRect(snapWorld(x - px / 2), snapWorld(y - s), px, px * 2);
         }
         ctx.restore();
     },
@@ -967,15 +962,6 @@ const Render = {
         if (p.delay > 0 && p.age < p.delay) {
             const k = p.age / p.delay;
             const e = k * k;
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const glow = ctx.createRadialGradient(to.x, to.y, 4, to.x, to.y, 50 + 110 * k);
-            glow.addColorStop(0, `rgba(255,255,255,${0.7 * k})`);
-            glow.addColorStop(0.4, `rgba(${rgb},${0.5 * k})`);
-            glow.addColorStop(1, `rgba(${rgb},0)`);
-            ctx.fillStyle = glow;
-            ctx.fillRect(to.x - 170, to.y - 170, 340, 340);
-            ctx.restore();
             p.from.forEach((f, i) => {
                 const from = pt(f);
                 const side = i ? 1 : -1;
@@ -1007,49 +993,6 @@ const Render = {
         const ease = 1 - Math.pow(1 - k, 3);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        // 터지는 빛
-        const flash = clamp(1 - t / 0.35, 0, 1);
-        const r0 = 60 + g.rays * 6 + 120 * ease;
-        const glow = ctx.createRadialGradient(to.x, to.y, 4, to.x, to.y, r0);
-        glow.addColorStop(0, `rgba(255,255,255,${0.9 * flash + 0.25 * fade})`);
-        glow.addColorStop(0.35, `rgba(${rgb},${0.6 * fade})`);
-        glow.addColorStop(1, `rgba(${rgb},0)`);
-        ctx.fillStyle = glow;
-        ctx.fillRect(to.x - r0, to.y - r0, r0 * 2, r0 * 2);
-        // 빛기둥: 희귀 이상
-        if (g.rays) {
-            const colH = 260 + g.rays * 14;
-            const col = ctx.createLinearGradient(0, to.y - colH, 0, to.y + 30);
-            col.addColorStop(0, `rgba(${rgb},0)`);
-            col.addColorStop(1, `rgba(${rgb},${0.55 * fade})`);
-            ctx.fillStyle = col;
-            const cw = 30 + g.rays * 2;
-            ctx.fillRect(to.x - cw / 2, to.y - colH, cw, colH + 30);
-        }
-        // 빛줄기
-        for (let i = 0; i < g.rays; i++) {
-            const ang = p.seed + i / g.rays * Math.PI * 2 + t * 0.9;
-            const len = 90 + 220 * ease + (i % 2) * 40;
-            ctx.fillStyle = `rgba(${i % 2 ? '255,255,255' : tint(i >> 1)},${0.45 * fade})`;
-            ctx.beginPath();
-            ctx.moveTo(to.x, to.y);
-            ctx.lineTo(to.x + Math.cos(ang - 0.07) * len, to.y + Math.sin(ang - 0.07) * len);
-            ctx.lineTo(to.x + Math.cos(ang + 0.07) * len, to.y + Math.sin(ang + 0.07) * len);
-            ctx.closePath();
-            ctx.fill();
-        }
-        // 퍼지는 고리
-        for (let i = 0; i < (g.rays ? 2 : 1); i++) {
-            const kk = clamp(k * 1.4 - i * 0.25, 0, 1);
-            if (kk <= 0 || kk >= 1) continue;
-            ctx.globalAlpha = 1 - kk;
-            ctx.strokeStyle = i ? '#ffffff' : `rgb(${rgb})`;
-            ctx.lineWidth = 10 * (1 - kk) + 2;
-            ctx.beginPath();
-            ctx.arc(to.x, to.y, 30 + (140 + g.rays * 8) * Math.sqrt(kk), 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
         // 불꽃: 상태 없이 시간과 번호로 위치를 정한다
         for (let i = 0; i < g.sparks; i++) {
             const ang = p.seed * 3 + i * 2.39996;
@@ -1067,7 +1010,7 @@ const Render = {
             const name = `${MONSTERS[p.type].sprite}/rotations/south`;
             ctx.save();
             ctx.globalAlpha = 1 - t / 0.3;
-            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 60, MONSTERS[p.type].art.scale * (1 + (1 - t / 0.3) * 0.6));
+            this.sprite(ctx, Assets.tinted(name, '#ffffff', 1), to.x, to.y + 60, MONSTERS[p.type].art.scale * (1 + (1 - t / 0.3) * 0.15));
             ctx.restore();
         }
         // 결과 이름과 등급: 합치기는 언제나, 소환은 희귀 이상만
@@ -1280,43 +1223,24 @@ const Render = {
         }
     },
 
-    // 맵 기믹 칸: 강화 제단(금빛 룬)과 저주받은 땅(검보라 균열). 판 중에 늘 보인다
+    // 맵 기믹 칸: 강화 제단과 저주받은 땅 그림(64px, 그림 1px = 화면 1px). 제단 룬은 천천히 달아오른다. 판 중에 늘 보인다
     drawMapTiles(ctx) {
         if (!Game.inPlay()) return;
         const map = MAPS[currentMap];
-        for (const [c, r] of map.cursed) {
-            const x = tileX(c);
-            const y = tileY(r);
-            ctx.save();
-            const g = ctx.createRadialGradient(x, y, 6, x, y, TILE * 0.6);
-            g.addColorStop(0, 'rgba(26,6,40,0.85)');
-            g.addColorStop(0.7, 'rgba(58,14,76,0.55)');
-            g.addColorStop(1, 'rgba(58,14,76,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(x - TILE * 0.6, y - TILE * 0.6, TILE * 1.2, TILE * 1.2);
-            ctx.strokeStyle = 'rgba(190,90,255,0.55)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(x - 26, y - 18); ctx.lineTo(x - 6, y - 4); ctx.lineTo(x - 14, y + 12); ctx.lineTo(x + 4, y + 24);
-            ctx.moveTo(x - 6, y - 4); ctx.lineTo(x + 16, y - 14); ctx.lineTo(x + 28, y + 2);
-            ctx.stroke();
-            ctx.restore();
-        }
+        const decal = (name, c, r) => {
+            const img = Assets.get(name);
+            if (!img) return;
+            const s = img.width * ART_SCALE;
+            ctx.drawImage(img, snapWorld(tileX(c) - s / 2), snapWorld(tileY(r) - s / 2), s, s);
+        };
+        for (const [c, r] of map.cursed) decal('decal_cursed', c, r);
         for (const [c, r] of map.altars) {
-            const x = tileX(c);
-            const y = tileY(r);
-            const pulse = 0.6 + Math.sin(Game.time * 3 + c) * 0.2;
+            decal('decal_altar', c, r);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = `rgba(255,190,70,${0.16 * pulse})`;
-            ctx.fillRect(x - TILE / 2 + 6, y - TILE / 2 + 6, TILE - 12, TILE - 12);
+            ctx.globalAlpha = 0.18 + Math.sin(Game.time * 2 + c) * 0.14;
+            decal('decal_altar', c, r);
             ctx.restore();
-            ctx.save();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = `rgba(255,215,110,${pulse})`;
-            ctx.strokeRect(x - TILE / 2 + 8, y - TILE / 2 + 8, TILE - 16, TILE - 16);
-            ctx.restore();
-            this.drawLoopSheet(ctx, 'fx_rune_damage', x, y + 22, 96, c * 0.1, 0.8);
         }
     },
 
@@ -1358,18 +1282,16 @@ const Render = {
         ctx.fillRect(x + 5, y + 5, TILE * cw - 10, TILE * ch - 10);
     },
 
+    // 사거리: 천천히 도는 도트 점 고리. 안을 칠하지 않아 전장을 가리지 않는다
     rangeRing(ctx, x, y, radius, color) {
-        ctx.save();
-        ctx.fillStyle = color.replace('1)', '0.1)');
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.setLineDash([14, 10]);
-        ctx.lineDashOffset = -Game.time * 40;
-        ctx.strokeStyle = color;
-        ctx.stroke();
-        ctx.restore();
+        const size = 3 * ART_SCALE;
+        const n = Math.max(12, Math.round(radius * Math.PI * 2 / 28));
+        const spin = Game.time * 0.25;
+        ctx.fillStyle = color;
+        for (let i = 0; i < n; i++) {
+            const a = spin + i / n * Math.PI * 2;
+            ctx.fillRect(snapWorld(x + Math.cos(a) * radius - size / 2), snapWorld(y + Math.sin(a) * radius - size / 2), size, size);
+        }
     },
 
     // 화로 소품(prop2_brazier) 둘레의 따뜻한 빛. 불꽃은 그림에 있다
