@@ -344,17 +344,14 @@ const Render = {
 
     // 정예 표시: 발밑의 금색 빛 고리
     eliteRing(ctx, x, y) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const pulse = 0.55 + Math.sin(Game.time * 5) * 0.15;
-        ctx.fillStyle = `rgba(255,190,60,${pulse * 0.35})`;
-        ctx.beginPath();
-        ctx.ellipse(x, y, 62, 21, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = `rgba(255,215,100,${pulse})`;
-        ctx.stroke();
-        ctx.restore();
+        const px = 2 * ART_SCALE;
+        const t = Game.time;
+        ctx.fillStyle = '#ffc63d';
+        for (let i = 0; i < 16; i++) {
+            if ((i + Math.floor(t * 6)) % 4 === 0) continue;
+            const a = i / 16 * Math.PI * 2 + t * 0.9;
+            ctx.fillRect(snapWorld(x + Math.cos(a) * 46), snapWorld(y + Math.sin(a) * 15), px * 2, px * 2);
+        }
     },
 
     // 서 있는 그림: 다음 파티 목록에 쓴다
@@ -647,19 +644,293 @@ const Render = {
         return { clip, name: this.plFrame(def, clip, m.dir, i) };
     },
 
+    // 모든 몬스터 주변을 떠다니는 종족 효과(도트). 등급이 높을수록 조금 많다. 시간과 자리로만 정해 판 결과와 무관하다
+    //   악마 불티는 빠르게 솟고, 언데드 혼불은 흔들리며 천천히 오르고, 정령은 제자리에서 반짝이고,
+    //   야수는 발밑에서 풀잎과 흙먼지가 옆으로 날리고, 오크는 발밑에서 먼지가 피어오른다
+    familyAmbient(ctx, m, def, footY, front) {
+        const t = Game.time;
+        const seed = (m.homeX || m.x) * 0.0137 + (m.homeY || m.y) * 0.0071;
+        const [cw] = def.art.cells || [1, 1];
+        const bodyW = def.art.hand ? def.art.hand.x / 0.3 : TILE * cw;
+        const halfW = Math.max(TILE * 0.3, bodyW * 0.45);
+        const bodyH = (def.art.barY || 120) * 0.85;
+        const unit = ART_SCALE;
+        const n = 5 + GRADE_ORDER.indexOf(def.grade) * 3;
+        const fam = def.family;
+        const pal = MONSTER_PALETTES[m.type] || ['#5a3a6a', '#9a6cff', '#e2b0ff', '#ffffff'];
+        // 발밑의 종족 얼룩: 잡음으로 만든 불규칙한 도트 자국(원이 아니다). 몬스터 종류마다 모양이 다르고 한 번 만들어 둔다
+        if (!front) this.drawGroundMark(ctx, m, def, footY, halfW);
+        // 몸 둘레를 도는 종족 효과(뒤쪽 반은 몸 뒤, 앞쪽 반은 몸 앞)
+        this.drawOrbiters(ctx, m, def, footY, halfW, bodyH, front);
+        for (let i = 0; i < n; i++) {
+            if ((i % 2 === 1) !== front) continue;
+            const r1 = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+            const rnd = r1 - Math.floor(r1); // 이 불티만의 고정 값
+            let x, y, size, color, alpha;
+            if (fam === 'demon') {
+                const k = ((t * (0.9 + rnd * 0.6) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.6 + Math.sin(t * 5 + i) * 4;
+                y = footY - k * bodyH * 1.1;
+                size = (rnd > 0.6 ? 2 : 1) * unit * 2;
+                color = [pal[2], pal[3], '#ffd23d'][i % 3];
+                alpha = 1 - k;
+            } else if (fam === 'undead') {
+                const k = ((t * (0.25 + rnd * 0.15) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.8 + Math.sin(t * 1.6 + i * 1.7) * 14;
+                y = footY - 6 - k * bodyH;
+                size = 2 * unit * 2;
+                color = i % 3 === 0 ? pal[3] : pal[2];
+                alpha = Math.sin(k * Math.PI);
+            } else if (fam === 'spirit') {
+                const ang = rnd * Math.PI * 2 + t * 0.4;
+                x = m.x + Math.cos(ang) * halfW * (0.7 + rnd * 0.5);
+                y = footY - bodyH * (0.25 + rnd * 0.65) + Math.sin(t * 2 + i) * 6;
+                const blink = (Math.sin(t * (2.5 + rnd * 2) + i * 2.1) + 1) / 2;
+                size = 2 * unit;
+                color = [pal[2], '#ffffff', pal[3]][i % 3];
+                alpha = blink;
+                if (blink > 0.85) {
+                    ctx.globalAlpha = blink;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(snapWorld(x - size), snapWorld(y), size * 3, unit * 2);
+                    ctx.fillRect(snapWorld(x + size / 2 - unit), snapWorld(y - size), unit * 2, size * 3);
+                }
+            } else if (fam === 'beast') {
+                const k = ((t * (0.35 + rnd * 0.2) + rnd) % 1);
+                const dir = rnd > 0.5 ? 1 : -1;
+                x = m.x + dir * (k * halfW * 1.4) + (rnd - 0.5) * 20;
+                y = footY - 4 - Math.sin(k * Math.PI) * 22 - rnd * 10;
+                size = 2 * unit;
+                color = i % 2 ? pal[2] : pal[1];
+                alpha = Math.sin(k * Math.PI);
+            } else {
+                const k = ((t * (0.5 + rnd * 0.3) + rnd) % 1);
+                x = m.x + (rnd - 0.5) * halfW * 1.6;
+                y = footY - 2 - k * 30;
+                size = (1 + Math.floor(k * 2)) * unit * 2;
+                color = '#8a7a66';
+                alpha = (1 - k) * 0.85;
+            }
+            ctx.globalAlpha = clamp(alpha, 0, 1);
+            ctx.fillStyle = color;
+            ctx.fillRect(snapWorld(x), snapWorld(y), size, size);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 발밑 자국: 종족별 색과 모양. 악마는 갈라진 불씨, 언데드는 번지는 독기, 정령은 흩어진 서리, 야수는 풀포기, 오크는 흙먼지
+    drawGroundMark(ctx, m, def, footY, halfW) {
+        const fam = def.family;
+        const cell = 2 * ART_SCALE;
+        const rx = Math.round(halfW * 1.15 / cell);
+        const ry = Math.max(3, Math.round(rx * 0.36));
+        const key = `mark|${m.type}|${rx}`;
+        this.markCache = this.markCache || new Map();
+        let mark = this.markCache.get(key);
+        if (!mark) {
+            mark = [];
+            let s = hashSeed(key);
+            const rand = () => { s = (Math.imul(s ^ (s >>> 15), 2246822507) + 0x9e3779b9) | 0; return ((s >>> 0) % 10000) / 10000; };
+            // 거친 잡음 격자(4칸마다 값)를 겹쳐 얼룩 모양을 만든다
+            const grid = [];
+            for (let i = 0; i <= rx * 2 / 4 + 2; i++) { grid.push([]); for (let j = 0; j <= ry * 2 / 4 + 2; j++) grid[i].push(rand()); }
+            const noise = (x, y) => {
+                const gx = (x + rx) / 4, gy = (y + ry) / 4;
+                const i = Math.floor(gx), j = Math.floor(gy), fx = gx - i, fy = gy - j;
+                const a = grid[i][j], b = grid[i + 1][j], c = grid[i][j + 1], d = grid[i + 1][j + 1];
+                return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+            };
+            for (let y = -ry; y <= ry; y++) {
+                for (let x = -rx; x <= rx; x++) {
+                    const r = Math.sqrt((x * x) / (rx * rx) + (y * y) / (ry * ry));
+                    if (r > 1.25) continue;
+                    const v = noise(x, y) * 0.9 + (1 - r) * 0.75 + (rand() - 0.5) * 0.25;
+                    if (v > 0.78) mark.push([x, y, v > 1.05 ? 2 : 1]);
+                }
+            }
+            // 악마: 가운데에서 뻗는 갈라짐
+            if (fam === 'demon') {
+                for (let k = 0; k < 4; k++) {
+                    let x = 0, y = 0;
+                    const ang = rand() * Math.PI * 2;
+                    for (let step = 0; step < rx * 0.9; step++) {
+                        x += Math.cos(ang) + (rand() - 0.5) * 1.2;
+                        y += Math.sin(ang) * 0.4 + (rand() - 0.5) * 0.6;
+                        mark.push([Math.round(x), Math.round(y), 3]);
+                    }
+                }
+            }
+            this.markCache.set(key, mark);
+        }
+        const colors = {
+            demon: ['#7a2a10', '#c8461a', '#ffb03d'], undead: ['#4a2e6a', '#7a4ec0', '#7dffb0'], spirit: ['#3e6a88', '#6fb8e0', '#e8fbff'],
+            beast: ['#3e5a22', '#6a8c3a', '#b8e07a'], orc: ['#5a4632', '#8a6a46', '#d8b47a']
+        }[fam] || ['#5a4632', '#8a6a46', '#d8b47a'];
+        const glow = 0.55 + Math.sin(Game.time * 3 + m.x * 0.01) * 0.25;
+        for (const [x, y, kind] of mark) {
+            ctx.globalAlpha = kind === 3 ? glow : (kind === 2 ? 0.6 : 0.45);
+            ctx.fillStyle = colors[kind - 1];
+            ctx.fillRect(snapWorld(m.x + x * cell), snapWorld(footY + y * cell), cell, cell);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 몸 둘레를 도는 종족 오브젝트: 전설부터. 몬스터 그림에서 뽑은 색(MONSTER_PALETTES)으로 명암을 넣은 작은 도트 그림이고,
+    // 몬스터와 같은 밀도(그림 1px = 화면 1px)다. 신화는 수가 많고 두 겹 궤도를 돌며 빛 꼬리를 남긴다
+    orbiterImage(fam, pal) {
+        const key = `orb|${fam}|${pal.join()}`;
+        this.orbCache = this.orbCache || new Map();
+        if (this.orbCache.has(key)) return this.orbCache.get(key);
+        const art = ORBITER_ART[fam] || ORBITER_ART.spirit;
+        const h = art.length;
+        const w = art[0].length;
+        if (typeof document === 'undefined') return null;
+        const cv = document.createElement('canvas');
+        cv.width = w + 2;
+        cv.height = h + 2;
+        const g = cv.getContext('2d');
+        const tone = { d: pal[0], m: pal[1], l: pal[2], w: '#ffffff', a: pal[3] };
+        const filled = (x, y) => y >= 0 && y < h && x >= 0 && x < w && art[y][x] !== '.';
+        // 테두리: 칠한 칸 둘레를 아주 어두운 색으로
+        g.fillStyle = '#140c10';
+        for (let y = -1; y <= h; y++) for (let x = -1; x <= w; x++) {
+            if (filled(x, y)) continue;
+            if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) g.fillRect(x + 1, y + 1, 1, 1);
+        }
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const ch = art[y][x];
+            if (ch === '.') continue;
+            g.fillStyle = tone[ch];
+            g.fillRect(x + 1, y + 1, 1, 1);
+        }
+        this.orbCache.set(key, cv);
+        return cv;
+    },
+
+    drawOrbiters(ctx, m, def, footY, halfW, bodyH, front) {
+        const fx = gradeInfo(def.grade, 'fx', 0);
+        if (fx < 2) return; // 전설부터
+        const pal = MONSTER_PALETTES[m.type] || ['#5a3a6a', '#9a6cff', '#e2b0ff', '#ffffff'];
+        const img = Assets.get(`orb_${m.type}`) || this.orbiterImage(def.family, pal); // 몬스터 색으로 칠한 24px 그림(tools/import_orbiters.py)
+        if (!img) return;
+        const t = Game.time;
+        const s = ART_SCALE;
+        const seed = (m.homeX || m.x) * 0.013;
+        const rings = fx >= 3 ? [{ n: 4, speed: 1.1, rx: 1.6, lift: 0.42 }, { n: 3, speed: -1.6, rx: 1.15, lift: 0.7 }] : [{ n: 3, speed: 1.2, rx: 1.5, lift: 0.45 }];
+        for (const [ri, ring] of rings.entries()) {
+            const rx = Math.max(halfW * ring.rx, TILE * 0.6);
+            const ry = rx * 0.3;
+            const cy = footY - bodyH * ring.lift;
+            for (let i = 0; i < ring.n; i++) {
+                const ang = t * ring.speed + i / ring.n * Math.PI * 2 + seed + ri;
+                if ((Math.sin(ang) > 0) !== front) continue;
+                const bob = Math.sin(t * 2.3 + i * 1.7 + ri) * 6;
+                const at = a => ({ x: m.x + Math.cos(a) * rx, y: cy + Math.sin(a) * ry + bob });
+                // 꼬리: 지나온 자리에 같은 그림을 점점 옅게(신화는 길게)
+                const tail = fx >= 3 ? 5 : 3;
+                for (let k = tail; k >= 1; k--) {
+                    const q = at(ang - Math.sign(ring.speed) * k * 0.09);
+                    ctx.globalAlpha = 0.5 * (1 - k / (tail + 1));
+                    ctx.drawImage(img, snapWorld(q.x - img.width * s / 2), snapWorld(q.y - img.height * s / 2), img.width * s, img.height * s);
+                }
+                const p = at(ang);
+                ctx.globalAlpha = 1;
+                ctx.drawImage(img, snapWorld(p.x - img.width * s / 2), snapWorld(p.y - img.height * s / 2), img.width * s, img.height * s);
+                // 신화: 가끔 하얀 반짝임
+                if (fx >= 3 && Math.floor(t * 3 + i + ri) % 4 === 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(snapWorld(p.x - 3 * s), snapWorld(p.y - img.height * s / 2 - 2 * s), 7 * s, s);
+                    ctx.fillRect(snapWorld(p.x), snapWorld(p.y - img.height * s / 2 - 5 * s), s, 7 * s);
+                }
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 영웅 이상 몬스터의 존재감: 등급 색 윤곽선, 피어오르는 도트 불티, 전설부터 발밑의 도는 점 고리.
+    // 등급이 높을수록 많고 진하다(영웅 fx 1, 전설 2, 신화 3). front가 거짓이면 몸 뒤, 참이면 몸 앞을 그린다
+    //   모두 시간과 몬스터 자리로 정해 판 결과와 무관하다
+    gradePresence(ctx, m, def, footY, name, clip, fx, front) {
+        const t = Game.time;
+        const seed = (m.homeX || m.x) * 0.0137 + (m.homeY || m.y) * 0.0071;
+        const grade = MONSTER_GRADES[def.grade];
+        const rainbow = grade.rainbow;
+        const colorAt = i => (rainbow ? rainbow[(i + Math.floor(t * 2)) % (rainbow.length - 1)] : grade.color);
+        const [cw] = def.art.cells || [1, 1];
+        const halfW = cw * TILE * 0.42;
+        const bodyH = (def.art.barY || 120) * 0.85;
+        const px = 2 * ART_SCALE;
+        // 발밑의 도는 점 고리(전설부터): 뒤쪽 반은 몸 뒤, 앞쪽 반은 몸 앞에 그린다(그림자에 가리지 않게)
+        if (fx >= 2) {
+            {
+                const rings = fx >= 3 ? 2 : 1;
+                for (let k = 0; k < rings; k++) {
+                    const rx = halfW * (1 + k * 0.25);
+                    const ry = rx * 0.32;
+                    const n = 18 + k * 6;
+                    ctx.fillStyle = k ? colorAt(1) : grade.color;
+                    ctx.globalAlpha = 0.9 - k * 0.2;
+                    for (let i = 0; i < n; i++) {
+                        if ((i + Math.floor(t * 6)) % 3 === 0) continue; // 점선이 돈다
+                        const ang = i / n * Math.PI * 2 + t * (k ? -0.6 : 0.8);
+                        if ((Math.sin(ang) > 0) !== front) continue;
+                        ctx.fillRect(snapWorld(m.x + Math.cos(ang) * rx), snapWorld(footY + Math.sin(ang) * ry), px * 2, px * 2);
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+        if (!front) {
+            // 윤곽선: 몸 뒤에 등급 색 실루엣을 한 도트씩 밀어 그린다
+            const pulse = 0.5 + Math.sin(t * 2.6 + seed * 9) * 0.5;
+            const pose = this.monsterPose(def, m);
+            const dot = (fx >= 2 ? 2 : 1) * ART_SCALE;
+            ctx.save();
+            ctx.globalAlpha = (fx >= 3 ? 1 : fx >= 2 ? 0.9 : 0.75) * (0.6 + pulse * 0.4);
+            const glow = Assets.tinted(name, colorAt(0), 1);
+            for (const [ox, oy] of [[-dot, 0], [dot, 0], [0, -dot], [0, dot]]) this.posedSprite(ctx, glow, def.art, clip, m.dir, m.x + ox, footY + oy, pose);
+            ctx.restore();
+        }
+        // 피어오르는 도트 불티: 반은 몸 뒤, 반은 몸 앞
+        const motes = [0, 0, 6, 12][fx];
+        for (let i = 0; i < motes; i++) {
+            if ((i % 2 === 1) !== front) continue;
+            const k = ((t * (0.35 + (i % 3) * 0.08) + i / motes + seed) % 1 + 1) % 1;
+            const x = m.x + Math.sin(i * 2.37 + seed * 5) * halfW + Math.sin(t * 1.7 + i) * 6;
+            const y = footY - 10 - k * bodyH;
+            const size = (i % 3 === 0 ? 6 : 4) * ART_SCALE;
+            ctx.globalAlpha = Math.min(1, Math.sin(k * Math.PI) * 1.4);
+            ctx.fillStyle = colorAt(i);
+            ctx.fillRect(snapWorld(x), snapWorld(y), size, size);
+            // 신화: 가끔 십자 반짝임
+            if (fx >= 3 && i % 4 === 0 && k > 0.4 && k < 0.6) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(snapWorld(x - size), snapWorld(y + size / 2 - ART_SCALE), size * 3, 2 * ART_SCALE);
+                ctx.fillRect(snapWorld(x + size / 2 - ART_SCALE), snapWorld(y - size), 2 * ART_SCALE, size * 3);
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+
     // 서 있는 몬스터 한 마리: 그림자와 그림. 건설 모드의 반투명 그림에도 쓴다
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
         const w = def.art.cells ? def.art.cells[0] : 1;
         const pose = this.monsterPose(def, m);
-        this.shadow(ctx, m.x + pose.dx * 0.6, footY - 2, 24 * w + 6, 7 * w + 3);
+        const bodyW = def.art.hand ? def.art.hand.x / 0.3 : TILE * w;
+        const rx = Math.max(TILE * 0.3, bodyW * 0.42);
+        const sx = m.x + pose.dx * 0.6;
+        const lift = clamp(1 + Math.min(0, pose.dy) / 90, 0.7, 1); // 몸이 뜨면 그림자가 작아진다
+        this.shadow(ctx, sx, footY - 2, rx * lift, rx * 0.3 * lift, 0.42);
+        this.shadow(ctx, sx, footY - 2, rx * 0.55 * lift, rx * 0.16 * lift, 0.4); // 발이 닿는 곳은 더 진하다
         this.posedSprite(ctx, img, def.art, clip, m.dir, m.x, footY, pose);
     },
 
     // 프레임이 적은 Asteria 그림(art.breathe)의 자세. 배율을 바꾸지 않고 위치와 가로줄 밀기만 쓴다(도트가 일그러지지 않는다)
-    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양, bob: 윗몸을 올리는 그림 px
+    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양(공격 때만)
+    //   대기 때는 그림 한 장을 통째로 위아래로 움직인다(그림을 자르지 않아 이음선이 생기지 않는다). 나는 몬스터는 크게 떠오른다
     monsterPose(def, m) {
-        const pose = { dx: 0, dy: 0, shear: 0, bob: 0 };
+        const pose = { dx: 0, dy: 0, shear: 0 };
         if (!def.art.breathe) return pose;
         if (m.atkPose > 0) {
             const t = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
@@ -682,8 +953,12 @@ const Render = {
             pose.shear = dir[0] * k * 0.3 * size;
             return pose;
         }
-        if (m.moving) pose.bob = Math.round(Math.abs(Math.sin(m.anim * 9)) * 2);
-        else pose.bob = Math.floor(Game.time * 1.4 + (m.x || 0) * 0.013) % 2; // 대기: 윗몸이 1px씩 오르내린다
+        const phase = (m.homeX || m.x || 0) * 0.013 + (m.homeY || m.y || 0) * 0.007;
+        if (m.moving) pose.dy = -Math.round(Math.abs(Math.sin(m.anim * 9)) * 3) * ART_SCALE;
+        else {
+            const amp = FLYING_MONSTERS.has(m.type) ? 6 : 2;
+            pose.dy = -Math.round((Math.sin(Game.time * (FLYING_MONSTERS.has(m.type) ? 1.8 : 2.4) + phase) + 1) / 2 * amp) * ART_SCALE;
+        }
         return pose;
     },
 
@@ -692,8 +967,8 @@ const Render = {
         if (!img) return;
         const pick = this.plPick(clip, dir);
         const footPx = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
-        if (!pose.dx && !pose.dy && !pose.shear && !pose.bob) {
-            this.sprite(ctx, img, x, footY, art.scale, footPx, pick.flip);
+        if (!pose.shear) {
+            this.sprite(ctx, img, x + pose.dx, footY + pose.dy, art.scale, footPx, pick.flip);
             return;
         }
         const s = art.scale;
@@ -701,7 +976,6 @@ const Render = {
         const ih = img.height;
         const left = snapWorld(x + pose.dx - iw * s / 2);
         const top = snapWorld(footY + pose.dy - footPx * s);
-        const seam = Math.round(footPx * 0.55); // 이 줄 위가 윗몸이다
         ctx.imageSmoothingEnabled = false;
         ctx.save();
         if (pick.flip) {
@@ -714,10 +988,7 @@ const Render = {
         for (let sy = 0; sy < ih; sy += band) {
             const bh = Math.min(band, ih - sy);
             const shift = Math.round(pose.shear * Math.max(0, footPx - sy)) * (pick.flip ? -1 : 1);
-            const up = pose.bob && sy < seam ? pose.bob : 0;
-            ctx.drawImage(img, 0, sy, iw, bh, shift * s, (sy - up) * s, iw * s, bh * s);
-            // 윗몸을 올리면 생기는 틈을 바로 아래 줄로 메운다
-            if (pose.bob && sy < seam && sy + band >= seam) ctx.drawImage(img, 0, seam - pose.bob, iw, pose.bob, shift * s, (seam - pose.bob) * s, iw * s, pose.bob * s);
+            ctx.drawImage(img, 0, sy, iw, bh, shift * s, sy * s, iw * s, bh * s);
         }
         ctx.restore();
     },
@@ -758,7 +1029,12 @@ const Render = {
         let img = Assets.get(name);
         if (m.flash > 0) img = Assets.tinted(name, '#ffffff', 0.85);
         else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
+        const fx = gradeInfo(def.grade, 'fx', 0);
+        this.familyAmbient(ctx, m, def, footY, false);
+        if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, false);
         this.monsterBody(ctx, def, m, img, clip);
+        this.familyAmbient(ctx, m, def, footY, true);
+        if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, true);
         // 광폭화: 몸 위에 붉은 빛을 더한다(밝기는 맥박처럼 오르내린다)
         if (enraged && !(m.flash > 0)) {
             ctx.save();

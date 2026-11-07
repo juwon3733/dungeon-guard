@@ -152,7 +152,7 @@ vm.runInContext(`{
         }
     }
     for (const id of ['elite_swordsman', 'elite_tamer', 'elite_stormcaller', 'elite_rhapsodist']) {
-        assert(heroes[id].anim.death && heroes[id].anim.death.dirs.join() === 'south', id + ' dies facing south');
+        assert(heroes[id].sprite.startsWith('ast_elite_') && !heroes[id].anim.death, id + ' uses Asteria art and falls flat');
     }
     // 지역 8곳: 우주 배경, 섬, 다리 그림(webp)이 있고 불러오기 목록에 들어 있다. 다리 자르기 범위는 원본(1024px) 안이다.
     // 지역 소품은 64px 그림이고 발끝 높이가 있다
@@ -968,7 +968,7 @@ assert.strictEqual(et.speed, 1.3);
 assert.strictEqual(es.stunEvery, 4);
 assert.strictEqual(es.stunRange, 4);
 assert.strictEqual(es.bounty, HEROES.mage.bounty * 3);
-assert(ew.anim && ew.sprite === 'pl_elite_duelist' && ew.anim.attack.folder === 'slash' && ew.anim.death.dirs.join() === 'south', 'elite uses PixelLab art');
+assert(ew.anim && ew.sprite === 'ast_elite_adv_nightExecutioner' && ew.anim.attack.frames === 2 && !ew.anim.death, 'elite uses Asteria art');
 assert.strictEqual(CORRUPTED.elite_tamer.hp, CORRUPTED.rogue.hp * 2);
 assert.strictEqual(CORRUPTED.elite_tamer.damage, CORRUPTED.rogue.damage * 2);
 assert(!WAVES[0].elites && !WAVES[1].elites && WAVES[2].elites && WAVES.filter(w => w.elites).length >= 12, 'elites from wave 3, then every 5 rounds');
@@ -1002,7 +1002,7 @@ assert(!WAVES[0].elites && !WAVES[1].elites && WAVES[2].elites && WAVES.filter(w
 
 // 정예 직업 능력. 아래 블록은 Game 목록을 직접 바꾸고, 다음 '다시 시작'에서 모두 초기화된다.
 const er = HEROES.elite_rhapsodist;
-assert(er.anim && er.sprite === 'pl_elite_bard' && er.anim.attack.folder === 'cast' && er.song && !er.stunEvery, 'rhapsodist: PixelLab art, song, no stun');
+assert(er.anim && er.sprite === 'ast_elite_adv_eclipseArchsage_luna' && er.song && !er.stunEvery, 'rhapsodist: Asteria art, song, no stun');
 assert(WAVES.some(w => w.elites && w.elites.elite_rhapsodist), 'rhapsodist appears in some wave');
 // 용사 하나를 길 위 거리 d, 길 한가운데(lane 0)에 세운다
 const place = (type, d, bossKey) => {
@@ -5535,7 +5535,7 @@ Game.state = 'wave';
     assert.strictEqual(HEROES.warrior.scale, SWARM_RULES.scale, 'small picture');
     const e = createHero('elite_swordsman', 0, 0, null, 'north');
     assert.strictEqual(e.throneDamage, HEROES.elite_swordsman.throneDamage, 'elites stay whole');
-    assert(HEROES.elite_swordsman.scale > SWARM_RULES.scale, 'elites stay big');
+    assert(HEROES.elite_swordsman.anim.walk.footPx.south > ASTERIA_HERO_SKINS.warrior[0].anim.walk.footPx.south, 'elites stay bigger than the swarm');
     // 왕좌 피해와 골드는 모아서: 일반 용사 3명이 도착하면 약 1 깎인다
     const hp0 = Game.hp;
     for (let i = 0; i < 3; i++) {
