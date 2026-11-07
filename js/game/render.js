@@ -657,27 +657,10 @@ const Render = {
         const unit = ART_SCALE;
         const n = 7 + GRADE_ORDER.indexOf(def.grade) * 3;
         const fam = def.family;
-        // 발밑의 종족 색 도트 바닥(바둑판 무늬가 천천히 흐른다): 그림자와 함께 몬스터가 땅에 서 있게 보인다
-        if (!front) {
-            const base = { demon: '#ff6a1a', undead: '#9a6cff', spirit: '#6fd8ff', beast: '#8fc45a', orc: '#c9a46b' }[fam] || '#c9a46b';
-            const rx = halfW * 1.1;
-            const ry = rx * 0.34;
-            const cell = 2 * unit;
-            const shift = Math.floor(t * 3) % 2;
-            ctx.fillStyle = base;
-            for (let dy = -ry; dy < ry; dy += cell) {
-                const row = Math.round(dy / cell);
-                const half = rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry)));
-                for (let dx = -half; dx < half; dx += cell) {
-                    const col = Math.round(dx / cell);
-                    if ((row + col + shift) % 2) continue;
-                    const edge = 1 - Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
-                    ctx.globalAlpha = 0.12 + (1 - edge) * 0.28; // 가장자리가 진한 고리
-                    ctx.fillRect(snapWorld(m.x + dx), snapWorld(footY + dy), cell, cell);
-                }
-            }
-            ctx.globalAlpha = 1;
-        }
+        // 발밑의 종족 얼룩: 잡음으로 만든 불규칙한 도트 자국(원이 아니다). 몬스터 종류마다 모양이 다르고 한 번 만들어 둔다
+        if (!front) this.drawGroundMark(ctx, m, def, footY, halfW);
+        // 몸 둘레를 도는 종족 효과(뒤쪽 반은 몸 뒤, 앞쪽 반은 몸 앞)
+        this.drawOrbiters(ctx, m, def, footY, halfW, bodyH, front);
         for (let i = 0; i < n; i++) {
             if ((i % 2 === 1) !== front) continue;
             const r1 = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
@@ -730,6 +713,110 @@ const Render = {
             ctx.globalAlpha = clamp(alpha, 0, 1);
             ctx.fillStyle = color;
             ctx.fillRect(snapWorld(x), snapWorld(y), size, size);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 발밑 자국: 종족별 색과 모양. 악마는 갈라진 불씨, 언데드는 번지는 독기, 정령은 흩어진 서리, 야수는 풀포기, 오크는 흙먼지
+    drawGroundMark(ctx, m, def, footY, halfW) {
+        const fam = def.family;
+        const cell = 2 * ART_SCALE;
+        const rx = Math.round(halfW * 1.15 / cell);
+        const ry = Math.max(3, Math.round(rx * 0.36));
+        const key = `mark|${m.type}|${rx}`;
+        this.markCache = this.markCache || new Map();
+        let mark = this.markCache.get(key);
+        if (!mark) {
+            mark = [];
+            let s = hashSeed(key);
+            const rand = () => { s = (Math.imul(s ^ (s >>> 15), 2246822507) + 0x9e3779b9) | 0; return ((s >>> 0) % 10000) / 10000; };
+            // 거친 잡음 격자(4칸마다 값)를 겹쳐 얼룩 모양을 만든다
+            const grid = [];
+            for (let i = 0; i <= rx * 2 / 4 + 2; i++) { grid.push([]); for (let j = 0; j <= ry * 2 / 4 + 2; j++) grid[i].push(rand()); }
+            const noise = (x, y) => {
+                const gx = (x + rx) / 4, gy = (y + ry) / 4;
+                const i = Math.floor(gx), j = Math.floor(gy), fx = gx - i, fy = gy - j;
+                const a = grid[i][j], b = grid[i + 1][j], c = grid[i][j + 1], d = grid[i + 1][j + 1];
+                return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+            };
+            for (let y = -ry; y <= ry; y++) {
+                for (let x = -rx; x <= rx; x++) {
+                    const r = Math.sqrt((x * x) / (rx * rx) + (y * y) / (ry * ry));
+                    if (r > 1.25) continue;
+                    const v = noise(x, y) * 0.9 + (1 - r) * 0.75 + (rand() - 0.5) * 0.25;
+                    if (v > 0.78) mark.push([x, y, v > 1.05 ? 2 : 1]);
+                }
+            }
+            // 악마: 가운데에서 뻗는 갈라짐
+            if (fam === 'demon') {
+                for (let k = 0; k < 4; k++) {
+                    let x = 0, y = 0;
+                    const ang = rand() * Math.PI * 2;
+                    for (let step = 0; step < rx * 0.9; step++) {
+                        x += Math.cos(ang) + (rand() - 0.5) * 1.2;
+                        y += Math.sin(ang) * 0.4 + (rand() - 0.5) * 0.6;
+                        mark.push([Math.round(x), Math.round(y), 3]);
+                    }
+                }
+            }
+            this.markCache.set(key, mark);
+        }
+        const colors = {
+            demon: ['#7a2a10', '#c8461a', '#ffb03d'], undead: ['#4a2e6a', '#7a4ec0', '#7dffb0'], spirit: ['#3e6a88', '#6fb8e0', '#e8fbff'],
+            beast: ['#3e5a22', '#6a8c3a', '#b8e07a'], orc: ['#5a4632', '#8a6a46', '#d8b47a']
+        }[fam] || ['#5a4632', '#8a6a46', '#d8b47a'];
+        const glow = 0.55 + Math.sin(Game.time * 3 + m.x * 0.01) * 0.25;
+        for (const [x, y, kind] of mark) {
+            ctx.globalAlpha = kind === 3 ? glow : (kind === 2 ? 0.6 : 0.45);
+            ctx.fillStyle = colors[kind - 1];
+            ctx.fillRect(snapWorld(m.x + x * cell), snapWorld(footY + y * cell), cell, cell);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 몸 둘레를 도는 종족 오브젝트(도트 그림과 꼬리). 기울어진 타원 궤도를 돌아 뒤로 갈 때는 몸 뒤에 그린다
+    drawOrbiters(ctx, m, def, footY, halfW, bodyH, front) {
+        const fam = def.family;
+        const t = Game.time;
+        const u = 3 * ART_SCALE;
+        const shapes = {
+            demon: { n: 3, speed: 1.6, art: ['.#.', '###', '.#.'], colors: ['#ffd23d', '#ff7a1a'], trail: '#ff3d1a' },
+            undead: { n: 3, speed: 0.9, art: ['.##.', '####', '#..#'], colors: ['#7dffb0', '#b48cff'], trail: '#4a2e6a' },
+            spirit: { n: 4, speed: 1.2, art: ['.#.', '###', '###', '.#.'], colors: ['#bff6ff', '#ffffff'], trail: '#6fd8ff' },
+            beast: { n: 3, speed: 1.1, art: ['..#', '.##', '##.'], colors: ['#a8d86b', '#d8c06b'], trail: '#5a7a32' },
+            orc: { n: 2, speed: 0.8, art: ['##', '##'], colors: ['#c9a46b', '#8a7a66'], trail: '#5a4632' }
+        }[fam];
+        if (!shapes) return;
+        const extra = Math.max(0, GRADE_ORDER.indexOf(def.grade) - 1); // 영웅부터 하나씩 더
+        const n = shapes.n + extra;
+        const seed = (m.homeX || m.x) * 0.013;
+        const rx = Math.max(halfW * 1.55, TILE * 0.6); // 몸 그림 바깥을 돈다
+        const ry = rx * 0.32;
+        const cy = footY - bodyH * 0.42;
+        const drawShape = (x, y, color, alpha) => {
+            ctx.globalAlpha = alpha;
+            const cells = [];
+            shapes.art.forEach((row, r) => [...row].forEach((ch, k) => { if (ch === '#') cells.push([x + (k - row.length / 2) * u, y + (r - shapes.art.length / 2) * u]); }));
+            // 어두운 테두리를 먼저 깔아 어느 바닥 위에서도 보이게 한다
+            ctx.fillStyle = '#120a0c';
+            for (const [cx, cy2] of cells) ctx.fillRect(snapWorld(cx - ART_SCALE), snapWorld(cy2 - ART_SCALE), u + ART_SCALE * 2, u + ART_SCALE * 2);
+            ctx.fillStyle = color;
+            for (const [cx, cy2] of cells) ctx.fillRect(snapWorld(cx), snapWorld(cy2), u, u);
+        };
+        for (let i = 0; i < n; i++) {
+            const ang = t * shapes.speed + i / n * Math.PI * 2 + seed;
+            if ((Math.sin(ang) > 0) !== front) continue;
+            const bob = Math.sin(t * 2.3 + i * 1.7) * 8;
+            const x = m.x + Math.cos(ang) * rx;
+            const y = cy + Math.sin(ang) * ry + bob;
+            // 꼬리: 지나온 자리에 옅은 점 셋
+            for (let k = 1; k <= 3; k++) {
+                const a2 = ang - k * 0.16;
+                ctx.globalAlpha = 0.45 - k * 0.12;
+                ctx.fillStyle = shapes.trail;
+                ctx.fillRect(snapWorld(m.x + Math.cos(a2) * rx), snapWorld(cy + Math.sin(a2) * ry + Math.sin(t * 2.3 + i * 1.7 - k * 0.1) * 8), u * 1.5, u * 1.5);
+            }
+            drawShape(x, y, shapes.colors[Math.floor(t * 4 + i) % 2], 0.95);
         }
         ctx.globalAlpha = 1;
     },
