@@ -654,7 +654,8 @@ const UI = {
         const nextTop = NEXT_BTN_Y - 58; // 자동 합치기 버튼까지
         if (x + w > NEXT_BTN_X && y + h > nextTop) {
             if (nextTop - 8 - h >= 80) y = nextTop - 8 - h;
-            else x = cx - 64 - w;
+            // 키가 커서 올릴 자리가 없으면 버튼 왼쪽으로 옮긴다(칸 왼쪽에 열어도 버튼에 걸칠 수 있다)
+            else x = Math.min(cx - 64 - w, NEXT_BTN_X - 8 - w);
         }
         return { x, y };
     },
