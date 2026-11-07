@@ -1,3 +1,6 @@
+// 자동 합치기 간격(틱). 30틱 = 0.5초
+const AUTO_MERGE_TICKS = 30;
+
 // 게임 진행 상태와 프레임 순서. 화면 코드 없이도 돌아가서 tools/simulate.js로 밸런스를 시험할 수 있다.
 // 마왕 대사 한 줄: 공통 대사(SPEECH)에 이번 판 마왕의 대사를 더해 고른다(Math.random 한 번)
 function lordLine(kind) {
@@ -37,6 +40,7 @@ const Game = {
         this.challengeResult = null;
         this.challengeBest = null;
         this.tick = 0;
+        this.autoMerge = false; // 자동 합치기(입력으로 켜고 끈다)
         this.raidTier = 0; // 주간 토벌전에서 잡은 보스 수
         this.mutations = []; // 끝없는 심연에서 쌓인 변이(규칙 카드 id)
         this.leak = 0; // 아직 왕좌를 깎지 않은 일반 용사 피해
@@ -117,6 +121,27 @@ const Game = {
 
     // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
     skillCooldown(key) { return COMBAT_RULES[key].cooldown * this.mods.skillCooldown * (key === 'lightning' ? this.mods.lightningCooldown : 1); },
+
+    // 이번 판 마왕의 패시브가 kind이면 그 표를, 아니면 null
+    lordPassive(kind) {
+        const lord = hasEntry(DEMON_LORDS, this.lord) ? DEMON_LORDS[this.lord] : null;
+        return lord && lord.passive && lord.passive.kind === kind ? lord.passive : null;
+    },
+
+    // 뼈의 여왕: 처치 수마다 앞선 용사들을 망령이 때린다
+    soulVolley() {
+        const p = this.lordPassive('soulVolley');
+        if (!p || this.stats.kills % p.every !== 0 || this.volleying) return;
+        this.volleying = true;
+        const list = this.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b)).slice(0, p.count);
+        const damage = p.base + p.perRound * this.waveIndex;
+        for (const h of list) {
+            const w = heroWorld(h);
+            Fx.anim('fx_blastViolet', w.x, w.y - 30, 200, 0.35);
+            damageHero(h, damage, w.x, w.y, '#c9a6ff');
+        }
+        this.volleying = false;
+    },
 
     // 호통을 아직 쓸 수 없는지(체력 조건). 유물 광기의 북이 있으면 언제나 쓴다
     roarLocked() { return !this.mods.roarAnytime && this.hp > COMBAT_RULES.roar.unlockHp; },
@@ -275,7 +300,9 @@ const Game = {
     // 소환 강화: 다음 레벨 비용(최고 레벨이면 null)과 올리기. 실패하면 reason: 'state' | 'max' | 'gold'
     summonUpgradeCost() {
         const next = SUMMON_LEVELS[this.summonLevel + 1];
-        return next ? next.cost : null;
+        if (!next) return null;
+        const gold = this.lordPassive('goldTouch');
+        return gold ? Math.round(next.cost * gold.upgradeMul) : next.cost;
     },
 
     upgradeSummon() {
@@ -691,6 +718,23 @@ const Game = {
         return Object.assign(this.mergePlanFor(src, m, null, true), { src, dst: m });
     },
 
+    // 자동 합치기 한 번: 가장 낮은 등급부터 같은 등급 3마리를 합친다.
+    // S랭크는 히든 조합 재료이므로 쓰지 않는다. 합칠 수 있으면 { ok: true }
+    autoMergeStep() {
+        const free = m => !m.removed && (m.rank || 0) < MONSTER_RANKS.length - 1;
+        for (const grade of GRADE_ORDER) {
+            if (!nextGrade(grade)) continue;
+            const list = this.monsters.filter(m => free(m) && MONSTERS[m.type].grade === grade).sort((a, b) => (b.rank || 0) - (a.rank || 0));
+            if (list.length < MERGE_RULES.gradeCount) continue;
+            for (const dst of list) {
+                const plan = this.quickMergePlan(dst);
+                if (plan.kind === 'none' || !free(plan.src) || !(plan.extra || []).every(free)) continue;
+                return this.merge({ monster: plan.src }, { monster: plan.dst }, plan.extra, true);
+            }
+        }
+        return { ok: false };
+    },
+
     // 무한 라운드: 다음 라운드가 늘 표에 있게 한다
     extendRounds() {
         if (!this.challenge) return;
@@ -792,6 +836,7 @@ const Game = {
     act(cmd) {
         if (this.record && !this.replaying && this.inPlay()) this.record.inputs.push(this.encodeInput(cmd));
         switch (cmd.kind) {
+            case 'autoMerge': this.autoMerge = !!cmd.on; return { ok: true };
             case 'pickReward': return this.pickBossReward(cmd.i);
             case 'equip': return this.equipMonster(cmd.monster, cmd.i);
             case 'unequip': return this.unequipMonster(cmd.monster);
@@ -1020,6 +1065,7 @@ const Game = {
         if (this.state !== 'prep' && this.state !== 'wave') return;
         if (this.bossReward) return; // 보상을 고르는 동안 전투도 멈춘다
         this.stats.time += dt;
+        if (this.autoMerge && this.tick % AUTO_MERGE_TICKS === 0) this.autoMergeStep();
 
         for (const key of ['lightning', 'roar']) this.skills[key] = Math.max(0, this.skills[key] - dt);
         this.streakTimer = Math.max(0, this.streakTimer - dt);

@@ -636,15 +636,22 @@ const Render = {
         let dx = 0;
         let dy = 0;
         let grow = 0;
+        let lean = 0;
         if (m.atkPose > 0) {
-            const k = Math.sin(Math.PI * (1 - m.atkPose / (m.atkPoseMax || m.atkPose)));
+            // 살짝 뒤로 젖혔다가 앞으로 내지른다. 근접은 크게, 공격 그림이 여러 장이면 그림이 움직이므로 작게
+            const t = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
+            const k = t < 0.3 ? -Math.sin(t / 0.3 * Math.PI) * 0.35 : Math.sin((t - 0.3) / 0.7 * Math.PI);
+            const melee = MONSTER_ROLES[def.role].melee;
+            const size = (melee ? 1 : 0.4) * (def.art.anim.attack.frames > 2 ? 0.4 : 1);
             const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[m.dir] || [0, 1];
-            dx = dir[0] * k * 18;
-            dy = dir[1] * k * 9;
-            grow = k * 0.05;
+            dx = dir[0] * k * 54 * size;
+            dy = dir[1] * k * 24 * size;
+            lean = dir[0] * k * 0.2 * size;
+            grow = Math.max(0, k) * 0.1 * size;
         }
         const breath = m.moving ? Math.abs(Math.sin(m.anim * 9)) * 0.03 : Math.sin(Game.time * 2.2 + m.homeX * 0.013) * 0.016;
         ctx.translate(m.x + dx, footY + dy);
+        if (lean) ctx.rotate(lean);
         ctx.scale(1 + grow - breath * 0.5, 1 + grow + breath);
         ctx.translate(-m.x, -footY);
     },

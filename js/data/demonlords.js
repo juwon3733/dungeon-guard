@@ -58,12 +58,14 @@ const RELIC_LIMITS = { goldStep: 200, goldDamageMax: 0.15, altarDamageMax: 0.15,
 //   sprite: 왕좌의 대기 그림, cast: 주문 그림(없으면 sprite를 쓰고 빛 효과로 구분), footPx: 128px 캔버스 안의 발끝 높이
 //   portrait: 마왕 탭 초상. crop이 있으면 sprite에서 [x, y, 크기]를 잘라 쓴다(머리 부분)
 //   speech: SPEECH에 더해 이 마왕만 하는 대사
+//   passive: 마왕 고유 패시브. kind로 동작한다(Game.lordPassive). lightningCurse 번개 맞은 용사 저주, soulVolley 처치 수마다 망령 타격, goldTouch 소환 강화 할인과 정예 골드
 const DEMON_LORDS = {
     rift: {
         id: 'rift', name: '균열의 군주', desc: '번개로 직접 싸운다. 부하들은 박수만 친다.',
         sprite: 'lord_rift', footPx: 120,
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: { lightningDamage: 1.25, skillCooldown: 0.9 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개에 맞은 용사는 4초간 받는 피해 +30%', duration: 4, takenMul: 1.3 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
@@ -75,6 +77,7 @@ const DEMON_LORDS = {
         sprite: 'lord_bone_queen', footPx: 119,
         portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
         effects: { attackSpeed: 0.1, xp: 0.25, maxHp: -3 },
+        passive: { kind: 'soulVolley', name: '망령 일제 사격', desc: '용사 25명을 쓰러뜨릴 때마다 망령이 앞선 용사 6명을 때림', every: 25, count: 6, base: 30, perRound: 8 },
         speech: {
             waveStart: ['얘들아, 간식 왔다. 뼈는 남기지 마.'],
             throneHit: ['내 왕관 삐뚤어졌잖아!'],
@@ -86,6 +89,7 @@ const DEMON_LORDS = {
         sprite: 'lord_gold_king', footPx: 120,
         portrait: { sprite: 'lord_gold_king', crop: [40, 6, 44] },
         effects: { startGold: 100, bounty: 1.2, maxHp: -5 },
+        passive: { kind: 'goldTouch', name: '황금 수완', desc: '소환 강화 비용 -25%, 정예와 보스 처치 골드 2배', upgradeMul: 0.75, eliteGold: 2 },
         speech: {
             waveStart: ['입장료는 냈나? 안 냈으면 목숨으로.'],
             throneHit: ['이 의자 얼마짜린 줄 알아?!'],

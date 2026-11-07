@@ -30,12 +30,14 @@ function killHero(hero, pos, attacker) {
     if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty;
+    const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1);
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
     G.stats.kills++;
     G.scoreKill(hero);
+    G.soulVolley();
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
     if (!hero.boss && !hero.elite) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
@@ -204,6 +206,15 @@ function resolveStrike(strike) {
     Fx.burst(strike.x, strike.y, '#d8f3ff', 42, 620, 0.5, 7);
     Fx.decals.push({ kind: 'scorch', x: strike.x, y: strike.y, age: 0, life: 9, radius: rule.radius * TILE * 0.72 });
     splashDamage(strike.x, strike.y, rule.radius * TILE, Game.lightningDamage(), '#bfe9ff');
+    // 균열의 군주: 번개에 맞은 용사에게 낙인
+    const mark = Game.lordPassive('lightningCurse');
+    if (mark) {
+        for (const h of Game.heroes) {
+            if (h.dead || h.waiting) continue;
+            const p = heroWorld(h);
+            if (distance(strike.x, strike.y, p.x, p.y) <= rule.radius * TILE) curseHero(h, mark.duration, mark.takenMul);
+        }
+    }
     Sfx.play('lightning');
 }
 

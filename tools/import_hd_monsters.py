@@ -41,7 +41,24 @@ for mid, cid in IDS.items():
     os.makedirs(os.path.join(OUT, sprite, 'rotations'), exist_ok=True)
     south.save(os.path.join(OUT, sprite, 'rotations', 'south.png'))
     clip = {'folder': 'idle', 'frames': 1, 'dirs': ['south', 'east'], 'footPx': foot}
-    art[mid] = {'sprite': sprite, 'cells': [1, 1], 'height': south.height, 'width': south.width, 'still': True, 'anim': {'idle': clip, 'attack': clip}}
+    # 베기 동작이 있으면 함께 받는다. 동작 캔버스는 더 크므로 첫 프레임의 발끝을 잰다
+    attack = clip
+    slash = sorted(x for x in names if '/animations/slash/' in x and x.endswith('.png'))
+    if slash:
+        attack_foot = {}
+        counts = {}
+        for x in slash:
+            facing = x.split('/')[-2]
+            if facing not in ('south', 'east'): continue
+            n = int(x.split('frame_')[1][:3])
+            im = Image.open(io.BytesIO(z.read(x))).convert('RGBA')
+            d = os.path.join(OUT, sprite, 'animations', 'slash', facing)
+            os.makedirs(d, exist_ok=True)
+            im.save(os.path.join(d, f'frame_{n:03d}.png'))
+            counts[facing] = max(counts.get(facing, 0), n + 1)
+            if n == 0: attack_foot[facing] = im.getchannel('A').point(lambda v: 255 if v > 40 else 0).getbbox()[3]
+        attack = {'folder': 'slash', 'frames': min(counts.values()), 'dirs': sorted(counts), 'footPx': attack_foot}
+    art[mid] = {'sprite': sprite, 'cells': [1, 1], 'height': south.height, 'width': south.width, 'still': not slash, 'anim': {'idle': clip, 'attack': attack}}
     print(mid, south.size)
 with open(os.path.join(ROOT, 'js', 'data', 'hd_monster_art.js'), 'w', encoding='utf8', newline='\n') as f:
     f.write('// tools/import_hd_monsters.py가 만든 표다. 고치지 말고 스크립트를 다시 실행한다.\n')

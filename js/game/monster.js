@@ -563,6 +563,9 @@ function monsterMelee(m, stats, first) {
         return distance(m.x, m.y, p.x, p.y) <= stats.range * TILE;
     }).sort((a, b) => remainingDistance(a) - remainingDistance(b));
     const targets = [first, ...inReach.slice(0, Math.max(1, stats.block) - 1)];
+    // 휘두르는 궤적: 몬스터와 첫 대상 사이에 크게
+    const fp = heroWorld(first);
+    Fx.anim('fx_cleave', (m.x + fp.x) / 2, (m.y + fp.y) / 2 - 24, 220 + Math.max(...monsterCells(m.type)) * 40, 0.3);
     for (const h of targets) {
         const p = heroWorld(h);
         Fx.anim('fx_cleave', p.x, p.y - 10, 130);
