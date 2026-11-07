@@ -35,7 +35,7 @@ vm.runInContext(`{
     }
     const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
     const names = vm.runInContext('Assets.names()', actx);
-    assert.strictEqual(ids.length, 16, 'sixteen equipment');
+    assert.strictEqual(ids.length, 27, 'six materials and twenty-one crafted items');
     for (const id of ids) {
         const file = path.join(root, 'assets/sprites', `equip_${id}.png`);
         assert(fs.existsSync(file), 'missing picture ' + file);
@@ -197,12 +197,26 @@ vm.runInContext(`{
     assert(!names.includes('ui_kit') && !names.includes('ui_buttons'), 'no parchment or wood kit');
     for (const f of ['js/ui/uikit.js', 'js/ui/ui.js', 'js/ui/hq.js']) assert(!/ui_kit|ui_buttons|UI_HP_BAR/.test(fs.readFileSync(path.join(root, f), 'utf8')), f + ' does not use the old kit');
 }
+// 옛 시험은 조합 전의 장비 표(16종, 재료를 겹치면 맞바꿈)로 돌린다. 조합은 맨 끝의 시험에서 지금 표로 본다
+ctx.LEGACY_EQUIP = JSON.parse(fs.readFileSync(path.join(root, 'tools/legacy_equipment.json'), 'utf8'));
+vm.runInContext(`
+var REAL_EQUIP = { table: JSON.parse(JSON.stringify(EQUIPMENT)), rules: Object.assign({}, EQUIP_RULES), recipes: EQUIP_RECIPES.slice() };
+function useEquip(table, rules, recipes) {
+    for (const k of Object.keys(EQUIPMENT)) delete EQUIPMENT[k];
+    Object.assign(EQUIPMENT, table);
+    for (const k of Object.keys(EQUIP_RULES)) delete EQUIP_RULES[k];
+    Object.assign(EQUIP_RULES, rules);
+    EQUIP_RECIPES.length = 0;
+    EQUIP_RECIPES.push(...recipes);
+}
+useEquip(LEGACY_EQUIP.equipment, LEGACY_EQUIP.rules, []);
+`, ctx);
 ctx.LEGACY_RULES = JSON.parse(fs.readFileSync(path.join(root, 'tools/legacy_block_rules.json'), 'utf8'));
 vm.runInContext(`
 // 옛 시험은 길을 막던 때의 표로 돌린다(유물 시험 앞에서 지금 표로 되돌린다)
 var REAL_RULES = { monsters: {}, equip: {}, lords: {}, roles: JSON.parse(JSON.stringify(MONSTER_ROLES)) };
 for (const m of Object.values(MONSTERS)) { REAL_RULES.monsters[m.id] = { stats: m.stats, abilities: m.abilities, skills: m.skills, desc: m.desc }; Object.assign(m, LEGACY_RULES.monsters[m.id]); }
-for (const e of Object.values(EQUIPMENT)) { REAL_RULES.equip[e.id] = e.effects; e.effects = LEGACY_RULES.equip[e.id]; }
+for (const e of Object.values(EQUIPMENT)) { REAL_RULES.equip[e.id] = e.effects; e.effects = LEGACY_RULES.equip[e.id] || e.effects; }
 for (const l of Object.values(DEMON_LORDS)) { REAL_RULES.lords[l.id] = l.effects; l.effects = LEGACY_RULES.lords[l.id]; }
 Object.assign(MONSTER_ROLES, LEGACY_RULES.roles);
 // 칸 모양은 맨 끝 시험에서 본다. 그 앞 시험은 모두 1칸으로 돌린다
@@ -2246,9 +2260,8 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     // 정예 드롭: 25% 확률, 일반 75% 희귀 25%. 난수 순서: 드롭, 등급, 장비
     Game.equipBag = [];
     assert(withRandom([0.25], () => Game.eliteDrop(0, 0)) === null && Game.equipBag.length === 0, 'no drop from 25%');
-    assert(withRandom([0.24, 0.25, 0], () => Game.eliteDrop(0, 0)).id === 'sword', 'common drop');
-    assert(withRandom([0, 0.24, 0.99], () => Game.eliteDrop(0, 0)).id === 'tome', 'rare drop');
-    assert.strictEqual(Game.equipBag.join(), 'sword,tome');
+    assert(withRandom([0.24, 0], () => Game.eliteDrop(0, 0)).id === 'sword', 'drop is a material');
+    assert.strictEqual(Game.equipBag.join(), 'sword');
     for (let i = 0; i < 200; i++) {
         Game.equipBag = [];
         const d = Game.eliteDrop(0, 0);
@@ -2262,9 +2275,9 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.heroes = [elite];
     Fx.notice = null;
     withRandom(0, () => damageHero(elite, 1e9));
-    assert(elite.dead && Game.equipBag.join() === 'axe' && Fx.drops.some(d => d.id === 'axe'), 'elite kill drops equipment');
+    assert(elite.dead && Game.equipBag.join() === 'sword' && Fx.drops.some(d => d.id === 'sword'), 'elite kill drops equipment');
     UI.update(0);
-    assert(UI.toast && UI.toast.text.includes('룬 전투 도끼'), 'drop notice');
+    assert(UI.toast && UI.toast.text.includes('저주받은 검'), 'drop notice');
     const grunt = createHero('warrior', 2, 0, false);
     grunt.waiting = false;
     Game.heroes = [grunt];
@@ -3446,7 +3459,7 @@ Game.gainEquip('sword');
 same(Meta.data.equips, ['sword'], 'recorded once');
 Game.bossReward = { cards: [{ kind: 'equip', id: 'crown' }] };
 assert(Game.pickBossReward(0).ok && Meta.hasEquip('crown'), 'boss reward equipment records');
-withRandom([0, 0, 0], () => Game.eliteDrop(100, 100)); // 희귀 첫 장비(룬 전투 도끼)
+withRandom([0, 0.2], () => Game.eliteDrop(100, 100)); // 두 번째 재료(보랏빛 반지)
 assert.strictEqual(Meta.data.equips.length, 3, 'elite drop records');
 while (!Game.bagFull()) Game.equipBag.push('bow');
 Game.gainEquip('cape');
@@ -5922,6 +5935,60 @@ for (const lord of Object.keys(DEMON_LORDS)) {
 Game.reset();
 console.log('smoke ok: lord powers');
 }`, ctx, { filename: 'smoke-powers' });
+
+// ----- 장비 조합 -----
+vm.runInContext(`{
+useEquip(REAL_EQUIP.table, REAL_EQUIP.rules, REAL_EQUIP.recipes);
+assert.strictEqual(EQUIP_BASES.length, 6);
+assert.strictEqual(EQUIP_RECIPES.length, 21);
+const made = new Set(EQUIP_RECIPES.map(r => r[2]));
+assert.strictEqual(made.size, 21, 'each pair makes its own item');
+for (const a of EQUIP_BASES) for (const b of EQUIP_BASES) { const r = craftResult(a, b); assert(r && EQUIPMENT[r], a + '+' + b); assert.strictEqual(r, craftResult(b, a)); assert(EQUIPMENT[r].grade !== 'common', r); }
+assert.strictEqual(Object.keys(EQUIPMENT).filter(id => EQUIPMENT[id].grade === 'common').length, 6, 'only materials are common');
+assert.strictEqual(craftResult('axe', 'sword'), null, 'crafted items do not craft');
+for (const id of Object.keys(EQUIPMENT)) assert(equipEffectText(id).length > 0, id + ' has text');
+// 몬스터 위에서 조합: 재료 + 재료
+Game.reset({ lord: 'rift', relics: [] }); Game.state = 'prep'; Game.gold = 9999;
+const m = Game.place('orc_guard', 3, 6);
+Game.equipBag = ['sword', 'ring', 'axe', 'bow'];
+assert(Game.act({ kind: 'equip', monster: m, i: 0 }).ok && m.equip === 'sword', 'fit a material');
+const res = Game.act({ kind: 'equip', monster: m, i: 0 });
+assert(res.ok && res.crafted && m.equip === 'gauntlet', 'material on material crafts');
+assert.strictEqual(JSON.stringify(Game.equipBag), JSON.stringify(['axe', 'bow']), 'used material leaves the bag');
+// 완성 장비는 맞바꾼다
+const swap = Game.act({ kind: 'equip', monster: m, i: 1 });
+assert(swap.ok && !swap.crafted && swap.swapped === 'gauntlet' && m.equip === 'bow', 'crafted item swaps');
+// 보관함에서 조합
+Game.equipBag = ['bow', 'axe', 'boots'];
+assert(!Game.act({ kind: 'craft', a: 0, b: 1 }).ok, 'crafted item is not a material');
+assert(!Game.act({ kind: 'craft', a: 0, b: 0 }).ok, 'same slot');
+assert(Game.act({ kind: 'craft', a: 2, b: 0 }).ok);
+assert.strictEqual(JSON.stringify(Game.equipBag), JSON.stringify(['windBoots', 'axe']), 'bag craft');
+// 효과: 정예 피해, 처치 골드, 적중 효과
+Game.state = 'prep'; Game.startWave();
+const hero = Game.heroes.find(h => !h.boss);
+hero.waiting = false; hero.armor = 0; hero.hp = hero.maxHp = 1e6;
+hero.elite = true;
+damageHero(hero, 100, 0, 0, null, { equip: 'fireCrown', type: 'orc_guard' });
+assert(Math.abs(hero.maxHp - hero.hp - 170) < 1e-6, 'bossDmg on elite');
+hero.elite = false; hero.hp = hero.maxHp;
+damageHero(hero, 100, 0, 0, null, { equip: 'fireCrown', type: 'orc_guard' });
+assert(Math.abs(hero.maxHp - hero.hp - 100) < 1e-6, 'no bossDmg on normal');
+monsterHitHero('orc_guard', hero, { equip: 'fireCrown', type: 'orc_guard' });
+assert(hero.burn === 3, 'fire crown burns');
+monsterHitHero('orc_guard', hero, { equip: 'frostArmor', type: 'orc_guard' });
+assert(hero.slow > 0 && hero.slowMul === 0.8, 'frost armor slows');
+monsterHitHero('orc_guard', hero, { equip: 'curseGlove', type: 'orc_guard' });
+assert(hero.curse === 3 && hero.curseMul === 1.15, 'curse glove');
+const killGold = (equip) => { const h = Game.heroes.find(x => !x.dead && !x.boss); h.waiting = false; h.elite = false; h.bounty = 10; h.hp = 1; h.armor = 0; Game.goldLeft = 0; Game.gold = 0; damageHero(h, 10, 0, 0, null, { equip, type: 'orc_guard' }); return Game.gold; };
+const g0 = killGold(null), g1 = killGold('boarBoots');
+assert.strictEqual(g1, g0 * 2, 'gold effect doubles the bounty');
+// 정예 드롭은 재료만
+Game.mods.eliteDrop = 1;
+for (let i = 0; i < 30; i++) { Game.equipBag = []; Game.eliteDrop(0, 0); assert(EQUIP_BASES.includes(Game.equipBag[0]), 'drop is a material'); }
+Game.reset();
+console.log('smoke ok: equipment crafting');
+}`, ctx, { filename: 'smoke-craft' });
 
 // 지금 해금 순서(옛 시험용으로 바꾸지 않은 표)
 {

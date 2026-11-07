@@ -198,6 +198,13 @@ function monsterEnrage(m) {
 // owner는 쏜 몬스터(화상 피해로 쓰러뜨리면 처치 경험치를 받는다. 없어도 된다)
 function monsterHitHero(type, hero, owner) {
     if (hero.dead) return;
+    // 장비의 적중 효과
+    const eq = owner && owner.equip && EQUIPMENT[owner.equip].onHit;
+    if (eq) {
+        if (eq.curse) curseHero(hero, eq.curse[0], eq.curse[1]);
+        if (eq.burn) burnHero(hero, eq.burn[0], eq.burn[1], owner);
+        if (eq.slow) slowHero(hero, eq.slow[0], eq.slow[1]);
+    }
     const curse = monsterAbility(type, 'curseShot');
     if (curse) curseHero(hero, curse.duration, curse.takenMul);
     const burn = monsterAbility(type, 'burnShot');

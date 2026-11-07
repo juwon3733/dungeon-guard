@@ -580,6 +580,18 @@ const Game = {
         const id = this.equipBag[index];
         if (!id) return { ok: false, reason: 'index' };
         const old = m.equip;
+        // 재료 위에 재료를 놓으면 완성 장비가 된다. 그 밖에는 맞바꾼다
+        const crafted = old ? craftResult(old, id) : null;
+        if (crafted) {
+            this.equipBag.splice(index, 1);
+            setMonsterEquip(m, crafted);
+            Meta.seeEquip(crafted);
+            Fx.notice = `조합: ${EQUIPMENT[crafted].name}`;
+            const fx = (m.down > 0 ? m.homeY : m.y) + MONSTER_FOOT;
+            Fx.anim('fx_blastGold', m.x, fx - 40, 180, 0.4);
+            Sfx.play('upgrade');
+            return { ok: true, id: crafted, crafted: true, swapped: null };
+        }
         if (old) this.equipBag[index] = old;
         else this.equipBag.splice(index, 1);
         setMonsterEquip(m, id);
@@ -590,6 +602,20 @@ const Game = {
         Fx.rise(x, footY, color, 14, 30, 0.5);
         Sfx.play('upgrade');
         return { ok: true, id, swapped: old || null };
+    },
+
+    // 보관함의 재료 두 개를 합친다(a, b는 칸 번호). 실패하면 { ok: false, reason: 'state' | 'index' | 'recipe' }
+    craftBag(a, b) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (a === b || !this.equipBag[a] || !this.equipBag[b]) return { ok: false, reason: 'index' };
+        const id = craftResult(this.equipBag[a], this.equipBag[b]);
+        if (!id) return { ok: false, reason: 'recipe' };
+        this.equipBag[Math.min(a, b)] = id;
+        this.equipBag.splice(Math.max(a, b), 1);
+        Meta.seeEquip(id);
+        Fx.notice = `조합: ${EQUIPMENT[id].name}`;
+        Sfx.play('upgrade');
+        return { ok: true, id };
     },
 
     // 낀 장비를 빼 보관함으로 돌려보낸다. 보관함이 가득 차면 빼지 않는다({ ok: false, reason: 'full' })
@@ -623,15 +649,13 @@ const Game = {
         return { keep, back };
     },
 
-    // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop(마왕과 유물의 eliteDrop을 더한다) 확률로 장비(일반 또는 희귀)를 떨어뜨린다.
-    // Math.random을 세 번까지 쓴다
+    // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop(마왕과 유물의 eliteDrop을 더한다) 확률로 재료를 떨어뜨린다
     eliteDrop(x, y) {
         const R = EQUIP_RULES;
         if (rng('reward') >= R.eliteDrop + this.mods.eliteDrop) return null;
-        const grade = rng('reward') < R.eliteRareChance ? 'rare' : 'common';
-        const id = rngItem('reward', equipPool(grade));
+        const id = rngItem('reward', EQUIP_BASES);
         const res = this.gainEquip(id, x, y);
-        if (res.kind === 'bag') Fx.notice = `장비 획득: ${EQUIPMENT[id].name}`;
+        if (res.kind === 'bag') Fx.notice = `재료: ${EQUIPMENT[id].name}`;
         return res;
     },
 
@@ -948,6 +972,7 @@ const Game = {
             case 'autoMerge': this.autoMerge = !!cmd.on; return { ok: true };
             case 'pickReward': return this.pickBossReward(cmd.i);
             case 'equip': return this.equipMonster(cmd.monster, cmd.i);
+            case 'craft': return this.craftBag(cmd.a, cmd.b);
             case 'unequip': return this.unequipMonster(cmd.monster);
             case 'upgrade': return { ok: !!this.upgrade(cmd.monster, cmd.branch) };
             case 'lightning': return { ok: !!castLightning(cmd.x, cmd.y) };

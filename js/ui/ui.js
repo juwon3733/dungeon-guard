@@ -845,6 +845,17 @@ const UI = {
     // 끈 장비를 놓는다: 몬스터 위면 끼우고(끼고 있으면 맞바꾼다), 아니면 보관함에 그대로 남는다
     dropEquip(x, y) {
         const d = this.equipDrag;
+        // 보관함의 다른 칸에 놓으면 조합한다
+        for (let i = 0; i < EQUIP_RULES.slots; i++) {
+            const r = this.bagRect(i);
+            if (i === d.index || !Game.equipBag[i] || x < r.x || x > r.x + r.w || y < r.y || y > r.y + r.h) continue;
+            const made = Game.act({ kind: 'craft', a: d.index, b: i });
+            if (!made.ok) {
+                this.showToast('조합할 수 없음');
+                Sfx.play('mergeFail');
+            }
+            return made;
+        }
         const m = this.equipTargetAt(x, y);
         if (!m) {
             if (y <= GAME_HEIGHT - BAR_H) {
@@ -2151,6 +2162,22 @@ const UI = {
         UIKit.text(ctx, `${G.equipBag.length}/${EQUIP_RULES.slots}`, ix + 24, y + 92, 22, G.bagFull() ? UI_THEME.bad : UI_THEME.cream, 'center', 'bold');
     },
 
+    // 재료 하나로 만들 수 있는 것: 상대 재료(작게)와 결과를 한 줄로. 보관함에 상대 재료가 있으면 밝다
+    drawCraftRow(ctx, id, x, y) {
+        if (!EQUIP_BASES.includes(id)) return;
+        const left = clamp(x, 12, GAME_WIDTH - 500);
+        UIKit.note(ctx, left, y, 488, 76);
+        EQUIP_BASES.forEach((other, i) => {
+            const cx = left + 16 + i * 78;
+            const have = Game.equipBag.filter(e => e === other).length >= (other === id ? 2 : 1);
+            ctx.save();
+            ctx.globalAlpha = have ? 1 : 0.4;
+            this.drawEquipIcon(ctx, craftResult(id, other), cx + 22, y + 14, 1);
+            this.drawEquipIcon(ctx, other, cx, y + 40, 0.5);
+            ctx.restore();
+        });
+    },
+
     // 장비 설명: 보관함 칸이나 팝업의 장비 칸 위에 마우스를 올렸을 때
     drawEquipTips(ctx) {
         if (this.equipDrag || Game.bossReward) return;
@@ -2162,6 +2189,7 @@ const UI = {
         const b = this.hoverButton;
         if (b && b.bagSlot !== undefined && Game.equipBag[b.bagSlot]) {
             tip(Game.equipBag[b.bagSlot], b.x - 120, GAME_HEIGHT - BAR_H - 92);
+            this.drawCraftRow(ctx, Game.equipBag[b.bagSlot], b.x - 120, GAME_HEIGHT - BAR_H - 176);
         }
         // 마왕 탭의 유물 칸
         const relic = b && b.barRelic !== undefined ? Game.relics[b.barRelic] : null;
@@ -3152,7 +3180,8 @@ const UI = {
             const m = this.equipTarget;
             if (m) {
                 const name = MONSTERS[m.type].name;
-                const text = m.equip ? `맞바꾸기 → ${name} (${EQUIPMENT[m.equip].name}은 보관함으로)` : `끼우기 → ${name}`;
+                const made = m.equip ? craftResult(m.equip, ed.id) : null;
+                const text = made ? `조합 → ${EQUIPMENT[made].name}` : (m.equip ? `맞바꾸기 → ${name}` : `끼우기 → ${name}`);
                 ctx.font = `bold 24px ${UI_FONT}`;
                 const w = Math.ceil((ctx.measureText(text).width + 48) / 8) * 8;
                 const x = clamp(ed.x, w / 2 + 12, GAME_WIDTH - w / 2 - 12);
@@ -3639,6 +3668,10 @@ const UI = {
 
     // 금테 상세 창(Asteria 대장간 오른쪽 창처럼): 남색 판에 굵은 금선
     drawDetailFrame(ctx, x, y, w, h) {
+        if (UIKit.ironSkin) {
+            UIKit.hudFrame(ctx, 'hud_panel', x, y, w, h, 26);
+            return;
+        }
         const T = UI_THEME;
         x = Math.round(x);
         y = Math.round(y);

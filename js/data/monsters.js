@@ -70,40 +70,69 @@ const BOSS_REWARD_RULES = {
     gold: 300
 };
 
-// 장비: 몬스터마다 1칸. 효과는 기본 수치에 곱하는 비율이다(0.2 = +20%). monsterStats 한 곳에서 랭크 배율 뒤에 곱한다.
-//   hp 체력, damage 피해, speed 공격 속도(공격 간격을 1 + speed로 나눈다), range 사거리, xp 처치 경험치
+// 장비: 몬스터마다 1칸. 재료(common) 6종을 2개 겹치면 완성 장비가 된다(EQUIP_RECIPES, 21가지).
+// 효과는 기본 수치에 곱하는 비율이다(0.2 = +20%). monsterStats 한 곳에서 랭크 배율 뒤에 곱한다.
+//   hp 체력, damage 피해, speed 공격 속도(공격 간격을 1 + speed로 나눈다), range 사거리, xp 처치 경험치,
+//   bossDmg 정예와 보스에게 주는 피해, gold 처치 골드
+//   onHit: 맞은 용사에게 거는 효과 { burn: [초, 초당 피해], slow: [초, 이동 배율], curse: [초, 받는 피해 배율] }, note: 그 설명
 //   grade는 MONSTER_GRADES의 열쇠(색과 이름을 함께 쓴다). 그림은 assets/sprites/equip_<id>.png(48px)
-const EQUIP_EFFECTS = { hp: '체력', damage: '피해', speed: '공격 속도', range: '사거리', xp: '처치 경험치' };
+const EQUIP_EFFECTS = { hp: '체력', damage: '피해', speed: '공격 속도', range: '사거리', xp: '처치 경험치', bossDmg: '정예·보스 피해', gold: '처치 골드' };
 const EQUIPMENT = {
+    // 재료
     sword: { id: 'sword', name: '저주받은 검', grade: 'common', effects: { damage: 0.2 } },
-    bow: { id: 'bow', name: '뼈 활', grade: 'common', effects: { range: 0.15 } },
-    armor: { id: 'armor', name: '강철 흉갑', grade: 'common', effects: { damage: 0.15 } },
     ring: { id: 'ring', name: '보랏빛 반지', grade: 'common', effects: { speed: 0.15 } },
-    boots: { id: 'boots', name: '날개 장화', grade: 'common', effects: { speed: 0.1, range: 0.05 } },
-    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { damage: 0.175 } },
-    axe: { id: 'axe', name: '룬 전투 도끼', grade: 'rare', effects: { damage: 0.4 } },
-    shield: { id: 'shield', name: '해골 방패', grade: 'rare', effects: { damage: 0.3 } },
-    helmet: { id: 'helmet', name: '뿔 투구', grade: 'rare', effects: { damage: 0.35 } },
-    amulet: { id: 'amulet', name: '핏빛 목걸이', grade: 'rare', effects: { speed: 0.3 } },
-    tome: { id: 'tome', name: '고대 주문서', grade: 'rare', effects: { range: 0.25, damage: 0.15 } },
-    gauntlet: { id: 'gauntlet', name: '악마 손아귀', grade: 'epic', effects: { damage: 0.6, speed: 0.15 } },
-    staff: { id: 'staff', name: '해골 지팡이', grade: 'epic', effects: { damage: 0.4, range: 0.3 } },
-    cape: { id: 'cape', name: '어둠의 망토', grade: 'epic', effects: { damage: 0.4, speed: 0.15 } },
-    crystal: { id: 'crystal', name: '영혼 수정', grade: 'epic', effects: { speed: 0.3, xp: 1 } },
-    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { damage: 0.6, xp: 0.5 } }
+    bow: { id: 'bow', name: '뼈 활', grade: 'common', effects: { range: 0.15 } },
+    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { xp: 0.5 } },
+    armor: { id: 'armor', name: '강철 흉갑', grade: 'common', effects: { bossDmg: 0.25 } },
+    boots: { id: 'boots', name: '날개 장화', grade: 'common', effects: { gold: 0.3 } },
+    // 완성
+    axe: { id: 'axe', name: '룬 전투 도끼', grade: 'rare', effects: { damage: 0.5 } },
+    gauntlet: { id: 'gauntlet', name: '악마 손아귀', grade: 'epic', effects: { damage: 0.35, speed: 0.25 } },
+    staff: { id: 'staff', name: '해골 지팡이', grade: 'epic', effects: { damage: 0.3, range: 0.25 } },
+    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { damage: 0.4, xp: 0.75 } },
+    shield: { id: 'shield', name: '해골 방패', grade: 'rare', effects: { damage: 0.25, bossDmg: 0.4 } },
+    helmet: { id: 'helmet', name: '뿔 투구', grade: 'rare', effects: { damage: 0.3, gold: 0.5 } },
+    amulet: { id: 'amulet', name: '핏빛 목걸이', grade: 'rare', effects: { speed: 0.45 } },
+    cape: { id: 'cape', name: '어둠의 망토', grade: 'rare', effects: { speed: 0.25, range: 0.25 } },
+    crystal: { id: 'crystal', name: '영혼 수정', grade: 'epic', effects: { speed: 0.25, xp: 1 } },
+    frostArmor: { id: 'frostArmor', name: '서리 갑주', grade: 'epic', effects: { speed: 0.2, bossDmg: 0.2 }, onHit: { slow: [1.5, 0.8] }, note: '맞은 용사 이동 -20%' },
+    stormBoots: { id: 'stormBoots', name: '폭풍 장화', grade: 'rare', effects: { speed: 0.25, gold: 0.3 } },
+    tome: { id: 'tome', name: '고대 주문서', grade: 'rare', effects: { range: 0.5 } },
+    moonCharm: { id: 'moonCharm', name: '별빛 목걸이', grade: 'rare', effects: { range: 0.2, xp: 0.5 } },
+    hunterHelm: { id: 'hunterHelm', name: '사냥꾼 투구', grade: 'rare', effects: { range: 0.2, bossDmg: 0.4 } },
+    windBoots: { id: 'windBoots', name: '바람 장화', grade: 'rare', effects: { range: 0.2, gold: 0.3 } },
+    sageOrb: { id: 'sageOrb', name: '현자의 보주', grade: 'rare', effects: { xp: 1.5 } },
+    curseGlove: { id: 'curseGlove', name: '저주 장갑', grade: 'epic', effects: { xp: 0.4 }, onHit: { curse: [3, 1.15] }, note: '맞은 용사 3초간 받는 피해 +15%' },
+    goldHelm: { id: 'goldHelm', name: '황금 투구', grade: 'rare', effects: { xp: 0.5, gold: 0.5 } },
+    fireCrown: { id: 'fireCrown', name: '불꽃 왕관', grade: 'epic', effects: { bossDmg: 0.7 }, onHit: { burn: [3, 8] }, note: '맞은 용사 3초간 화상' },
+    bloodPlate: { id: 'bloodPlate', name: '핏빛 갑옷', grade: 'rare', effects: { bossDmg: 0.3, gold: 0.4 } },
+    boarBoots: { id: 'boarBoots', name: '황금 장화', grade: 'rare', effects: { gold: 1 } }
 };
+const EQUIP_BASES = ['sword', 'ring', 'bow', 'elixir', 'armor', 'boots'];
+const EQUIP_RECIPES = [
+    ['sword', 'sword', 'axe'], ['sword', 'ring', 'gauntlet'], ['sword', 'bow', 'staff'], ['sword', 'elixir', 'crown'], ['sword', 'armor', 'shield'], ['sword', 'boots', 'helmet'],
+    ['ring', 'ring', 'amulet'], ['ring', 'bow', 'cape'], ['ring', 'elixir', 'crystal'], ['ring', 'armor', 'frostArmor'], ['ring', 'boots', 'stormBoots'],
+    ['bow', 'bow', 'tome'], ['bow', 'elixir', 'moonCharm'], ['bow', 'armor', 'hunterHelm'], ['bow', 'boots', 'windBoots'],
+    ['elixir', 'elixir', 'sageOrb'], ['elixir', 'armor', 'curseGlove'], ['elixir', 'boots', 'goldHelm'],
+    ['armor', 'armor', 'fireCrown'], ['armor', 'boots', 'bloodPlate'],
+    ['boots', 'boots', 'boarBoots']
+];
+// 재료 두 개로 만드는 장비(순서 무관). 없으면 null
+function craftResult(a, b) {
+    const r = EQUIP_RECIPES.find(x => (x[0] === a && x[1] === b) || (x[0] === b && x[1] === a));
+    return r ? r[2] : null;
+}
 
 // 장비 얻기와 보관함
 //   slots: 보관함 칸 수. 가득 차 있으면 들어올 장비(정예 드롭, 합치기·제물·판매로 돌아오는 장비)는 fullGold 골드로 바뀐다.
 //     보스 보상의 장비 카드는 꺼져 고를 수 없다
-//   rewardEpicChance: 보스 보상 장비 카드가 영웅일 확률(아니면 희귀)
-//   eliteDrop: 정예 용사를 처치하면 장비를 떨어뜨릴 확률, eliteRareChance: 그 장비가 희귀일 확률(아니면 일반)
+//   rewardEpicChance: 보스 보상 장비 카드가 영웅일 확률(아니면 희귀). 조합을 건너뛰지 않게 낮게 둔다
+//   eliteDrop: 정예 용사를 처치하면 재료를 떨어뜨릴 확률
 const EQUIP_RULES = {
     slots: 6,
     fullGold: 30,
-    rewardEpicChance: 0.4,
-    eliteDrop: 0.25,
-    eliteRareChance: 0.25
+    rewardEpicChance: 0.1,
+    eliteDrop: 0.35
 };
 
 // 랭크: 개체의 성장(등급은 종류에 고정). 소환하면 첫 단계(D)이고 처치 경험치로만 오른다(합치기로는 오르지 않는다).
@@ -1006,7 +1035,9 @@ function equipEffect(id, key) {
 // "피해 +20%, 사거리 +15%". EQUIP_EFFECTS 순서로 적는다
 function equipEffectText(id) {
     const e = EQUIPMENT[id].effects;
-    return Object.keys(EQUIP_EFFECTS).filter(k => e[k]).map(k => `${EQUIP_EFFECTS[k]} +${Math.round(e[k] * 100)}%`).join(', ');
+    const list = Object.keys(EQUIP_EFFECTS).filter(k => e[k]).map(k => `${EQUIP_EFFECTS[k]} +${Math.round(e[k] * 100)}%`);
+    if (EQUIPMENT[id].note) list.push(EQUIPMENT[id].note);
+    return list.join(', ');
 }
 
 // 등급이 높은 쪽 장비. 같으면 a(합치기에서는 먼저 끌어온 쪽). 둘 다 없으면 null

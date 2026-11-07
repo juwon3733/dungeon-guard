@@ -15,7 +15,8 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.dead) return 0;
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
-    const base = dot ? amount : Math.max(1, amount - (hero.armor || 0));
+    const big = hero.boss || hero.elite ? 1 + equipEffect(attacker && attacker.equip, 'bossDmg') : 1; // 장비: 정예와 보스 피해
+    const base = dot ? amount : Math.max(1, amount * big - (hero.armor || 0));
     const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
     hero.hp -= dealt;
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
@@ -49,7 +50,7 @@ function killHero(hero, pos, attacker) {
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1);
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
