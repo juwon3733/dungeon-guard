@@ -205,14 +205,16 @@ const Game = {
     powerLinked(id) {
         return this.powerMap().edges.some(([a, b]) => (a === id && (b === 'core' || this.power(b))) || (b === id && (a === 'core' || this.power(a))));
     },
-    // 찍을 수 있는지: { ok, cost, reason }. reason: none | owned | locked(이어지지 않음) | exclusive | limit | mana
+    // 찍을 수 있는지: { ok, cost, reason }. reason: none | owned | branch(다른 갈래를 찍음) | tier(그 겹에서 이미 고름) | locked(이어지지 않음) | limit | mana
     powerCheck(id) {
         const at = this.powerNode(id);
         if (!at) return { ok: false, reason: 'none' };
         if (this.power(id)) return { ok: false, reason: 'owned' };
         const cost = POWER_RULES.tierCost[at.tier];
+        const other = this.lordPowers().find(b => b !== at.branch && b.tiers.some(t => t.some(n => this.power(n.id))));
+        if (other) return { ok: false, cost, reason: 'branch' };
+        if (at.branch.tiers[at.tier].some(n => this.power(n.id))) return { ok: false, cost, reason: 'tier' };
         if (!this.powerLinked(id)) return { ok: false, cost, reason: 'locked' };
-        if (at.tier === at.branch.tiers.length - 1 && at.branch.tiers[at.tier].some(n => this.power(n.id))) return { ok: false, cost, reason: 'exclusive' };
         if (this.powerCount() >= POWER_RULES.maxNodes) return { ok: false, cost, reason: 'limit' };
         return { ok: this.mana >= cost, cost, reason: this.mana >= cost ? null : 'mana' };
     },
