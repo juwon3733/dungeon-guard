@@ -241,9 +241,9 @@ const ABILITY_KINDS = {
 function plClip(folder, frames, south, east, north) {
     return { folder, frames, dirs: PL_DIRS, footPx: { south, east, north } };
 }
-// Asteria 그림 하나(js/data/asteria_art.js): 그림 1px이 화면 1px(세계 배율 1.5)이다. breathe로 숨 쉬기와 내지르기를 코드가 그린다
+// Asteria 그림(js/data/asteria_art.js)이나 88px로 새로 그린 그림(js/data/hd_monster_art.js) 하나: 그림 1px이 화면 1px(세계 배율 1.5)이다. breathe로 숨 쉬기와 내지르기를 코드가 그린다
 function astArt(id, opts) {
-    const a = ASTERIA_ART[id];
+    const a = ASTERIA_ART[id] || HD_MONSTER_ART[id];
     const scale = 1.5;
     return Object.assign({ scale, barY: Math.round(a.height * scale) + 14, idleFps: 0, glow: '200,200,255', breathe: true, cells: a.cells,
         hand: { x: Math.round(a.width * scale * 0.3), y: Math.round(a.height * scale * 0.6) }, anim: a.anim }, opts);
@@ -272,17 +272,10 @@ function monsterCovers(m, col, row) {
     return col >= m.col && col < m.col + w && row <= m.row && row > m.row - h;
 }
 
-// 맞는 Asteria 그림이 없어 PixelLab으로 만든 몬스터 4종의 그림
-const PL_NEW_ART = {
-    goblin_thrower: { scale: PIXEL_SCALE, barY: 138, idleFps: 3, glow: '255,190,90', hand: { x: 60, y: 75 }, anim: { idle: plClip('idle', 5, 57, 57, 54), attack: plClip('throw', 6, 57, 57, 54) } },
-    war_drummer: { scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,120,70', shot: 'bolt', hand: { x: 45, y: 80 }, anim: { idle: plClip('idle', 5, 57, 57, 56), attack: plClip('drum', 6, 57, 57, 56) } },
-    ogre_crusher: { scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '255,170,90', anim: { idle: plClip('walking', 6, 63, 63, 62), attack: plClip('slash', 6, 56, 57, 56), walk: plClip('walking', 6, 63, 63, 62) } },
-    succubus: { scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '255,90,190', shot: 'bolt', hand: { x: 60, y: 80 }, anim: { idle: plClip('idle', 5, 57, 57, 56), attack: plClip('cast', 6, 57, 57, 56) } },
-};
 const MONSTERS = {
     orc_guard: {
         id: 'orc_guard', name: '오크 경비병', role: 'tank', family: 'orc', grade: 'common',
-        sprite: 'pl_orc_guard', cost: 70,
+        sprite: HD_MONSTER_ART.orc_guard.sprite, cost: 70,
         stats: { hp: 120, damage: 8, interval: 1.0, range: 2, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
         desc: '길 옆에 서서 곁을 지나는 용사 3명을 한꺼번에 때립니다.',
@@ -290,11 +283,11 @@ const MONSTERS = {
             A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
             B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
         },
-        art: { scale: PIXEL_SCALE, barY: 126, idleFps: 0, glow: '255,130,70', anim: { idle: ORC_ART.anim.walk, walk: ORC_ART.anim.walk, attack: ORC_ART.anim.attack } }
+        art: astArt('orc_guard', { glow: '255,130,70' })
     },
     skeleton_archer: {
         id: 'skeleton_archer', name: '스켈레톤 궁수', role: 'ranged', family: 'undead', grade: 'common',
-        sprite: 'pl_mon_skeleton_archer', cost: 50,
+        sprite: HD_MONSTER_ART.skeleton_archer.sprite, cost: 50,
         stats: { hp: 40, damage: 8, interval: 0.8, range: 3 },
         abilities: [], unlock: 'start',
         desc: '길 옆에서 가장 앞선 용사를 빠르게 쏩니다.',
@@ -302,17 +295,11 @@ const MONSTERS = {
             A: { name: '연사', desc: '공격 간격 0.4초', interval: 0.4 },
             B: { name: '저격', desc: '피해 3배, 사거리 5', damageMul: 3, range: 5, heavy: true }
         },
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '120,170,255', hand: { x: 60, y: 75 },
-            anim: {
-                idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
-                attack: { folder: 'shoot', frames: 6, dirs: PL_DIRS, footPx: { south: 59, east: 56, north: 56 } }
-            }
-        }
+        art: astArt('skeleton_archer', { glow: '120,170,255' })
     },
     dark_mage: {
         id: 'dark_mage', name: '암흑 마법사', role: 'area', family: 'demon', grade: 'common',
-        sprite: 'pl_mon_dark_mage', cost: 100,
+        sprite: HD_MONSTER_ART.dark_mage.sprite, cost: 100,
         stats: { hp: 30, damage: 20, interval: 2.0, range: 2.5, splash: 1 },
         abilities: [], unlock: 'start',
         desc: '길 옆에서 마력 구체로 무리를 함께 공격합니다.',
@@ -320,28 +307,15 @@ const MONSTERS = {
             A: { name: '폭발', desc: '피해 범위 반경 2', splash: 2 },
             B: { name: '관통', desc: '일직선 빔으로 공격', beam: true }
         },
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '190,90,255', hand: { x: 51, y: 60 },
-            anim: {
-                idle: { folder: 'idle', frames: 4, dirs: PL_DIRS, footPx: { south: 63, east: 62, north: 62 } },
-                attack: { folder: 'cast', frames: 6, dirs: PL_DIRS, footPx: { south: 56, east: 57, north: 56 } }
-            }
-        }
+        art: astArt('dark_mage', { glow: '190,90,255' })
     },
     orc_berserker: {
         id: 'orc_berserker', name: '오크 광전사', role: 'melee', family: 'orc', grade: 'rare',
-        sprite: 'pl_mon_orc_berserker', cost: 120,
+        sprite: HD_MONSTER_ART.orc_berserker.sprite, cost: 120,
         stats: { hp: 180, damage: 22, interval: 0.7, range: 2.4, block: 2, respawn: 8 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
         desc: '곁의 용사 2명을 빠르게 베고, 쓰러뜨릴수록 더 빨라집니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 138, idleFps: 0, glow: '255,110,60',
-            anim: {
-                idle: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
-                walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 61, east: 54, north: 60 } },
-                attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 53, north: 53 } }
-            }
-        }
+        art: astArt('orc_berserker', { glow: '255,110,60' })
     },
     curse_shooter: {
         id: 'curse_shooter', name: '저주 사수', role: 'ranged', family: 'undead', grade: 'rare',
@@ -372,14 +346,11 @@ const MONSTERS = {
     // ----- 몬스터 확장 16종(2026-11-06, 수치 초안) -----
     goblin_spearman: {
         id: 'goblin_spearman', name: '고블린 창병', role: 'melee', family: 'orc', grade: 'common',
-        sprite: 'pl_mon_goblin_spearman', cost: 60,
+        sprite: HD_MONSTER_ART.goblin_spearman.sprite, cost: 60,
         stats: { hp: 70, damage: 12, interval: 0.7, range: 2.4, block: 1, respawn: 6 },
         abilities: [], unlock: 'start',
         desc: '길 옆에 서서 지나가는 용사를 창으로 빠르게 찌릅니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 156, idleFps: 0, glow: '130,235,80',
-            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
-        }
+        art: astArt('goblin_spearman', { glow: '130,235,80' })
     },
     zombie: {
         id: 'zombie', name: '좀비', role: 'tank', family: 'undead', grade: 'common',
@@ -399,14 +370,11 @@ const MONSTERS = {
     },
     gnoll_hunter: {
         id: 'gnoll_hunter', name: '그놀 사냥꾼', role: 'ranged', family: 'beast', grade: 'common',
-        sprite: 'pl_mon_gnoll_hunter', cost: 60,
+        sprite: HD_MONSTER_ART.gnoll_hunter.sprite, cost: 60,
         stats: { hp: 40, damage: 14, interval: 1.3, range: 3 },
         abilities: [], unlock: 'start',
         desc: '무거운 손도끼를 던져 앞선 용사 하나를 세게 때립니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 132, idleFps: 3, glow: '255,180,70', hand: { x: 27, y: 78 }, shot: 'fx_shot_axe',
-            anim: { idle: plClip('idle', 4, 54, 54, 54), attack: plClip('throw', 6, 54, 54, 54) }
-        }
+        art: astArt('gnoll_hunter', { glow: '255,180,70', shot: 'fx_shot_axe' })
     },
     wisp_acolyte: {
         id: 'wisp_acolyte', name: '도깨비불 수련사', role: 'support', family: 'spirit', grade: 'common',
@@ -418,25 +386,19 @@ const MONSTERS = {
     },
     werewolf: {
         id: 'werewolf', name: '늑대인간', role: 'melee', family: 'beast', grade: 'rare',
-        sprite: 'pl_mon_werewolf', cost: 120,
+        sprite: HD_MONSTER_ART.werewolf.sprite, cost: 120,
         stats: { hp: 170, damage: 24, interval: 0.6, range: 2.4, block: 2, respawn: 7 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
         desc: '곁의 용사 2명을 물어뜯고, 쓰러뜨리면 더 사나워집니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 141, idleFps: 0, glow: '140,160,255',
-            anim: { idle: plClip('walking', 6, 54, 63, 54), walk: plClip('walking', 6, 54, 63, 54), attack: plClip('slash', 6, 54, 57, 53) }
-        }
+        art: astArt('werewolf', { glow: '140,160,255' })
     },
     troll: {
         id: 'troll', name: '동굴 트롤', role: 'tank', family: 'orc', grade: 'rare',
-        sprite: 'pl_mon_troll', cost: 120,
+        sprite: HD_MONSTER_ART.troll.sprite, cost: 120,
         stats: { hp: 320, damage: 14, interval: 1.2, range: 2, block: 4, respawn: 7 },
         abilities: [{ kind: 'slowShot', name: '육중한 일격', speedMul: 0.8, duration: 2 }], unlock: 'start',
         desc: '곁의 용사 4명을 내리쳐 느리게 합니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 0, glow: '70,230,180',
-            anim: { idle: plClip('walking', 6, 62, 63, 63), walk: plClip('walking', 6, 62, 63, 63), attack: plClip('slash', 6, 56, 57, 56) }
-        }
+        art: astArt('troll', { glow: '70,230,180' })
     },
     frost_witch: {
         id: 'frost_witch', name: '서리 마녀', role: 'area', family: 'spirit', grade: 'rare',
@@ -448,36 +410,27 @@ const MONSTERS = {
     },
     nightmare_jester: {
         id: 'nightmare_jester', name: '악몽 광대', role: 'ranged', family: 'demon', grade: 'rare',
-        sprite: 'pl_mon_nightmare_jester', cost: 120,
+        sprite: HD_MONSTER_ART.nightmare_jester.sprite, cost: 120,
         stats: { hp: 40, damage: 12, interval: 1.2, range: 3.5 },
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1 }], unlock: 'start',
         desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세웁니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 144, idleFps: 3, glow: '235,110,255', hand: { x: 15, y: 66 }, shot: 'fx_shot_jester',
-            anim: { idle: plClip('idle', 4, 54, 54, 51), attack: plClip('cast', 6, 54, 54, 51) }
-        }
+        art: astArt('nightmare_jester', { glow: '235,110,255', shot: 'fx_shot_jester' })
     },
     orc_shaman: {
         id: 'orc_shaman', name: '오크 주술사', role: 'support', family: 'orc', grade: 'rare',
-        sprite: 'pl_mon_orc_shaman', cost: 120,
+        sprite: HD_MONSTER_ART.orc_shaman.sprite, cost: 120,
         stats: { hp: 50, damage: 5, interval: 1.5, range: 2.5 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 2.5, value: 0.2 }], unlock: 'start',
         desc: '전쟁 주술로 둘레 몬스터의 공격을 더 아프게 합니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 147, idleFps: 3, glow: '110,240,130', hand: { x: 36, y: 66 }, shot: 'bolt',
-            anim: { idle: plClip('idle', 4, 57, 57, 57), attack: plClip('cast', 6, 57, 57, 57) }
-        }
+        art: astArt('orc_shaman', { glow: '110,240,130', shot: 'bolt' })
     },
     minotaur: {
         id: 'minotaur', name: '미노타우로스', role: 'melee', family: 'beast', grade: 'epic',
-        sprite: 'pl_mon_minotaur', cost: 250,
+        sprite: HD_MONSTER_ART.minotaur.sprite, cost: 250,
         stats: { hp: 480, damage: 50, interval: 1.2, range: 2.4, block: 3, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
         desc: '큰 도끼를 휘둘러 곁의 용사와 그 둘레를 함께 벱니다.',
-        art: {
-            scale: PIXEL_SCALE, barY: 150, idleFps: 0, glow: '255,140,50',
-            anim: { idle: plClip('walking', 6, 64, 63, 62), walk: plClip('walking', 6, 64, 63, 62), attack: plClip('slash', 6, 57, 57, 56) }
-        }
+        art: astArt('minotaur', { glow: '255,140,50' })
     },
     vampire: {
         id: 'vampire', name: '뱀파이어', role: 'ranged', family: 'undead', grade: 'epic',
@@ -557,11 +510,11 @@ const MONSTERS = {
     },
     goblin_thrower: {
         id: 'goblin_thrower', name: '고블린 투척병', role: 'ranged', family: 'orc', grade: 'common',
-        sprite: 'pl_mon_goblin_thrower', cost: 60,
+        sprite: HD_MONSTER_ART.goblin_thrower.sprite, cost: 60,
         stats: { hp: 35, damage: 10, interval: 1.0, range: 2.5 },
         abilities: [{ kind: 'stunShot', chance: 0.1, duration: 0.6 }], unlock: 'start',
         desc: '창을 던져 가끔 용사를 멈춰 세웁니다.',
-        art: PL_NEW_ART.goblin_thrower
+        art: astArt('goblin_thrower', { glow: '255,190,90' })
     },
     orc_charger: {
         id: 'orc_charger', name: '돌격대장', role: 'melee', family: 'orc', grade: 'epic',
@@ -573,19 +526,19 @@ const MONSTERS = {
     },
     war_drummer: {
         id: 'war_drummer', name: '전쟁 북꾼', role: 'support', family: 'orc', grade: 'epic',
-        sprite: 'pl_mon_war_drummer', cost: 250,
+        sprite: HD_MONSTER_ART.war_drummer.sprite, cost: 250,
         stats: { hp: 100, damage: 10, interval: 1.5, range: 3 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 3, value: 0.3 }], unlock: 'start',
         desc: '북소리로 둘레 몬스터의 피해를 올립니다.',
-        art: PL_NEW_ART.war_drummer
+        art: astArt('war_drummer', { glow: '255,120,70', shot: 'bolt' })
     },
     ogre_crusher: {
         id: 'ogre_crusher', name: '오우거 파쇄자', role: 'melee', family: 'orc', grade: 'epic',
-        sprite: 'pl_mon_ogre_crusher', cost: 250,
+        sprite: HD_MONSTER_ART.ogre_crusher.sprite, cost: 250,
         stats: { hp: 560, damage: 60, interval: 1.4, range: 2.4, block: 4, respawn: 7 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.8 }], unlock: 'start',
         desc: '느리지만 한 번에 여럿을 부수는 거한입니다.',
-        art: PL_NEW_ART.ogre_crusher
+        art: astArt('ogre_crusher', { glow: '255,170,90' })
     },
     orc_high_chief: {
         id: 'orc_high_chief', name: '대족장', role: 'melee', family: 'orc', grade: 'legendary',
@@ -615,11 +568,11 @@ const MONSTERS = {
     },
     succubus: {
         id: 'succubus', name: '서큐버스', role: 'ranged', family: 'demon', grade: 'rare',
-        sprite: 'pl_mon_succubus', cost: 120,
+        sprite: HD_MONSTER_ART.succubus.sprite, cost: 120,
         stats: { hp: 45, damage: 18, interval: 1.0, range: 3.5 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
         desc: '홀린 용사가 더 큰 피해를 받게 합니다.',
-        art: PL_NEW_ART.succubus
+        art: astArt('succubus', { glow: '255,90,190', shot: 'bolt' })
     },
     flame_archer: {
         id: 'flame_archer', name: '화염 궁수', role: 'tank', family: 'demon', grade: 'rare',

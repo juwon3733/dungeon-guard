@@ -25,7 +25,8 @@ const Assets = {
         // 모든 캐릭터는 PixelLab 동작 그림이다: rotations/south 한 장과 동작(anim)마다 방향별 프레임
         const monsterArt = Object.values(MONSTERS).map(m => ({ sprite: m.sprite, anim: m.art.anim }));
         const bossArt = Object.values(BOSSES).map(b => b.art);
-        for (const def of [...Object.values(HEROES), ...monsterArt, ...bossArt]) {
+        const skins = Object.values(ASTERIA_HERO_SKINS).flat();
+        for (const def of [...Object.values(HEROES), ...monsterArt, ...bossArt, ...skins]) {
             list.push(`${def.sprite}/rotations/south`);
             for (const clip of Object.values(def.anim)) {
                 for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {

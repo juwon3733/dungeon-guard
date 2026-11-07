@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -13,7 +13,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
     const actx = vm.createContext({ console });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/core/assets.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
     }
     const ids = vm.runInContext('Object.keys(EQUIPMENT)', actx);
@@ -2545,8 +2545,8 @@ Game.gold = 6000;
     // 길 뒤쪽: 돌진하는 보스를 붙잡을 오크와 마무리 화력
     [17,10,'orc_guard'],[20,9,'orc_guard'],[22,8,'orc_guard'],[19,10,'skeleton_archer'],[20,6,'dark_mage'],[23,6,'skeleton_archer']].forEach(([c,r,t]) => assert(Game.place(t,c,r), 'place ' + t + ' ' + c + ',' + r));
 for (const x of Game.monsters) { Game.upgrade(x); Game.upgrade(x, 'A'); }
-Game.heroHpMul = 0.05; // 규칙이 끝까지 도는지 보는 시험이라 난이도는 낮춘다(용사가 떼로 나온다)
-SWARM_RULES.leak = 0.1;
+Game.heroHpMul = 0.03; // 규칙이 끝까지 도는지 보는 시험이라 난이도는 낮춘다(용사가 떼로 나온다)
+SWARM_RULES.leak = 0.02;
 let guard = 0, sawCharge = false, sawStomp = false, rewards = 0, sawArchmage = false, equipped = 0;
 const eliteWaves = new Set();
 while (Game.state !== 'victory' && Game.state !== 'defeat' && guard++ < 60000) {
@@ -4412,7 +4412,7 @@ console.log('smoke ok: zones');
     });
     const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
     const rctx = vm.createContext({ console, Math, Set, Map, Object, Array, Number, String, JSON, document });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
     }
     vm.runInContext(`

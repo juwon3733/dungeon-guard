@@ -22,6 +22,8 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         throneDamage: (src.throneDamage || 1) * (swarm ? SWARM_RULES.leak : 1),
         name: src.name,
         route: route || 'north',
+        // 일반 용사의 생김새(연출만, 판 결과와 무관). 같은 그림이 줄지어 보이지 않게 섞는다
+        skin: swarm && ASTERIA_HERO_SKINS[type] ? randItem(ASTERIA_HERO_SKINS[type]) : null,
         d: 0, // route 길 위에서 입구로부터 이동한 거리
         lane: bossDef ? 0 : rngRange('spawn', -34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
