@@ -4368,6 +4368,19 @@ assert(ids().includes('sell') && ids().includes('unequip'), 'popup buttons');
         m.y = tileY(r);
         check('popup at ' + key);
     }
+    // 창 높이는 몬스터마다 다르다: 오른쪽 칸에서 모든 몬스터로 본다(소환 운에 따라 가끔만 실패하던 경우)
+    const ht = m.type;
+    const right = [...BUILD_CELLS].filter(k => Number(k.split(',')[0]) >= 20);
+    for (const type of Object.keys(MONSTERS)) {
+        m.type = type;
+        for (const key of right) {
+            const [c, r] = key.split(',').map(Number);
+            m.x = tileX(c);
+            m.y = tileY(r);
+            check('popup of ' + type + ' at ' + key);
+        }
+    }
+    m.type = ht;
     m.x = hx;
     m.y = hy;
 }
