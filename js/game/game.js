@@ -399,10 +399,10 @@ const Game = {
 
     inPlay() { return this.state === 'prep' || this.state === 'wave'; },
 
-    // 지금 소환 비용: 처음 cost(마왕과 유물의 summonBase를 더한다), 소환할 때마다 costStep씩 올라 maxCost에서 멈춘다
+    // 지금 소환 비용: 처음 cost(마왕과 유물의 summonBase를 더한다), 소환할 때마다 costStep씩 오른다. 상한이 없다(후반에 골드가 남지 않게)
     summonCost() {
         const r = SUMMON_RULES;
-        return Math.max(0, Math.min(r.maxCost, r.cost + this.mods.summonBase + r.costStep * this.summonCount));
+        return Math.max(0, r.cost + this.mods.summonBase + r.costStep * this.summonCount);
     },
 
     // 맵에 더 둘 자리가 있는지(상한)

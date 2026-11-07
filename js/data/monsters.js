@@ -31,7 +31,6 @@ const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 const SUMMON_RULES = {
     cost: 25,       // 첫 소환 골드
     costStep: 1,    // 소환할 때마다 오르는 골드(다시 시작하면 처음으로)
-    maxCost: 60,    // 소환 비용 상한
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     // 등급별 확률은 SUMMON_LEVELS(소환 강화 레벨)에 있다
