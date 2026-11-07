@@ -207,11 +207,11 @@ const UI = {
         } else {
             // 스킬 칸 둘과 오른쪽의 유물 칸(2줄). 유물 칸이 늘면 스킬 칸이 좁아진다
             const relicW = this.barRelicWidth();
-            const portal = G.power('gate'); // 권능으로 3번째 스킬 칸이 열린다
-            const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - (portal ? 30 : 20)) / (portal ? 3 : 2));
+            const third = G.thirdSkill(); // 권능으로 3번째 스킬 칸이 열린다
+            const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - (third ? 30 : 20)) / (third ? 3 : 2));
             this.button('lightning', BAR_SLOT_X, slotY, skillW, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
             this.button('roar', BAR_SLOT_X + skillW + 10, slotY, skillW, 104, { skill: 'roar', onClick: () => this.useRoar() });
-            if (portal) this.button('portal', BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: 'portal', onClick: () => this.usePortal() });
+            if (third) this.button(third.key, BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: third.key, third, onClick: () => this.useThirdSkill() });
             for (let i = 0; i < Meta.relicSlots(); i++) {
                 const r = this.barRelicRect(i);
                 this.button(`barRelic${i}`, r.x, r.y, r.w, r.h, { barRelic: i });
@@ -1123,10 +1123,15 @@ const UI = {
         this.clearSelection();
     },
 
-    usePortal() {
+    useThirdSkill() {
+        const third = Game.thirdSkill();
+        if (!third) return;
         this.setTab('demon');
-        if (!Game.power('gate')) return;
-        if (!Game.act({ kind: 'portal' }).ok) this.showToast(Game.skills.portal > 0 ? `균열 재사용까지 ${Math.ceil(Game.skills.portal)}초` : '되돌릴 용사가 없습니다.');
+        if (Game.act({ kind: third.key }).ok) return;
+        const left = Game.skills[third.key];
+        if (left > 0) this.showToast(`${third.name} 재사용까지 ${Math.ceil(left)}초`);
+        else if (third.key === 'goldBomb' && Game.gold < COMBAT_RULES.goldBomb.minGold) this.showToast('골드가 모자랍니다.');
+        else this.showToast('지금은 쓸 수 없습니다.');
     },
 
     // 권능 창: 여는 동안 판이 멈춘다
@@ -1149,6 +1154,8 @@ const UI = {
             this.showToast(`마왕 체력 ${COMBAT_RULES.roar.unlockHp} 이하에서 쓸 수 있습니다.`);
             return;
         }
+        if (Game.power('bribeRoar') && Game.skills.roar <= 0 && !Game.act({ kind: 'roar' }).ok) { this.showToast('입막음에 쓸 골드가 모자랍니다.'); return; }
+        if (Game.power('bribeRoar')) return;
         if (!Game.act({ kind: 'roar' }).ok) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
     },
 
@@ -1322,7 +1329,7 @@ const UI = {
             return;
         }
         if (code === 'KeyR') { this.togglePowers(); return; }
-        if (code === 'KeyE') { this.usePortal(); return; }
+        if (code === 'KeyE') { this.useThirdSkill(); return; }
         if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyU') this.doSummonUpgrade();
@@ -2767,7 +2774,7 @@ const UI = {
     drawSkillButton(ctx, b, st) {
         const T = UI_THEME;
         const lightning = b.skill === 'lightning';
-        const portal = b.skill === 'portal';
+        const third = b.third;
         const cd = Game.skills[b.skill];
         const max = Game.skillCooldown(b.skill);
         const locked = b.skill === 'roar' && Game.roarLocked();
@@ -2784,7 +2791,7 @@ const UI = {
         }
         UIKit.slot(ctx, sx, sy, ss, ss, cd > 0 || locked ? 'iron' : 'gold', st.hover && !st.pressed ? 'hover' : null);
         if (lightning) UIKit.icon(ctx, 'bolt', sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
-        else if (portal) UIKit.icon(ctx, 'wave', sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
+        else if (third) UIKit.icon(ctx, third.icon, sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
         else this.drawLordPortrait(ctx, Game.lordDef(), sx + 10, sy + 10, ss - 20);
         if (cd > 0 || locked) {
             const ratio = locked ? 1 : cd / max;
@@ -2793,9 +2800,9 @@ const UI = {
             if (locked) UIKit.icon(ctx, 'lock', sx + (ss - 48) / 2, sy + (ss - 48) / 2);
             else UIKit.bigText(ctx, String(Math.ceil(cd)), sx + ss / 2, sy + ss / 2, 40, '#ffffff', 'center');
         }
-        this.drawKeyCap(ctx, lightning ? 'Q' : (portal ? 'E' : 'W'), sx + 6, sy + 6, 16);
+        this.drawKeyCap(ctx, lightning ? 'Q' : (third ? 'E' : 'W'), sx + 6, sy + 6, 16);
         const tx = sx + ss + 14;
-        const name = lightning ? '번개' : (portal ? '균열' : '호통');
+        const name = lightning ? '번개' : (third ? third.name : '호통');
         UIKit.text(ctx, name, tx, b.y + 34 + dy, 26, locked ? T.creamSoft : T.cream, 'left', 'bold');
         let status = '준비됨';
         let color = T.good;
@@ -2804,8 +2811,8 @@ const UI = {
         else if (cd > 0) { status = `${Math.ceil(cd)}초`; color = T.bad; }
         UIKit.text(ctx, status, tx, b.y + 74 + dy, 20, color, 'left', 'bold');
         if (st.hover) {
-            const title = lightning ? '마왕의 번개' : (portal ? '균열 열기' : '마왕의 호통');
-            const desc = portal ? `왕좌에 가까운 용사 ${COMBAT_RULES.portal.count}명을 ${COMBAT_RULES.portal.back}칸 뒤로, 재사용 ${Math.round(max * 10) / 10}초` : lightning ? `범위 피해 ${Math.round(Game.lightningDamage())}, 재사용 ${Math.round(max * 10) / 10}초`
+            const title = lightning ? '마왕의 번개' : (third ? third.title : '마왕의 호통');
+            const desc = third ? `${Game.powerNode(Object.keys(POWER_SKILLS).find(k => POWER_SKILLS[k] === third)).node.desc.replace('새 스킬(E): ', '')}, 재사용 ${Math.round(max * 10) / 10}초` : lightning ? `범위 피해 ${Math.round(Game.lightningDamage())}, 재사용 ${Math.round(max * 10) / 10}초`
                 : `모든 용사 ${COMBAT_RULES.roar.duration}초 정지, 체력 ${COMBAT_RULES.roar.unlockHp} 이하, 재사용 ${Math.round(max * 10) / 10}초`;
             this.drawTooltip(ctx, b.x, b.y - 100, title, desc);
         }

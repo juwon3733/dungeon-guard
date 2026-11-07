@@ -49,7 +49,7 @@ function killHero(hero, pos, attacker) {
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1);
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1);
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -60,6 +60,14 @@ function killHero(hero, pos, attacker) {
     if (!hero.boss && !hero.elite) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
         const y = pos.y - 24;
+        // 권능 시체: 쓰러진 자리를 기억하고, 몇 명째마다 그 자리가 터진다
+        G.graves.push({ x: pos.x, y: pos.y });
+        if (G.graves.length > COMBAT_RULES.raise.count) G.graves.shift();
+        if (G.power('corpseBlast')) {
+            const rule = COMBAT_RULES.corpseBlast;
+            G.corpseCount++;
+            if (G.corpseCount % (G.power('corpseQuick') ? rule.quickEvery : rule.every) === 0) corpseExplode(pos.x, pos.y, rule.radius, rule.damageMul);
+        }
         // 권능 과부하: 처치가 번개를 충전한다
         const charge = G.power('frenzy') ? 0.3 : (G.power('killCharge') ? 0.1 : 0);
         if (charge) G.skills.lightning = Math.max(0, G.skills.lightning - charge);
@@ -232,7 +240,10 @@ function resolveStrike(strike) {
     Fx.decals.push({ kind: 'scorch', x: strike.x, y: strike.y, age: 0, life: 9, radius: radius * 0.72 });
     // 맞기 전에 대상을 정해 둔다(이 번개에 쓰러진 용사는 뒤의 효과에서 빠진다)
     const struck = Game.heroes.filter(h => !h.dead && !h.waiting && distance(strike.x, strike.y, heroWorld(h).x, heroWorld(h).y) <= radius);
+    Game.striking = true;
     splashDamage(strike.x, strike.y, radius, Game.lightningDamage() * (strike.mul || 1), '#bfe9ff');
+    Game.striking = false;
+    if (Game.power('coinRain')) Game.gold += struck.length;
     // 권능: 맞은 용사에게 붙는 효과
     const G = Game;
     const stun = G.power('longTear') ? 2 : (G.power('tear') ? 1 : 0);
@@ -301,13 +312,69 @@ function castPortal() {
     return true;
 }
 
+// 권능 시체 폭발: 폭발 안에서 쓰러진 용사가 또 폭발을 부르지 않게 막는다
+function corpseExplode(x, y, radius, damageMul) {
+    const G = Game;
+    if (G.blasting) return;
+    G.blasting = true;
+    const r = radius * (G.power('corpseBig') ? 2 : 1) * TILE;
+    Fx.anim('fx_blastViolet', x, y - 20, r * 1.4, 0.4);
+    splashDamage(x, y, r, G.lightningDamage() * damageMul, '#c9a6ff', h => { if (!h.dead && G.power('corpseFrost')) slowHero(h, 2, 0.7); });
+    G.blasting = false;
+}
+
+// 권능 시체 일으키기: 최근 쓰러진 자리가 한꺼번에 터진다
+function castRaise() {
+    const G = Game;
+    const rule = COMBAT_RULES.raise;
+    if (!G.power('raise') || G.skills.raise > 0 || !G.graves.length) return false;
+    G.skills.raise = G.skillCooldown('raise');
+    for (const g of G.graves.slice()) corpseExplode(g.x, g.y, rule.radius, rule.damageMul);
+    G.graves = [];
+    Fx.addShake(12);
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '일어나서 한 번 더 죽어.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// 권능 금화 폭격: 골드 일부를 써서 맨 앞 용사 둘레를 때린다. 쓴 돈만큼 세다
+function castGoldBomb() {
+    const G = Game;
+    const rule = COMBAT_RULES.goldBomb;
+    if (!G.power('goldBomb') || G.skills.goldBomb > 0 || G.gold < rule.minGold) return false;
+    const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+    if (!front) return false;
+    const rich = G.power('bombRich');
+    const spend = Math.min(rule.maxSpend, Math.floor(G.gold * (rich ? rule.richSpend : rule.spend)));
+    G.gold -= spend;
+    G.skills.goldBomb = G.skillCooldown('goldBomb');
+    const p = heroWorld(front);
+    const r = (rule.radius + (G.power('bombBig') ? rule.bigRadius : 0)) * TILE;
+    Fx.anim('fx_blastGold', p.x, p.y - 30, r * 1.6, 0.5);
+    Fx.ring(p.x, p.y, r, '#ffd34d', 0.4);
+    Fx.addShake(14);
+    splashDamage(p.x, p.y, r, spend * rule.damagePerGold * (rich ? 2 : 1), '#ffd34d');
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '영수증은 안 줘.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
 function castRoar() {
     const G = Game;
     const rule = COMBAT_RULES.roar;
     if (G.roarLocked() || G.skills.roar > 0) return false;
+    if (G.power('bribeRoar')) {
+        const cost = Math.floor(COMBAT_RULES.bribeRoar.cost * (G.power('bribeCheap') ? 0.5 : 1));
+        if (G.gold < cost) return false;
+        G.gold -= cost;
+    }
     G.skills.roar = G.skillCooldown('roar');
     if (G.power('rally')) G.skills.lightning = 0;
-    for (const h of G.heroes) if (!h.dead) h.stun = Math.max(h.stun, rule.duration);
+    for (const h of G.heroes) {
+        if (h.dead) continue;
+        h.stun = Math.max(h.stun, rule.duration + (G.power('longRoar') ? 1 : 0));
+        if (G.power('traitor')) curseHero(h, 3, 1.3);
+    }
     const tx = tileX(THRONE_TILE.col);
     const ty = tileY(THRONE_TILE.row);
     Fx.ring(tx, ty, 1500, '#ff6e8a', 0.8);

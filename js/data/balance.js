@@ -173,6 +173,10 @@ const COMBAT_RULES = {
     lightning: { damage: 40, radius: 1.5, cooldown: 30 },
     roar: { unlockHp: 10, duration: 3, cooldown: 60 },
     portal: { cooldown: 35, count: 8, back: 6 }, // 권능 균열 열기
+    raise: { cooldown: 30, count: 8, radius: 1, damageMul: 0.5 }, // 권능 시체 일으키기
+    goldBomb: { cooldown: 25, spend: 0.1, richSpend: 0.2, maxSpend: 500, minGold: 50, radius: 3, bigRadius: 1.5, damagePerGold: 0.5 }, // 권능 금화 폭격
+    bribeRoar: { cost: 300, cooldown: 5 }, // 권능 입막음
+    corpseBlast: { every: 5, quickEvery: 3, radius: 1.5, damageMul: 0.3 }, // 권능 시체 폭발
     chainStrike: { count: 3, radius: 0.75, damageMul: 0.4 } // 권능 연쇄 낙뢰
 };
 

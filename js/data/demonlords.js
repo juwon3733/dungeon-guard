@@ -77,7 +77,54 @@ const LORD_POWERS = {
             [{ id: 'eliteCharge', name: '사냥 충전', desc: '정예 처치 시 번개 재사용이 끝남' }, { id: 'circuit', name: '마력 회로', desc: '왕좌가 안 맞은 라운드 마력 +1' }],
             [{ id: 'frenzy', name: '폭주', desc: '처치마다 번개 재사용 -0.3초, 대신 호통 불가' }, { id: 'rally', name: '맞불', desc: '호통을 쓰면 번개 재사용이 끝남' }]
         ] }
+    ],
+    bone_queen: [
+        { id: 'wraith', name: '망령', desc: '일제 사격을 키운다', tiers: [
+            [{ id: 'volleyFast', name: '재촉', desc: '일제 사격이 20명 처치마다' }, { id: 'volleyWide', name: '망령 무리', desc: '일제 사격 대상 +3명' }],
+            [{ id: 'volleyHeavy', name: '무거운 혼', desc: '일제 사격 피해 +50%' }, { id: 'volleyCurse', name: '저주받은 화살', desc: '맞은 용사 3초간 받는 피해 +20%' }],
+            [{ id: 'volleyBoss', name: '우두머리 사냥', desc: '정예와 보스를 먼저 노림' }, { id: 'volleyCharge', name: '혼의 환류', desc: '일제 사격마다 스킬 재사용 -3초' }],
+            [{ id: 'volleyTwin', name: '두 번째 사격', desc: '일제 사격이 두 번 때림' }, { id: 'volleyFear', name: '공포', desc: '맞은 용사 1.5초 정지' }]
+        ] },
+        { id: 'corpse', name: '시체', desc: '쓰러진 용사를 터뜨린다', tiers: [
+            [{ id: 'corpseBlast', name: '시체 폭발', desc: '일반 용사 5명째 처치마다 그 자리가 터짐' }, { id: 'xpUp', name: '죽음의 교훈', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'corpseFrost', name: '썩은 안개', desc: '폭발에 맞은 용사 2초간 이동 -30%' }, { id: 'boneEdge', name: '뼈 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
+            [{ id: 'raise', name: '시체 일으키기', desc: '새 스킬(E): 최근 쓰러진 8곳이 한꺼번에 터짐' }, { id: 'corpseQuick', name: '썩은 살', desc: '시체 폭발이 3명째 처치마다' }],
+            [{ id: 'raiseFast', name: '끝없는 무덤', desc: '시체 일으키기 재사용 -40%' }, { id: 'corpseBig', name: '큰 폭발', desc: '폭발 범위 2배' }]
+        ] },
+        { id: 'offering', name: '제물', desc: '바칠수록 강해진다', tiers: [
+            [{ id: 'sacBoost', name: '달콤한 제물', desc: '제물 효과 +50%', mods: { sacrifice: 1.5 } }, { id: 'sacSell', name: '뼈값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
+            [{ id: 'sacRage', name: '피의 환호', desc: '제물을 바치면 몬스터 8초간 공격 속도 +25%' }, { id: 'altar', name: '쌓이는 제단', desc: '제물당 몬스터 피해 +2%(최대 15%)', mods: { altarDamage: 0.02 } }],
+            [{ id: 'sacMana', name: '영혼 추출', desc: '제물을 바치면 마력 +1' }, { id: 'sacGold', name: '헌금', desc: '제물을 바치면 소환 비용 2배 골드' }],
+            [{ id: 'sacRoar', name: '여왕의 외침', desc: '제물을 바치면 호통 재사용이 끝남' }, { id: 'sacSoul', name: '혼의 일제 사격', desc: '제물을 바치면 일제 사격 발동' }]
+        ] }
+    ],
+    gold_king: [
+        { id: 'invest', name: '투자', desc: '돈이 돈을 번다', tiers: [
+            [{ id: 'interestUp', name: '복리 장부', desc: '라운드 종료 이자 +3%(최대 15G)', mods: { interest: 0.03 } }, { id: 'bountyUp', name: '현상금 수수료', desc: '처치 골드 +20%', mods: { bounty: 1.2 } }],
+            [{ id: 'summonCheap', name: '대량 계약', desc: '소환 시작 비용 -5G', mods: { summonBase: -5 } }, { id: 'sellUp', name: '중고 거래', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
+            [{ id: 'goldMana', name: '금화 연금술', desc: '라운드를 다 잡을 때 골드 500 이상이면 마력 +1' }, { id: 'goldEdge', name: '금칠한 칼', desc: '200G당 몬스터 피해 +1%(최대 15%)', mods: { goldDamage: 0.01 } }],
+            [{ id: 'compound', name: '큰손', desc: '이자 상한 2배' }, { id: 'twin', name: '덤', desc: '소환 때 8% 확률로 1마리 더', mods: { twinSummon: 0.08 } }]
+        ] },
+        { id: 'bribe', name: '매수', desc: '돈으로 막는다', tiers: [
+            [{ id: 'goldWard', name: '왕좌 보험', desc: '일반 용사의 왕좌 피해 -20%' }, { id: 'dropUp', name: '장물아비', desc: '정예 장비 드롭 +10%', mods: { eliteDrop: 0.1 } }],
+            [{ id: 'heroSlow', name: '통행세', desc: '새로 오는 용사 이동 -7%', mods: { heroSpeed: 0.93 } }, { id: 'longRoar', name: '긴 협상', desc: '호통 정지 +1초' }],
+            [{ id: 'bribeRoar', name: '입막음', desc: '호통이 재사용 대신 300G로 동작(체력 조건 없음, 대기 5초)' }, { id: 'contract', name: '상시 계약', desc: '호통을 체력과 상관없이 씀', mods: { roarAnytime: 1 } }],
+            [{ id: 'bribeCheap', name: '단골', desc: '입막음 비용 절반' }, { id: 'traitor', name: '배신 유도', desc: '호통으로 멈춘 용사 3초간 받는 피해 +30%' }]
+        ] },
+        { id: 'bomb', name: '금화 폭격', desc: '돈을 뿌려 때린다', tiers: [
+            [{ id: 'goldFocus', name: '금빛 번개', desc: '번개 피해 +25%', mods: { lightningDamage: 1.25 } }, { id: 'coinWide', name: '넓은 금맥', desc: '번개 범위 +0.5칸' }],
+            [{ id: 'coinCool', name: '선불', desc: '번개 재사용 -15%' }, { id: 'coinLoot', name: '전리품', desc: '번개로 쓰러뜨린 용사 골드 2배' }],
+            [{ id: 'goldBomb', name: '금화 폭격', desc: '새 스킬(E): 골드 10%를 써서 맨 앞을 넓게 폭격' }, { id: 'coinRain', name: '금화 비', desc: '번개에 맞은 용사 1명당 +1G' }],
+            [{ id: 'bombBig', name: '대규모 폭격', desc: '폭격 범위 +1.5칸' }, { id: 'bombRich', name: '재벌의 분노', desc: '폭격에 골드 20%를 쓰고 피해 2배' }]
+        ] }
     ]
+};
+
+// 권능으로 열리는 3번째 스킬. 항목 id: 스킬 키(Game.skills와 COMBAT_RULES의 키), 칸 이름, 설명 제목, 아이콘
+const POWER_SKILLS = {
+    gate: { key: 'portal', name: '균열', title: '균열 열기', icon: 'wave' },
+    raise: { key: 'raise', name: '시체', title: '시체 일으키기', icon: 'soul' },
+    goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' }
 };
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다

@@ -5556,7 +5556,7 @@ for (let i = 0; i < 40; i++) {
     for (const n of map.nodes) assert(Math.abs(n.x) < 1.1 && Math.abs(n.y) < 1.1, 'node inside the map');
 }
 assert(shapes.size > 20, 'maps differ by seed: ' + shapes.size);
-assert.strictEqual(buildPowerMap('gold_king', 'a').nodes.length, 0, 'lord without powers');
+assert.strictEqual(buildPowerMap('nobody', 'a').nodes.length, 0, 'lord without powers');
 // 지도를 만들어도 판의 난수는 그대로다
 Rng.start('x');
 const r0 = rng('summon');
@@ -5695,12 +5695,125 @@ const sacGain = Game.sacrificeGain(sac);
 Game.skills.lightning = 100;
 assert(Game.sacrifice(sac).ok);
 assert(Math.abs(Game.skills.lightning - (100 - sacGain.lightning * 2)) < 1e-9, 'sacCharge');
-// 권능이 없는 마왕은 마력을 모으지 않고 찍을 수도 없다
-Game.reset({ lord: 'rift', relics: [] });
-Game.lord = 'gold_king';
+// 모든 마왕: 3갈래 4겹 2개, 항목 id와 효과 키가 맞고, 3번째 스킬은 표에 있다
+{
+    const all = [];
+    for (const lord of Object.keys(DEMON_LORDS)) {
+        const list = LORD_POWERS[lord];
+        assert(list && list.length === 3, lord + ' has three branches');
+        for (const b of list) {
+            assert.strictEqual(b.tiers.length, 4);
+            for (const t of b.tiers) { assert.strictEqual(t.length, 2); for (const n of t) { all.push(n.id); for (const k of Object.keys(n.mods || {})) assert(LORD_EFFECTS[k], 'effect key ' + k); } }
+        }
+        assert.strictEqual(buildPowerMap(lord, 'a').nodes.length, 24);
+    }
+    assert.strictEqual(new Set(all).size, 72, 'node ids are unique across lords');
+    for (const [id, sk] of Object.entries(POWER_SKILLS)) { assert(all.includes(id), id); assert(COMBAT_RULES[sk.key].cooldown > 0, sk.key); }
+}
+// 다른 마왕의 항목은 찍을 수 없고, 권능이 없는 마왕은 마력을 모으지 않는다
+fresh(100);
+assert.strictEqual(Game.powerCheck('volleyFast').reason, 'none');
+Game.lord = 'nobody';
 Game.addMana(3);
-assert.strictEqual(Game.mana, 0);
-assert.strictEqual(Game.powerCheck('wide').reason, 'none');
+assert.strictEqual(Game.mana, 100);
+const lordFresh = (lord, mana) => { Game.reset({ lord: 'rift', relics: [] }); Game.lord = lord; Game.mods = buildMods(lord, []); Game.mana = mana; };
+const takeNode = id => { assert(Game.powerNode(id), 'node ' + id); Game.powers[id] = true; Game.addNodeMods(Game.powerNode(id).node); };
+const volleyTargets = (hs) => hs.filter(h => h.hp < h.maxHp).length;
+// 뼈의 여왕: 망령
+lordFresh('bone_queen', 0); hs = arena(); Game.soulVolley(true);
+assert.strictEqual(volleyTargets(hs), 6, 'volley base count');
+const volleyBase = hs[5].maxHp - hs[5].hp;
+Game.stats.kills = 20;
+hs.forEach(h => { h.hp = h.maxHp; }); Game.soulVolley();
+assert.strictEqual(volleyTargets(hs), 0, 'no volley at 20 without volleyFast');
+lordFresh('bone_queen', 0); takeNode('volleyFast'); hs = arena(); Game.stats.kills = 20; Game.soulVolley();
+assert.strictEqual(volleyTargets(hs), 6, 'volleyFast');
+lordFresh('bone_queen', 0); takeNode('volleyHeavy'); hs = arena(); Game.soulVolley(true);
+assert(Math.abs((hs[5].maxHp - hs[5].hp) - volleyBase * 1.5) < 1e-6, 'volleyHeavy');
+lordFresh('bone_queen', 0); takeNode('volleyCurse'); takeNode('volleyFear'); hs = arena(); Game.soulVolley(true);
+assert(hs[5].curse === 3 && hs[5].curseMul === 1.2 && hs[5].stun === 1.5, 'volleyCurse and volleyFear');
+lordFresh('bone_queen', 0); takeNode('volleyTwin'); hs = arena(); Game.soulVolley(true);
+assert(Math.abs((hs[5].maxHp - hs[5].hp) - volleyBase * 2) < 1e-6, 'volleyTwin');
+lordFresh('bone_queen', 0); takeNode('volleyCharge'); hs = arena(); Game.skills.lightning = 10; Game.soulVolley(true);
+assert.strictEqual(Game.skills.lightning, 7, 'volleyCharge');
+lordFresh('bone_queen', 0); takeNode('volleyBoss'); hs = arena(); hs[0].elite = true; Game.soulVolley(true);
+assert(hs[0].hp < hs[0].maxHp, 'volleyBoss aims at the farthest elite');
+lordFresh('bone_queen', 0); takeNode('volleyWide'); hs = arena();
+for (let i = 0; i < 4; i++) { const extra = Game.heroes[0]; Game.heroes.push(Object.assign({}, extra, { d: 100 + i })); }
+Game.soulVolley(true);
+assert.strictEqual(Game.heroes.filter(h => h.hp < h.maxHp).length, 9, 'volleyWide');
+// 뼈의 여왕: 시체
+const blast = (id2) => { lordFresh('bone_queen', 0); takeNode('corpseBlast'); if (id2) takeNode(id2); const list = arena(); list[1].d = list[0].d + 30; return list; };
+hs = blast(); for (let i = 0; i < 4; i++) { hs[0].hp = 1; damageHero(Object.assign(hs[0], { dead: false }), 10, 0, 0); hs[0].dead = false; hs[0].hp = hs[0].maxHp; }
+assert.strictEqual(hs[1].hp, hs[1].maxHp, 'no blast before the fifth');
+hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
+assert(hs[1].hp < hs[1].maxHp, 'corpseBlast on the fifth');
+hs = blast('corpseQuick'); for (let i = 0; i < 2; i++) { hs[0].hp = 1; damageHero(hs[0], 10, 0, 0); hs[0].dead = false; hs[0].hp = hs[0].maxHp; }
+hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
+assert(hs[1].hp < hs[1].maxHp, 'corpseQuick on the third');
+hs = blast('corpseFrost'); Game.corpseCount = 4; hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
+assert(hs[1].slow > 0, 'corpseFrost');
+hs = blast('corpseBig'); hs[2].d = hs[0].d + 200; Game.corpseCount = 4; hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
+assert(hs[2].hp < hs[2].maxHp, 'corpseBig reaches further');
+lordFresh('bone_queen', 0); takeNode('raise');
+assert(!Game.act({ kind: 'raise' }).ok, 'raise needs graves');
+hs = arena(); hs[1].d = hs[0].d + 20; hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
+assert.strictEqual(hs[1].hp, hs[1].maxHp);
+assert(Game.act({ kind: 'raise' }).ok);
+assert(hs[1].hp < hs[1].maxHp && Game.graves.length === 0, 'raise explodes graves');
+assert.strictEqual(Game.skills.raise, Game.skillCooldown('raise'));
+const raiseCd = Game.skillCooldown('raise');
+takeNode('raiseFast');
+assert(Math.abs(Game.skillCooldown('raise') - raiseCd * 0.6) < 1e-9, 'raiseFast');
+assert.strictEqual(Game.thirdSkill().key, 'raise');
+lordFresh('bone_queen', 0); const xp0 = Game.mods.xp, dmg0 = Game.mods.damage; takeNode('xpUp'); takeNode('boneEdge');
+assert(Math.abs(Game.mods.xp - xp0 - 0.3) < 1e-9 && Math.abs(Game.mods.damage - dmg0 - 0.08) < 1e-9, 'bone mods');
+// 뼈의 여왕: 제물
+const offer = (...nodes) => { lordFresh('bone_queen', 0); nodes.forEach(takeNode); Game.gold = 9999; Game.state = 'prep'; const a = Game.place('orc_guard', 3, 6); const b = Game.place('orc_guard', 7, 4); assert(a && b, 'placed'); return { a, b }; };
+let pair = offer('sacRage'); assert(Game.sacrifice(pair.a).ok);
+assert(pair.b.buffT === 8 && pair.b.buff.speed === 0.25, 'sacRage');
+pair = offer('sacMana'); Game.sacrifice(pair.a); assert.strictEqual(Game.mana, 1, 'sacMana');
+pair = offer('sacGold'); { const g = Game.gold, cost = Game.summonCost(); Game.sacrifice(pair.a); assert.strictEqual(Game.gold, g + cost * 2, 'sacGold'); }
+pair = offer('sacRoar'); Game.skills.roar = 30; Game.sacrifice(pair.a); assert.strictEqual(Game.skills.roar, 0, 'sacRoar');
+pair = offer('sacSoul'); hs = arena(); Game.sacrifice(pair.a); assert(hs[5].hp < hs[5].maxHp, 'sacSoul fires the volley');
+lordFresh('bone_queen', 0); { const a = Game.mods.sacrifice, b = Game.mods.refund, d = Game.mods.altarDamage; takeNode('sacBoost'); takeNode('sacSell'); takeNode('altar'); assert(Game.mods.sacrifice === a * 1.5 && Game.mods.refund === b * 1.3 && Game.mods.altarDamage === d + 0.02, 'offering mods'); }
+// 황금 마왕: 투자
+lordFresh('gold_king', 0); { const m = Object.assign({}, Game.mods); ['interestUp', 'bountyUp', 'summonCheap', 'sellUp', 'goldEdge', 'twin'].forEach(takeNode);
+    assert(Math.abs(Game.mods.interest - m.interest - 0.03) < 1e-9 && Math.abs(Game.mods.bounty - m.bounty * 1.2) < 1e-9 && Game.mods.summonBase === m.summonBase - 5 && Math.abs(Game.mods.refund - m.refund * 1.3) < 1e-9 && Game.mods.goldDamage === m.goldDamage + 0.01 && Game.mods.twinSummon === m.twinSummon + 0.08, 'invest mods'); }
+lordFresh('gold_king', 0); takeNode('interestUp'); Game.gold = 100000; { const g = Game.gold; Game.payInterest(); assert.strictEqual(Game.gold, g + RELIC_LIMITS.interestMax, 'interest cap'); }
+takeNode('compound'); { const g = Game.gold; Game.payInterest(); assert.strictEqual(Game.gold, g + RELIC_LIMITS.interestMax * 2, 'compound'); }
+lordFresh('gold_king', 0); takeNode('goldMana'); Game.gold = 500; Game.state = 'prep'; Game.startWave(); Game.heroes = []; Game.endWave();
+assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound + 1, 'goldMana');
+// 황금 마왕: 매수
+lordFresh('gold_king', 0); takeNode('goldWard'); hs = arena(); hs[0].d = ROUTES[hs[0].route].length; Game.leak = 0; updateHero(hs[0], GAME_TICK);
+assert(Math.abs(Game.leak - hs[0].throneDamage * 0.8) < 1e-9, 'goldWard');
+lordFresh('gold_king', 0); { const m = Object.assign({}, Game.mods); ['dropUp', 'heroSlow', 'contract'].forEach(takeNode); assert(Math.abs(Game.mods.eliteDrop - m.eliteDrop - 0.1) < 1e-9 && Math.abs(Game.mods.heroSpeed - m.heroSpeed * 0.93) < 1e-9 && Game.mods.roarAnytime, 'bribe mods'); assert(!Game.roarLocked(), 'contract unlocks roar'); }
+lordFresh('gold_king', 0); takeNode('longRoar'); takeNode('traitor'); Game.hp = 1; hs = arena(); assert(Game.act({ kind: 'roar' }).ok);
+assert(hs[0].stun === COMBAT_RULES.roar.duration + 1 && hs[0].curseMul === 1.3, 'longRoar and traitor');
+lordFresh('gold_king', 0); takeNode('bribeRoar'); hs = arena(); Game.hp = Game.maxHp(); Game.gold = 100;
+assert(!Game.roarLocked(), 'bribeRoar has no hp condition');
+assert(!Game.act({ kind: 'roar' }).ok, 'bribeRoar needs gold');
+Game.gold = 1000; assert(Game.act({ kind: 'roar' }).ok);
+assert(Game.gold === 700 && Game.skills.roar === COMBAT_RULES.bribeRoar.cooldown, 'bribeRoar pays gold');
+takeNode('bribeCheap'); Game.skills.roar = 0; assert(Game.act({ kind: 'roar' }).ok); assert.strictEqual(Game.gold, 550, 'bribeCheap');
+// 황금 마왕: 금화 폭격
+lordFresh('gold_king', 0); { const d = Game.lightningDamage(), cd2 = Game.skillCooldown('lightning'); takeNode('goldFocus'); takeNode('coinCool'); takeNode('coinWide');
+    assert(Math.abs(Game.lightningDamage() - d * 1.25) < 1e-9 && Math.abs(Game.skillCooldown('lightning') - cd2 * 0.85) < 1e-9 && Game.lightningRadius() === COMBAT_RULES.lightning.radius + 0.5, 'bomb number nodes'); }
+lordFresh('gold_king', 0); takeNode('coinRain'); hs = arena(); hs[1].d = hs[0].d + 30; Game.gold = 0; strikeAt(hs[0]); assert.strictEqual(Game.gold, 2, 'coinRain');
+lordFresh('gold_king', 0); hs = arena(); hs[0].hp = 1; hs[0].bounty = 10; Game.gold = 0; Game.goldLeft = 0; strikeAt(hs[0]); { const plain = Game.gold;
+    lordFresh('gold_king', 0); takeNode('coinLoot'); hs = arena(); hs[0].hp = 1; hs[0].bounty = 10; Game.gold = 0; Game.goldLeft = 0; strikeAt(hs[0]); assert.strictEqual(Game.gold, plain * 2, 'coinLoot'); }
+lordFresh('gold_king', 0); takeNode('goldBomb'); Game.gold = 10;
+assert(!Game.act({ kind: 'goldBomb' }).ok, 'goldBomb needs heroes and gold');
+hs = arena(); assert(!Game.act({ kind: 'goldBomb' }).ok, 'goldBomb needs gold');
+Game.gold = 1000; assert(Game.act({ kind: 'goldBomb' }).ok);
+assert(Game.gold === 900 && hs[5].maxHp - hs[5].hp === 100 * COMBAT_RULES.goldBomb.damagePerGold, 'goldBomb spends and hits the front');
+assert.strictEqual(hs[0].hp, hs[0].maxHp, 'bomb stays around the front');
+assert.strictEqual(Game.thirdSkill().key, 'goldBomb');
+lordFresh('gold_king', 0); takeNode('goldBomb'); takeNode('bombRich'); takeNode('bombBig'); hs = arena(); hs[3].d = hs[5].d - 380; Game.gold = 1000; assert(Game.act({ kind: 'goldBomb' }).ok);
+assert(Game.gold === 800 && hs[5].maxHp - hs[5].hp === 200 * COMBAT_RULES.goldBomb.damagePerGold * 2, 'bombRich');
+assert(hs[3].hp < hs[3].maxHp, 'bombBig reaches further');
+// 효과표를 다시 만들어도 찍은 항목이 남는다
+lordFresh('gold_king', 0); takeNode('summonCheap'); { const before = Game.mods.summonBase; Game.mods = buildMods('gold_king', []); Game.applyPowerMods(); assert.strictEqual(Game.mods.summonBase, before, 'applyPowerMods'); }
 // 왕좌가 맞지 않은 라운드만 마력을 주고, 마력 회로는 하나 더 준다
 Game.reset({ lord: 'rift', relics: [] });
 Game.state = 'prep'; Game.startWave();
@@ -5717,17 +5830,34 @@ Game.state = 'prep'; Game.startWave();
 Game.heroes = [];
 Game.endWave();
 assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound + 1, 'circuit');
-// 권능을 찍고 쓴 판도 입력 재생 결과가 같다(번 마력으로만 찍는다). 마왕이 균열의 군주로 정해지는 날을 고른다
-{
+// 권능을 찍고 쓴 판도 입력 재생 결과가 같다(번 마력으로만 찍는다). 마왕마다 그 마왕으로 정해지는 날을 고른다
+for (const lord of Object.keys(DEMON_LORDS)) {
     let date = null;
-    for (let d = 1; d <= 28 && !date; d++) {
-        const text = '2026-11-' + String(d).padStart(2, '0');
-        if (dailyChallenge(text).lord === 'rift') date = text;
+    for (let d = 1; d <= 60 && !date; d++) {
+        const text = '2026-' + String(9 + Math.floor((d - 1) / 28)).padStart(2, '0') + '-' + String((d - 1) % 28 + 1).padStart(2, '0');
+        if (dailyChallenge(text).lord === lord) date = text;
     }
-    assert(date, 'a rift day exists');
+    assert(date, 'a day for ' + lord);
     Game.reset(null, null, dailyChallenge(date));
     Game.state = 'prep';
-    assert.strictEqual(Game.lord, 'rift');
+    assert.strictEqual(Game.lord, lord);
+    // 3번째 스킬이 든 갈래부터 찍는다
+    const thirdId = Object.keys(POWER_SKILLS).find(k => Game.powerNode(k));
+    // 새 스킬까지 가장 짧은 길의 다음 항목. 새 스킬을 찍은 뒤에는 찍을 수 있는 아무 항목
+    const stepTo = target => {
+        const edges = Game.powerMap().edges;
+        const seen = new Set(['core', ...Object.keys(Game.powers)]);
+        const queue = [...seen].map(id => ({ id, first: null }));
+        while (queue.length) {
+            const q = queue.shift();
+            if (q.id === target) return q.first;
+            for (const [a, b] of edges) {
+                const to = a === q.id ? b : (b === q.id ? a : null);
+                if (to && !seen.has(to)) { seen.add(to); queue.push({ id: to, first: q.first || to }); }
+            }
+        }
+        return null;
+    };
     let guard = 0;
     while (Game.inPlay() && guard++ < 60 * 60 * 120) {
         if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
@@ -5739,26 +5869,28 @@ assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound + 1, 'circuit');
                 if (b) { Game.act({ kind: 'merge', src: a, dst: b }); break; }
             }
         }
-        // 지도에서 지금 찍을 수 있는 첫 항목을 찍는다
-        const next = Game.powerMap().nodes.find(n => Game.powerCheck(n.id).ok);
-        if (next) Game.act({ kind: 'power', id: next.id });
+        const wanted = Game.power(thirdId) ? (Game.powerMap().nodes.find(n => Game.powerCheck(n.id).ok) || {}).id : stepTo(thirdId);
+        if (wanted && Game.powerCheck(wanted).ok) Game.act({ kind: 'power', id: wanted });
         if (Game.tick % 300 === 0 && Game.state === 'wave' && !Game.power('auto')) Game.act({ kind: 'lightning', x: 700, y: 500 });
-        if (Game.tick % 400 === 0 && Game.power('gate')) Game.act({ kind: 'portal' });
+        if (Game.tick % 400 === 0 && Game.thirdSkill()) Game.act({ kind: Game.thirdSkill().key });
         Game.update(GAME_TICK);
     }
     const record = JSON.parse(JSON.stringify(Game.record));
     const result = Game.challengeResult;
     const built = Object.assign({}, Game.powers);
     const buys = record.inputs.filter(x => x.kind === 'power').length;
-    assert(result && buys >= 4, 'bot earned mana and bought powers: ' + buys);
+    assert(result && buys >= 4, lord + ' bot earned mana and bought powers: ' + buys);
+    const skillKey = POWER_SKILLS[thirdId].key;
+    const uses = record.inputs.filter(i => i.kind === skillKey).length;
+    assert(built[thirdId] && uses > 0, lord + ' bot reached its new skill');
     const orig = Math.random;
     let x = 0.321;
     Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
     const R = replayChallenge(record);
     Math.random = orig;
-    assert.strictEqual(JSON.stringify(R), JSON.stringify(result), 'replay with powers gives the same result');
-    assert.strictEqual(JSON.stringify(Game.powers), JSON.stringify(built), 'replay builds the same powers');
-    console.log('smoke power replay: ' + date + ' buys ' + buys + ' ' + Object.keys(built).join(',') + ' score ' + result.score);
+    assert.strictEqual(JSON.stringify(R), JSON.stringify(result), lord + ' replay with powers gives the same result');
+    assert.strictEqual(JSON.stringify(Game.powers), JSON.stringify(built), lord + ' replay builds the same powers');
+    console.log('smoke power replay: ' + lord + ' ' + date + ' buys ' + buys + ' uses ' + uses + ' ' + Object.keys(built).join(',') + ' score ' + result.score);
 }
 Game.reset();
 console.log('smoke ok: lord powers');
