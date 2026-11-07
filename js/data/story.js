@@ -45,7 +45,7 @@ const STAGES = [
             ['goblin', '다 쫓아냈습니다! 용사 지갑이랑 뿔, 심장을 주웠어요.'],
             ['rift', '스테이지를 처음 깰 때마다 이런 게 풀리는군. 유물 칸도 하나 짜 둬.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'pouch' }, { kind: 'relic', id: 'horn' }, { kind: 'relic', id: 'heart' }]
+        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'greedy_vault' }, { kind: 'relic', id: 'legion_banner' }, { kind: 'relic', id: 'glass_heart' }]
     },
     {
         id: 's2', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
@@ -58,7 +58,7 @@ const STAGES = [
             ['goblin', '성배, 주사위, 촛불, 석판을 흘리고 갔습니다.'],
             ['bone_queen', '(벽 너머) 그 주사위 내 거야! ...아니, 아무것도 아니야.']
         ],
-        unlocks: [{ kind: 'relic', id: 'chalice' }, { kind: 'relic', id: 'dice' }, { kind: 'relic', id: 'candle' }, { kind: 'relic', id: 'tablet' }]
+        unlocks: [{ kind: 'relic', id: 'usury_ledger' }, { kind: 'relic', id: 'mad_dice' }, { kind: 'relic', id: 'dead_horn' }, { kind: 'relic', id: 'sniper_mark' }]
     },
     {
         id: 's3', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
@@ -72,7 +72,7 @@ const STAGES = [
             ['rift', '월세는?'],
             ['bone_queen', '뼈로 낼게. 족쇄랑 북, 눈알도 덤이야.']
         ],
-        unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'relic', id: 'shackles' }, { kind: 'relic', id: 'drum' }, { kind: 'relic', id: 'eye' }]
+        unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'relic', id: 'iron_oath' }, { kind: 'relic', id: 'blood_altar' }, { kind: 'relic', id: 'broken_hourglass' }]
     },
     {
         id: 's4', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
@@ -85,7 +85,7 @@ const STAGES = [
             ['gold_king', '잘했다. 유물 칸 하나 더 짜 주지. 이 해골 손, 모래시계, 열쇠는 담보로 맡겨 두마.'],
             ['rift', '그거 내 전리품인데.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'handgem' }, { kind: 'relic', id: 'hourglass' }, { kind: 'relic', id: 'key' }]
+        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'mad_drum' }, { kind: 'relic', id: 'smith_hammer' }]
     },
     {
         id: 's5', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
@@ -98,7 +98,7 @@ const STAGES = [
             ['gold_king', '대금은 분할 상환해 주지. 대신 여기 살면서 수금하겠다.'],
             ['goblin', '깃발이랑 번개 병도 두고 가셨어요. ...이자는 붙는대요.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'banner' }, { kind: 'relic', id: 'bottle' }]
+        unlocks: [{ kind: 'slot' }, { kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }]
     },
     {
         id: 's6', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],
@@ -113,7 +113,7 @@ const STAGES = [
             ['bone_queen', '후기 마지막 줄이 뭐야? "도전의 문 너머가 진짜 맛집"?'],
             ['goblin', '사장님, 이제 본부의 도전의 문이 진짜 장사예요!']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'mirror' }, { kind: 'ending' }]
+        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'pauper_helm' }, { kind: 'relic', id: 'blood_contract' }, { kind: 'relic', id: 'shaky_bridge' }, { kind: 'ending' }]
     }
 ];
 

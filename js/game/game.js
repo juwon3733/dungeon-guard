@@ -61,6 +61,8 @@ const Game = {
         this.runResult = null;
         this.clearField();
         this.skills = { lightning: 0, roar: 0 };
+        this.bloodSummons = 0; // 유물 피의 계약서로 쓴 횟수
+        this.earlyBoost = false; // 유물 깨진 모래시계: 이번 라운드를 일찍 불렀다
         this.streak = 0;
         this.streakTimer = 0;
         this.throneFlash = 0;
@@ -89,7 +91,45 @@ const Game = {
     maxHp() { return Math.max(1, COMBAT_RULES.maxHp + this.mods.maxHp); },
 
     // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
-    skillCooldown(key) { return COMBAT_RULES[key].cooldown * this.mods.skillCooldown; },
+    skillCooldown(key) { return COMBAT_RULES[key].cooldown * this.mods.skillCooldown * (key === 'lightning' ? this.mods.lightningCooldown : 1); },
+
+    // 호통을 아직 쓸 수 없는지(체력 조건). 유물 광기의 북이 있으면 언제나 쓴다
+    roarLocked() { return !this.mods.roarAnytime && this.hp > COMBAT_RULES.roar.unlockHp; },
+
+    // 유물의 조건부 몬스터 피해 합(비율). 판 상황에 따라 바뀌어 monsterStats가 매번 읽는다
+    relicDamage(m) {
+        const mods = this.mods;
+        const L = RELIC_LIMITS;
+        let bonus = 0;
+        if (mods.goldDamage) bonus += Math.min(L.goldDamageMax, Math.floor(this.gold / L.goldStep) * mods.goldDamage);
+        if (mods.altarDamage) bonus += Math.min(L.altarDamageMax, this.stats.sacrificed * mods.altarDamage);
+        if (mods.fewDamage && this.monsters.length <= L.fewCount) bonus += mods.fewDamage;
+        if (mods.commonDamage && MONSTERS[m.type].grade === 'common') bonus += mods.commonDamage;
+        if (mods.fullHpDamage && this.hp >= this.maxHp()) bonus += mods.fullHpDamage;
+        return bonus;
+    },
+
+    // 유물 고리대금 장부: 라운드 보상을 받은 뒤 가진 골드의 이자
+    payInterest() {
+        const pay = Math.min(RELIC_LIMITS.interestMax, Math.floor(this.gold * this.mods.interest));
+        if (pay > 0) this.gold += pay;
+    },
+
+    // 유물 피의 계약서: 판에서 남은 체력 소환 횟수
+    bloodSummonsLeft() { return Math.max(0, this.mods.hpSummon - this.bloodSummons); },
+
+    // 지금 소환 값을 치를 수 있는지(골드, 또는 체력 1)
+    canPaySummon() { return this.gold >= this.summonCost() || (this.bloodSummonsLeft() > 0 && this.hp > 1); },
+
+    // 유물 대장장이의 망치: 돌아오는 장비가 확률로 한 등급 위 장비가 된다(Math.random은 유물이 있을 때만)
+    returnedEquipId(id) {
+        const mods = this.mods;
+        if (!mods.equipUp || Math.random() >= mods.equipUp) return id;
+        const grades = ['common', 'rare', 'epic'];
+        const next = grades[grades.indexOf(EQUIPMENT[id].grade) + 1];
+        if (!next) return id;
+        return randItem(Object.keys(EQUIPMENT).filter(k => EQUIPMENT[k].grade === next));
+    },
 
     lightningDamage() { return COMBAT_RULES.lightning.damage * this.mods.lightningDamage; },
 
@@ -277,7 +317,7 @@ const Game = {
         if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
         if (this.fieldFull()) return { ok: false, reason: 'full' };
         const cost = this.summonCost();
-        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        if (!this.canPaySummon()) return { ok: false, reason: 'gold' };
         // 큰 몬스터가 나왔는데 자리가 없으면 다시 뽑는다(작은 몬스터가 들어갈 칸은 있을 수 있다)
         let type = this.rollSummon();
         let cell = this.pickSummonCell(type);
@@ -286,11 +326,27 @@ const Game = {
             cell = this.pickSummonCell(type);
         }
         if (!cell) return { ok: false, reason: 'full' };
-        this.gold -= cost;
+        if (this.gold >= cost) {
+            this.gold -= cost;
+        } else {
+            this.hp -= 1; // 유물 피의 계약서
+            this.bloodSummons++;
+            Fx.addShake(4);
+        }
         this.summonCount++;
         const m = createMonster(type, cell.col, cell.row);
         this.monsters.push(m);
         this.stats.summoned++;
+        // 유물 거울 쌍둥이: 같은 몬스터가 공짜로 1마리 더
+        if (this.mods.twinSummon && Math.random() < this.mods.twinSummon && !this.fieldFull()) {
+            const spot = this.pickSummonCell(type);
+            if (spot) {
+                const twin = createMonster(type, spot.col, spot.row);
+                this.monsters.push(twin);
+                this.stats.summoned++;
+                Fx.pop({ kind: 'summon', to: { x: twin.x, y: twin.y }, type, grade: MONSTERS[type].grade });
+            }
+        }
         Meta.seeMonster(type);
         const grade = MONSTERS[type].grade;
         Fx.pop({ kind: 'summon', to: { x: m.x, y: m.y }, type, grade });
@@ -391,7 +447,7 @@ const Game = {
         if (!m.equip) return null;
         const id = m.equip;
         m.equip = null;
-        return this.gainEquip(id, m.x, m.y - 40);
+        return this.gainEquip(this.returnedEquipId(id), m.x, m.y - 40);
     },
 
     // 합칠 때 장비: 등급이 높은 쪽 1개가 결과로 이어지고(같으면 끌어온 src 쪽), 나머지는 돌아간다
@@ -648,7 +704,13 @@ const Game = {
         if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
         const plan = fullPlan || this.mergePlanFor(src.monster, dst.monster, extra, gradeOnly);
         if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
-        const type = plan.kind === 'recipe' ? plan.result : randItem(this.mergeResultPool(plan.grade, [src.monster, dst.monster, ...(plan.extra || [])]));
+        // 유물 미치광이의 주사위: 등급 합치기가 확률로 두 등급 오른다(전설까지)
+        let resultGrade = plan.grade;
+        if (plan.kind === 'grade' && this.mods.mergeJump && Math.random() < this.mods.mergeJump) {
+            const higher = nextGrade(plan.grade);
+            if (higher && higher !== 'mythic') resultGrade = higher;
+        }
+        const type = plan.kind === 'recipe' ? plan.result : randItem(this.mergeResultPool(resultGrade, [src.monster, dst.monster, ...(plan.extra || [])]));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
         // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
         const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;
@@ -668,7 +730,7 @@ const Game = {
         const equip = this.mergeEquipAll(materials);
         if (equip.keep) setMonsterEquip(monster, equip.keep);
         for (const m of materials) m.equip = null;
-        const returned = equip.back.map(id => this.gainEquip(id, monster.x, monster.y - 40));
+        const returned = equip.back.map(id => this.gainEquip(this.returnedEquipId(id), monster.x, monster.y - 40));
         monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
         this.monsters[this.monsters.indexOf(old)] = monster;
         old.removed = true;
@@ -753,6 +815,7 @@ const Game = {
     },
 
     startWave() {
+        this.earlyBoost = this.state === 'prep' && this.prepTimer > 0;
         if (this.state !== 'prep' || this.bossReward) return false; // 보스 보상을 고르기 전에는 시작하지 않는다
         const bonus = Math.floor(Math.max(0, this.prepTimer)) * COMBAT_RULES.earlyGoldPerSecond;
         if (bonus > 0 && this.waveIndex > 0) {
@@ -910,9 +973,11 @@ const Game = {
         if (this.state !== 'wave' || this.waveIndex + 1 >= this.waves.length) return false;
         const n = this.waveIndex + 1;
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
+        const calledEarly = this.roundTimer > 0;
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
         this.gold += reward;
+        this.payInterest();
         Fx.goldPulse = 1;
         this.waveIndex = n;
         if (bossDown || n % BOSS_REWARD_RULES.roundEvery === 0) this.bossReward = this.rollBossReward();
@@ -920,6 +985,7 @@ const Game = {
         this.state = 'prep'; // startWave는 준비 단계에서 시작한다
         this.prepTimer = 1;  // 카드를 고르는 중이면 고른 뒤 1초 뒤에 시작한다
         this.startWave();
+        this.earlyBoost = calledEarly; // 유물 깨진 모래시계
         return true;
     },
 
@@ -933,6 +999,7 @@ const Game = {
             return;
         }
         this.gold += reward;
+        this.payInterest();
         Fx.goldPulse = 1;
         Fx.banner = { name: `라운드 ${n} 완료`, sub: `+${reward} 골드`, age: 0, life: 1.6, small: true };
         Sfx.play('waveClear');

@@ -104,8 +104,8 @@ const SCENES = {
             storyProgress(5);
             UI.openSelect('s6');
             pressButton('lord_gold_king');
-            pressButton('relic_eye');
-            const b = UI.buttons.find(x => x.id === 'relic_mirror');
+            pressButton('relic_broken_hourglass');
+            const b = UI.buttons.find(x => x.id === 'relic_pauper_helm');
             UI.onMove(b.x + 20, b.y + 20);
         }
     },
@@ -116,7 +116,7 @@ const SCENES = {
             unlockAll();
             UI.openSelect(null);
             pressButton('lord_bone_queen');
-            pressButton('relic_shackles');
+            pressButton('relic_iron_oath');
             pressButton('begin');
             Game.place('orc_guard', 7, 6);
             Game.place('skeleton_archer', 7, 4);
@@ -139,8 +139,8 @@ const SCENES = {
         setup: () => {
             storyProgress(1);
             UI.openSelect('s2');
-            pressButton('relic_pouch');
-            const b = UI.buttons.find(x => x.id === 'relic_hourglass');
+            pressButton('relic_greedy_vault');
+            const b = UI.buttons.find(x => x.id === 'relic_mad_drum');
             UI.onMove(b.x + 20, b.y + 20);
         }
     },

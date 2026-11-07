@@ -34,17 +34,19 @@ function monsterStats(m) {
     }
     // 장비: 랭크와 갈래까지 정한 수치에 곱한다(갈래의 interval, range는 값을 바꾸므로 그 뒤에)
     if (m.equip) {
-        stats.hp *= 1 + equipEffect(m.equip, 'hp');
-        stats.damage *= 1 + equipEffect(m.equip, 'damage');
-        stats.range *= 1 + equipEffect(m.equip, 'range');
-        stats.interval /= 1 + equipEffect(m.equip, 'speed');
+        const power = 1 + Game.mods.equipPower; // 유물: 장비 효과
+        stats.hp *= 1 + equipEffect(m.equip, 'hp') * power;
+        stats.damage *= 1 + equipEffect(m.equip, 'damage') * power;
+        stats.range *= 1 + equipEffect(m.equip, 'range') * power;
+        stats.interval /= 1 + equipEffect(m.equip, 'speed') * power;
     }
     // 마왕과 유물: 장비와 같은 방식으로 그 뒤에 곱한다. 값이 없으면(0, 1) 그대로다
     const mods = Game.mods;
     stats.hp *= 1 + mods.hp;
-    stats.damage *= 1 + mods.damage;
+    stats.damage *= (1 + mods.damage) * (1 + Game.relicDamage(m));
     stats.range *= 1 + mods.range;
-    stats.interval /= 1 + mods.attackSpeed;
+    stats.interval /= (1 + mods.attackSpeed) * (Game.earlyBoost ? 1 + mods.earlyAttackSpeed : 1);
+    stats.armor = 1 - (1 - stats.armor) * (1 - mods.monsterArmor);
     stats.respawn *= mods.respawn;
     // 오라(지원 몬스터): updateAuras가 매 프레임 정해 둔 값. 피해와 공격 속도만 바꾸고 최대 체력은 건드리지 않아
     // 오라 안팎을 오가도 체력 비율이 흔들리지 않는다. 팝업 미리보기처럼 aura가 없는 개체는 그대로다
