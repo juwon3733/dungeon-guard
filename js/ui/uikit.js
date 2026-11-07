@@ -183,6 +183,8 @@ const UIKit = {
         ctx.fillRect(x + 6, y + h - 8, w - 12, 2);
     },
 
+    ironSkin: true, // 창과 버튼을 쇠와 뼈 재질로 그린다(남색 재질 코드는 재질 정리 때 지운다)
+
     // 전투 UI 재질: 그림(hud_panel, hud_slot)을 9칸으로 자른다. 모서리 c px는 그대로, 변과 가운데는 늘리지 않고 반복해 도트가 고르다
     hudFrame(ctx, name, x, y, w, h, c) {
         x = Math.round(x);
@@ -242,7 +244,7 @@ const UIKit = {
     // 창: 남색 판, 가는 금선, 네 모서리 금장(ui_window). 이전 옵션(seal, iron)은 모두 같은 창이다
     panel(ctx, x, y, w, h, opts) {
         const o = opts || {};
-        if (this.battleSkin) {
+        if (this.ironSkin) {
             this.hudFrame(ctx, 'hud_panel', x, y, w, h, 26);
             return;
         }
@@ -277,7 +279,7 @@ const UIKit = {
 
     // 칸. kind: 'iron'(은테) | 'light'(밝은 은테) | 'gold'(금테)
     slot(ctx, x, y, w, h, kind, tint) {
-        if (this.battleSkin) {
+        if (this.ironSkin) {
             this.battleButton(ctx, x, y, w, h, kind === 'gold' ? 'tab' : 'silver', { hover: tint === 'hover' });
             return;
         }
@@ -288,7 +290,7 @@ const UIKit = {
     // 작은 창(설명, 말풍선, 쪽지): 남색 판과 가는 금테, 계단 모서리. red: 진한 빨강 판(보스, 위험)
     note(ctx, x, y, w, h, opts) {
         const o = opts || {};
-        if (this.battleSkin) {
+        if (this.ironSkin) {
             this.battleButton(ctx, x, y, w, h, o.red ? 'danger' : 'silver', {});
             return;
         }
@@ -419,7 +421,7 @@ const UIKit = {
     // 'tabOff'(꺼진 탭) | 'danger'(빨강) | 'off'(누를 수 없음). 누른 동안은 2px 내려앉는다. 내용에 더할 dy를 돌려준다
     button(ctx, x, y, w, h, kind, state) {
         const st = state || {};
-        if (this.battleSkin) return this.battleButton(ctx, x, y, w, h, kind, st);
+        if (this.ironSkin) return this.battleButton(ctx, x, y, w, h, kind, st);
         const dy = st.pressed ? 2 : 0;
         const hover = st.hover && !st.pressed;
         const k = h >= 40 ? 2 : 1;

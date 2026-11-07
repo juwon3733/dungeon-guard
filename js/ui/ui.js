@@ -60,7 +60,7 @@ const LOADOUT_KEY = 'dungeonGuard.loadout'; // 직전 선택 저장(localStorage
 
 // 스토리 지도: 남색 창에 메달과 점선 길, 아래쪽 창에 고른 스테이지 설명
 const STORY_MAP = { x: 60, y: 110, w: 1800, h: 660 };
-const STORY_INFO = { x: 60, y: 790, w: 1800, h: 250 };
+const STORY_INFO = { x: 60, y: 810, w: 1800, h: 250 };
 const STAMP_R = 46; // 도장 반지름
 // 대화: 맵 위를 얇게 가라앉히고 아래쪽에 남색 대화창, 왼쪽에 초상과 이름표. 글자는 한 글자씩 나온다
 const DIALOGUE_BOX = { x: 140, y: 730, w: 1640, h: 300 };
@@ -147,7 +147,7 @@ const UI = {
         }
         if (G.state === 'title') {
             const label = Meta.data.cleared.length || Meta.data.runs ? '이어하기' : '시작하기';
-            this.button('start', GAME_WIDTH / 2 - 210, 640, 420, 100, { label, icon: 'lord', theme: 'gold', size: 38, onClick: () => this.openHQ() });
+            this.button('start', 110, 540, 420, 100, { label, icon: 'lord', theme: 'gold', size: 38, onClick: () => this.openHQ() });
             return;
         }
         if (G.state === 'hq') {
@@ -341,7 +341,7 @@ const UI = {
     pickStage(id) {
         if (!Meta.isOpen(id)) {
             const i = STAGES.findIndex(st => st.id === id);
-            this.showToast(`스테이지 ${STAGES[i - 1].no}을(를) 깨면 열립니다.`);
+            this.showToast(`스테이지 ${STAGES[i - 1].no} 먼저`);
             Sfx.play('mergeFail');
             return;
         }
@@ -553,10 +553,10 @@ const UI = {
         else if (list.length < slots) list.push(id);
         else if (slots === 1) list.splice(0, 1, id);
         else if (slots === 0) {
-            this.showToast(`유물 칸은 ${this.unlockText('slot', 1)}됩니다.`);
+            this.showToast(`유물 칸: ${this.unlockText('slot', 1)}`);
             Sfx.play('mergeFail');
         } else {
-            this.showToast('유물 칸이 가득 찼습니다. 고른 유물을 다시 눌러 빼세요.');
+            this.showToast('유물 칸 가득 참');
             Sfx.play('mergeFail');
         }
     },
@@ -632,7 +632,7 @@ const UI = {
         // 지도와 고르기 화면은 처음 상태에 맞춘다(고른 스테이지가 잠기면 첫 스테이지로)
         if (this.storyPick && !Meta.isOpen(this.storyPick)) this.storyPick = STAGES[0].id;
         if (this.stageId && !Meta.isOpen(this.stageId)) this.stageId = STAGES[0].id;
-        this.showToast('기록을 지웠습니다. 처음 상태로 돌아갔습니다.', 2.4);
+        this.showToast('기록 삭제', 2.4);
     },
 
     // 시작 버튼: 선택을 저장하고 그 마왕과 유물로 판을 시작한다
@@ -681,11 +681,11 @@ const UI = {
     mergeFailText(plan, type) {
         const g = MONSTER_GRADES[MONSTERS[type].grade];
         const target = plan.grade ? MONSTER_GRADES[plan.grade] : null;
-        if (plan.reason === 'top') return `${g.name}은 최고 등급이라 더 합칠 수 없습니다.`;
-        if (plan.reason === 'mismatch') return '등급이 다르고 조합식도 없어 합칠 수 없습니다.';
-        if (plan.reason === 'count') return `같은 ${g.name} ${plan.count}마리가 있어야 합칩니다(지금 ${plan.have}마리).`;
-        if (plan.reason === 'unique' && plan.sameKind) return '같은 신화는 맵에 1마리만 둘 수 있습니다.';
-        if (plan.reason === 'unique' && target) return `${target.name} 몬스터는 맵에 ${target.fieldMax}마리만 둘 수 있습니다.`;
+        if (plan.reason === 'top') return `${g.name} 최고 등급`;
+        if (plan.reason === 'mismatch') return '합칠 수 없음';
+        if (plan.reason === 'count') return `같은 ${g.name} ${plan.count}마리 필요 (지금 ${plan.have}마리)`;
+        if (plan.reason === 'unique' && plan.sameKind) return '같은 신화는 1마리만';
+        if (plan.reason === 'unique' && target) return `${target.name} : 맵에 ${target.fieldMax}마리까지`;
         return null;
     },
 
@@ -717,7 +717,7 @@ const UI = {
         // 재료가 모이면 S랭크 전설의 창에만 뜨는 히든 조합 버튼. 찾기 전에는 이름을 숨긴다
         const full = Game.fullRecipePlan(f);
         const showFull = full.kind === 'recipe' || full.reason === 'unique';
-        const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
+        const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         // 창은 매 프레임 다시 배치된다. 다른 몬스터를 골랐을 때만 여는 연출을 처음부터 한다
@@ -731,7 +731,7 @@ const UI = {
                 label: '빼기', icon: 'bag', size: 20,
                 onClick: () => {
                     const res = Game.act({ kind: 'unequip', monster: f });
-                    if (!res.ok && res.reason === 'full') this.showToast('보관함이 가득 차 뺄 수 없습니다.');
+                    if (!res.ok && res.reason === 'full') this.showToast('보관함 가득 참');
                 }
             });
         }
@@ -741,7 +741,7 @@ const UI = {
             this.button('up2', o.x + 12, y, w - 24, 80, {
                 upgrade: { name: '2단계 강화', desc: f.blocks ? '피해·체력 +50%' : '피해 +50%', cost },
                 disabled: Game.gold < cost,
-                onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f }).ok) this.showToast('골드가 부족합니다.'); }
+                onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f }).ok) this.showToast('골드 부족'); }
             });
             y += 88;
         } else if (upgrades === 2) {
@@ -750,7 +750,7 @@ const UI = {
                 const b = def.branches[key];
                 this.button(`up3${key}`, o.x + 12, y, w - 24, 80, {
                     upgrade: { name: b.name, desc: b.desc, cost }, disabled: Game.gold < cost,
-                    onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f, branch: key }).ok) this.showToast('골드가 부족합니다.'); }
+                    onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f, branch: key }).ok) this.showToast('골드 부족'); }
                 });
                 y += 88;
             }
@@ -762,7 +762,7 @@ const UI = {
                 onClick: () => {
                     const res = Game.act({ kind: 'fullRecipe', monster: f });
                     if (res.ok) { this.clearSelection(); return; }
-                    this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없습니다.');
+                    this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없음');
                     Sfx.play('mergeFail');
                 }
             });
@@ -777,7 +777,7 @@ const UI = {
             onClick: () => {
                 const res = Game.act({ kind: 'quickMerge', monster: f });
                 if (res.ok) { this.clearSelection(); return; }
-                this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없습니다.');
+                this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없음');
                 Sfx.play('mergeFail');
             }
         });
@@ -808,8 +808,8 @@ const UI = {
     pickReward(i) {
         const res = Game.act({ kind: 'pickReward', i });
         if (res.ok) return res;
-        if (res.reason === 'full') this.showToast('몬스터를 놓을 자리가 없습니다. 골드를 고르세요.');
-        else if (res.reason === 'bagFull') this.showToast('보관함이 가득 찼습니다. 다른 카드를 고르세요.');
+        if (res.reason === 'full') this.showToast('자리 없음');
+        else if (res.reason === 'bagFull') this.showToast('보관함 가득 참');
         Sfx.play('mergeFail');
         return res;
     },
@@ -848,13 +848,13 @@ const UI = {
         const m = this.equipTargetAt(x, y);
         if (!m) {
             if (y <= GAME_HEIGHT - BAR_H) {
-                this.showToast('장비는 맵의 몬스터 위에 놓아야 끼웁니다.');
+                this.showToast('몬스터 위에 놓기');
                 Sfx.play('mergeFail');
             }
             return null;
         }
         const res = Game.act({ kind: 'equip', monster: m, i: d.index });
-        if (res.ok && res.swapped) this.showToast(`맞바꿨습니다. ${EQUIPMENT[res.swapped].name}은(는) 보관함으로 돌아갔습니다.`, 2.2);
+        if (res.ok && res.swapped) this.showToast(`맞바꿈: ${EQUIPMENT[res.swapped].name} 회수`, 2.2);
         return res;
     },
 
@@ -950,8 +950,8 @@ const UI = {
     doSummonUpgrade() {
         const res = Game.act({ kind: 'upgradeSummon' });
         if (!res.ok) {
-            if (res.reason === 'gold') this.showToast(`소환 강화에 ${Game.summonUpgradeCost()}G가 필요합니다.`);
-            else if (res.reason === 'max') this.showToast('소환 강화가 최고 단계입니다.');
+            if (res.reason === 'gold') this.showToast(`소환 강화 ${Game.summonUpgradeCost()}G`);
+            else if (res.reason === 'max') this.showToast('최고 단계');
             Sfx.play('mergeFail');
         }
         return res;
@@ -964,8 +964,8 @@ const UI = {
             this.targeting = false;
             return res;
         }
-        if (res.reason === 'full') this.showToast('몬스터를 더 놓을 자리가 없습니다. 합쳐서 자리를 만드세요.');
-        else if (res.reason === 'gold') this.showToast(`소환에는 ${Game.summonCost()}골드가 필요합니다.`);
+        if (res.reason === 'full') this.showToast('자리 없음');
+        else if (res.reason === 'gold') this.showToast(`소환 ${Game.summonCost()}G`);
         Sfx.play('mergeFail');
         return res;
     },
@@ -1068,7 +1068,7 @@ const UI = {
             // 끌지 않고 뗐다: 끼우는 법을 알려 준다
             this.cancelEquipDrag();
             Sfx.play('click');
-            this.showToast('장비를 맵의 몬스터 위로 끌어 놓으면 끼웁니다.');
+            this.showToast('몬스터 위에 놓기');
             return;
         }
         if (drag) {
@@ -1104,9 +1104,9 @@ const UI = {
         // 놓지 못했다: 안내하고 제자리로 날아간다
         if (act.action === 'invalid') {
             const msg = (act.real && this.mergeFailText(act.real, d.type)) || {
-                path: '길에는 놓을 수 없습니다. 근접 몬스터도 길 옆에 놓으면 길로 걸어 나갑니다.',
-                cell: '몬스터는 빛나는 길 옆 칸에만 놓을 수 있습니다.'
-            }[act.reason] || '여기에는 놓을 수 없습니다.';
+                path: '길에는 못 놓음',
+                cell: '길 옆 칸만'
+            }[act.reason] || '못 놓음';
             this.showToast(msg);
             Sfx.play('mergeFail');
         }
@@ -1135,8 +1135,8 @@ const UI = {
         if (Game.act({ kind: third.key }).ok) return;
         const left = Game.skills[third.key];
         if (left > 0) this.showToast(`${third.name} 재사용까지 ${Math.ceil(left)}초`);
-        else if (third.key === 'goldBomb' && Game.gold < COMBAT_RULES.goldBomb.minGold) this.showToast('골드가 모자랍니다.');
-        else this.showToast('지금은 쓸 수 없습니다.');
+        else if (third.key === 'goldBomb' && Game.gold < COMBAT_RULES.goldBomb.minGold) this.showToast('골드 부족');
+        else this.showToast('지금 못 씀');
     },
 
     // 권능 창: 여는 동안 판이 멈춘다
@@ -1156,10 +1156,10 @@ const UI = {
     useRoar() {
         this.setTab('demon');
         if (Game.roarLocked()) {
-            this.showToast(`마왕 체력 ${COMBAT_RULES.roar.unlockHp} 이하에서 쓸 수 있습니다.`);
+            this.showToast(`체력 ${COMBAT_RULES.roar.unlockHp} 이하 전용`);
             return;
         }
-        if (Game.power('bribeRoar') && Game.skills.roar <= 0 && !Game.act({ kind: 'roar' }).ok) { this.showToast('입막음에 쓸 골드가 모자랍니다.'); return; }
+        if (Game.power('bribeRoar') && Game.skills.roar <= 0 && !Game.act({ kind: 'roar' }).ok) { this.showToast('입막음에 쓸 골드 부족'); return; }
         if (Game.power('bribeRoar')) return;
         if (!Game.act({ kind: 'roar' }).ok) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
     },
@@ -1259,7 +1259,7 @@ const UI = {
         if (isBuildCell(col, row) && !G.monsterAt(col, row)) {
             this.clearSelection();
             this.setTab('monster');
-            this.showToast(G.monsters.length ? '맵의 몬스터를 이 칸으로 끌어 옮길 수 있습니다.' : `소환(S, ${G.summonCost()}G)하면 몬스터가 길 옆 칸에 바로 나옵니다.`);
+            this.showToast(G.monsters.length ? '끌어서 이동' : `소환(S) ${G.summonCost()}G`);
             return;
         }
         this.clearSelection();
@@ -1555,7 +1555,6 @@ const UI = {
     },
 
     draw(ctx) {
-        UIKit.battleSkin = false; // 전투 화면에서만 쇠와 뼈 재질을 쓴다(아래에서 켠다)
         const G = Game;
         if (this.dialogue && !G.inPlay() && G.state !== 'victory') {
             // 시작 전 대화: 비운 맵 위에 대화만
@@ -1595,7 +1594,6 @@ const UI = {
             this.drawToast(ctx);
             return;
         }
-        UIKit.battleSkin = true;
         this.drawBottomBar(ctx);
         this.drawTopBar(ctx);
         this.drawChallengeScore(ctx);
@@ -1670,7 +1668,7 @@ const UI = {
         UIKit.panel(ctx, x, y, w, h);
         UIKit.icon(ctx, 'pause', cx - 150, y + 36);
         UIKit.text(ctx, '일시정지', cx + 24, y + 62, 52, T.gold, 'center', 'bold');
-        UIKit.ink(ctx, `멈춘 채로도 소환, 배치, 합치기${CORRUPTION_ENABLED ? ', 타락' : ''}를 할 수 있습니다.`, cx, y + 114, 21, T.inkSoft, 'center');
+        UIKit.ink(ctx, `멈춘 채로 소환, 배치, 합치기${CORRUPTION_ENABLED ? ', 타락' : ''} 가능`, cx, y + 114, 21, T.inkSoft, 'center');
         const keys = [['S', '소환'], ['Tab', '탭 바꾸기'], ['Space', '다음 라운드'], ['Q', '번개'], ['W', '호통'], ['F', '배속'],
             ['P', '일시정지'], ['M', '소리'], ['Esc', '취소']];
         keys.forEach(([key, label], i) => {
@@ -1737,18 +1735,31 @@ const UI = {
 
     // 메뉴 바탕(선택 화면, 도감, 스토리 지도, 본부 안 화면): 고른 스테이지 지역의 우주 배경 위에 남색을 얇게 덮는다
     drawTable(ctx) {
-        const img = Assets.get(`void_${zoneOf(this.stageId)}`);
-        if (img) ctx.drawImage(img, 0, 0, GAME_WIDTH, GAME_HEIGHT);
-        else {
-            ctx.fillStyle = UI_THEME.navyDark;
+        this.drawIllust(ctx, 'ill_select', 0.68);
+    },
+
+    // 일러스트를 화면에 꽉 차게 정수 배율로 그린다(가운데 기준으로 넘치는 쪽을 자른다). dim은 위에 덮는 어둠
+    drawIllust(ctx, name, dim) {
+        const img = Assets.get(name);
+        ctx.fillStyle = '#06040c';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        if (img) {
+            const k = Math.ceil(Math.max(GAME_WIDTH / img.width, GAME_HEIGHT / img.height));
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, Math.round((GAME_WIDTH - img.width * k) / 2), Math.round((GAME_HEIGHT - img.height * k) / 2), img.width * k, img.height * k);
+        }
+        if (dim) {
+            ctx.fillStyle = `rgba(6,4,12,${dim})`;
             ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         }
-        ctx.fillStyle = 'rgba(8,14,36,0.5)';
-        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     },
 
     // 육각 이름판: 양끝이 뾰족한 남색 판에 진한 테와 가는 금선, 양끝 금 마름모(위쪽 이름판, 대화 제목, 표지)
     drawHexPlate(ctx, x, y, w, h, opts) {
+        if (UIKit.ironSkin) {
+            UIKit.hudFrame(ctx, 'hud_panel', x, y, w, Math.max(h, 58), 26);
+            return;
+        }
         const o = opts || {};
         const T = UI_THEME;
         x = Math.round(x);
@@ -1841,7 +1852,7 @@ const UI = {
 
         // 유물 격자: 은테 칸. 고른 유물은 금테 칸, 잠긴 유물은 흐린 그림 위에 자물쇠와 풀리는 스테이지 번호(도장)
         UIKit.text(ctx, '유물', RELIC_GRID_X, 636, 32, T.cream);
-        UIKit.text(ctx, '스토리를 깨면 풀립니다 · 판 중에는 얻지 않습니다', RELIC_GRID_X + 84, 638, 19, T.creamSoft);
+        UIKit.text(ctx, '', RELIC_GRID_X + 84, 638, 19, T.creamSoft);
         for (const b of this.buttons.filter(x => x.relicId)) {
             const picked = L.relics.includes(b.relicId);
             const hover = this.hoverButton === b;
@@ -1858,8 +1869,8 @@ const UI = {
             }
             this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
         }
-        UIKit.text(ctx, '누르면 넣고 다시 누르면 뺍니다 · 붉은 도장은 풀리는 스테이지', RELIC_GRID_X, 862, 19, T.creamSoft);
-        UIKit.text(ctx, '1·2·3 마왕 · Enter 시작', RELIC_GRID_X, 892, 19, T.creamSoft);
+        UIKit.text(ctx, '', RELIC_GRID_X, 862, 19, T.creamSoft);
+        UIKit.text(ctx, '', RELIC_GRID_X, 892, 19, T.creamSoft);
 
         // 고른 유물 칸과 이름·효과
         UIKit.text(ctx, `고른 유물 ${L.relics.length}/${Meta.relicSlots()}`, PICKED_X, 636, 28, T.cream);
@@ -1880,8 +1891,8 @@ const UI = {
             else UIKit.text(ctx, '빈 칸', b.x + b.w / 2, b.y + b.h / 2, 16, T.creamSoft, 'center');
         }
         let ly = RELIC_GRID_Y + RELIC_CELL + 30;
-        if (!Meta.relicSlots()) UIKit.text(ctx, `유물 칸은 ${this.unlockText('slot', 1)}됩니다`, PICKED_X, ly, 19, T.creamSoft);
-        else if (!L.relics.length) UIKit.text(ctx, '유물 없이도 시작할 수 있습니다', PICKED_X, ly, 19, T.creamSoft);
+        if (!Meta.relicSlots()) UIKit.text(ctx, `유물 칸: ${this.unlockText('slot', 1)}`, PICKED_X, ly, 19, T.creamSoft);
+        else if (!L.relics.length) UIKit.text(ctx, '', PICKED_X, ly, 19, T.creamSoft);
         for (const id of L.relics) {
             // 이름과 효과 두 줄(효과 글이 길어 한 줄에 함께 두면 오른쪽 창에 가린다)
             UIKit.text(ctx, RELICS[id].name, PICKED_X, ly, 20, T.cream);
@@ -2440,8 +2451,7 @@ const UI = {
             while (fs > 12 && ctx.measureText(fx).width > p.w - 90 - 130) ctx.font = `bold ${--fs}px ${UI_FONT}`;
             UIKit.ink(ctx, fx, p.x + 90, y + 50, fs, T.inkGood, 'left', 'bold');
         } else {
-            UIKit.ink(ctx, '장비 없음', p.x + 90, y + 22, 20, T.inkFaint, 'left', 'bold');
-            UIKit.ink(ctx, '보관함에서 끌어 놓아 끼웁니다', p.x + 90, y + 50, 16, T.inkSoft);
+            UIKit.ink(ctx, '장비 없음', p.x + 90, y + 34, 20, T.inkFaint, 'left', 'bold');
         }
         y += POPUP_EQUIP_H;
 
@@ -2477,12 +2487,6 @@ const UI = {
             UIKit.ink(ctx, res.name, p.x + 304, y + 24, 19, MONSTER_GRADES[res.grade].ink, 'left', 'bold');
             y += 50;
         }
-        const next = nextGrade(def.grade);
-        const gradeLine = next ? `같은 ${grade.name} 아무 ${MERGE_RULES.gradeCount}마리 → ${MONSTER_GRADES[next].name} 무작위 1마리`
-            : `${grade.name}은 최고 등급이라 등급 합치기를 할 수 없습니다`;
-        UIKit.ink(ctx, gradeLine, p.x + 22, y + 18, 17, next ? MONSTER_GRADES[next].ink : T.inkFaint, 'left', 'bold');
-        // 제물: 이 몬스터(랭크 포함)를 바치면 얻는 것
-        UIKit.ink(ctx, `왕좌에 바치면 ${sacrificeText(Game.sacrificeGain(f))}`, p.x + 22, y + 18 + POPUP_SACRIFICE_H, 17, T.inkWax);
     },
 
     drawButtons(ctx) {
@@ -2602,7 +2606,7 @@ const UI = {
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         const cx = GAME_WIDTH / 2;
         UIKit.bigText(ctx, '보스 처치 보상', cx, REWARD_CARD_Y - 118, 68, UI_THEME.gold, 'center', '#fff2b8');
-        UIKit.text(ctx, '하나를 고르세요 · 1, 2, 3', cx, REWARD_CARD_Y - 60, 26, UI_THEME.creamSoft, 'center');
+        UIKit.text(ctx, '1, 2, 3', cx, REWARD_CARD_Y - 60, 26, UI_THEME.creamSoft, 'center');
         let cardIndex = 0;
         for (const b of this.buttons) if (b.reward) {
             // 카드는 차례로 올라온다
@@ -2700,7 +2704,7 @@ const UI = {
             // 골드 카드: 금화 더미 아이콘을 3배로, 큰 숫자
             UIKit.icon(ctx, 'gold', cx - 72, 52, 3);
             UIKit.bigText(ctx, `+${card.gold}`, cx, 250, 60, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, '골드 · 바로 받습니다', cx, 296, 20, T.inkSoft, 'center');
+            UIKit.ink(ctx, '골드', cx, 296, 20, T.inkSoft, 'center');
             UIKit.icon(ctx, 'summon', cx - 92, 336);
             UIKit.ink(ctx, `소환 ${Game.summonCost()}G`, cx - 36, 361, 24, T.ink, 'left', 'bold');
         }
@@ -2770,7 +2774,7 @@ const UI = {
         if (st.hover) {
             const line = odds => GRADE_ORDER.filter(g => odds[g] > 0).map(g => `${MONSTER_GRADES[g].name} ${Math.round(odds[g] * 100)}%`).join(' · ');
             const next = SUMMON_LEVELS[G.summonLevel + 1];
-            this.drawTooltip(ctx, b.x, b.y - 100, `지금: ${line(SUMMON_LEVELS[G.summonLevel].odds)}`, next ? `다음: ${line(next.odds)}` : '최고 단계입니다');
+            this.drawTooltip(ctx, b.x, b.y - 100, `지금: ${line(SUMMON_LEVELS[G.summonLevel].odds)}`, next ? `다음: ${line(next.odds)}` : '최고 단계');
         }
     },
 
@@ -2946,7 +2950,7 @@ const UI = {
             const say = { owned: ['찍음', T.good], locked: ['아직 이어지지 않음', T.creamSoft], exclusive: ['이 갈래의 끝은 하나만', T.creamSoft], limit: ['더 찍을 수 없음', T.bad], mana: [`마력 ${check.cost} 필요`, T.bad] }[check.reason] || [`마력 ${check.cost}로 찍기`, T.gold];
             UIKit.text(ctx, say[0], px, W.y + 278, 20, say[1], 'left', 'bold');
         } else {
-            this.drawWrappedPower(ctx, '왕좌나 찍은 곳과 이어진 항목을 찍습니다. 지도는 판마다 다릅니다.', px, W.y + 130, pw, T.creamSoft);
+            this.drawWrappedPower(ctx, '', px, W.y + 130, pw, T.creamSoft);
         }
         ctx.fillStyle = T.goldDark;
         ctx.fillRect(px, W.y + 316, pw, 2);
@@ -3012,15 +3016,15 @@ const UI = {
     currentHint() {
         const G = Game;
         if (G.bossReward) return null;
-        if (this.targeting) return { key: 'target', text: '번개 떨어뜨릴 곳을 누르세요 · Esc 취소' };
-        if (this.drag) return { key: 'drag', text: '빈 칸으로 옮기거나 몬스터 위에 놓아 합치기 · 왕좌는 제물' };
-        if (this.equipDrag) return { key: 'equipDrag', text: '몬스터 위에 놓으면 끼웁니다' };
-        if (G.equipBag.length && G.monsters.length && !G.monsters.some(m => m.equip)) return { key: 'bag', text: '보관함의 장비를 몬스터 위로 끌어 끼우세요' };
-        if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) return { key: 'summon', text: `소환(S)하면 길 옆에 몬스터가 나옵니다 · ${G.summonCost()}G` };
-        if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: `같은 등급 몬스터 위에 놓으면 ${MERGE_RULES.gradeCount}마리가 합쳐집니다 · 조합식은 2마리` };
-        if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '몬스터를 왕좌로 끌어 바치면 체력을 회복합니다' };
-        if (G.state === 'wave' && G.waveIndex === 0 && G.skills.lightning <= 0) return { key: 'lightning', text: '마왕 탭의 번개(Q)로 용사를 직접 때리세요' };
-        if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사를 5초 안에 누르면 부하가 됩니다!' };
+        if (this.targeting) return { key: 'target', text: '번개 위치 선택 · Esc 취소' };
+        if (this.drag) return { key: 'drag', text: '빈 칸 이동 · 몬스터 합치기 · 왕좌 제물' };
+        if (this.equipDrag) return { key: 'equipDrag', text: '몬스터 위에 놓기' };
+        if (G.equipBag.length && G.monsters.length && !G.monsters.some(m => m.equip)) return { key: 'bag', text: '장비를 몬스터 위로' };
+        if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) return { key: 'summon', text: `소환(S) ${G.summonCost()}G` };
+        if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: `같은 등급끼리 겹치면 합치기` };
+        if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '왕좌로 끌면 제물' };
+        if (G.state === 'wave' && G.waveIndex === 0 && G.skills.lightning <= 0) return { key: 'lightning', text: '번개(Q)' };
+        if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사 누르기' };
         return null;
     },
 
@@ -3034,6 +3038,7 @@ const UI = {
 
     // 화면 위쪽 가운데 안내: 남색 창 한 줄(처음 몇 번만)
     drawHints(ctx) {
+        if (this.popup) return; // 안내가 정보 창을 가리지 않게 한다
         const h = this.currentHint();
         if (!h || (this.hintCounts[h.key] || 0) > HINT_SHOWS) return;
         ctx.font = `24px ${UI_FONT}`;
@@ -3295,31 +3300,28 @@ const UI = {
 
     drawTitle(ctx) {
         const T = UI_THEME;
-        ctx.fillStyle = T.dimLight;
-        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        const cx = GAME_WIDTH / 2;
-        const lift = Math.round(Math.sin(Game.time * 1.4) * 4);
-        // 제목: 흰 글자에 금 테와 진한 남색 외곽선, 아래로 진한 그림자
+        this.drawIllust(ctx, 'ill_title', 0.12);
+        // 왼쪽 위에 어둠을 깔아 제목이 그림 위에서 읽히게 한다(도트 계단)
+        for (let i = 0; i < 12; i++) {
+            ctx.fillStyle = `rgba(6,4,12,${0.06 * (12 - i) / 2})`;
+            ctx.fillRect(0, 0, 900 - i * 40, GAME_HEIGHT);
+        }
         ctx.save();
-        ctx.font = `bold 150px ${UI_FONT}`;
-        ctx.textAlign = 'center';
+        ctx.font = `bold 118px ${UI_FONT}`;
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = 30;
-        ctx.strokeStyle = T.outline;
-        ctx.strokeText('던전 수호대', cx, 318 + lift);
-        ctx.lineWidth = 26;
-        ctx.strokeText('던전 수호대', cx, 310 + lift);
-        ctx.lineWidth = 12;
-        ctx.strokeStyle = T.goldLine;
-        ctx.strokeText('던전 수호대', cx, 310 + lift);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText('던전 수호대', cx, 310 + lift);
+        ctx.lineJoin = 'miter';
+        ctx.lineWidth = 16;
+        ctx.strokeStyle = '#0c0814';
+        ctx.strokeText('던전', 110, 250);
+        ctx.strokeText('수호대', 110, 380);
+        ctx.fillStyle = '#e8dcc0';
+        ctx.fillText('던전', 110, 250);
+        ctx.fillStyle = '#ff9a4d';
+        ctx.fillText('수호대', 110, 380);
         ctx.restore();
-        this.drawHexPlate(ctx, cx - 470, 408, 940, 68);
-        UIKit.text(ctx, '용사들이 또 왔습니다. 마왕의 왕좌를 지키세요.', cx, 443, 30, T.cream, 'center');
-        UIKit.panel(ctx, GAME_WIDTH - 330, 18, 300, 72);
-        UIKit.text(ctx, `스토리 ${Meta.data.cleared.length} / ${STAGES.length}`, GAME_WIDTH - 180, 55, 30, T.gold, 'center', 'bold');
+        UIKit.text(ctx, '', 118, 480, 28, T.cream, 'left');
+        UIKit.text(ctx, `스토리 ${Meta.data.cleared.length} / ${STAGES.length}`, 118, 690, 22, T.creamSoft, 'left');
     },
 
     drawResult(ctx) {
@@ -3334,9 +3336,9 @@ const UI = {
         const abyss = G.challenge && G.challenge.kind === 'abyss';
         const raid = G.challenge && G.challenge.kind === 'raid';
         if (raid) UIKit.bigText(ctx, `${BOSSES[G.challenge.boss].name} ${G.raidTier}단계 토벌`, cx, 200, 54, T.gold, 'center', '#fff4c0');
-        else if (abyss) UIKit.bigText(ctx, `심연 ${G.waveIndex}층까지 내려갔습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
-        else if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드까지 막았습니다`, cx, 200, 54, T.gold, 'center', '#fff4c0');
-        else UIKit.bigText(ctx, win ? '왕좌를 지켰습니다!' : '왕좌가 무너졌습니다', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
+        else if (abyss) UIKit.bigText(ctx, `심연 ${G.waveIndex}층`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        else if (G.challenge) UIKit.bigText(ctx, `${G.waveIndex}라운드`, cx, 200, 54, T.gold, 'center', '#fff4c0');
+        else UIKit.bigText(ctx, win ? '승리' : '패배', cx, 200, 58, win ? T.gold : '#ff9a8a', 'center', win ? '#fff4c0' : null);
         if (st) UIKit.ink(ctx, `스테이지 ${st.no} · ${st.name}`, cx, 248, 24, T.inkSoft, 'center', 'bold');
         const lord = G.lordDef();
         const portrait = Assets.get(lord.sprite);
@@ -3384,9 +3386,9 @@ const UI = {
                 if (many) UIKit.ink(ctx, names, cx - 200, 686, 20, T.ink, 'left', 'bold');
                 else UIKit.ink(ctx, names, cx - 200 + res.unlocks.length * 92 + 8, 636, 22, T.ink, 'left', 'bold');
             } else if (win) {
-                UIKit.ink(ctx, '다시 깸 · 해금은 처음 깰 때만 받습니다', cx, 630, 24, T.inkSoft, 'center', 'bold');
+                UIKit.ink(ctx, '다시 깸', cx, 630, 24, T.inkSoft, 'center', 'bold');
             } else {
-                UIKit.ink(ctx, '다시 도전하면 시작 전 대화 없이 바로 시작합니다', cx, 630, 22, T.inkSoft, 'center');
+                UIKit.ink(ctx, '', cx, 630, 22, T.inkSoft, 'center');
             }
             const next = nextStage(st.id);
             if (win && !next) line = '"이야기는 끝! 이제 본부의 도전의 문이다."';
@@ -3430,81 +3432,42 @@ const UI = {
     // 스토리 지도: 남색 창에 이야기 제목, 점선 길, 스테이지 메달. 아래 창에 고른 스테이지 설명과 처음 깰 때의 보상
     drawStoryMap(ctx) {
         const T = UI_THEME;
-        const M = STORY_MAP;
-        this.drawTable(ctx);
-        this.drawHexPlate(ctx, GAME_WIDTH / 2 - 220, 26, 440, 62);
-        UIKit.text(ctx, '스토리 지도', GAME_WIDTH / 2, 58, 34, T.cream, 'center', 'bold');
-        UIKit.panel(ctx, M.x, M.y, M.w, M.h);
-        const done = STAGES.every(st => Meta.isCleared(st.id));
-        UIKit.bigText(ctx, STORY_TITLE.name, M.x + M.w / 2, M.y + 78, 42, done ? T.gold : T.cream, 'center');
-        UIKit.ink(ctx, STORY_TITLE.sub, M.x + M.w / 2, M.y + 120, 19, T.inkSoft, 'center');
-        // 점선 길: 깬 구간은 금색, 나머지는 흐린 색
+        this.drawIllust(ctx, 'ill_worldmap', 0.1);
+        this.drawHexPlate(ctx, GAME_WIDTH / 2 - 220, 22, 440, 68);
+        UIKit.text(ctx, STORY_TITLE.name, GAME_WIDTH / 2, 56, 30, T.cream, 'center', 'bold');
+        // 길: 도트 점선. 깬 구간은 불빛, 나머지는 어두운 잉크
         for (let i = 1; i < STAGES.length; i++) {
             const a = STAGES[i - 1].map;
             const b = STAGES[i].map;
-            const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-            ctx.fillStyle = Meta.isCleared(STAGES[i - 1].id) ? T.goldLine : T.inkFaint;
-            for (let t = STAMP_R + 10; t < len - STAMP_R - 6; t += 20) {
-                const px = a[0] + (b[0] - a[0]) * t / len;
-                const py = a[1] + (b[1] - a[1]) * t / len;
-                ctx.fillRect(Math.round(px) - 4, Math.round(py) - 4, 8, 8);
+            const len = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+            const lit = Meta.isCleared(STAGES[i - 1].id);
+            for (let t = STAMP_R; t < len - STAMP_R; t += 20) {
+                const px = Math.round((a[0] + (b[0] - a[0]) * t / len) / 2) * 2;
+                const py = Math.round((a[1] + (b[1] - a[1]) * t / len) / 2) * 2;
+                ctx.fillStyle = '#1a0f08';
+                ctx.fillRect(px - 5, py - 5, 10, 10);
+                ctx.fillStyle = lit ? '#ff9a4d' : '#8a7458';
+                ctx.fillRect(px - 3, py - 3, 6, 6);
             }
         }
-        // 메달: 깸은 금 고리 붉은 보석, 열림은 밝은 은청색(다음 스테이지는 숨쉬는 금 고리), 잠김은 어두운 판에 자물쇠
+        // 도장: 도트 마름모. 깸은 붉은색, 열림은 불빛으로 깜빡이고, 잠김은 어둡다
         for (const st of STAGES) {
             const [x, y] = st.map;
             const cleared = Meta.isCleared(st.id);
             const open = Meta.isOpen(st.id);
             const picked = this.storyPick === st.id;
             const hover = this.hoverButton && this.hoverButton.stamp === st.id;
-            const disc = (r, color) => {
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(x, y, r, 0, Math.PI * 2);
-                ctx.fill();
-            };
-            if (picked) {
-                ctx.save();
-                ctx.globalCompositeOperation = 'lighter';
-                const g = ctx.createRadialGradient(x, y, STAMP_R, x, y, STAMP_R + 40);
-                g.addColorStop(0, 'rgba(255,210,90,0.5)');
-                g.addColorStop(1, 'rgba(255,210,90,0)');
-                ctx.fillStyle = g;
-                ctx.fillRect(x - STAMP_R - 40, y - STAMP_R - 40, STAMP_R * 2 + 80, STAMP_R * 2 + 80);
-                ctx.restore();
-                disc(STAMP_R + 12, T.goldLight);
-            }
-            if (cleared) {
-                this.drawWaxSeal(ctx, x, y, STAMP_R);
-                UIKit.bigText(ctx, String(st.no), x, y + 2, 40, '#ffffff', 'center');
-            } else if (open) {
-                const pulse = 4 + Math.round((Math.sin(Game.time * 3) + 1) * 3);
-                ctx.strokeStyle = T.goldLine;
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.arc(x, y, STAMP_R + pulse, 0, Math.PI * 2);
-                ctx.stroke();
-                disc(STAMP_R + 3, T.outline);
-                disc(STAMP_R, hover ? '#cfe0ff' : '#a9c2f0');
-                disc(STAMP_R - 6, hover ? '#e8f0ff' : '#d6e4ff');
-                UIKit.ink(ctx, String(st.no), x, y + 2, 42, '#14204a', 'center', 'bold');
-            } else {
-                disc(STAMP_R + 3, T.outline);
-                disc(STAMP_R, '#2a3654');
-                ctx.save();
-                ctx.globalAlpha = 0.85;
-                UIKit.icon(ctx, 'lock', x - 24, y - 26);
-                ctx.restore();
-            }
-            if (st.boss) UIKit.text(ctx, '보스', x + STAMP_R + 8, y - STAMP_R + 8, 18, open ? '#ff8a78' : T.inkFaint, 'left', 'bold');
-            // 이름 뒤는 창 색으로 비워 점선 길이 글자를 가로지르지 않게 한다
+            const r = picked ? STAMP_R + 6 : STAMP_R;
+            this.powerGem(ctx, x, y, r + 8, '#0c0814');
+            if (picked) this.powerGem(ctx, x, y, r + 2, Math.floor(this.popupAge * 3) % 2 === 0 ? '#ffe9b0' : '#ff9a4d');
+            this.powerGem(ctx, x, y, r - 4, cleared ? '#a01228' : (open ? (hover ? '#ffb46a' : '#e87a2c') : '#3a3444'));
+            this.powerGem(ctx, x, y, r - 14, cleared ? '#c81e36' : (open ? '#ffb46a' : '#28242e'));
+            if (open) UIKit.bigText(ctx, String(st.no), x, y + 2, 36, '#ffffff', 'center');
+            else UIKit.icon(ctx, 'lock', x - 24, y - 26);
             ctx.font = `bold 20px ${UI_FONT}`;
-            const nw = Math.ceil(ctx.measureText(st.name).width) + 12;
-            ctx.fillStyle = T.navy;
-            ctx.fillRect(Math.round(x - nw / 2), y + STAMP_R + 13, nw, 26);
-            UIKit.ink(ctx, st.name, x, y + STAMP_R + 26, 20, open ? T.ink : T.inkFaint, 'center', 'bold');
-            const zone = ZONES[st.zone];
-            if (zone) UIKit.ink(ctx, zone.name, x, y + STAMP_R + 50, 16, open ? T.inkSoft : T.inkFaint, 'center');
+            const nw = Math.ceil(ctx.measureText(st.name).width) + 40;
+            UIKit.note(ctx, x - nw / 2, y + STAMP_R + 8, nw, 44);
+            UIKit.text(ctx, st.name, x, y + STAMP_R + 31, 20, open ? T.cream : T.creamSoft, 'center', 'bold');
         }
         this.drawStoryInfo(ctx);
     },
@@ -3519,7 +3482,7 @@ const UI = {
         const cleared = Meta.isCleared(st.id);
         const zone = ZONES[st.zone];
         UIKit.text(ctx, `${STORY_TITLE.name} · 스테이지 ${st.no} / ${STAGES.length}${zone ? ` · ${zone.name}` : ''}`, I.x + 50, I.y + 50, 24, T.creamSoft);
-        UIKit.text(ctx, st.name, I.x + 50, I.y + 110, 56, T.cream, 'left', 'bold');
+        UIKit.text(ctx, st.name, I.x + 50, I.y + 104, 48, T.cream, 'left', 'bold');
         UIKit.icon(ctx, 'wave', I.x + 46, I.y + 154);
         UIKit.text(ctx, `라운드 ${st.waves.length}`, I.x + 102, I.y + 180, 28, T.gold, 'left', 'bold');
         if (st.boss) UIKit.text(ctx, `보스 ${BOSSES[st.boss].name}`, I.x + 280, I.y + 180, 26, T.bad, 'left', 'bold');
@@ -3544,8 +3507,8 @@ const UI = {
         const T = UI_THEME;
         const D = this.dialogue;
         const B = DIALOGUE_BOX;
-        ctx.fillStyle = T.dimLight;
-        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        // 바탕: 이번 지역의 일러스트
+        this.drawIllust(ctx, `ill_${zoneOf(this.stageId || Game.stage)}`, 0.18);
         if (D.title) {
             ctx.font = `bold 32px ${UI_FONT}`;
             const w = Math.ceil(ctx.measureText(D.title).width) + 150;
@@ -3557,7 +3520,7 @@ const UI = {
         UIKit.panel(ctx, B.x, B.y, B.w, B.h);
         // 초상: 금테 액자(232px)
         const portrait = castPortrait(who);
-        UIKit.waxFrame(ctx, B.x + 40, B.y + 36, 232);
+        UIKit.slot(ctx, B.x + 40, B.y + 36, 232, 232, 'gold');
         if (portrait) this.drawPortrait(ctx, portrait, B.x + 48, B.y + 44, 216);
         // 이름표: 대화창 위쪽에 걸친 육각 이름판
         ctx.font = `bold 28px ${UI_FONT}`;
@@ -3579,14 +3542,11 @@ const UI = {
             // 다 나오면 오른쪽 아래에 깜빡이는 화살표
             const ax = B.x + B.w - 70;
             const ay = B.y + B.h - 70;
+            // 도트 삼각형
             ctx.fillStyle = T.gold;
-            ctx.beginPath();
-            ctx.moveTo(ax - 14, ay - 8);
-            ctx.lineTo(ax + 14, ay - 8);
-            ctx.lineTo(ax, ay + 10);
-            ctx.fill();
+            for (let i = 0; i < 7; i++) ctx.fillRect(ax - 14 + i * 2, ay - 8 + i * 2, 28 - i * 4, 2);
         }
-        UIKit.ink(ctx, `${D.index + 1} / ${D.lines.length} · 클릭·Space 다음 · Esc 건너뛰기`, B.x + B.w - 110, B.y + B.h - 40, 18, T.inkSoft, 'right');
+        UIKit.ink(ctx, `${D.index + 1} / ${D.lines.length}`, B.x + B.w - 110, B.y + B.h - 40, 18, T.inkSoft, 'right');
     },
 
     // 해금 카드: 어둡게 덮은 화면 가운데 남색 카드 한 장. 그림, 종류, 이름, 효과 표에서 만든 설명, 몇 번째 카드인지
@@ -3600,7 +3560,7 @@ const UI = {
         const x = cx - U.w / 2;
         ctx.fillStyle = T.dim;
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        UIKit.bigText(ctx, '새로 풀렸습니다!', cx, U.y - 50, 52, T.gold, 'center', '#fff4c0');
+        UIKit.bigText(ctx, '새로 풀림', cx, U.y - 50, 52, T.gold, 'center', '#fff4c0');
         UIKit.panel(ctx, x, U.y, U.w, U.h);
         UIKit.gradeFrame(ctx, x - 6, U.y - 6, U.w + 12, U.h + 12, T.goldLine, 4);
         UIKit.ink(ctx, info.kind, cx, U.y + 60, 26, T.inkSoft, 'center', 'bold');
@@ -3626,12 +3586,12 @@ const UI = {
                 ctx.font = `21px ${UI_FONT}`;
                 this.wrapLines(ctx, def.desc, U.w - 100).slice(0, 1).forEach(t => UIKit.ink(ctx, t, cx, y + 10, 21, T.inkSoft, 'center'));
             }
-            UIKit.ink(ctx, u.kind === 'lord' ? '이제 고르기 화면에서 고를 수 있습니다' : '판을 시작할 때 유물 칸에 넣을 수 있습니다', cx, U.y + U.h - 34, 19, T.inkFaint, 'center');
+            UIKit.ink(ctx, u.kind === 'lord' ? '' : '', cx, U.y + U.h - 34, 19, T.inkFaint, 'center');
         } else if (u.kind === 'slot') {
-            UIKit.ink(ctx, `유물을 ${Meta.relicSlots()}개까지 들고 시작합니다`, cx, y, 26, T.inkGood, 'center', 'bold');
+            UIKit.ink(ctx, `유물 ${Meta.relicSlots()}개까지`, cx, y, 26, T.inkGood, 'center', 'bold');
         } else {
-            UIKit.ink(ctx, '메인 스토리를 모두 깼습니다.', cx, y, 26, T.ink, 'center', 'bold');
-            UIKit.ink(ctx, '이제 본부의 도전의 문에서 겨루세요.', cx, y + 40, 22, T.inkSoft, 'center');
+            UIKit.ink(ctx, '스토리 완료', cx, y, 26, T.ink, 'center', 'bold');
+            UIKit.ink(ctx, '도전의 문이 열렸다', cx, y + 40, 22, T.inkSoft, 'center');
         }
         if (C.list.length > 1) UIKit.text(ctx, `${C.index + 1} / ${C.list.length}`, cx, U.y + U.h + 20, 22, T.creamSoft, 'center');
     },
@@ -3713,7 +3673,7 @@ const UI = {
         const ids = Object.keys(MONSTERS);
         const seen = ids.filter(id => Meta.hasSeen(id)).length;
         UIKit.text(ctx, `본 몬스터 ${seen} / ${ids.length}`, 76, 150, 30, T.cream, 'left', 'bold');
-        UIKit.text(ctx, '소환, 합치기, 보스 보상으로 맵에 나온 몬스터가 기록됩니다', 420, 152, 19, T.creamSoft);
+        UIKit.text(ctx, '', 420, 152, 19, T.creamSoft);
         const m = this.mouse;
         const cells = this.collectionCells();
         const hot = cells.find(c => m.x >= c.x && m.x <= c.x + c.w && m.y >= c.y && m.y <= c.y + c.h);
@@ -3742,7 +3702,7 @@ const UI = {
         const D = COL_DETAIL;
         this.drawDetailFrame(ctx, D.x, D.y, D.w, D.h);
         if (!pick || !Meta.hasSeen(pick.item)) {
-            UIKit.ink(ctx, pick ? '아직 만나지 못했습니다' : '칸에 마우스를 올리면 자세히 봅니다', D.x + D.w / 2, D.y + D.h / 2, 26, T.inkSoft, 'center', 'bold');
+            UIKit.ink(ctx, pick ? '미발견' : '', D.x + D.w / 2, D.y + D.h / 2, 26, T.inkSoft, 'center', 'bold');
             return;
         }
         const type = pick.item;
@@ -3805,7 +3765,7 @@ const UI = {
         const hidden = MONSTER_RECIPES.filter(r => r.hidden);
         const foundHidden = hidden.filter(r => Meta.hasRecipe(r)).length;
         UIKit.text(ctx, `조합식 ${MONSTER_RECIPES.length - hidden.length}개 공개 · 히든 ${foundHidden} / ${hidden.length} 찾음`, 70, 150, 30, T.cream);
-        UIKit.text(ctx, '랭크 조건은 재료별 최소 랭크입니다', 760, 152, 19, T.creamSoft);
+        UIKit.text(ctx, '', 760, 152, 19, T.creamSoft);
         for (const c of this.collectionCells()) {
             const r = c.item;
             const found = Meta.hasRecipe(r);

@@ -278,7 +278,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.orc_guard.sprite, cost: 70,
         stats: { hp: 120, damage: 8, interval: 1.0, range: 2, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
-        desc: '길 옆에 서서 곁을 지나는 용사 3명을 한꺼번에 때립니다.',
+        desc: '길 옆에 서서 곁을 지나는 용사 3명을 한꺼번에 때린다.',
         branches: {
             A: { name: '중갑', desc: '받는 피해 40% 감소', armor: 0.4 },
             B: { name: '광전사', desc: '피해 2배, 공격 간격 0.5초', damageMul: 2, interval: 0.5 }
@@ -290,7 +290,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.skeleton_archer.sprite, cost: 50,
         stats: { hp: 40, damage: 8, interval: 0.8, range: 3 },
         abilities: [], unlock: 'start',
-        desc: '길 옆에서 가장 앞선 용사를 빠르게 쏩니다.',
+        desc: '길 옆에서 가장 앞선 용사를 빠르게 쏜다.',
         branches: {
             A: { name: '연사', desc: '공격 간격 0.4초', interval: 0.4 },
             B: { name: '저격', desc: '피해 3배, 사거리 5', damageMul: 3, range: 5, heavy: true }
@@ -302,7 +302,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.dark_mage.sprite, cost: 100,
         stats: { hp: 30, damage: 20, interval: 2.0, range: 2.5, splash: 1 },
         abilities: [], unlock: 'start',
-        desc: '길 옆에서 마력 구체로 무리를 함께 공격합니다.',
+        desc: '길 옆에서 마력 구체로 무리를 함께 공격한다.',
         branches: {
             A: { name: '폭발', desc: '피해 범위 반경 2', splash: 2 },
             B: { name: '관통', desc: '일직선 빔으로 공격', beam: true }
@@ -314,7 +314,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.orc_berserker.sprite, cost: 120,
         stats: { hp: 180, damage: 22, interval: 0.7, range: 2.4, block: 2, respawn: 8 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
-        desc: '곁의 용사 2명을 빠르게 베고, 쓰러뜨릴수록 더 빨라집니다.',
+        desc: '곁의 용사 2명을 빠르게 베고, 쓰러뜨릴수록 더 빨라진다.',
         art: astArt('orc_berserker', { glow: '255,110,60' })
     },
     curse_shooter: {
@@ -322,7 +322,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.curse_shooter.sprite, cost: 120,
         stats: { hp: 50, damage: 22, interval: 1.0, range: 4 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
-        desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏩니다.',
+        desc: '먼 곳의 가장 앞선 용사에게 저주 화살을 쏜다.',
         art: astArt('curse_shooter', { glow: '170,90,255' })
     },
     bone_knight: {
@@ -330,7 +330,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.bone_knight.sprite, cost: 250,
         stats: { hp: 500, damage: 30, interval: 1.0, range: 2, block: 5, respawn: 6 },
         abilities: [{ kind: 'stunShot', chance: 0.15, duration: 1 }], unlock: 'start',
-        desc: '곁의 용사 5명을 베고, 가끔 기절시킵니다.',
+        desc: '곁의 용사 5명을 베고, 가끔 기절시킨다.',
         art: astArt('bone_knight', { glow: '170,120,255' })
     },
     death_lord: {
@@ -339,7 +339,7 @@ const MONSTERS = {
         stats: { hp: 900, damage: 60, interval: 0.9, range: 2, block: 8, respawn: 5 },
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1.2 }], unlock: 'start',
         skills: [{ kind: 'barrage', name: '망자의 군세', cooldown: 14, count: 6, mul: 1.2, reach: 6 }],
-        desc: '곁의 용사 8명을 한꺼번에 베고, 가끔 기절시킵니다.',
+        desc: '곁의 용사 8명을 한꺼번에 베고, 가끔 기절시킨다.',
         art: astArt('death_lord', { glow: '255,200,90' })
     },
 
@@ -349,7 +349,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.goblin_spearman.sprite, cost: 60,
         stats: { hp: 70, damage: 12, interval: 0.7, range: 2.4, block: 1, respawn: 6 },
         abilities: [], unlock: 'start',
-        desc: '길 옆에 서서 지나가는 용사를 창으로 빠르게 찌릅니다.',
+        desc: '길 옆에 서서 지나가는 용사를 창으로 빠르게 찌른다.',
         art: astArt('goblin_spearman', { glow: '130,235,80' })
     },
     zombie: {
@@ -357,7 +357,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.zombie.sprite, cost: 60,
         stats: { hp: 170, damage: 6, interval: 1.2, range: 2, block: 3, respawn: 7 },
         abilities: [{ kind: 'slowShot', name: '붙잡는 손', speedMul: 0.85, duration: 1.5 }], unlock: 'start',
-        desc: '곁을 지나는 용사 3명을 움켜쥐어 느리게 합니다.',
+        desc: '곁을 지나는 용사 3명을 움켜쥐어 느리게 한다.',
         art: astArt('zombie', { glow: '150,220,120' })
     },
     fire_imp: {
@@ -365,7 +365,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.fire_imp.sprite, cost: 60,
         stats: { hp: 30, damage: 7, interval: 1.0, range: 2.5 },
         abilities: [{ kind: 'burnShot', dps: 3, duration: 2 }], unlock: 'start',
-        desc: '불덩이를 던져 맞은 용사를 잠시 태웁니다.',
+        desc: '불덩이를 던져 맞은 용사를 잠시 태운다.',
         art: astArt('fire_imp', { glow: '255,110,40', shot: 'fx_shot_fire' })
     },
     gnoll_hunter: {
@@ -373,7 +373,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.gnoll_hunter.sprite, cost: 60,
         stats: { hp: 40, damage: 14, interval: 1.3, range: 3 },
         abilities: [], unlock: 'start',
-        desc: '무거운 손도끼를 던져 앞선 용사 하나를 세게 때립니다.',
+        desc: '무거운 손도끼를 던져 앞선 용사 하나를 세게 때린다.',
         art: astArt('gnoll_hunter', { glow: '255,180,70', shot: 'fx_shot_axe' })
     },
     wisp_acolyte: {
@@ -381,7 +381,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.wisp_acolyte.sprite, cost: 60,
         stats: { hp: 30, damage: 3, interval: 1.5, range: 2 },
         abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 2, value: 0.05 }], unlock: 'start',
-        desc: '둘레 몬스터의 공격 속도를 조금 올립니다.',
+        desc: '둘레 몬스터의 공격 속도를 조금 올린다.',
         art: astArt('wisp_acolyte', { glow: '90,240,255', shot: 'bolt' })
     },
     werewolf: {
@@ -389,7 +389,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.werewolf.sprite, cost: 120,
         stats: { hp: 170, damage: 24, interval: 0.6, range: 2.4, block: 2, respawn: 7 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
-        desc: '곁의 용사 2명을 물어뜯고, 쓰러뜨리면 더 사나워집니다.',
+        desc: '곁의 용사 2명을 물어뜯고, 쓰러뜨리면 더 사나워진다.',
         art: astArt('werewolf', { glow: '140,160,255' })
     },
     troll: {
@@ -397,7 +397,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.troll.sprite, cost: 120,
         stats: { hp: 320, damage: 14, interval: 1.2, range: 2, block: 4, respawn: 7 },
         abilities: [{ kind: 'slowShot', name: '육중한 일격', speedMul: 0.8, duration: 2 }], unlock: 'start',
-        desc: '곁의 용사 4명을 내리쳐 느리게 합니다.',
+        desc: '곁의 용사 4명을 내리쳐 느리게 한다.',
         art: astArt('troll', { glow: '70,230,180' })
     },
     frost_witch: {
@@ -405,7 +405,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.frost_witch.sprite, cost: 120,
         stats: { hp: 40, damage: 14, interval: 2.0, range: 3, splash: 1 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
-        desc: '얼음 창을 던져 무리를 함께 얼리고 느리게 만듭니다.',
+        desc: '얼음 창을 던져 무리를 함께 얼리고 느리게 만든다.',
         art: astArt('frost_witch', { glow: '130,205,255', shot: 'fx_shot_ice', impact: 'fx_snowflake' })
     },
     nightmare_jester: {
@@ -413,7 +413,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.nightmare_jester.sprite, cost: 120,
         stats: { hp: 40, damage: 12, interval: 1.2, range: 3.5 },
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1 }], unlock: 'start',
-        desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세웁니다.',
+        desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세운다.',
         art: astArt('nightmare_jester', { glow: '235,110,255', shot: 'fx_shot_jester' })
     },
     orc_shaman: {
@@ -421,7 +421,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.orc_shaman.sprite, cost: 120,
         stats: { hp: 50, damage: 5, interval: 1.5, range: 2.5 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 2.5, value: 0.2 }], unlock: 'start',
-        desc: '전쟁 주술로 둘레 몬스터의 공격을 더 아프게 합니다.',
+        desc: '전쟁 주술로 둘레 몬스터의 공격을 더 아프게 한다.',
         art: astArt('orc_shaman', { glow: '110,240,130', shot: 'bolt' })
     },
     minotaur: {
@@ -429,7 +429,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.minotaur.sprite, cost: 250,
         stats: { hp: 480, damage: 50, interval: 1.2, range: 2.4, block: 3, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
-        desc: '큰 도끼를 휘둘러 곁의 용사와 그 둘레를 함께 벱니다.',
+        desc: '큰 도끼를 휘둘러 곁의 용사와 그 둘레를 함께 벤다.',
         art: astArt('minotaur', { glow: '255,140,50' })
     },
     vampire: {
@@ -437,7 +437,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.vampire.sprite, cost: 250,
         stats: { hp: 70, damage: 40, interval: 1.0, range: 4 },
         abilities: [{ kind: 'goldOnKill', gold: 3 }], unlock: 'start',
-        desc: '먼 곳의 용사에게 핏빛 구슬을 쏘고, 쓰러뜨리면 금화를 챙깁니다.',
+        desc: '먼 곳의 용사에게 핏빛 구슬을 쏘고, 쓰러뜨리면 금화를 챙긴다.',
         art: astArt('vampire', { glow: '255,50,80', shot: 'fx_shot_blood' })
     },
     flame_demon: {
@@ -445,7 +445,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.flame_demon.sprite, cost: 250,
         stats: { hp: 80, damage: 45, interval: 2.2, range: 3, splash: 1.5 },
         abilities: [{ kind: 'burnGround', radius: 1, dps: 10, duration: 3 }], unlock: 'start',
-        desc: '용암 덩이를 던져 무리를 태우고 그 자리에 불 장판을 남깁니다.',
+        desc: '용암 덩이를 던져 무리를 태우고 그 자리에 불 장판을 남긴다.',
         art: astArt('flame_demon', { glow: '255,90,20', shot: 'fx_shot_fire', impact: 'fx_hit_fire' })
     },
     ancient_treant: {
@@ -453,7 +453,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.ancient_treant.sprite, cost: 250,
         stats: { hp: 700, damage: 20, interval: 1.3, range: 2, block: 6, respawn: 6 },
         abilities: [{ kind: 'slowShot', name: '뿌리 묶기', speedMul: 0.7, duration: 2 }], unlock: 'start',
-        desc: '곁의 용사 6명을 뿌리로 묶어 느리게 합니다.',
+        desc: '곁의 용사 6명을 뿌리로 묶어 느리게 한다.',
         art: astArt('ancient_treant', { glow: '140,255,100' })
     },
     hell_general: {
@@ -462,7 +462,7 @@ const MONSTERS = {
         stats: { hp: 800, damage: 110, interval: 0.8, range: 2.4, block: 4, respawn: 5 },
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '지옥불 강타', cooldown: 12, reach: 5, radius: 2, mul: 3, burn: 3 }],
-        desc: '곁의 용사를 불칼로 쓸어버립니다.',
+        desc: '곁의 용사를 불칼로 쓸어버린다.',
         art: astArt('hell_general', { glow: '255,170,40' })
     },
     archlich: {
@@ -471,7 +471,7 @@ const MONSTERS = {
         stats: { hp: 120, damage: 100, interval: 1.8, range: 4.5, splash: 2 },
         abilities: [{ kind: 'chain', count: 3, ratio: 0.6, jump: 2.5 }, { kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '죽음의 파동', cooldown: 16, radius: 4.5, mul: 1.5, curse: 3 }],
-        desc: '죽음의 구체를 떨어뜨리고 번개로 잇습니다. 둘레 몬스터가 더 빨리 공격합니다.',
+        desc: '죽음의 구체를 떨어뜨리고 번개로 잇는다. 둘레 몬스터가 더 빨리 공격한다.',
         art: astArt('archlich', { glow: '80,255,150', shot: 'bolt' })
     },
 
@@ -481,7 +481,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.grave_keeper.sprite, cost: 60,
         stats: { hp: 150, damage: 7, interval: 1.1, range: 2, block: 2, respawn: 7 },
         abilities: [{ kind: 'curseShot', name: '무덤의 저주', duration: 2, takenMul: 1.1 }], unlock: 'start',
-        desc: '등불로 곁을 지나는 용사 2명에게 저주를 겁니다.',
+        desc: '등불로 곁을 지나는 용사 2명에게 저주를 건다.',
         art: astArt('grave_keeper', { glow: '150,190,255' })
     },
     wraith_swordsman: {
@@ -489,7 +489,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.wraith_swordsman.sprite, cost: 120,
         stats: { hp: 190, damage: 20, interval: 0.7, range: 2.4, block: 2, respawn: 7 },
         abilities: [{ kind: 'frenzy', duration: 2, intervalMul: 0.7 }], unlock: 'start',
-        desc: '곁의 용사 2명을 베고, 쓰러뜨리면 잠시 더 빨라집니다.',
+        desc: '곁의 용사 2명을 베고, 쓰러뜨리면 잠시 더 빨라진다.',
         art: astArt('wraith_swordsman', { glow: '150,110,255' })
     },
     plague_ghoul: {
@@ -497,7 +497,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.plague_ghoul.sprite, cost: 120,
         stats: { hp: 50, damage: 12, interval: 1.8, range: 3, splash: 1 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
-        desc: '독 안개를 던져 맞은 용사들이 더 큰 피해를 받게 합니다.',
+        desc: '독 안개를 던져 맞은 용사들이 더 큰 피해를 받게 한다.',
         art: astArt('plague_ghoul', { glow: '190,170,240', shot: 'bolt' })
     },
     bone_priest: {
@@ -505,7 +505,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.bone_priest.sprite, cost: 250,
         stats: { hp: 90, damage: 12, interval: 1.5, range: 3 },
         abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.2 }], unlock: 'start',
-        desc: '둘레 몬스터의 공격 속도를 올리는 뼈 가면의 사제입니다.',
+        desc: '둘레 몬스터의 공격 속도를 올리는 뼈 가면의 사제이다.',
         art: astArt('bone_priest', { glow: '140,230,120', shot: 'bolt' })
     },
     goblin_thrower: {
@@ -513,7 +513,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.goblin_thrower.sprite, cost: 60,
         stats: { hp: 35, damage: 10, interval: 1.0, range: 2.5 },
         abilities: [{ kind: 'stunShot', chance: 0.1, duration: 0.6 }], unlock: 'start',
-        desc: '창을 던져 가끔 용사를 멈춰 세웁니다.',
+        desc: '창을 던져 가끔 용사를 멈춰 세운다.',
         art: astArt('goblin_thrower', { glow: '255,190,90' })
     },
     orc_charger: {
@@ -521,7 +521,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.orc_charger.sprite, cost: 250,
         stats: { hp: 460, damage: 44, interval: 0.9, range: 2.4, block: 3, respawn: 6 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.65 }], unlock: 'start',
-        desc: '곁의 용사 3명을 들이받고, 쓰러뜨리면 더 사나워집니다.',
+        desc: '곁의 용사 3명을 들이받고, 쓰러뜨리면 더 사나워진다.',
         art: astArt('orc_charger', { glow: '255,150,80' })
     },
     war_drummer: {
@@ -529,7 +529,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.war_drummer.sprite, cost: 250,
         stats: { hp: 100, damage: 10, interval: 1.5, range: 3 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 3, value: 0.3 }], unlock: 'start',
-        desc: '북소리로 둘레 몬스터의 피해를 올립니다.',
+        desc: '북소리로 둘레 몬스터의 피해를 올린다.',
         art: astArt('war_drummer', { glow: '255,120,70', shot: 'bolt' })
     },
     ogre_crusher: {
@@ -537,7 +537,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.ogre_crusher.sprite, cost: 250,
         stats: { hp: 560, damage: 60, interval: 1.4, range: 2.4, block: 4, respawn: 7 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.8 }], unlock: 'start',
-        desc: '느리지만 한 번에 여럿을 부수는 거한입니다.',
+        desc: '느리지만 한 번에 여럿을 부수는 거한이다.',
         art: astArt('ogre_crusher', { glow: '255,170,90' })
     },
     orc_high_chief: {
@@ -546,7 +546,7 @@ const MONSTERS = {
         stats: { hp: 1000, damage: 95, interval: 0.9, range: 2.4, block: 6, respawn: 5 },
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.5 }, { kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '전쟁의 함성', cooldown: 20, duration: 8, damage: 0.3 }],
-        desc: '철퇴를 휘두르며 둘레 몬스터를 함께 강하게 만듭니다.',
+        desc: '철퇴를 휘두르며 둘레 몬스터를 함께 강하게 만든다.',
         art: astArt('orc_high_chief', { glow: '255,160,70' })
     },
     giant_king: {
@@ -555,7 +555,7 @@ const MONSTERS = {
         stats: { hp: 1400, damage: 70, interval: 1.3, range: 2, block: 10, respawn: 6 },
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1.2 }, { kind: 'cleave', radius: 1.5, ratio: 0.4 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '대지 강타', cooldown: 15, radius: 3, mul: 1.5, stun: 2 }],
-        desc: '곁의 용사 10명을 한꺼번에 내리치는 거인입니다.',
+        desc: '곁의 용사 10명을 한꺼번에 내리치는 거인이다.',
         art: astArt('giant_king', { glow: '255,140,60' })
     },
     hellhound_warrior: {
@@ -563,7 +563,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.hellhound_warrior.sprite, cost: 60,
         stats: { hp: 90, damage: 13, interval: 0.7, range: 2.4, block: 1, respawn: 6 },
         abilities: [{ kind: 'frenzy', duration: 2, intervalMul: 0.7 }], unlock: 'start',
-        desc: '불타는 사냥개입니다. 쓰러뜨리면 더 빨리 뭅니다.',
+        desc: '불타는 사냥개이다. 쓰러뜨리면 더 빨리 문다.',
         art: astArt('hellhound_warrior', { glow: '255,120,50' })
     },
     succubus: {
@@ -571,7 +571,7 @@ const MONSTERS = {
         sprite: HD_MONSTER_ART.succubus.sprite, cost: 120,
         stats: { hp: 45, damage: 18, interval: 1.0, range: 3.5 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
-        desc: '홀린 용사가 더 큰 피해를 받게 합니다.',
+        desc: '홀린 용사가 더 큰 피해를 받게 한다.',
         art: astArt('succubus', { glow: '255,90,190', shot: 'bolt' })
     },
     flame_archer: {
@@ -579,7 +579,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.flame_archer.sprite, cost: 120,
         stats: { hp: 240, damage: 18, interval: 1.0, range: 2, block: 3, respawn: 7 },
         abilities: [{ kind: 'burnShot', dps: 6, duration: 2 }], unlock: 'start',
-        desc: '곁의 용사 3명을 불로 때려 태웁니다.',
+        desc: '곁의 용사 3명을 불로 때려 태운다.',
         art: astArt('flame_archer', { glow: '255,110,50' })
     },
     executioner: {
@@ -587,7 +587,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.executioner.sprite, cost: 250,
         stats: { hp: 420, damage: 70, interval: 1.3, range: 2.4, block: 2, respawn: 6 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.65 }, { kind: 'cleave', radius: 1.5, ratio: 0.5 }], unlock: 'start',
-        desc: '큰 낫으로 둘레를 함께 베는 사신입니다.',
+        desc: '큰 낫으로 둘레를 함께 베는 사신이다.',
         art: astArt('executioner', { glow: '190,90,255' })
     },
     chaos_mage: {
@@ -595,7 +595,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.chaos_mage.sprite, cost: 250,
         stats: { hp: 80, damage: 42, interval: 2.0, range: 3.5, splash: 1.5 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.25 }], unlock: 'start',
-        desc: '넓은 저주를 터뜨립니다.',
+        desc: '넓은 저주를 터뜨린다.',
         art: astArt('chaos_mage', { glow: '170,110,255', shot: 'bolt' })
     },
     fallen_angel: {
@@ -604,7 +604,7 @@ const MONSTERS = {
         stats: { hp: 140, damage: 130, interval: 1.0, range: 5 },
         abilities: [{ kind: 'chain', count: 4, ratio: 0.5, jump: 2.5 }, { kind: 'curseShot', duration: 4, takenMul: 1.3 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '검은 심판', cooldown: 14, reach: 5, below: 0.25, gold: 1 }],
-        desc: '검은 빛이 용사들 사이를 이어 달립니다.',
+        desc: '검은 빛이 용사들 사이를 이어 달린다.',
         art: astArt('fallen_angel', { glow: '255,210,120', shot: 'bolt' })
     },
     boar_warrior: {
@@ -612,7 +612,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.boar_warrior.sprite, cost: 60,
         stats: { hp: 160, damage: 8, interval: 1.1, range: 2, block: 2, respawn: 7 },
         abilities: [], unlock: 'start',
-        desc: '튼튼한 멧돼지가 길을 막습니다.',
+        desc: '튼튼한 멧돼지가 길을 막는다.',
         art: astArt('boar_warrior', { glow: '255,160,80' })
     },
     spider_archer: {
@@ -620,7 +620,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.spider_archer.sprite, cost: 60,
         stats: { hp: 35, damage: 9, interval: 0.9, range: 2.5 },
         abilities: [{ kind: 'slowShot', speedMul: 0.8, duration: 1.5 }], unlock: 'start',
-        desc: '독을 뱉어 용사를 느리게 합니다.',
+        desc: '독을 뱉어 용사를 느리게 한다.',
         art: astArt('spider_archer', { glow: '100,210,255', shot: 'bolt' })
     },
     bear_warrior: {
@@ -628,7 +628,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.bear_warrior.sprite, cost: 120,
         stats: { hp: 360, damage: 16, interval: 1.2, range: 2, block: 4, respawn: 7 },
         abilities: [{ kind: 'slowShot', name: '곰의 앞발', speedMul: 0.8, duration: 1.5 }], unlock: 'start',
-        desc: '곁의 용사 4명을 앞발로 후려 느리게 합니다.',
+        desc: '곁의 용사 4명을 앞발로 후려 느리게 한다.',
         art: astArt('bear_warrior', { glow: '190,225,255' })
     },
     eagle_hunter: {
@@ -636,7 +636,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.eagle_hunter.sprite, cost: 120,
         stats: { hp: 45, damage: 24, interval: 0.9, range: 4.5 },
         abilities: [{ kind: 'goldOnKill', gold: 1 }], unlock: 'start',
-        desc: '멀리서 쏘고 쓰러뜨린 용사의 금화를 챙깁니다.',
+        desc: '멀리서 쏘고 쓰러뜨린 용사의 금화를 챙긴다.',
         art: astArt('eagle_hunter', { glow: '255,190,200' })
     },
     saber_warrior: {
@@ -644,7 +644,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.saber_warrior.sprite, cost: 250,
         stats: { hp: 420, damage: 56, interval: 0.8, range: 2.4, block: 3, respawn: 6 },
         abilities: [{ kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
-        desc: '곁의 용사 3명을 할퀴고, 쓰러뜨리면 더 빨라집니다.',
+        desc: '곁의 용사 3명을 할퀴고, 쓰러뜨리면 더 빨라진다.',
         art: astArt('saber_warrior', { glow: '255,215,120' })
     },
     hydra_warrior: {
@@ -652,7 +652,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.hydra_warrior.sprite, cost: 250,
         stats: { hp: 110, damage: 38, interval: 1.6, range: 3.5, splash: 1.2 },
         abilities: [{ kind: 'chain', count: 2, ratio: 0.5, jump: 2 }], unlock: 'start',
-        desc: '세 머리가 독을 뿜어 이어 맞힙니다.',
+        desc: '세 머리가 독을 뿜어 이어 맞힌다.',
         art: astArt('hydra_warrior', { glow: '160,220,90', shot: 'bolt' })
     },
     earth_behemoth: {
@@ -661,7 +661,7 @@ const MONSTERS = {
         stats: { hp: 1500, damage: 55, interval: 1.2, range: 2, block: 9, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.5 }, { kind: 'slowShot', name: '가시 덩굴', speedMul: 0.7, duration: 2 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '가시 폭풍', cooldown: 14, radius: 3.5, mul: 2, slow: 3 }],
-        desc: '곁의 용사 9명을 가시로 찔러 느리게 합니다.',
+        desc: '곁의 용사 9명을 가시로 찔러 느리게 한다.',
         art: astArt('earth_behemoth', { glow: '220,90,80' })
     },
     phoenix_lord: {
@@ -670,7 +670,7 @@ const MONSTERS = {
         stats: { hp: 150, damage: 90, interval: 1.6, range: 4.5, splash: 2 },
         abilities: [{ kind: 'burnGround', name: '불바다', radius: 1.2, dps: 20, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '재생의 불꽃', cooldown: 25, duration: 8, damage: 0.25 }],
-        desc: '지나간 자리를 불바다로 만듭니다.',
+        desc: '지나간 자리를 불바다로 만든다.',
         art: astArt('phoenix_lord', { glow: '255,150,50', shot: 'bolt' })
     },
     rock_spirit: {
@@ -678,7 +678,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.rock_spirit.sprite, cost: 60,
         stats: { hp: 190, damage: 5, interval: 1.3, range: 2, block: 3, respawn: 8 },
         abilities: [], unlock: 'start',
-        desc: '느리지만 잘 버티는 흙과 바위의 정령입니다.',
+        desc: '느리지만 잘 버티는 흙과 바위의 정령이다.',
         art: astArt('rock_spirit', { glow: '190,170,120' })
     },
     wind_sylph: {
@@ -686,7 +686,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.wind_sylph.sprite, cost: 60,
         stats: { hp: 30, damage: 8, interval: 0.7, range: 3 },
         abilities: [{ kind: 'slowShot', speedMul: 0.85, duration: 1 }], unlock: 'start',
-        desc: '빠른 바람 칼날로 발을 묶습니다.',
+        desc: '빠른 바람 칼날로 발을 묶는다.',
         art: astArt('wind_sylph', { glow: '170,220,255', shot: 'bolt' })
     },
     water_spirit: {
@@ -694,7 +694,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.water_spirit.sprite, cost: 120,
         stats: { hp: 60, damage: 6, interval: 1.5, range: 2.5 },
         abilities: [{ kind: 'aura', stat: 'attackSpeed', radius: 3, value: 0.1 }], unlock: 'start',
-        desc: '둘레 몬스터의 공격 속도를 올립니다.',
+        desc: '둘레 몬스터의 공격 속도를 올린다.',
         art: astArt('water_spirit', { glow: '110,210,255', shot: 'bolt' })
     },
     lightning_spirit: {
@@ -702,7 +702,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.lightning_spirit.sprite, cost: 120,
         stats: { hp: 40, damage: 18, interval: 1.1, range: 3 },
         abilities: [{ kind: 'chain', count: 2, ratio: 0.5, jump: 2 }], unlock: 'start',
-        desc: '번개가 다음 용사로 튑니다.',
+        desc: '번개가 다음 용사로 튄다.',
         art: astArt('lightning_spirit', { glow: '110,160,255', shot: 'bolt' })
     },
     moon_priestess: {
@@ -710,7 +710,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.moon_priestess.sprite, cost: 250,
         stats: { hp: 90, damage: 14, interval: 1.4, range: 3 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
-        desc: '달빛으로 둘레 몬스터의 피해를 크게 올립니다.',
+        desc: '달빛으로 둘레 몬스터의 피해를 크게 올린다.',
         art: astArt('moon_priestess', { glow: '200,220,255', shot: 'bolt' })
     },
     storm_archer: {
@@ -718,7 +718,7 @@ const MONSTERS = {
         sprite: ASTERIA_ART.storm_archer.sprite, cost: 250,
         stats: { hp: 90, damage: 46, interval: 1.0, range: 4.5 },
         abilities: [{ kind: 'chain', count: 2, ratio: 0.6, jump: 2.5 }], unlock: 'start',
-        desc: '하늘에서 폭풍을 내리꽂습니다.',
+        desc: '하늘에서 폭풍을 내리꽂는다.',
         art: astArt('storm_archer', { glow: '140,190,255', shot: 'bolt' })
     },
     element_sage: {
@@ -727,7 +727,7 @@ const MONSTERS = {
         stats: { hp: 130, damage: 95, interval: 1.7, range: 4.5, splash: 2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }, { kind: 'burnGround', name: '일곱 빛 불꽃', radius: 1, dps: 15, duration: 3 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '운명의 실', cooldown: 18, radius: 'map', mul: 0.5, slow: 5 }],
-        desc: '일곱 빛깔 실로 용사의 발을 묶고 태웁니다.',
+        desc: '일곱 빛깔 실로 용사의 발을 묶고 태운다.',
         art: astArt('element_sage', { glow: '255,210,240', shot: 'bolt' })
     },
     crystal_giant: {
@@ -736,7 +736,7 @@ const MONSTERS = {
         stats: { hp: 1600, damage: 50, interval: 1.3, range: 2, block: 10, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.4 }, { kind: 'stunShot', chance: 0.2, duration: 1.2 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '수정 공명', cooldown: 20, duration: 6, damage: 0.2 }],
-        desc: '곁의 용사 10명을 수정 주먹으로 내리칩니다.',
+        desc: '곁의 용사 10명을 수정 주먹으로 내리친다.',
         art: astArt('crystal_giant', { glow: '150,180,255' })
     },
 
@@ -747,7 +747,7 @@ const MONSTERS = {
         stats: { hp: 240, damage: 170, interval: 1.6, range: 5, splash: 2.2 },
         abilities: [{ kind: 'chain', count: 3, ratio: 0.5, jump: 2.5 }], unlock: 'start',
         skills: [{ kind: 'push', name: '심연의 포효', cooldown: 18, radius: 'map', mul: 1, tiles: 2.5 }, { kind: 'meteor', name: '해일', cooldown: 13, reach: 6, radius: 2.5, mul: 2.5, slow: 3 }],
-        desc: '포효로 맵의 모든 용사를 뒤로 밀어냅니다.',
+        desc: '포효로 맵의 모든 용사를 뒤로 밀어낸다.',
         art: astArt('abyss_dragon_king', { glow: '90,220,200', shot: 'bolt' })
     },
     time_witch: {
@@ -756,7 +756,7 @@ const MONSTERS = {
         stats: { hp: 220, damage: 190, interval: 1.0, range: 5.5 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
         skills: [{ kind: 'timeStop', name: '시간 정지', cooldown: 22, duration: 3 }, { kind: 'barrage', name: '시간의 화살', cooldown: 11, count: 10, mul: 1, reach: 'map' }],
-        desc: '시간을 멈춰 용사들을 세웁니다.',
+        desc: '시간을 멈춰 용사들을 세운다.',
         art: astArt('time_witch', { glow: '230,210,160', shot: 'bolt' })
     },
     soul_devourer: {
@@ -765,7 +765,7 @@ const MONSTERS = {
         stats: { hp: 260, damage: 160, interval: 1.5, range: 5, splash: 2 },
         abilities: [{ kind: 'curseShot', duration: 4, takenMul: 1.3 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '영혼 수확', cooldown: 12, reach: 5, below: 0.3, gold: 2 }, { kind: 'nova', name: '영혼 흡수', cooldown: 16, radius: 4, mul: 1.5, curse: 4 }],
-        desc: '약해진 용사의 영혼을 통째로 삼킵니다.',
+        desc: '약해진 용사의 영혼을 통째로 삼킨다.',
         art: astArt('soul_devourer', { glow: '170,230,110', shot: 'bolt' })
     },
     bone_dragon: {
@@ -774,7 +774,7 @@ const MONSTERS = {
         stats: { hp: 280, damage: 175, interval: 1.7, range: 5, splash: 2.2 },
         abilities: [{ kind: 'burnGround', name: '죽음의 불길', radius: 1.2, dps: 25, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '죽음의 숨결', cooldown: 10, reach: 6, radius: 2.5, mul: 3, curse: 4 }, { kind: 'nova', name: '뼈의 비명', cooldown: 18, radius: 4, mul: 1, stun: 2 }],
-        desc: '초록 숨결로 넓은 땅을 태웁니다.',
+        desc: '초록 숨결로 넓은 땅을 태운다.',
         art: astArt('bone_dragon', { glow: '120,240,130', shot: 'bolt' })
     },
     kraken: {
@@ -783,7 +783,7 @@ const MONSTERS = {
         stats: { hp: 2400, damage: 90, interval: 1.1, range: 2, block: 14, respawn: 5 },
         abilities: [{ kind: 'slowShot', name: '먹물', speedMul: 0.6, duration: 2.5 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '촉수 붙잡기', cooldown: 14, radius: 4, mul: 1.5, stun: 2.5 }, { kind: 'push', name: '소용돌이', cooldown: 20, radius: 5, mul: 1, tiles: 2 }],
-        desc: '곁의 용사 14명을 촉수로 후려칩니다.',
+        desc: '곁의 용사 14명을 촉수로 후려친다.',
         art: astArt('kraken', { glow: '130,110,230' })
     },
     frost_queen: {
@@ -792,7 +792,7 @@ const MONSTERS = {
         stats: { hp: 220, damage: 150, interval: 1.6, range: 5, splash: 2.2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.5, duration: 3 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '절대 영도', cooldown: 20, radius: 'map', mul: 0.8, slow: 6 }, { kind: 'buff', name: '얼음 숨결', cooldown: 18, duration: 6, speed: 0.25 }],
-        desc: '맵 전체를 얼려 용사의 발을 묶습니다.',
+        desc: '맵 전체를 얼려 용사의 발을 묶는다.',
         art: astArt('frost_queen', { glow: '160,220,255', shot: 'bolt' })
     },
     star_whale: {
@@ -801,7 +801,7 @@ const MONSTERS = {
         stats: { hp: 260, damage: 170, interval: 1.1, range: 5.5 },
         abilities: [{ kind: 'chain', count: 3, ratio: 0.6, jump: 3 }], unlock: 'start',
         skills: [{ kind: 'barrage', name: '별의 비', cooldown: 12, count: 12, mul: 1, reach: 'map' }, { kind: 'buff', name: '별의 노래', cooldown: 20, duration: 8, speed: 0.3 }],
-        desc: '하늘에서 별을 쏟아붓습니다.',
+        desc: '하늘에서 별을 쏟아붓는다.',
         art: astArt('star_whale', { glow: '120,140,255', shot: 'bolt' })
     },
     frost_drake: {
@@ -810,7 +810,7 @@ const MONSTERS = {
         stats: { hp: 250, damage: 165, interval: 1.5, range: 5, splash: 2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '서리 숨결', cooldown: 11, reach: 6, radius: 3, mul: 2.5, slow: 4 }, { kind: 'nova', name: '눈보라', cooldown: 16, radius: 5, mul: 1.2, slow: 4 }],
-        desc: '얼음 숨결로 길을 뒤덮습니다.',
+        desc: '얼음 숨결로 길을 뒤덮는다.',
         art: astArt('frost_drake', { glow: '170,225,255', shot: 'bolt' })
     },
 
@@ -821,7 +821,7 @@ const MONSTERS = {
         stats: { hp: 400, damage: 270, interval: 1.4, range: 6, splash: 2.6 },
         abilities: [{ kind: 'burnGround', name: '태양의 불길', radius: 1.5, dps: 40, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '태양 폭발', cooldown: 16, radius: 'map', mul: 2.5, burn: 5 }, { kind: 'buff', name: '여명', cooldown: 24, duration: 8, speed: 0.3 }],
-        desc: '히든 신화. 맵 전체를 불태우고 몬스터를 빛으로 북돋웁니다.',
+        desc: '히든 신화. 맵 전체를 불태우고 몬스터를 빛으로 북돋운다.',
         art: astArt('sun_god', { glow: '255,210,110', shot: 'bolt' })
     },
     moon_god: {
@@ -830,7 +830,7 @@ const MONSTERS = {
         stats: { hp: 380, damage: 290, interval: 0.9, range: 6.5 },
         abilities: [{ kind: 'chain', count: 4, ratio: 0.6, jump: 3 }], unlock: 'start',
         skills: [{ kind: 'timeStop', name: '달빛 정지', cooldown: 20, duration: 3 }, { kind: 'buff', name: '달의 장막', cooldown: 18, duration: 8, damage: 0.3 }],
-        desc: '히든 신화. 시간을 멈추고 몬스터를 달빛으로 강하게 합니다.',
+        desc: '히든 신화. 시간을 멈추고 몬스터를 달빛으로 강하게 한다.',
         art: astArt('moon_god', { glow: '200,220,255', shot: 'bolt' })
     },
     death_god: {
@@ -839,7 +839,7 @@ const MONSTERS = {
         stats: { hp: 2800, damage: 320, interval: 0.8, range: 2.4, block: 8, respawn: 4 },
         abilities: [{ kind: 'cleave', radius: 2.5, ratio: 0.8 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '사신의 낫', cooldown: 10, reach: 'map', below: 0.35, gold: 2 }, { kind: 'barrage', name: '저승의 군세', cooldown: 14, count: 15, mul: 1.2, reach: 'map' }],
-        desc: '히든 신화. 약해진 용사는 맵 어디에 있어도 거둡니다.',
+        desc: '히든 신화. 약해진 용사는 맵 어디에 있어도 거둔다.',
         art: astArt('death_god', { glow: '200,170,255' })
     },
     god_king: {
@@ -848,7 +848,7 @@ const MONSTERS = {
         stats: { hp: 3600, damage: 300, interval: 0.9, range: 2.4, block: 12, respawn: 4 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 5, value: 0.3 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '신왕의 칙령', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }, { kind: 'barrage', name: '천벌', cooldown: 15, count: 20, mul: 1.5, reach: 'map' }],
-        desc: '히든 신화. 맵의 모든 몬스터를 강하게 하고 하늘의 벌을 내립니다.',
+        desc: '히든 신화. 맵의 모든 몬스터를 강하게 하고 하늘의 벌을 내린다.',
         art: astArt('god_king', { glow: '255,225,150' })
     }
 };

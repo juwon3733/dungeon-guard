@@ -16,6 +16,16 @@ function legacyLayout(f) {
     return src.replace('const WORLD_ZOOM = 5 / 6;', 'const WORLD_ZOOM = 2 / 3;').replace('const MAP_COLS = 24;', 'const MAP_COLS = 30;').replace('const MAP_ROWS = 12;', 'const MAP_ROWS = 15;');
 }
 for (const f of files) vm.runInContext(legacyLayout(f), ctx, { filename: f });
+// 옛 시험은 마왕이 스테이지 3, 5에서 풀리던 표를 기준으로 적혀 있다. 지금 해금 순서는 맨 끝에서 따로 본다
+vm.runInContext(`{
+    const move = (from, to, id, at) => {
+        const a = STAGES.find(s => s.id === from), b = STAGES.find(s => s.id === to);
+        a.unlocks = a.unlocks.filter(u => !(u.kind === 'lord' && u.id === id));
+        b.unlocks.splice(at, 0, { kind: 'lord', id });
+    };
+    move('s1', 's3', 'bone_queen', 0);
+    move('s2', 's5', 'gold_king', 1);
+}`, ctx);
 
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
@@ -395,7 +405,7 @@ assert(UI.buttons.find(b => b.id === 'summon').disabled, 'summon dimmed without 
 UI.onKey('KeyS');
 assert.strictEqual(Game.monsters.length, 3);
 assert.strictEqual(Game.gold, 27);
-assert(UI.toast && UI.toast.text.includes('28골드'), 'gold toast shows current cost');
+assert(UI.toast && UI.toast.text.includes('28G'), 'gold toast shows current cost');
 // 희귀·영웅 소환 연출은 등급을 따른다
 Game.gold = 1000;
 withRandom([0.97, 0], () => UI.onKey('KeyS'));
@@ -429,7 +439,7 @@ let g0 = Game.gold;
 UI.toast = null;
 withRandom([0.69, 0.17], () => UI.onKey('KeyS')); // 암흑 마법사: 남은 칸은 모두 사거리 밖
 assert.strictEqual(Game.gold, g0, 'no cell in range: no gold spent');
-assert(UI.toast && UI.toast.text.includes('합쳐서'), 'no cell toast');
+assert(UI.toast && UI.toast.text.includes('자리 없음'), 'no cell toast');
 assert(!Game.monsters.some(m => m.type === 'dark_mage'), 'dark mage not placed out of range');
 MONSTERS.dark_mage.stats.range = mageRange;
 withRandom([0.1, 0.03], () => UI.onKey('KeyS')); // 오크 경비병(막는 몬스터)은 사거리 조건 없이 남은 칸에 나온다
@@ -444,7 +454,7 @@ g0 = Game.gold;
 UI.toast = null;
 withRandom([0, 0], () => UI.onKey('KeyS'));
 assert.strictEqual(Game.gold, g0, 'no free cell: no gold spent');
-assert(UI.toast && UI.toast.text.includes('합쳐서'));
+assert(UI.toast && UI.toast.text.includes('자리 없음'));
 SUMMON_RULES.maxField = 24;
 // 원거리로 나온 몬스터는 모두 사거리 안에 길이 있다
 Game.monsters = [];
@@ -482,7 +492,7 @@ UI.toast = null;
 btn('summon');
 assert.strictEqual(Game.monsters.length, 24, 'cap holds');
 assert.strictEqual(Game.gold, g0, 'no gold spent at cap');
-assert(UI.toast && UI.toast.text.includes('합쳐서 자리를 만드세요'), 'cap toast');
+assert(UI.toast && UI.toast.text.includes('자리 없음'), 'cap toast');
 assert.strictEqual(Game.summon().reason, 'full');
 UI.update(0);
 assert(UI.buttons.find(b => b.id === 'summon').full, 'summon button shows full');
@@ -2014,7 +2024,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     UI.onKey('Digit1');
     btn('reward0');
     assert(Game.bossReward && Game.monsters.length === SUMMON_RULES.maxField, 'monster card refused at cap');
-    assert(UI.toast && UI.toast.text.includes('골드'), 'cap toast');
+    assert(UI.toast && UI.toast.text.includes('자리 없음'), 'cap toast');
     UI.onKey('Digit3');
     assert(!Game.bossReward && Game.gold === gold0 + 600, 'gold at cap');
     // 마지막 보스는 보상 없이 승리
@@ -2092,7 +2102,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.equipBag = ['bow'];
     UI.toast = null;
     click(...bagXY(0));
-    assert(Game.equipBag[0] === 'bow' && UI.toast && UI.toast.text.includes('끌어'), 'bag click hint');
+    assert(Game.equipBag[0] === 'bow' && UI.toast && UI.toast.text.includes('위에 놓기'), 'bag click hint');
     // 몬스터가 없는 곳에 놓으면 보관함에 그대로
     dragTo(bagXY(0), cellXY(13, 2));
     assert(Game.equipBag.join() === 'bow', 'dropped on nothing stays in bag');
@@ -3544,7 +3554,7 @@ Game.state = 'title';
     same(Meta.data, Meta.fresh(), 'wiped');
     same(stored(), Meta.fresh(), 'wiped in storage');
     same(UI.loadout, { lord: 'rift', relics: [] }, 'loadout back to defaults');
-    assert(UI.hqView === 'record' && UI.toast.text.includes('지웠'), 'stays on the record book');
+    assert(UI.hqView === 'record' && UI.toast.text.includes('삭제'), 'stays on the record book');
     assert.strictEqual(UI.stageId, 's1', 'locked stage falls back to the first stage');
     UI.onKey('Escape');
     assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the book');
@@ -4163,7 +4173,7 @@ HQ_CONTENTS.push({ id: 'test_open', name: '시험 처음', desc: '처음부터 �
     assert(UI.toast.text.includes('스테이지 2'), 'locked content says its stage');
     UI.toast = null;
     btn('content_test_open');
-    assert(UI.toast.text.includes('곧'), 'open content without a mode: notice');
+    assert(UI.toast.text.includes('준비'), 'open content without a mode: notice');
     let entered = 0;
     HQ_CONTENTS[0].enter = () => { entered++; };
     btn('content_test_open');
@@ -5912,5 +5922,21 @@ for (const lord of Object.keys(DEMON_LORDS)) {
 Game.reset();
 console.log('smoke ok: lord powers');
 }`, ctx, { filename: 'smoke-powers' });
+
+// 지금 해금 순서(옛 시험용으로 바꾸지 않은 표)
+{
+    const real = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), real, { filename: f });
+    vm.runInContext(`
+    Meta.data.cleared = [];
+    assert(Meta.hasLord('rift') && !Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king'), 'one lord at the start');
+    Meta.data.cleared = ['s1'];
+    assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king'), 'stage 1 opens the bone queen');
+    Meta.data.cleared = ['s1', 's2'];
+    assert(Meta.hasLord('gold_king'), 'stage 2 opens the gold king');
+    `, real);
+    console.log('smoke ok: lord unlock order');
+}
 
 require('./smoke_maps.js');
