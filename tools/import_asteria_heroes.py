@@ -102,3 +102,10 @@ with open(os.path.join(ROOT, 'js', 'data', 'asteria_heroes.js'), 'w', encoding='
     f.write('// 정예 용사의 그림. balance.js의 HEROES에 덮어쓴다(쓰러지는 동작은 없어 걷기 그림으로 쓰러진다)\n')
     f.write('const ASTERIA_ELITE_ART = ' + json.dumps(elites, ensure_ascii=False, separators=(',', ':')) + ';\n')
     f.write('for (const [type, a] of Object.entries(ASTERIA_ELITE_ART)) if (HEROES[type]) Object.assign(HEROES[type], { sprite: a.sprite, scale: a.scale, barY: a.barY, anim: a.anim });\n')
+
+# 정예 오라: Asteria 모험가의 회전 오라(128px 8프레임)를 그대로 옮긴다. assets/fx/pfx_aura_<이름>.png, 표는 js/data/fx_sheets.js의 fx_aura_<정예>
+ELITE_AURA = {'elite_swordsman': 'nightExecutioner', 'elite_tamer': 'mistBlade', 'elite_stormcaller': 'thunderSage', 'elite_rhapsodist': 'sunMoonDance'}
+for etype, name in ELITE_AURA.items():
+    # 원본은 이름만 .png인 WebP(검은 바탕)라 PNG로 다시 저장한다. 게임은 빛을 더해(lighter) 그려 검은 바탕을 지운다
+    Image.open(os.path.join(WWW, 'lz', f'fx_aura_{name}.png')).convert('RGB').save(os.path.join(ROOT, 'assets', 'fx', f'pfx_aura_{name}.png'), optimize=True)
+print('auras', len(ELITE_AURA))

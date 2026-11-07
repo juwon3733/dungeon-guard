@@ -1140,7 +1140,10 @@ const clearBoard = () => { Game.heroes = []; Game.units = []; Game.monsters = []
     assert(boss.boss && !boss.elite && boss.bossKey === 'archmage' && boss.name === def.name);
     assert.strictEqual(boss.maxHp, knight.maxHp * def.waveHpMul, 'fallen knight hp x waveHpMul');
     assert.strictEqual(boss.throneDamage, def.throneDamage);
-    assert(def.art.sprite === 'pl_boss_grand_wizard' && def.art.scale === BOSS_SCALE && def.art.anim.attack.folder === 'cast' && def.art.windupLoop);
+    // 이야기 보스는 Asteria 그림이고 경고 중에는 시전 자세를 반복한다
+    assert(def.art.sprite === 'ast_boss_story_archmage' && def.art.anim.attack.frames === 2 && def.art.windupLoop);
+    assert(BOSSES.fallen_knight.art.sprite === 'ast_boss_story_captain' && !BOSSES.fallen_knight.art.windupLoop);
+    assert(STORY_CAST.archmage.portrait.sprite === 'ast_boss_story_archmage/rotations/south' && STORY_CAST.captain.portrait.sprite === 'ast_boss_story_captain/rotations/south');
     const [p1, p2] = def.patterns;
     assert(p1.at === 0.5 && p1.kind === 'shock' && p2.at === 0.25 && p2.kind === 'shock' && p2.range > p1.range);
     const w = heroWorld(boss);
@@ -1939,8 +1942,8 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert.strictEqual(BOSSES.archmage.waveHpMul, 0.6);
     assert(!BOSSES.fallen_knight.waveHpMul, 'fallen knight keeps full hp');
     assert(Math.abs(createHero(null, 4, 0, 'archmage').maxHp - createHero(null, 4, 0, 'fallen_knight').maxHp * 0.6) < 1e-9);
-    // 발끝: 보스마다 걷기와 공격 동작의 방향(PL_DIRS)마다 값이 있다
-    for (const boss of Object.values(BOSSES)) for (const clip of [boss.art.anim.walk, boss.art.anim.attack]) for (const dir of PL_DIRS) {
+    // 발끝: 보스마다 걷기와 공격 동작이 가진 방향(없으면 PL_DIRS)마다 값이 있다. 없는 방향은 Render.plPick이 있는 방향으로 그린다
+    for (const boss of Object.values(BOSSES)) for (const clip of [boss.art.anim.walk, boss.art.anim.attack]) for (const dir of clip.dirs || PL_DIRS) {
         assert(typeof clip.footPx[dir] === 'number', boss.name + ' foot ' + clip.folder + ' ' + dir);
     }
 
