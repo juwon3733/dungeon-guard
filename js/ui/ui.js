@@ -19,6 +19,8 @@ const ABILITY_INK = '#e8a6ff'; // 능력 이름 글자(남색 창 위)
 const HINT_SHOWS = 3; // 화면 가운데 안내 쪽지는 종류마다 이만큼만 나온다(이번 창에서)
 const POPUP_TOP = 16; // 팝업 창 위쪽 판자 머리 높이(내용은 그 아래부터)
 const POPUP_ABILITY_H = 30; // 팝업의 능력 한 줄 높이
+const POPUP_SKILL_H = 56; // 팝업의 특수 스킬 한 칸 높이(이름과 설명 두 줄)
+const SKILL_INK = '#ffd25a';
 const POPUP_RANK_H = 30; // 팝업의 랭크 줄 높이
 const POPUP_SACRIFICE_H = 30; // 팝업의 제물 안내 줄 높이
 const POPUP_MERGE_H = 60; // 팝업의 합치기 버튼 줄 높이
@@ -641,6 +643,7 @@ const UI = {
         if (plan.reason === 'top') return `${g.name}은 최고 등급이라 더 합칠 수 없습니다.`;
         if (plan.reason === 'mismatch') return '등급이 다르고 조합식도 없어 합칠 수 없습니다.';
         if (plan.reason === 'count') return `같은 ${g.name} ${plan.count}마리가 있어야 합칩니다(지금 ${plan.have}마리).`;
+        if (plan.reason === 'unique' && plan.sameKind) return '같은 신화는 맵에 1마리만 둘 수 있습니다.';
         if (plan.reason === 'unique' && target) return `${target.name} 몬스터는 맵에 ${target.fieldMax}마리만 둘 수 있습니다.`;
         return null;
     },
@@ -670,7 +673,7 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
+        const h = POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
@@ -2301,6 +2304,14 @@ const UI = {
             UIKit.ink(ctx, kind.desc(a), p.x + 34 + nameW, y + 12, 17, T.ink);
             y += POPUP_ABILITY_H;
         }
+        // 특수 스킬: 이름(남은 대기)과 설명 두 줄
+        (def.skills || []).forEach((s, i) => {
+            const cd = f.skillCd ? Math.ceil(f.skillCd[i]) : 0;
+            UIKit.ink(ctx, `특수 스킬 · ${s.name}`, p.x + 22, y + 12, 18, SKILL_INK, 'left', 'bold');
+            if (cd > 0) UIKit.ink(ctx, `${cd}초`, p.x + p.w - 22, y + 12, 16, T.inkSoft, 'right');
+            UIKit.ink(ctx, skillDesc(s), p.x + 22, y + 36, 15, T.ink);
+            y += POPUP_SKILL_H;
+        });
 
         // 함께 합칠 수 있는 몬스터
         ctx.fillStyle = T.parchmentDark;
@@ -3438,6 +3449,16 @@ const UI = {
             y += 34;
             ctx.font = `20px ${UI_FONT}`;
             for (const line of this.wrapLines(ctx, kind.desc(a), maxW).slice(0, 3)) {
+                UIKit.ink(ctx, line, x, y, 20, T.ink);
+                y += 28;
+            }
+            y += 10;
+        }
+        for (const s of def.skills || []) {
+            UIKit.ink(ctx, `특수 스킬 · ${s.name}`, x, y, 24, SKILL_INK, 'left', 'bold');
+            y += 34;
+            ctx.font = `20px ${UI_FONT}`;
+            for (const line of this.wrapLines(ctx, skillDesc(s), maxW).slice(0, 3)) {
                 UIKit.ink(ctx, line, x, y, 20, T.ink);
                 y += 28;
             }

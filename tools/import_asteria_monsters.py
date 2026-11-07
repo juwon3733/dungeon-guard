@@ -34,10 +34,14 @@ ART = {
     'element_sage': ('b:fateGod', 2, 3), 'crystal_giant': ('b:crystal_colossus', 3, 3),
     # 신화
     'abyss_dragon_king': ('b:abyss_wyrm', 3, 3), 'time_witch': ('b:chronos', 2, 3), 'soul_devourer': ('b:abyssDevourer', 3, 2),
+    'bone_dragon': ('b:mid_boneDragon', 3, 3), 'kraken': ('b:mid_kraken', 3, 3), 'frost_queen': ('b:mid_frostQueen', 2, 3),
+    'star_whale': ('b:mid_starWhale', 3, 2), 'frost_drake': ('b:frost_drake', 3, 2),
+    # 히든 신화
+    'sun_god': ('b:sunGod', 2, 3), 'moon_god': ('b:moonGod', 3, 3), 'death_god': ('b:deathGod', 2, 3), 'god_king': ('b:godKing', 3, 3),
 }
 RANGED = {'curse_shooter', 'bone_priest', 'vampire', 'archlich', 'fire_imp', 'chaos_mage', 'fallen_angel', 'spider_archer', 'eagle_hunter', 'hydra_warrior',
           'phoenix_lord', 'wisp_acolyte', 'wind_sylph', 'frost_witch', 'water_spirit', 'lightning_spirit', 'moon_priestess', 'storm_archer', 'element_sage',
-          'time_witch', 'abyss_dragon_king', 'soul_devourer'}
+          'time_witch', 'abyss_dragon_king', 'soul_devourer', 'bone_dragon', 'frost_queen', 'star_whale', 'frost_drake', 'sun_god', 'moon_god'}
 
 html = open(os.path.join(WWW, 'index.html'), encoding='utf8', errors='replace').read()
 i = html.index('var PLAY_ATLAS = '); j = k = html.index('[', i); depth = 0; instr = False

@@ -547,7 +547,21 @@ const Game = {
         if (max !== undefined && this.gradeCount(grade, materials) >= max) {
             return Object.assign({}, plan, { kind: 'none', reason: 'unique', grade, plan: plan.kind });
         }
+        // 조합식 결과: 맵 제한이 있는 등급은 같은 종을 두 마리 둘 수 없다
+        if (plan.kind === 'recipe' && max !== undefined) {
+            if (this.monsters.some(m => !m.removed && !materials.includes(m) && m.type === plan.result)) {
+                return Object.assign({}, plan, { kind: 'none', reason: 'unique', grade, plan: plan.kind, sameKind: true });
+            }
+        }
         return plan;
+    },
+
+    // 등급 합치기 결과 후보: 맵 제한이 있는 등급은 맵에 이미 있는 종을 뺀다(재료는 사라지므로 센다 않는다)
+    mergeResultPool(grade, materials) {
+        const pool = mergePool(grade);
+        if (MONSTER_GRADES[grade].fieldMax === undefined) return pool;
+        const free = pool.filter(t => !this.monsters.some(m => !m.removed && m.type === t && !materials.includes(m)));
+        return free.length ? free : pool;
     },
 
     // 팝업의 합치기 버튼: m과 같은 등급 몬스터를 끌기와 같은 판단(랭크 낮음, 장비 없음, 가까움)으로 골라 gradeCount마리를 합친다.
@@ -594,7 +608,7 @@ const Game = {
         if (this.sameLoc(src, dst)) return { ok: false, reason: 'same' };
         const plan = this.mergePlanFor(src.monster, dst.monster, extra, gradeOnly);
         if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
-        const type = plan.kind === 'recipe' ? plan.result : randItem(mergePool(plan.grade));
+        const type = plan.kind === 'recipe' ? plan.result : randItem(this.mergeResultPool(plan.grade, [src.monster, dst.monster, ...(plan.extra || [])]));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
         // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
         const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;

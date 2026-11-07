@@ -20,6 +20,21 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
+    // 신화와 전설 스킬이 쓰이는 전투(정보 창은 히든 신화)
+    mythicSkills: {
+        setup: () => {
+            startRun();
+            for (const t of ['god_king', 'abyss_dragon_king', 'frost_queen', 'hell_general', 'star_whale']) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            Game.startWave();
+            advance(9);
+            const m = Game.monsters.find(x => x.type === 'god_king');
+            UI.selectedMonster = m;
+        }
+    },
+
     // 칸 모양이 다른 몬스터를 큰 것부터 깐 맵(몬스터별 칸 크기와 Asteria 그림 확인)
     monsterCells: {
         setup: () => {
