@@ -27,8 +27,28 @@ const LORD_EFFECTS = {
     respawn: { name: '부활 시간', mode: 'mul', low: true }, // 막는 몬스터가 쓰러졌다 다시 나오는 시간
     eliteDrop: { name: '정예 장비 드롭', mode: 'ratio' }, // EQUIP_RULES.eliteDrop에 더한다
     refund: { name: '판매 환불', mode: 'mul' },
-    sacrifice: { name: '제물 효과', mode: 'mul' } // 체력 회복과 번개 감소에 곱한다(체력은 내림)
+    sacrifice: { name: '제물 효과', mode: 'mul' }, // 체력 회복과 번개 감소에 곱한다(체력은 내림)
+    // 유물 전용. 상한과 기준 수는 RELIC_LIMITS
+    goldDamage: { name: '200G당 몬스터 피해', mode: 'ratio', note: '최대 15%' },
+    interest: { name: '라운드 종료 이자', mode: 'ratio', note: '최대 15G' },
+    mergeJump: { name: '합치기 두 등급 상승 확률', mode: 'ratio', note: '전설까지' },
+    monsterArmor: { name: '몬스터 받는 피해 감소', mode: 'ratio' },
+    altarDamage: { name: '제물당 몬스터 피해', mode: 'ratio', note: '최대 15%' },
+    earlyAttackSpeed: { name: '일찍 부른 라운드 공격 속도', mode: 'ratio' },
+    lightningCooldown: { name: '번개 재사용', mode: 'mul', low: true },
+    roarAnytime: { name: '호통', mode: 'add', text: () => '호통을 언제나 쓴다' },
+    equipUp: { name: '돌아오는 장비 등급 상승 확률', mode: 'ratio' },
+    equipPower: { name: '장비 효과', mode: 'ratio' },
+    twinSummon: { name: '소환 1마리 더 나올 확률', mode: 'ratio' },
+    fewDamage: { name: '몬스터 6마리 이하일 때 피해', mode: 'ratio' },
+    commonDamage: { name: '일반 몬스터 피해', mode: 'ratio' },
+    fullHpDamage: { name: '체력이 가득할 때 피해', mode: 'ratio' },
+    hpSummon: { name: '골드가 모자라면 체력 1로 소환', mode: 'add', unit: '회', text: v => `골드 부족 시 체력 1로 소환(판당 ${v}회)` },
+    mergedSlow: { name: '합류 뒤 용사 이동 속도', mode: 'mul', low: true }
 };
+
+// 유물 효과의 상한과 기준 수
+const RELIC_LIMITS = { goldStep: 200, goldDamageMax: 0.15, altarDamageMax: 0.15, interestMax: 15, fewCount: 6 };
 
 // 마왕. 스킬은 셋 다 번개와 호통이다(전용 몬스터는 다음 단계).
 //   sprite: 왕좌의 대기 그림, cast: 주문 그림(없으면 sprite를 쓰고 빛 효과로 구분), footPx: 128px 캔버스 안의 발끝 높이
@@ -71,24 +91,27 @@ const DEMON_LORDS = {
 };
 const DEFAULT_LORD = 'rift';
 
-// 유물: 시작할 때 유물 칸 수만큼 고른다. 그림은 assets/sprites/relic_<id>.png(48px)
+// 유물: 시작할 때 유물 칸 수만큼 고른다. 대가 없이 약하게, 판의 방식을 바꾸는 효과 위주다. 그림은 assets/sprites/relic_<id>.png(48px)
 const RELICS = {
-    pouch: { id: 'pouch', name: '황금 주머니', effects: { startGold: 100 } },
-    chalice: { id: 'chalice', name: '피의 성배', effects: { maxHp: 5 } },
-    hourglass: { id: 'hourglass', name: '모래시계', effects: { skillCooldown: 0.8 } },
-    candle: { id: 'candle', name: '푸른 촛불', effects: { heroSpeed: 0.92 } },
-    tablet: { id: 'tablet', name: '룬 석판', effects: { range: 0.1 } },
-    handgem: { id: 'handgem', name: '해골 손', effects: { rareChance: 0.05 } },
-    drum: { id: 'drum', name: '전쟁 북', effects: { attackSpeed: 0.1 } },
-    horn: { id: 'horn', name: '악마 뿔', effects: { damage: 0.1 } },
-    key: { id: 'key', name: '박쥐 열쇠', effects: { eliteDrop: 0.15 } },
-    heart: { id: 'heart', name: '갇힌 심장', effects: { hp: 0.15 } },
-    bottle: { id: 'bottle', name: '번개 병', effects: { lightningDamage: 1.5 } },
-    eye: { id: 'eye', name: '마녀의 눈', effects: { xp: 0.5 } },
-    banner: { id: 'banner', name: '마왕군 깃발', effects: { fieldMax: 4 } },
-    dice: { id: 'dice', name: '뼈 주사위', effects: { summonBase: -5 } },
-    shackles: { id: 'shackles', name: '푸른 족쇄', effects: { respawn: 0.7 } },
-    mirror: { id: 'mirror', name: '금 간 거울', effects: { refund: 1.5, sacrifice: 1.5 } }
+    greedy_vault: { id: 'greedy_vault', name: '탐욕의 금주머니', effects: { goldDamage: 0.01 } },
+    legion_banner: { id: 'legion_banner', name: '군단의 깃발', effects: { fieldMax: 3 } },
+    glass_heart: { id: 'glass_heart', name: '유리 심장', effects: { fullHpDamage: 0.1 } },
+    usury_ledger: { id: 'usury_ledger', name: '고리대금 장부', effects: { interest: 0.03 } },
+    mad_dice: { id: 'mad_dice', name: '미치광이의 주사위', effects: { mergeJump: 0.05 } },
+    dead_horn: { id: 'dead_horn', name: '망자의 뿔피리', effects: { respawn: 0.8 } },
+    sniper_mark: { id: 'sniper_mark', name: '저격수의 표식', effects: { range: 0.1 } },
+    iron_oath: { id: 'iron_oath', name: '철벽 서약', effects: { monsterArmor: 0.1 } },
+    blood_altar: { id: 'blood_altar', name: '피의 제단', effects: { altarDamage: 0.005 } },
+    broken_hourglass: { id: 'broken_hourglass', name: '깨진 모래시계', effects: { earlyAttackSpeed: 0.1 } },
+    storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.75 } },
+    mad_drum: { id: 'mad_drum', name: '광기의 북', effects: { roarAnytime: 1 } },
+    smith_hammer: { id: 'smith_hammer', name: '대장장이의 망치', effects: { equipUp: 0.1 } },
+    equip_eater: { id: 'equip_eater', name: '장비 먹는 괴물', effects: { equipPower: 0.2 } },
+    mirror_twin: { id: 'mirror_twin', name: '거울 쌍둥이', effects: { twinSummon: 0.05 } },
+    lone_crown: { id: 'lone_crown', name: '고독한 왕관', effects: { fewDamage: 0.25 } },
+    pauper_helm: { id: 'pauper_helm', name: '빈민의 투구', effects: { commonDamage: 0.2 } },
+    blood_contract: { id: 'blood_contract', name: '피의 계약서', effects: { hpSummon: 3 } },
+    shaky_bridge: { id: 'shaky_bridge', name: '흔들리는 다리', effects: { mergedSlow: 0.92 } }
 };
 
 // 표에 있는 id인지('toString' 같은 Object 속성 이름은 아니다)
@@ -121,8 +144,9 @@ function effectText(key, v) {
     const e = LORD_EFFECTS[key];
     const round = x => Math.round(x * 1000) / 1000;
     const signed = x => `${x < 0 ? '-' : '+'}${round(Math.abs(x))}`;
+    if (e.text) return e.text(v);
     if (e.mode === 'add') return `${e.name} ${signed(v)}${e.unit || ''}`;
-    if (e.mode === 'ratio') return `${e.name} ${signed(v * 100)}%`;
+    if (e.mode === 'ratio') return `${e.name} ${signed(v * 100)}%${e.note ? `(${e.note})` : ''}`;
     if (e.pct) return `${e.name} ${signed((v - 1) * 100)}%`;
     return `${e.name} ×${round(v)}`;
 }

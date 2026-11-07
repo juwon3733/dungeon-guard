@@ -47,9 +47,9 @@ const LORD_CARD_H = 470;
 const LORD_CARD_GAP = 40;
 const LORD_CARD_Y = 104;
 const RELIC_CELL = 64;
-const RELIC_GAP = 12;
-const RELIC_COLS = 8;
-const RELIC_GRID_X = 170;
+const RELIC_GAP = 6;
+const RELIC_COLS = 10;
+const RELIC_GRID_X = 150;
 const RELIC_GRID_Y = 676;
 const PICKED_X = 860; // 고른 유물 칸
 const LOADOUT_KEY = 'dungeonGuard.loadout'; // 직전 선택 저장(localStorage)
@@ -183,7 +183,7 @@ const UI = {
         if (this.tab === 'monster') {
             const full = G.fieldFull();
             this.button('summon', BAR_SLOT_X, slotY, SUMMON_BTN_W, 104, {
-                summonBtn: true, disabled: full || G.gold < G.summonCost(), full,
+                summonBtn: true, disabled: full || !G.canPaySummon(), full,
                 onClick: () => this.doSummon()
             });
             const upCost = G.summonUpgradeCost();
@@ -1034,7 +1034,7 @@ const UI = {
 
     useRoar() {
         this.setTab('demon');
-        if (Game.hp > COMBAT_RULES.roar.unlockHp) {
+        if (Game.roarLocked()) {
             this.showToast(`마왕 체력 ${COMBAT_RULES.roar.unlockHp} 이하에서 쓸 수 있습니다.`);
             return;
         }
@@ -1691,7 +1691,8 @@ const UI = {
             }
             this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
         }
-        UIKit.text(ctx, '누르면 넣고 다시 누르면 뺍니다 · 1·2·3 마왕 · Enter 시작 · 붉은 도장은 풀리는 스테이지', RELIC_GRID_X, 862, 19, T.creamSoft);
+        UIKit.text(ctx, '누르면 넣고 다시 누르면 뺍니다 · 붉은 도장은 풀리는 스테이지', RELIC_GRID_X, 862, 19, T.creamSoft);
+        UIKit.text(ctx, '1·2·3 마왕 · Enter 시작', RELIC_GRID_X, 892, 19, T.creamSoft);
 
         // 고른 유물 칸과 이름·효과
         UIKit.text(ctx, `고른 유물 ${L.relics.length}/${Meta.relicSlots()}`, PICKED_X, 636, 28, T.cream);
@@ -1715,11 +1716,10 @@ const UI = {
         if (!Meta.relicSlots()) UIKit.text(ctx, `유물 칸은 ${this.unlockText('slot', 1)}됩니다`, PICKED_X, ly, 19, T.creamSoft);
         else if (!L.relics.length) UIKit.text(ctx, '유물 없이도 시작할 수 있습니다', PICKED_X, ly, 19, T.creamSoft);
         for (const id of L.relics) {
-            UIKit.text(ctx, RELICS[id].name, PICKED_X, ly, 21, T.cream);
-            ctx.font = `21px ${UI_FONT}`;
-            const nx = PICKED_X + ctx.measureText(RELICS[id].name).width + 14;
-            UIKit.text(ctx, effectLines(RELICS[id].effects).join(', '), nx, ly, 19, T.good);
-            ly += 32;
+            // 이름과 효과 두 줄(효과 글이 길어 한 줄에 함께 두면 오른쪽 창에 가린다)
+            UIKit.text(ctx, RELICS[id].name, PICKED_X, ly, 20, T.cream);
+            UIKit.text(ctx, effectLines(RELICS[id].effects).join(', '), PICKED_X, ly + 24, 18, T.good);
+            ly += 52;
         }
 
         // 이번 판 효과: 마왕과 유물을 합친 값(같은 키는 합쳐 한 줄). 금테 상세 창
@@ -2649,7 +2649,7 @@ const UI = {
         const lightning = b.skill === 'lightning';
         const cd = Game.skills[b.skill];
         const max = Game.skillCooldown(b.skill);
-        const locked = !lightning && Game.hp > COMBAT_RULES.roar.unlockHp;
+        const locked = !lightning && Game.roarLocked();
         const active = lightning && this.targeting;
         const dy = st.pressed ? 2 : 0;
         const ss = b.h;

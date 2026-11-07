@@ -104,6 +104,7 @@ function equipSources(grade) {
 
 // 본부 안 화면의 칸 격자(진열장 유물, 무기고 장비): 8열 2줄, 등급 색 테두리 칸. 오른쪽은 금테 상세 창(HQ_DETAIL)
 const HQ_GRID = { cols: 8, w: 132, h: 150, gapX: 18, gapY: 18, x: 70, y: 560 };
+const HQ_RELIC_GRID = { cols: 10, w: 116, h: 150, gapX: 6, gapY: 18, x: 70, y: 560 }; // 유물은 한 줄에 10칸
 const HQ_LORD_CARD = { w: 380, h: 300, gap: 22, x: 70, y: 150 };
 const HQ_DETAIL = { x: 1300, y: 150, w: 560, h: 740 };
 
@@ -473,8 +474,8 @@ Object.assign(UI, {
     },
 
     // 카드 격자 i번 자리(진열장 유물, 무기고 장비)
-    hqGridRect(i) {
-        const G = HQ_GRID;
+    hqGridRect(i, grid) {
+        const G = grid || HQ_GRID;
         return { x: G.x + (i % G.cols) * (G.w + G.gapX), y: G.y + Math.floor(i / G.cols) * (G.h + G.gapY), w: G.w, h: G.h };
     },
 
@@ -513,7 +514,7 @@ Object.assign(UI, {
         UIKit.text(ctx, name, r.x + r.w / 2, r.y + r.h - 22, fs, opts.owned ? opts.light : T.inkFaint, 'center', 'bold');
     },
 
-    // 보물 진열장: 위쪽 마왕 3명(금테 칸), 아래 유물 16종(칸), 오른쪽 금테 상세 창(마우스를 올린 것). 잠긴 것은 그림자와 해금 스테이지
+    // 보물 진열장: 위쪽 마왕 3명(금테 칸), 아래 유물 19종(칸), 오른쪽 금테 상세 창(마우스를 올린 것). 잠긴 것은 그림자와 해금 스테이지
     drawHqRelics(ctx) {
         const T = UI_THEME;
         const relicIds = Object.keys(RELICS);
@@ -521,7 +522,7 @@ Object.assign(UI, {
         const L = HQ_LORD_CARD;
         const lordIds = Object.keys(DEMON_LORDS);
         const lordRects = lordIds.map((id, i) => ({ id, x: L.x + i * (L.w + L.gap), y: L.y, w: L.w, h: L.h }));
-        const relicRects = relicIds.map((id, i) => Object.assign({ id }, this.hqGridRect(i)));
+        const relicRects = relicIds.map((id, i) => Object.assign({ id }, this.hqGridRect(i, HQ_RELIC_GRID)));
         const hot = this.hqHotCell([...lordRects, ...relicRects]);
         for (const r of lordRects) {
             const lord = DEMON_LORDS[r.id];

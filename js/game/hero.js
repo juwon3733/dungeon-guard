@@ -143,7 +143,8 @@ function updateHero(h, dt) {
     if (def.stunEvery && !h.boss) updateMageCast(h, dt);
     if (h.windup > 0) return; // 뇌술사가 범위 감전 경고를 막 시작했다
 
-    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
+    const bridge = Game.mods.mergedSlow !== 1 && h.d >= mergeDistance(h.route) ? Game.mods.mergedSlow : 1; // 유물: 합류점을 지난 용사
+    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * bridge * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
     h.d += speed * dt;
     const p = pathAt(h.d, h.route);
     h.dir = dirFromVector(p.dx, p.dy);

@@ -179,7 +179,7 @@ function resolveStrike(strike) {
 function castRoar() {
     const G = Game;
     const rule = COMBAT_RULES.roar;
-    if (G.hp > rule.unlockHp || G.skills.roar > 0) return false;
+    if (G.roarLocked() || G.skills.roar > 0) return false;
     G.skills.roar = G.skillCooldown('roar');
     for (const h of G.heroes) if (!h.dead) h.stun = Math.max(h.stun, rule.duration);
     const tx = tileX(THRONE_TILE.col);
