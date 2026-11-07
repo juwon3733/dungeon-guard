@@ -2366,7 +2366,7 @@ const UI = {
         UIKit.ink(ctx, `${num(stats.interval)}초마다`, sx, sy + 2, 20, T.inkSoft);
         const melee = MONSTER_ROLES[def.role].melee;
         const line2 = melee ? `한 번에 ${stats.block}명 타격 · 사거리 ${num(stats.range)}칸` : (stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림');
-        UIKit.ink(ctx, line2, p.x + 22, top + 138 + POPUP_RANK_H + 14, 17, T.inkSoft);
+        UIKit.ink(ctx, onAltar(f.type, f.col, f.row) ? `${line2} · 강화 제단` : line2, p.x + 22, top + 138 + POPUP_RANK_H + 14, 17, onAltar(f.type, f.col, f.row) ? T.inkWax : T.inkSoft);
 
         // 장비 줄: 칸(마우스를 올리면 설명), 이름과 등급, 효과. 빼기 버튼은 layoutMonsterMenu가 놓는다
         let y = top + 166 + POPUP_RANK_H;

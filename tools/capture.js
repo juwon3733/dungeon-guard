@@ -83,6 +83,11 @@ const SCENES = {
         freeze: false
     },
 
+    // 맵 3종: 길 모양과 기믹 칸. 몬스터 몇 마리와 함께 본다
+    mapMerge: { setup: () => { mapScene('merge', 's1'); } },
+    mapParallel: { setup: () => { mapScene('parallel', 's2'); } },
+    mapCoil: { setup: () => { mapScene('coil', 's3'); } },
+
     // 주간 토벌전: 도전의 문 설명과 보스 전투
     raidPortal: {
         setup: () => {
@@ -585,7 +590,7 @@ const SCENES = {
             const types = ['warrior', 'rogue', 'mage'];
             // 용사 그림 위치는 길 위 거리(d)와 길 폭 방향 어긋남(lane)으로 정해진다.
             // 3행 가로 구간(10,3)~(15,3)을 골라 d로 가로, lane으로 세로 위치를 맞춘다.
-            const seg = PATH.segments.find(s => s.dy === 0 && s.dx > 0 && s.ax === tileX(10) && s.ay === tileY(3));
+            const seg = ROUTES.north.segments.find(s => s.dy === 0 && s.dx > 0 && s.ax === tileX(10) && s.ay === tileY(3));
             // Why: d가 구간 양 끝과 같으면 이웃 구간(세로)으로 계산되어 lane이 가로로 붙는다. 양 끝을 비워 둔다.
             const margin = 48;
             const colX = i => seg.ax + margin + i * ((seg.len - margin * 2) / 3);
@@ -1008,6 +1013,23 @@ const SCENES = {
 const PAGE_HELPERS = () => {
     // 스토리 없는 판(WAVES 전부)을 고르기 화면을 거쳐 기본 선택(균열의 군주, 유물 없음)으로 시작한다(tools/smoke.js와 같은 시험용 판)
     window.startRun = () => { UI.openSelect(null); pressButton('begin'); };
+    // 맵 장면: 그 스테이지로 시작해 제단 위에 하나, 길 옆에 몇 마리를 세운다
+    window.mapScene = (id, stage) => {
+        storyProgress(STAGES.length);
+        UI.openSelect(stage);
+        pressButton('begin');
+        const m = MAPS[id];
+        Game.place('vampire', m.altars[0][0], m.altars[0][1] + 1) || Game.place('orc_guard', m.altars[0][0], m.altars[0][1]);
+        Game.place('dark_mage', m.altars[1][0], m.altars[1][1]);
+        for (const t of ['skeleton_archer', 'minotaur', 'succubus', 'werewolf']) {
+            const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r) && !onAltar(t, c, r); });
+            if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+        }
+        Game.dialogue = null;
+        UI.dialogue = null;
+        Game.startWave();
+        advance(7);
+    };
     // 기록을 스토리 스테이지 앞에서부터 n개 깬 상태로. 페이지마다 저장소를 비우고 시작해 사용자의 저장과 상관없다
     window.storyProgress = n => {
         Meta.data = Meta.sanitize({ version: META_VERSION, cleared: STAGES.slice(0, n).map(s => s.id) });

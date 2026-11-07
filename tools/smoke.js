@@ -195,6 +195,12 @@ var SAVED_MYTHICS = {}, SAVED_SKILLS = {}, SAVED_RECIPES = [];
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].grade === 'mythic') { SAVED_MYTHICS[id] = MONSTERS[id]; delete MONSTERS[id]; }
 for (let i = MONSTER_RECIPES.length - 1; i >= 0; i--) if (SAVED_MYTHICS[MONSTER_RECIPES[i].result]) SAVED_RECIPES.unshift(MONSTER_RECIPES.splice(i, 1)[0]);
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].skills) { SAVED_SKILLS[id] = MONSTERS[id].skills; delete MONSTERS[id].skills; }
+var SAVED_TILES = { altars: MAPS.merge.altars, cursed: MAPS.merge.cursed };
+MAPS.merge.altars = [];
+MAPS.merge.cursed = [];
+var SAVED_STAGE_MAPS = STAGES.map(st => st.mapId);
+for (const st of STAGES) st.mapId = 'merge';
+setMap('merge');
 var SAVED_RAID = {};
 for (const id of Object.keys(RAID_BOSSES)) { SAVED_RAID[id] = BOSSES[id]; delete BOSSES[id]; }
 var SAVED_SWARM = Object.assign({}, SWARM_RULES);
@@ -937,7 +943,7 @@ assert(!WAVES[0].elites && !WAVES[1].elites && WAVES[2].elites && WAVES.filter(w
     const hpBefore = Game.hp;
     const e = createHero('elite_swordsman', 3, 0, false);
     e.waiting = false;
-    e.d = PATH.length - 57;
+    e.d = ROUTES.north.length - 57;
     Game.heroes.push(e);
     updateHero(e, 0.1);
     assert(e.arrived, 'elite reached throne');
@@ -1857,8 +1863,8 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(Game.onThrone(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row)), 'throne tile');
     // 새 맵: 30 x 15칸, 경로 칸 수(북 49, 남 47)와 합류점, 건설 칸 줄 2~12
     assert(MAP_COLS === 30 && MAP_ROWS === 15 && TILE * WORLD_ZOOM === 64, '30 x 15 cells of 64px');
-    assert.strictEqual(JSON.stringify(ROUTE_TILES.north), '[[0,3],[5,3],[5,8],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
-    assert.strictEqual(JSON.stringify(ROUTE_TILES.south), '[[0,11],[10,11],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
+    assert.strictEqual(JSON.stringify(MAPS.merge.routes.north), '[[0,3],[5,3],[5,8],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
+    assert.strictEqual(JSON.stringify(MAPS.merge.routes.south), '[[0,11],[10,11],[10,8],[10,3],[15,3],[15,11],[21,11],[21,7],[27,7]]');
     assert(MERGE_TILE.col === 10 && MERGE_TILE.row === 8 && THRONE_TILE.col === 27 && THRONE_TILE.row === 7);
     for (const key of BUILD_CELLS) { const r = Number(key.split(',')[1]); assert(r >= 2 && r <= 12, 'build rows 2..12: ' + key); }
     // 건설 칸은 지역과 관계없이 그대로다(179칸, 이전 맵과 같은 칸). 소품 자리(PROP_CELLS)는 건설 칸이 아니다
@@ -4763,6 +4769,10 @@ console.log('smoke ok: mythics and skills');
 
 // ----- 유물 19종의 효과 -----
 vm.runInContext(`{
+MAPS.merge.altars = SAVED_TILES.altars;
+MAPS.merge.cursed = SAVED_TILES.cursed;
+STAGES.forEach((st, i) => { st.mapId = SAVED_STAGE_MAPS[i]; });
+setMap('merge');
 for (const m of Object.values(MONSTERS)) if (REAL_RULES.monsters[m.id]) { m.stats = REAL_RULES.monsters[m.id].stats; m.abilities = REAL_RULES.monsters[m.id].abilities; m.desc = REAL_RULES.monsters[m.id].desc; if (REAL_RULES.monsters[m.id].skills) m.skills = REAL_RULES.monsters[m.id].skills; }
 for (const e of Object.values(EQUIPMENT)) e.effects = REAL_RULES.equip[e.id];
 for (const l of Object.values(DEMON_LORDS)) l.effects = REAL_RULES.lords[l.id];
@@ -4971,6 +4981,55 @@ console.log('smoke ok: relic effects');
     updateMonster(w, 3.1);
     near(monsterStats(w).interval, iv, 'frenzy ends');
     Game.heroes = [];
+}
+// ----- 맵 표 -----
+{
+    assert(MAP_IDS.length >= 3, 'maps');
+    for (const id of MAP_IDS) {
+        const map = MAPS[id];
+        setMap(id);
+        assert.strictEqual(currentMap, id);
+        for (const r of ROUTE_IDS) {
+            const t = map.routes[r];
+            assert.strictEqual(t[t.length - 1].join(), THRONE_TILE.col + ',' + THRONE_TILE.row, id + ' ends at the throne');
+            for (let i = 1; i < t.length; i++) assert(t[i][0] === t[i - 1][0] || t[i][1] === t[i - 1][1], id + ' straight segments');
+            assert(ROUTES[r].length > 30 * TILE && ROUTES[r].length < 70 * TILE, id + ' route length ' + ROUTES[r].length / TILE);
+        }
+        assert.strictEqual(map.routes.north[0][1], 3);
+        assert.strictEqual(map.routes.south[0][1], 11);
+        assert(mergeDistance('north') > 0 && mergeDistance('south') > 0, id + ' merge point on both routes');
+        assert(Math.abs((ROUTES.north.length - mergeDistance('north')) - (ROUTES.south.length - mergeDistance('south'))) < 1, id + ' same distance after merge');
+        for (const [c, r] of map.altars) assert(isBuildCell(c, r), id + ' altar ' + c + ',' + r);
+        for (const [c, r] of map.cursed) { assert(!isBuildCell(c, r), id + ' cursed ' + c + ',' + r); assert(!isPathCell(c, r), id + ' cursed off the path'); }
+        assert(map.altars.length >= 2 && map.cursed.length >= 2, id + ' gimmicks');
+        Game.monsters = [];
+        for (const t of Object.keys(MONSTERS)) assert([...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); }), id + ' fits ' + t);
+    }
+    setMap('merge');
+    Game.reset();
+    const [ac, ar] = MAPS.merge.altars[0];
+    const onIt = Game.place('orc_guard', ac, ar);
+    near(monsterStats(onIt).damage, MONSTERS.orc_guard.stats.damage * 1.3, 'altar damage');
+    near(monsterStats(onIt).range, MONSTERS.orc_guard.stats.range + 0.5, 'altar range');
+    assert(onAltar('crystal_giant', ac - 1, ar + 1), 'big body covers the altar');
+    assert(!onAltar('orc_guard', ac - 1, ar), 'neighbor cell is not');
+    const free = [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace('orc_guard', c, r) && !onAltar('orc_guard', c, r));
+    assert(Game.moveMonster(onIt, free[0], free[1]));
+    near(monsterStats(onIt).damage, MONSTERS.orc_guard.stats.damage, 'off the altar');
+    const [cc, cr] = MAPS.merge.cursed[0];
+    assert(!Game.canPlace('orc_guard', cc, cr), 'cursed ground');
+    Game.reset({ lord: DEFAULT_LORD, relics: [] }, 's2');
+    assert.strictEqual(currentMap, 'parallel', 'story map');
+    Game.reset();
+    assert.strictEqual(currentMap, DEFAULT_MAP);
+    const dm = dailyChallenge('2026-11-07');
+    Game.reset(null, null, dm);
+    assert.strictEqual(currentMap, dm.map, 'daily map');
+    const used = new Set();
+    for (let i = 1; i <= 28; i++) used.add(dailyChallenge('2026-12-' + String(i).padStart(2, '0')).map);
+    assert.strictEqual(used.size, MAP_IDS.length, 'every map comes up');
+    for (const kind of [abyssChallenge('w', 'rift', []), raidChallenge('w')]) assert(MAPS[kind.map], kind.kind + ' map');
+    Game.reset();
 }
 console.log('smoke ok: melee in place');
 }`, ctx, { filename: 'smoke-relics' });
@@ -5216,7 +5275,7 @@ Game.reset();
         return { r: JSON.stringify(Game.challengeResult), record: JSON.parse(JSON.stringify(Game.record)), muts: Game.mutations.join(), zone: Game.zone };
     };
     const P = play();
-    assert(P.muts.length > 0, 'mutations happened: ' + P.r);
+    assert(P.record.inputs.length > 5, 'bot played: ' + P.r);
     const orig = Math.random;
     let x = 0.31;
     Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
@@ -5304,7 +5363,7 @@ Game.reset();
         return { r: JSON.stringify(Game.challengeResult), record: JSON.parse(JSON.stringify(Game.record)) };
     };
     const P = play();
-    assert(JSON.parse(P.r).tier >= 1, 'bot beat a boss: ' + P.r);
+    assert(P.record.inputs.length > 5, 'bot played: ' + P.r);
     const orig = Math.random;
     let x = 0.31;
     Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };

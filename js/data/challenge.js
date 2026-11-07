@@ -60,6 +60,7 @@ function dailyChallenge(date) {
         lord: seededPick(seed, 'lord', Object.keys(DEMON_LORDS), 1)[0],
         relics: seededPick(seed, 'relics', Object.keys(RELICS), DAILY_RULES.relics),
         cards: [...seededPick(seed, 'hard', cards('hard'), DAILY_RULES.hard), ...seededPick(seed, 'boon', cards('boon'), DAILY_RULES.boon)],
+        map: seededPick(seed, 'map', MAP_IDS, 1)[0],
         zone: seededPick(seed, 'zone', ZONE_IDS, 1)[0]
     };
 }
@@ -100,6 +101,7 @@ function raidChallenge(week) {
         lord: seededPick(seed, 'lord', Object.keys(DEMON_LORDS), 1)[0],
         relics: seededPick(seed, 'relics', Object.keys(RELICS), RAID_RULES.relics),
         cards: seededPick(seed, 'hard', hard, RAID_RULES.hard),
+        map: seededPick(seed, 'map', MAP_IDS, 1)[0],
         zone: seededPick(seed, 'zone', ZONE_IDS, 1)[0]
     };
 }
@@ -115,6 +117,7 @@ function abyssChallenge(seed, lord, relics) {
     return {
         kind: 'abyss', id: `abyss-${seed}`, name: '끝없는 심연', seed: String(seed), lord, relics: relics.slice(), cards: [],
         hpFrom: ABYSS_RULES.hpFrom, hpGrowth: ABYSS_RULES.hpGrowth,
+        map: seededPick(String(seed), 'map', MAP_IDS, 1)[0],
         zone: seededPick(String(seed), 'zone', ZONE_IDS, 1)[0]
     };
 }

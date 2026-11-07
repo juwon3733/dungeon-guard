@@ -3,7 +3,7 @@
 // 수치(체력 배율, 시작 골드 보너스)는 플레이 후 고칠 초안이다. 설계: docs/MONSTER_DESIGN.md의 "메인 스토리"
 //
 // 스테이지 항목
-//   id, no(지도 도장 번호), name, zone(맵 지역: js/data/map.js의 ZONES)
+//   id, mapId(길과 기믹: js/data/map.js의 MAPS), no(지도 도장 번호), name, zone(맵 지역: js/data/map.js의 ZONES)
 //   waves: 이번 스테이지에 쓸 WAVES의 인덱스 목록(순서대로, 겹쳐도 된다). 라운드의 나머지 값은 WAVES 그대로다
 //   noBoss: true면 고른 라운드의 보스 칸을 모두 비운다("보스 없는 표")
 //   boss: 있으면 마지막 라운드의 보스 칸을 이 보스(BOSSES 열쇠)로 덮어쓴다. 마지막 라운드의 보스는 보상 없이 승리로 끝난다
@@ -35,7 +35,7 @@ function firstRounds(n) { return Array.from({ length: n }, (_, i) => i); }
 
 const STAGES = [
     {
-        id: 's1', no: 1, name: '첫 손님', zone: 'moonGarden', waves: firstRounds(10), hpMul: 0.5, goldBonus: 0, map: [260, 610],
+        id: 's1', mapId: 'merge', no: 1, name: '첫 손님', zone: 'moonGarden', waves: firstRounds(10), hpMul: 0.5, goldBonus: 0, map: [260, 610],
         intro: [
             ['goblin', '군주님! 입주 첫날부터 용사 손님입니다. 소환(S)하면 길 옆에 부하가 나와요.'],
             ['rift', '같은 등급 둘을 겹치면 더 센 놈이 된다고? 좋아, 합쳐서 막는다.'],
@@ -48,7 +48,7 @@ const STAGES = [
         unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'greedy_vault' }, { kind: 'relic', id: 'legion_banner' }, { kind: 'relic', id: 'glass_heart' }]
     },
     {
-        id: 's2', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
+        id: 's2', mapId: 'parallel', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
         intro: [
             ['goblin', '도굴꾼입니다! 벽을 몰래 파고 있어요!'],
             ['bone_queen', '(벽 너머) 거기 시끄러워! 뼈 울린다고!'],
@@ -61,7 +61,7 @@ const STAGES = [
         unlocks: [{ kind: 'relic', id: 'usury_ledger' }, { kind: 'relic', id: 'mad_dice' }, { kind: 'relic', id: 'dead_horn' }, { kind: 'relic', id: 'sniper_mark' }]
     },
     {
-        id: 's3', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
+        id: 's3', mapId: 'coil', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
         intro: [
             ['bone_queen', '난 백 년째 옆방에 살았어. 계약서는... 묻혔지.'],
             ['archmage', '불법 거주 마왕이 둘! 한 번에 신고 처리한다!'],
@@ -75,7 +75,7 @@ const STAGES = [
         unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'relic', id: 'iron_oath' }, { kind: 'relic', id: 'blood_altar' }, { kind: 'relic', id: 'broken_hourglass' }]
     },
     {
-        id: 's4', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
+        id: 's4', mapId: 'merge', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
         intro: [
             ['gold_king', '실례합니다. 이 던전 분양 대금이 아직 안 들어왔는데요?'],
             ['goblin', '그, 그 와중에 왕국 정찰대가 옵니다!'],
@@ -88,7 +88,7 @@ const STAGES = [
         unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'mad_drum' }, { kind: 'relic', id: 'smith_hammer' }]
     },
     {
-        id: 's5', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
+        id: 's5', mapId: 'parallel', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
         intro: [
             ['archmage', '지난번 민원은 반려됐지만, 이번엔 직접 철거한다!'],
             ['gold_king', '이 던전이 철거되면 내 돈은 누가 갚지? 군주, 이번엔 나도 싸운다.'],
@@ -101,7 +101,7 @@ const STAGES = [
         unlocks: [{ kind: 'slot' }, { kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }]
     },
     {
-        id: 's6', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],
+        id: 's6', mapId: 'coil', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],
         intro: [
             ['captain', '내가 용사단 부대장이다. 이 던전의 모든 것을 확인하러 왔다!'],
             ['rift', '확인? 압류야, 철거야?'],

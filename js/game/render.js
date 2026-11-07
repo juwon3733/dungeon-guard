@@ -1252,6 +1252,46 @@ const Render = {
         }
     },
 
+    // 맵 기믹 칸: 강화 제단(금빛 룬)과 저주받은 땅(검보라 균열). 판 중에 늘 보인다
+    drawMapTiles(ctx) {
+        if (!Game.inPlay()) return;
+        const map = MAPS[currentMap];
+        for (const [c, r] of map.cursed) {
+            const x = tileX(c);
+            const y = tileY(r);
+            ctx.save();
+            const g = ctx.createRadialGradient(x, y, 6, x, y, TILE * 0.6);
+            g.addColorStop(0, 'rgba(26,6,40,0.85)');
+            g.addColorStop(0.7, 'rgba(58,14,76,0.55)');
+            g.addColorStop(1, 'rgba(58,14,76,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(x - TILE * 0.6, y - TILE * 0.6, TILE * 1.2, TILE * 1.2);
+            ctx.strokeStyle = 'rgba(190,90,255,0.55)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x - 26, y - 18); ctx.lineTo(x - 6, y - 4); ctx.lineTo(x - 14, y + 12); ctx.lineTo(x + 4, y + 24);
+            ctx.moveTo(x - 6, y - 4); ctx.lineTo(x + 16, y - 14); ctx.lineTo(x + 28, y + 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+        for (const [c, r] of map.altars) {
+            const x = tileX(c);
+            const y = tileY(r);
+            const pulse = 0.6 + Math.sin(Game.time * 3 + c) * 0.2;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(255,190,70,${0.16 * pulse})`;
+            ctx.fillRect(x - TILE / 2 + 6, y - TILE / 2 + 6, TILE - 12, TILE - 12);
+            ctx.restore();
+            ctx.save();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = `rgba(255,215,110,${pulse})`;
+            ctx.strokeRect(x - TILE / 2 + 8, y - TILE / 2 + 8, TILE - 16, TILE - 16);
+            ctx.restore();
+            this.drawLoopSheet(ctx, 'fx_rune_damage', x, y + 22, 96, c * 0.1, 0.8);
+        }
+    },
+
     // 몬스터를 놓을 수 있는 길 옆 칸: 건설 모드에서는 밝게, 준비 시간에는 흐리게 보여 준다. 길 칸에는 놓을 수 없다
     drawBuildPads(ctx) {
         const placing = !!UI.drag;
@@ -1311,6 +1351,7 @@ const Render = {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         for (const [sprite, col, row] of zone.props) {
+            if (isPathCell(col, row)) continue; // 이 맵의 길 위에 놓인 소품은 뺀다
             if (sprite !== 'prop2_brazier') continue;
             const x = tileX(col);
             const y = tileY(row) + PROP_FOOT_Y - 120;
@@ -1517,7 +1558,7 @@ const Render = {
         }
         ctx.scale(WORLD_ZOOM, WORLD_ZOOM);
         const zoneId = this.zoneNow();
-        if (zoneId !== this.mapZone) this.buildMap(zoneId); // 판을 시작하면 이번 지역으로 다시 그린다
+        if (zoneId !== this.mapZone || currentMap !== this.mapBuilt) { this.mapBuilt = currentMap; this.buildMap(zoneId); } // 판을 시작하면 이번 지역으로 다시 그린다
         if (this.mapLayer) ctx.drawImage(this.mapLayer, 0, 0);
 
         for (const d of Fx.decals) {
@@ -1530,6 +1571,7 @@ const Render = {
             ctx.fillRect(d.x - d.radius, d.y - d.radius, d.radius * 2, d.radius * 2);
         }
 
+        this.drawMapTiles(ctx);
         this.drawBuildPads(ctx);
         this.drawHoverCell(ctx);
         UI.drawRanges(ctx);
@@ -1564,6 +1606,7 @@ const Render = {
         const entities = [];
         const zone = ZONES[this.mapZone] || ZONES[DEFAULT_ZONE];
         for (const [sprite, col, row] of zone.props) {
+            if (isPathCell(col, row)) continue; // 이 맵의 길 위에 놓인 소품은 뺀다
             const footY = tileY(row) + PROP_FOOT_Y;
             entities.push({ y: footY, draw: () => this.sprite(ctx, Assets.get(sprite), tileX(col), footY, PIXEL_SCALE, propFootPx(sprite)) });
         }

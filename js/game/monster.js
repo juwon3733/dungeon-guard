@@ -56,6 +56,11 @@ function monsterStats(m) {
     }
     const enrage = monsterEnrage(m);
     if (enrage) stats.interval *= enrage.intervalMul;
+    // 강화 제단 위
+    if (onAltar(m.type, m.col, m.row)) {
+        stats.damage *= 1 + MAP_RULES.altarDamage;
+        stats.range += MAP_RULES.altarRange;
+    }
     // 격분: 처치 뒤 잠시 빨라진다
     if (m.frenzyT > 0) stats.interval *= m.frenzyMul;
     // 유물: 근접 몬스터

@@ -710,7 +710,7 @@ Object.assign(UI, {
         const x = GAME_WIDTH / 2 - 560;
         const y = 310;
         UIKit.panel(ctx, x, y, 1120, 520);
-        UIKit.ink(ctx, `이번 주 토벌 · ${boss.name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        UIKit.ink(ctx, `이번 주 토벌 · ${boss.name} · ${MAPS[c.map].name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const a = Meta.raidBest(week);
         UIKit.ink(ctx, a.bestScore ? `이번 주 최고 ${a.bestTier}단계 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestScore ? T.ink : T.inkSoft, 'right', 'bold');
         const img = Assets.get(`${boss.art.sprite}/rotations/south`);
@@ -750,7 +750,7 @@ Object.assign(UI, {
         UIKit.panel(ctx, x, y, 1120, 520);
         const week = abyssWeek();
         const a = Meta.abyssBest(week);
-        UIKit.ink(ctx, `이번 주 심연 · ${week}부터`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        UIKit.ink(ctx, `이번 주 심연 · ${MAPS[abyssChallenge(week, DEFAULT_LORD, []).map].name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         UIKit.ink(ctx, a.bestFloor ? `이번 주 최고 ${a.bestFloor}층 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestFloor ? T.ink : T.inkSoft, 'right', 'bold');
         const rows = [
             '이번 주는 모두 같은 시드입니다. 소환 순서와 변이 순서가 같습니다',
@@ -770,7 +770,7 @@ Object.assign(UI, {
         const x = GAME_WIDTH / 2 - 560;
         const y = 310;
         UIKit.panel(ctx, x, y, 1120, 520);
-        UIKit.ink(ctx, `오늘의 판 · ${c.date} · 무한 라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        UIKit.ink(ctx, `오늘의 판 · ${MAPS[c.map].name} · 무한 라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const best = Meta.data.daily[c.date];
         UIKit.ink(ctx, best ? `오늘 최고 ${best.score.toLocaleString()}점 · ${best.rounds}라운드` : '아직 오늘 기록이 없습니다', x + 1080, y + 50, 24, best ? T.ink : T.inkSoft, 'right', 'bold');
         const lord = DEMON_LORDS[c.lord];
