@@ -25,7 +25,7 @@ function toVirtual(event) {
 
 function saveSettings() {
     try {
-        localStorage.setItem('dungeonGuard.settings', JSON.stringify({ muted: Sfx.muted, reduce: Fx.reduce }));
+        localStorage.setItem('dungeonGuard.settings', JSON.stringify({ muted: Sfx.muted, reduce: Fx.reduce, volume: Sfx.volume }));
     } catch (e) { /* 저장을 못 해도 게임은 그대로 돈다 */ }
 }
 
@@ -33,6 +33,7 @@ function loadSettings() {
     try {
         const raw = JSON.parse(localStorage.getItem('dungeonGuard.settings') || '{}');
         Sfx.muted = !!raw.muted;
+        if (raw.volume) for (const k of Object.keys(Sfx.volume)) if (typeof raw.volume[k] === 'number') Sfx.volume[k] = clamp(raw.volume[k], 0, 100);
         Fx.reduce = !!raw.reduce;
     } catch (e) { /* 기본값 사용 */ }
 }
@@ -64,6 +65,7 @@ function frame(now) {
 
     Render.world(ctx);
     UI.draw(ctx);
+    Music.update();
     requestAnimationFrame(frame);
 }
 

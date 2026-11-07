@@ -43,6 +43,10 @@ const HQ_ROOM = {
 // 시설: 누르면 들어간다. 숫자 키는 표 순서(1부터).
 //   action: UI의 여는 함수 이름(스토리 지도, 도감) 또는 view: 본부 안 화면(hq.js가 그린다)
 //   news: 새로 볼 것이 있으면 그 값(문자열), 없으면 null. 들어갈 때 본 값과 다르면 붉은 느낌표
+// 설정 창: 위쪽 끝과 음량 줄(Sfx.volume 열쇠, 이름)
+const HQ_SETTINGS_Y = 150;
+const HQ_VOLUME_ROWS = [['master', '전체'], ['sfx', '효과음'], ['bgm', '배경음악']];
+
 const HQ_FACILITIES = [
     { id: 'wartable', sprite: 'hq_wartable', name: '작전 테이블', desc: '스토리 지도 · 다음 스테이지 출전', x: 330, y: 470, scale: 3, action: 'openStoryMap',
         news: () => { const st = hqNextStage(); return st ? st.id : null; } },
@@ -189,10 +193,18 @@ Object.assign(UI, {
     layoutHQ() {
         if (this.hqSettings) {
             const x = GAME_WIDTH / 2 - 260;
-            this.button('set_sound', x + 40, 330, 440, 80, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
-            this.button('set_fx', x + 40, 430, 440, 80, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
-            this.button('set_title', x + 40, 530, 440, 80, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
-            this.button('set_close', x + 40, 650, 440, 80, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
+            // 음량 세 줄: − 와 + 로 10씩
+            HQ_VOLUME_ROWS.forEach(([kind], i) => {
+                const y = HQ_SETTINGS_Y + 110 + i * 84;
+                const step = d => () => { Sfx.setVolume(kind, Sfx.volume[kind] + d); saveSettings(); Sfx.play('click'); };
+                this.button(`vol_${kind}_down`, x + 250, y, 76, 64, { label: '−', size: 34, disabled: Sfx.volume[kind] <= 0, onClick: step(-10) });
+                this.button(`vol_${kind}_up`, x + 404, y, 76, 64, { label: '+', size: 34, disabled: Sfx.volume[kind] >= 100, onClick: step(10) });
+            });
+            const by = HQ_SETTINGS_Y + 370;
+            this.button('set_sound', x + 40, by, 440, 72, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
+            this.button('set_fx', x + 40, by + 86, 440, 72, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
+            this.button('set_title', x + 40, by + 172, 440, 72, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
+            this.button('set_close', x + 40, by + 270, 440, 72, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
             return;
         }
         if (this.hqView) {
@@ -469,10 +481,17 @@ Object.assign(UI, {
     },
 
     drawHqSettings(ctx) {
-        ctx.fillStyle = UI_THEME.dim;
+        const T = UI_THEME;
+        ctx.fillStyle = T.dim;
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, 210, 520, 560);
-        UIKit.text(ctx, '설정', GAME_WIDTH / 2, 280, 44, UI_THEME.gold, 'center', 'bold');
+        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, HQ_SETTINGS_Y, 520, 740);
+        UIKit.text(ctx, '설정', GAME_WIDTH / 2, HQ_SETTINGS_Y + 66, 44, T.gold, 'center', 'bold');
+        const x = GAME_WIDTH / 2 - 260;
+        HQ_VOLUME_ROWS.forEach(([kind, label], i) => {
+            const y = HQ_SETTINGS_Y + 110 + i * 84;
+            UIKit.text(ctx, label, x + 44, y + 32, 28, T.cream, 'left', 'bold');
+            UIKit.text(ctx, String(Sfx.volume[kind]), x + 365, y + 32, 28, Sfx.muted ? T.creamSoft : T.gold, 'center', 'bold');
+        });
     },
 
     // 안 화면 제목(왼쪽 위): 시설 그림과 큰 제목, 보조 글
