@@ -24,6 +24,8 @@ const LORD_EFFECTS = {
     rareChance: { name: '소환 희귀 확률', mode: 'ratio' }, // 희귀 확률에 더하고 일반에서 뺀다
     summonBase: { name: '소환 시작 비용', mode: 'add', unit: 'G', low: true },
     fieldMax: { name: '맵 몬스터 상한', mode: 'add' },
+    meleeDamage: { name: '근접 몬스터 피해', mode: 'ratio' },
+    meleeRange: { name: '근접 몬스터 사거리', mode: 'add', unit: '칸' },
     respawn: { name: '부활 시간', mode: 'mul', low: true }, // 막는 몬스터가 쓰러졌다 다시 나오는 시간
     eliteDrop: { name: '정예 장비 드롭', mode: 'ratio' }, // EQUIP_RULES.eliteDrop에 더한다
     refund: { name: '판매 환불', mode: 'mul' },
@@ -69,10 +71,10 @@ const DEMON_LORDS = {
         }
     },
     bone_queen: {
-        id: 'bone_queen', name: '뼈의 여왕', desc: '몬스터를 빨리 키운다. 쓰러져도 금방 일으킨다.',
+        id: 'bone_queen', name: '뼈의 여왕', desc: '몬스터를 빨리 키우고 손놀림을 높인다.',
         sprite: 'lord_bone_queen', footPx: 119,
         portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
-        effects: { respawn: 0.6, xp: 0.25, maxHp: -3 },
+        effects: { attackSpeed: 0.1, xp: 0.25, maxHp: -3 },
         speech: {
             waveStart: ['얘들아, 간식 왔다. 뼈는 남기지 마.'],
             throneHit: ['내 왕관 삐뚤어졌잖아!'],
@@ -100,9 +102,9 @@ const RELICS = {
     glass_heart: { id: 'glass_heart', name: '유리 심장', effects: { fullHpDamage: 0.1 } },
     usury_ledger: { id: 'usury_ledger', name: '고리대금 장부', effects: { interest: 0.03 } },
     mad_dice: { id: 'mad_dice', name: '미치광이의 주사위', effects: { mergeJump: 0.05 } },
-    dead_horn: { id: 'dead_horn', name: '망자의 뿔피리', effects: { respawn: 0.8 } },
+    dead_horn: { id: 'dead_horn', name: '망자의 뿔피리', effects: { meleeDamage: 0.15 } },
     sniper_mark: { id: 'sniper_mark', name: '저격수의 표식', effects: { range: 0.1 } },
-    iron_oath: { id: 'iron_oath', name: '철벽 서약', effects: { monsterArmor: 0.1 } },
+    iron_oath: { id: 'iron_oath', name: '철벽 서약', effects: { meleeRange: 0.5 } },
     blood_altar: { id: 'blood_altar', name: '피의 제단', effects: { altarDamage: 0.005 } },
     broken_hourglass: { id: 'broken_hourglass', name: '깨진 모래시계', effects: { earlyAttackSpeed: 0.1 } },
     storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.75 } },

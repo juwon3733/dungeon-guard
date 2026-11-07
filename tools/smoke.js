@@ -180,7 +180,14 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     assert(!names.includes('ui_kit') && !names.includes('ui_buttons'), 'no parchment or wood kit');
     for (const f of ['js/ui/uikit.js', 'js/ui/ui.js', 'js/ui/hq.js']) assert(!/ui_kit|ui_buttons|UI_HP_BAR/.test(fs.readFileSync(path.join(root, f), 'utf8')), f + ' does not use the old kit');
 }
+ctx.LEGACY_RULES = JSON.parse(fs.readFileSync(path.join(root, 'tools/legacy_block_rules.json'), 'utf8'));
 vm.runInContext(`
+// 옛 시험은 길을 막던 때의 표로 돌린다(유물 시험 앞에서 지금 표로 되돌린다)
+var REAL_RULES = { monsters: {}, equip: {}, lords: {}, roles: JSON.parse(JSON.stringify(MONSTER_ROLES)) };
+for (const m of Object.values(MONSTERS)) { REAL_RULES.monsters[m.id] = { stats: m.stats, abilities: m.abilities, skills: m.skills, desc: m.desc }; Object.assign(m, LEGACY_RULES.monsters[m.id]); }
+for (const e of Object.values(EQUIPMENT)) { REAL_RULES.equip[e.id] = e.effects; e.effects = LEGACY_RULES.equip[e.id]; }
+for (const l of Object.values(DEMON_LORDS)) { REAL_RULES.lords[l.id] = l.effects; l.effects = LEGACY_RULES.lords[l.id]; }
+Object.assign(MONSTER_ROLES, LEGACY_RULES.roles);
 // 칸 모양은 맨 끝 시험에서 본다. 그 앞 시험은 모두 1칸으로 돌린다
 var SAVED_CELLS = {};
 // 신화 표와 특수 스킬도 맨 끝 시험에서 본다. 그 앞 시험은 신화가 비어 있고 스킬이 없는 표로 돌린다(신화 제한도 1마리)
@@ -1135,8 +1142,8 @@ assert.strictEqual(gradePool('common').slice(0, 3).map(t => MONSTERS[t].abilitie
 {
     const used = new Set();
     for (const t of Object.keys(MONSTERS)) for (const a of MONSTERS[t].abilities) used.add(a.kind);
-    assert.strictEqual([...used].sort().join(), Object.keys(ABILITY_KINDS).sort().join(), 'every ability kind used');
-    assert.strictEqual(Object.keys(ABILITY_KINDS).length, 14);
+    assert.strictEqual([...used].sort().join(), Object.keys(ABILITY_KINDS).filter(k => k !== 'frenzy').sort().join(), 'every ability kind used');
+    assert.strictEqual(Object.keys(ABILITY_KINDS).length, 15);
     assert.strictEqual(ABILITY_KINDS.burnShot.desc(monsterAbility('fire_imp', 'burnShot')), '맞은 용사가 2초간 초당 3 화상 피해');
     assert.strictEqual(ABILITY_KINDS.aura.desc(monsterAbility('orc_shaman', 'aura')), '2.5칸 안 몬스터 피해 +20%(겹치지 않음)');
     assert.strictEqual(ABILITY_KINDS.aura.desc(monsterAbility('wisp_acolyte', 'aura')), '2칸 안 몬스터 체력 회복 초당 3(겹치지 않음)');
@@ -2619,7 +2626,7 @@ for (const r of Object.values(RELICS)) assert(effectLines(r.effects).length === 
 assert(effectGood('maxHp', -3) === false && effectGood('respawn', 0.6) && effectGood('skillCooldown', 0.9) && effectGood('startGold', 100), 'good/bad colors');
 // 합치기: 더하는 키는 더하고 곱하는 키는 곱한다
 {
-    near(buildMods('bone_queen', ['dead_horn']).respawn, 0.48, 'respawn multiplies');
+    near(buildMods('bone_queen', ['dead_horn']).meleeDamage, 0.15, 'relic ratio');
     near(buildMods('rift', ['storm_bottle']).lightningCooldown, 0.75, 'lightning cooldown');
     near(buildMods('rift', ['sniper_mark']).range, 0.1, 'ratio');
     assert.strictEqual(buildMods('rift', ['legion_banner']).fieldMax, 3, 'adds');
@@ -4752,6 +4759,10 @@ console.log('smoke ok: mythics and skills');
 
 // ----- 유물 19종의 효과 -----
 vm.runInContext(`{
+for (const m of Object.values(MONSTERS)) if (REAL_RULES.monsters[m.id]) { m.stats = REAL_RULES.monsters[m.id].stats; m.abilities = REAL_RULES.monsters[m.id].abilities; m.desc = REAL_RULES.monsters[m.id].desc; if (REAL_RULES.monsters[m.id].skills) m.skills = REAL_RULES.monsters[m.id].skills; }
+for (const e of Object.values(EQUIPMENT)) e.effects = REAL_RULES.equip[e.id];
+for (const l of Object.values(DEMON_LORDS)) l.effects = REAL_RULES.lords[l.id];
+Object.assign(MONSTER_ROLES, REAL_RULES.roles);
 const seed = (id) => {
     const save = Meta.hasRelic;
     Meta.hasRelic = () => true;
@@ -4805,9 +4816,12 @@ Game.stats.sacrificed = 2;
 near(monsterStats(m).damage, base * 1.01, 'two sacrifices');
 Game.stats.sacrificed = 100;
 near(monsterStats(m).damage, base * 1.15, 'altar cap');
-// 철벽 서약
+// 철벽 서약과 망자의 뿔피리: 근접 몬스터만
 seed('iron_oath');
-near(monsterStats(put('orc_guard')).armor, 0.1, 'armor');
+near(monsterStats(put('orc_guard')).range, MONSTERS.orc_guard.stats.range + 0.5, 'melee range');
+near(monsterStats(put('skeleton_archer')).range, MONSTERS.skeleton_archer.stats.range, 'ranged stays');
+seed('dead_horn');
+near(monsterStats(put('orc_guard')).damage, base * 1.15, 'melee damage');
 // 장비 먹는 괴물
 seed('equip_eater');
 m = put('orc_guard');
@@ -4908,6 +4922,53 @@ seed('smith_hammer');
     Math.random = orig;
 }
 console.log('smoke ok: relic effects');
+
+// ----- 근접 몬스터: 설치한 자리에서 때린다 -----
+{
+    for (const m of Object.values(MONSTERS)) {
+        assert(!monsterBlocks(m.id), m.id + ' does not block');
+        if (MONSTER_ROLES[m.role].melee) assert(m.stats.block >= 1 && m.stats.range >= 2, m.id + ' melee reach');
+        for (const a of m.abilities) assert(!['regen', 'thorns', 'lifesteal', 'enrage', 'deathStun'].includes(a.kind) && !(a.kind === 'aura' && a.stat === 'heal'), m.id + ' no hp ability');
+        for (const k of m.skills || []) assert(k.kind !== 'heal' && !k.armor, m.id + ' no hp skill');
+    }
+    for (const e of Object.values(EQUIPMENT)) assert(!e.effects.hp, e.id + ' no hp');
+    assert(monsterReach('crystal_giant') > MONSTERS.crystal_giant.stats.range, 'big body reaches further');
+    Game.reset();
+    Game.state = 'wave';
+    const g = Game.place('orc_guard', ...spot('orc_guard'));
+    const hx = g.x, hy = g.y;
+    const makeHero = () => {
+        const h = createHero('warrior', 0, 0, null, 'north');
+        h.waiting = false; h.delay = 0; h.speed = 0; h.hp = h.maxHp = 100000;
+        let best = 0, bd = Infinity;
+        for (let d = 0; d < ROUTES.north.length; d += 10) { h.d = d; const p = heroWorld(h); const dd = distance(p.x, p.y, g.x, g.y); if (dd < bd) { bd = dd; best = d; } }
+        h.d = best;
+        Game.heroes.push(h);
+        return h;
+    };
+    const hs = [makeHero(), makeHero(), makeHero(), makeHero(), makeHero()];
+    if (distance(...Object.values((({ x, y }) => ({ x, y }))(heroWorld(hs[0]))), g.x, g.y) <= monsterStats(g).range * TILE) {
+        for (let i = 0; i < 90; i++) { Fx.update(GAME_TICK); updateMonster(g, GAME_TICK); }
+        assert.strictEqual(g.x, hx, 'stays in place');
+        assert.strictEqual(g.y, hy, 'stays in place');
+        assert(hs.every(h => !h.blocker), 'nobody is held');
+        assert.strictEqual(hs.filter(h => h.hp < h.maxHp).length, 3, 'hits block count at once');
+    }
+    // 격분: 쓰러뜨리면 잠시 빨라진다
+    Game.reset();
+    Game.state = 'wave';
+    const w = Game.place('werewolf', ...spot('werewolf'));
+    const iv = monsterStats(w).interval;
+    const v = createHero('warrior', 0, 0, null, 'north');
+    v.waiting = false;
+    Game.heroes.push(v);
+    damageHero(v, 1e6, 0, 0, null, w);
+    near(monsterStats(w).interval, iv * 0.6, 'frenzy');
+    updateMonster(w, 3.1);
+    near(monsterStats(w).interval, iv, 'frenzy ends');
+    Game.heroes = [];
+}
+console.log('smoke ok: melee in place');
 }`, ctx, { filename: 'smoke-relics' });
 
 // ----- 고정 난수, 입력 기록, 일일 도전 -----
