@@ -720,7 +720,11 @@ const UI = {
         const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
-        this.popupAge = 0;
+        // 창은 매 프레임 다시 배치된다. 다른 몬스터를 골랐을 때만 여는 연출을 처음부터 한다
+        if (this.popupFor !== f) {
+            this.popupFor = f;
+            this.popupAge = 0;
+        }
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
         if (f.equip) {
             this.button('unequip', o.x + w - 120, o.y + POPUP_TOP + 166 + POPUP_RANK_H + 8, 104, 56, {

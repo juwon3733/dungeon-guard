@@ -4359,6 +4359,10 @@ m.equip = 'sword';
 UI.selectedMonster = m;
 check('popup');
 assert(ids().includes('sell') && ids().includes('unequip'), 'popup buttons');
+// 정보 창은 다시 배치돼도 여는 연출이 처음으로 돌아가지 않는다(돌아가면 창이 내내 투명하다)
+UI.update(0.5);
+UI.layout();
+assert(UI.popupAge >= 0.5, 'popup keeps opening across layouts');
 // 정보 창은 맵 어느 칸에서 열어도 다른 버튼과 겹치지 않는다
 {
     const [hx, hy] = [m.x, m.y];
