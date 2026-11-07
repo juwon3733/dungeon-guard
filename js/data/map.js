@@ -2,15 +2,34 @@
 // 합류형: 남쪽 길은 합류점(10,8)에서 북쪽 길과 만나 그 뒤로는 같은 칸을 지난다(docs/MULTI_PATH.md 5절).
 // 합류 뒤 구간은 두 길에서 좌표와 남은 거리(length - d)가 같으므로 길이 달라도 남은 거리로 비교할 수 있다.
 // 길이는 북쪽 49칸, 남쪽 47칸이다(이전 맵과 같다)
-const ROUTE_COMMON = [[10, 8], [10, 3], [15, 3], [15, 11], [21, 11], [21, 7], [27, 7]];
-const ROUTE_TILES = {
-    north: [[0, 3], [5, 3], [5, 8], ...ROUTE_COMMON],
-    south: [[0, 11], [10, 11], ...ROUTE_COMMON]
+// 맵 표. 한 줄을 더하면 새 맵이 생긴다. 길 칸과 설치 칸은 표에서 계산한다(setMap).
+//   routes: 입구마다 왕좌까지 가는 꺾은선, merge: 두 길이 만나는 칸(이 뒤로는 같은 칸을 지난다)
+//   altars: 강화 제단 칸(몬스터가 올라서면 MAP_RULES만큼 강해진다), cursed: 저주받은 땅(설치할 수 없다)
+//   입구와 왕좌 자리는 모든 맵이 같다(북쪽 3줄, 남쪽 11줄, 왕좌 27,7)
+const MAPS = {
+    merge: {
+        id: 'merge', name: '합류로', desc: '두 길이 일찍 만난다. 합류 뒤에 화력을 모은다', merge: [10, 8],
+        routes: { north: [[0, 3], [5, 3], [5, 8], [10, 8], [10, 3], [15, 3], [15, 11], [21, 11], [21, 7], [27, 7]], south: [[0, 11], [10, 11], [10, 8], [10, 3], [15, 3], [15, 11], [21, 11], [21, 7], [27, 7]] },
+        altars: [[12, 7], [18, 9]], cursed: [[8, 6], [13, 9], [23, 9]]
+    },
+    parallel: {
+        id: 'parallel', name: '평행로', desc: '두 길이 끝까지 만나지 않는다. 가운데 줄이 명당이다', merge: [24, 7],
+        routes: { north: [[0, 3], [4, 3], [4, 6], [9, 6], [9, 3], [14, 3], [14, 6], [19, 6], [19, 3], [24, 3], [24, 7], [27, 7]], south: [[0, 11], [4, 11], [4, 8], [9, 8], [9, 11], [14, 11], [14, 8], [19, 8], [19, 11], [24, 11], [24, 7], [27, 7]] },
+        altars: [[11, 7], [21, 7]], cursed: [[6, 7], [16, 7], [12, 5], [12, 9]]
+    },
+    coil: {
+        id: 'coil', name: '똬리길', desc: '길이 안으로 말려 들어간다. 가운데에서 여러 구간에 닿는다', merge: [3, 7],
+        routes: { north: [[0, 3], [3, 3], [3, 7], [8, 7], [8, 4], [19, 4], [19, 10], [12, 10], [12, 7], [27, 7]], south: [[0, 11], [3, 11], [3, 7], [8, 7], [8, 4], [19, 4], [19, 10], [12, 10], [12, 7], [27, 7]] },
+        altars: [[15, 6], [15, 8]], cursed: [[10, 8], [22, 5], [22, 9]]
+    }
 };
+const MAP_IDS = Object.keys(MAPS);
+const DEFAULT_MAP = 'merge';
+// 강화 제단 위의 몬스터: 피해 +altarDamage, 사거리 +altarRange칸
+const MAP_RULES = { altarDamage: 0.3, altarRange: 0.5 };
 const ROUTE_IDS = ['north', 'south']; // 이 순서가 우선순위다(거리가 같으면 north)
 const ROUTE_NAMES = { north: '북', south: '남' };
-const MERGE_TILE = { col: 10, row: 8 };
-const PATH_TILES = ROUTE_TILES.north; // 예전 이름(북쪽 길)
+const MERGE_TILE = { col: 10, row: 8 }; // 지금 맵의 합류점(setMap이 바꾼다)
 const THRONE_TILE = { col: 27, row: 7 };
 const LORD_SAY_Y = 360; // 마왕 말풍선 높이(왕좌 칸 가운데에서 위로, 세계 px). 마왕 머리 위
 
@@ -47,10 +66,8 @@ function buildPath(tiles) {
     return { tiles, segments, length: total, cells };
 }
 
-const ROUTES = {};
-for (const id of ROUTE_IDS) ROUTES[id] = buildPath(ROUTE_TILES[id]);
-const PATH = ROUTES.north; // 예전 이름. 새 코드는 ROUTES[route]를 쓴다
-const PATH_CELLS = new Set(ROUTE_IDS.flatMap(id => [...ROUTES[id].cells])); // 모든 길 칸의 합집합
+const ROUTES = {}; // 지금 맵의 길(setMap이 내용을 바꾼다)
+const PATH_CELLS = new Set(); // 모든 길 칸의 합집합
 
 // 입구에서 합류점까지 거리. 이 거리부터는 두 길의 좌표가 같다
 function mergeDistance(route) {
@@ -135,11 +152,15 @@ function propFootPx(sprite) { return PROP_FOOT[sprite.replace('prop2_', '')]; }
 const BUILD_REACH = 2; // 길에서 이 칸 수까지 지을 수 있다
 
 // Why: 길에서 너무 먼 칸까지 열면 사거리 낭비만 늘고, 2칸까지는 가까이 지을지 물러날지 판단이 생긴다.
-const BUILD_CELLS = (function findBuildCells() {
-    const result = new Set();
+const BUILD_CELLS = new Set();
+let currentMap = DEFAULT_MAP; // 지금 맵 id
+
+function findBuildCells(map) {
+    BUILD_CELLS.clear();
+    const cursed = new Set(map.cursed.map(([c, r]) => c + ',' + r));
     for (let r = 2; r <= MAP_ROWS - 3; r++) { // 맨 위 두 줄과 맨 아래 두 줄은 HUD와 섬 가장자리 자리다(2~12줄)
         for (let c = 1; c <= MAP_COLS - 2; c++) {
-            if (isPathCell(c, r)) continue;
+            if (isPathCell(c, r) || cursed.has(c + ',' + r)) continue;
             if (PROP_CELLS.some(([pc, pr]) => pc === c && pr === r)) continue;
             if (isThroneArea(c, r)) continue;
             let near = false;
@@ -148,11 +169,29 @@ const BUILD_CELLS = (function findBuildCells() {
                     if (isPathCell(c + dx, r + dy)) near = true;
                 }
             }
-            if (near) result.add(c + ',' + r);
+            if (near) BUILD_CELLS.add(c + ',' + r);
         }
     }
-    return result;
-})();
+}
+
+// 맵을 바꾼다: 길, 길 칸, 합류점, 설치 칸을 다시 만든다. 표에 없는 id는 기본 맵
+function setMap(id) {
+    const map = MAPS[id] || MAPS[DEFAULT_MAP];
+    currentMap = map.id;
+    for (const r of ROUTE_IDS) ROUTES[r] = buildPath(map.routes[r]);
+    PATH_CELLS.clear();
+    for (const r of ROUTE_IDS) for (const cell of ROUTES[r].cells) PATH_CELLS.add(cell);
+    MERGE_TILE.col = map.merge[0];
+    MERGE_TILE.row = map.merge[1];
+    findBuildCells(map);
+}
+setMap(DEFAULT_MAP);
+
+// 몬스터가 강화 제단 위에 서 있는지(몸 어느 칸이든)
+function onAltar(type, col, row) {
+    const [w, h] = monsterCells(type);
+    return MAPS[currentMap].altars.some(([c, r]) => c >= col && c < col + w && r <= row && r > row - h);
+}
 
 function isBuildCell(col, row) { return BUILD_CELLS.has(col + ',' + row); }
 
