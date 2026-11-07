@@ -20,7 +20,7 @@ const ORC_ART = {
 
 // 떼로 몰려오는 일반 용사: 그림은 작게(1.5면 그림 1px이 화면 1px), 수는 countMul배, 대신 한 명의 체력, 처치 골드, 왕좌 피해를 나눈다.
 // 정예와 보스에는 쓰지 않는다
-const SWARM_RULES = { scale: 1.5, countMul: 3, hpMul: 0.35, bountyMul: 0.35, leak: 0.34 };
+const SWARM_RULES = { scale: ART_SCALE, countMul: 3, hpMul: 0.35, bountyMul: 0.35, leak: 0.34 };
 
 const HEROES = {
     warrior: {

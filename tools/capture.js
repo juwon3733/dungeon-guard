@@ -228,9 +228,9 @@ const SCENES = {
             pressButton('lord_bone_queen');
             pressButton('relic_iron_oath');
             pressButton('begin');
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             advance(1.6);
             Fx.reset();
             Game.hp = 9; // 호통을 쓸 수 있는 체력
@@ -340,9 +340,9 @@ const SCENES = {
             UI.enterStage('s3');
             UI.endDialogue();
             pressButton('begin');
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             advance(1.6);
             Fx.reset();
             Game.stats.kills = 214;
@@ -559,9 +559,9 @@ const SCENES = {
             startRun();
             Game.gold = 2000; // 장면용: 세 몬스터를 모두 놓을 돈
             // 화면 가운데쯤(길이 ㄷ자로 꺾이는 곳)에 놓아 싸움이 입구 그림에 가리지 않게 한다
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             Fx.reset(); // 배치 효과를 지운다
             // Why: 첫 웨이브는 전사뿐이라 세 직업이 섞인 7번째 웨이브로 띄운다. 수치 확인용이 아니라 그림 확인용이다.
             Game.waveIndex = 6;
@@ -652,7 +652,7 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
             Fx.reset();
             Game.waveIndex = 6;
@@ -689,9 +689,9 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             Fx.reset();
             Game.waveIndex = 0;
             Game.startWave();
@@ -716,7 +716,7 @@ const SCENES = {
             startRun();
             Game.gold = 2000;
             // 셋을 서로 다른 길 옆에 떨어뜨려 놓아 효과가 겹치지 않게 한다
-            const bz = Game.place('orc_berserker', 7, 6);
+            const bz = Game.place('orc_berserker', 6, 5);
             const cs = Game.place('curse_shooter', 9, 5);
             const bk = Game.place('bone_knight', 14, 7);
             if (!bz || !cs || !bk) throw new Error('몬스터를 놓지 못했습니다');
@@ -814,9 +814,9 @@ const SCENES = {
     bossReward: {
         setup: () => {
             startRun();
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             advance(1.6);
             Game.waveIndex = 9;
             Game.startWave();
@@ -904,9 +904,9 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            Game.place('orc_guard', 7, 6);
+            Game.place('orc_guard', 6, 5);
             Game.place('skeleton_archer', 7, 4);
-            Game.place('dark_mage', 12, 5);
+            Game.place('dark_mage', 10, 5);
             Game.place('frost_witch', 16, 9);
             Game.waveIndex = 6;
             Game.startWave();
@@ -1079,9 +1079,9 @@ const PAGE_HELPERS = () => {
     window.setupBoard = () => {
         startRun();
         Game.gold = 300;
-        Game.place('orc_guard', 7, 6);
+        Game.place('orc_guard', 6, 5);
         Game.place('skeleton_archer', 7, 4);
-        Game.place('dark_mage', 12, 5);
+        Game.place('dark_mage', 10, 5);
         Game.place('dark_mage', 3, 5);
         Game.place('orc_guard', 13, 8);
         Game.place('curse_shooter', 13, 5);

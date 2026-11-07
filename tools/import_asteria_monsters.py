@@ -1,6 +1,6 @@
 # Asteria 빌드에서 몬스터 그림을 가져와 assets/sprites/ast_mon_<id>/에 PixelLab과 같은 폴더 구조로 저장하고
 # js/data/asteria_art.js(프레임 수, 발끝, 크기)를 만든다. 실행: python tools/import_asteria_monsters.py
-# 그림 1px이 화면 1px이 되도록(세계 배율 1.5) 칸 크기에 맞춰 미리 줄인다. 원본보다 키우지는 않는다.
+# 그림 1px이 화면 1px이 되도록 칸 크기에 맞춰 미리 줄인다. 원본보다 키우지는 않는다.
 import json, os, re, shutil
 from PIL import Image
 
@@ -8,7 +8,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 WWW = os.path.join(os.environ['USERPROFILE'], r'Downloads\Asteria-stove-3.2.0-win64\resources\www')
 LZ = os.path.join(WWW, 'lz')
 OUT = os.path.join(ROOT, 'assets', 'sprites')
-CELL = 64  # 칸 하나의 화면 px
+CELL = 80  # 칸 하나의 화면 px
 
 # id: (원본, 칸 가로, 칸 세로)
 #   e:이름 일반 몹(enemy_ 앞/옆, anim_ 걷기/공격) / b:이름 보스 그림(boss_ 앞, 있으면 옆/기술)
@@ -40,7 +40,7 @@ ART = {
     'sun_god': ('b:sunGod', 2, 3), 'moon_god': ('b:moonGod', 3, 3), 'death_god': ('b:deathGod', 2, 3), 'god_king': ('b:godKing', 3, 3),
 }
 # 1칸을 차지하지만 일반보다 조금 크게 그리는 영웅(화면 px)
-EPIC_BOX = {k: 112 for k in ('bone_knight', 'vampire', 'flame_demon', 'executioner', 'hydra_warrior', 'ancient_treant', 'storm_archer')}
+EPIC_BOX = {k: 140 for k in ('bone_knight', 'vampire', 'flame_demon', 'executioner', 'hydra_warrior', 'ancient_treant', 'storm_archer')}
 current = None
 RANGED = {'curse_shooter', 'bone_priest', 'vampire', 'archlich', 'fire_imp', 'chaos_mage', 'fallen_angel', 'spider_archer', 'eagle_hunter', 'hydra_warrior',
           'phoenix_lord', 'wisp_acolyte', 'wind_sylph', 'frost_witch', 'water_spirit', 'lightning_spirit', 'moon_priestess', 'storm_archer', 'element_sage',
@@ -80,7 +80,7 @@ def trimmed(im):
 def fit(im, w_cells, h_cells):
     # 가로는 칸 너비의 1.25배, 세로는 칸 높이에 머리 위 여유를 둔다
     box_w = w_cells * CELL * 1.25
-    box_h = h_cells * CELL + 40
+    box_h = h_cells * CELL + 50
     if current in EPIC_BOX: box_w = box_h = EPIC_BOX[current]  # 1칸 영웅: 일반보다 조금 크게
     k = min(1.5 if w_cells * h_cells >= 4 else 1, box_w / im.width, box_h / im.height)
     if k == 1: return im

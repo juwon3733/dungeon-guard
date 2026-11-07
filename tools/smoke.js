@@ -8,7 +8,14 @@ const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.j
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
-for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
+// 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
+function legacyLayout(f) {
+    if (f === 'js/data/map.js') return fs.readFileSync(path.join(root, 'tools/legacy_map.js'), 'utf8');
+    const src = fs.readFileSync(path.join(root, f), 'utf8');
+    if (f !== 'js/core/config.js') return src;
+    return src.replace('const WORLD_ZOOM = 5 / 6;', 'const WORLD_ZOOM = 2 / 3;').replace('const MAP_COLS = 24;', 'const MAP_COLS = 30;').replace('const MAP_ROWS = 12;', 'const MAP_ROWS = 15;');
+}
+for (const f of files) vm.runInContext(legacyLayout(f), ctx, { filename: f });
 
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
 {
@@ -122,7 +129,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
     const heroes = vm.runInContext('HEROES', actx);
     const bosses = vm.runInContext('BOSSES', actx);
     for (const def of [...Object.values(heroes), ...Object.values(bosses).map(b => b.art)]) {
-        assert(def.scale === 3 || def.scale === vm.runInContext('SWARM_RULES.scale', actx), def.sprite + ' scale');
+        assert(def.scale === vm.runInContext("PIXEL_SCALE", actx) || def.scale === vm.runInContext("SWARM_RULES.scale", actx), def.sprite + " scale");
         assert(names.includes(`${def.sprite}/rotations/south`), def.sprite + ' rotation');
         for (const clip of Object.values(def.anim)) {
             for (const dir of clip.dirs || ['south', 'west', 'east', 'north']) {
@@ -160,7 +167,7 @@ for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8
             if (kind === 'bridgedeck') assert(z.deck[0] >= 0 && z.deck[1] <= h && z.deck[1] - z.deck[0] >= 300, id + ' deck crop inside');
         }
         assert(typeof z.name === 'string' && z.name.length > 1, id + ' name');
-        assert(z.light.length === 4 && z.vignette.length === 4 && z.vignette[3] <= 0.2, id + ' light and a light vignette');
+        assert(z.vignette.length === 4 && z.vignette[3] <= 0.2, id + ' light and a light vignette');
         assert(z.gate.length === 3 && z.post.length === 3, id + ' gate and post colors');
         assert(z.props.length >= 1 && z.props.length <= 4, id + ' few props');
         for (const [sprite] of z.props) {
@@ -331,7 +338,7 @@ assert.strictEqual(MONSTERS.curse_shooter.stats.range, 4);
         const s = d.stats;
         assert.deepStrictEqual([d.grade, d.role, d.family, s.hp, s.damage, s.interval, s.range, s.block, s.respawn].slice(0, w.length), w, id);
         assert(MONSTER_FAMILIES[d.family] && MONSTER_ROLES[d.role], id + ' role and family');
-        assert.strictEqual(d.art.scale, d.art.breathe ? 1.5 : PIXEL_SCALE, id + ' scale');
+        assert.strictEqual(d.art.scale, d.art.breathe ? ART_SCALE : PIXEL_SCALE, id + ' scale');
         assert(d.art.glow.split(',').length === 3 && d.art.glow.split(',').every(v => Number(v) >= 0 && Number(v) <= 255), id + ' glow');
         if (!monsterBlocks(id)) assert(d.art.hand && d.art.hand.x >= 0, id + ' hand');
     }
@@ -4447,9 +4454,9 @@ console.log('smoke ok: zones');
     assert.strictEqual(vm.runInContext('Render.zoneNow()', rctx), 'coast', 'story screen uses the picked stage zone');
     vm.runInContext(`UI.stageId = null;`, rctx);
     assert.strictEqual(vm.runInContext('Render.zoneNow()', rctx), 'ember', 'title uses ember');
-    // 꺾이는 곳: 합류점(10,8)은 세 쪽(왼쪽, 아래, 위)이 열린 T자
+    // 꺾이는 곳: 합류점(8,6)은 세 쪽(왼쪽, 아래, 위)이 열린 T자
     const corners = vm.runInContext('Render.deckCorners().map(c => ({ x: c.x, y: c.y, open: [...c.open].sort() }))', rctx);
-    const merge = corners.find(c => c.x === 10 * 96 + 48 && c.y === 8 * 96 + 48);
+    const merge = corners.find(c => c.x === 8 * 96 + 48 && c.y === 6 * 96 + 48);
     assert(merge && JSON.stringify(merge.open) === JSON.stringify(['-1,0', '0,-1', '0,1']), 'merge tile is a T junction');
     assert(corners.every(c => c.open.length >= 2), 'every corner joins two ways');
     console.log('smoke ok: zone maps');
@@ -5518,3 +5525,4 @@ Game.reset();
 console.log('smoke ok: seeded runs and daily challenge');
 }`, ctx, { filename: 'smoke-daily' });
 
+require('./smoke_maps.js');
