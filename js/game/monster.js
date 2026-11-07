@@ -196,6 +196,17 @@ function monsterEnrage(m) {
 
 // 몬스터의 공격이 용사에게 맞음: 맞은 뒤 걸리는 능력(저주, 화상, 빙결, 악몽)을 적용한다. 피해를 준 다음에 부른다.
 // owner는 쏜 몬스터(화상 피해로 쓰러뜨리면 처치 경험치를 받는다. 없어도 된다)
+// 몬스터 능력에 맞는 명중 소리: 불, 얼음, 번개, 저주, 기절. 없으면 기본 소리(fallback)
+function monsterHitSfx(type, fallback) {
+    const kinds = (MONSTERS[type] && MONSTERS[type].abilities || []).map(a => a.kind);
+    if (kinds.includes('burnShot') || kinds.includes('burnGround')) return 'hitFire';
+    if (kinds.includes('slowShot')) return 'hitIce';
+    if (kinds.includes('chain')) return 'hitLightning';
+    if (kinds.includes('curseShot')) return 'hitCurse';
+    if (kinds.includes('stunShot') || kinds.includes('cleave')) return 'hitHeavy';
+    return fallback;
+}
+
 function monsterHitHero(type, hero, owner) {
     if (hero.dead) return;
     // 장비의 적중 효과
@@ -536,7 +547,7 @@ function updateBlockMonster(m, dt) {
     monsterDealt(m, damageHero(target, stats.damage, m.x, m.y, '#ffb76b', m));
     monsterHitHero(m.type, target, m);
     monsterCleave(m, target, stats.damage);
-    Sfx.play('slash');
+    Sfx.play(monsterHitSfx(m.type, 'slash'));
 }
 
 function updateSideMonster(m, dt) {
@@ -580,7 +591,7 @@ function monsterMelee(m, stats, first) {
         monsterHitHero(m.type, h, m);
     }
     monsterCleave(m, first, stats.damage);
-    Sfx.play('slash');
+    Sfx.play(monsterHitSfx(m.type, 'slash'));
 }
 
 function fireMonsterShot(m, stats, target) {
@@ -681,7 +692,7 @@ function updateProjectile(p, dt) {
             if (p.src) monsterHitHero(p.src, t, p.owner);
             if (p.owner && !p.owner.removed) monsterChain(p.owner, t, p.damage);
             if (p.big) Fx.addShake(5);
-            Sfx.play('hit');
+            Sfx.play(p.src ? monsterHitSfx(p.src, 'hit') : 'hit');
             p.done = true;
             return;
         }

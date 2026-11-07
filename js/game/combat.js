@@ -83,7 +83,7 @@ function killHero(hero, pos, attacker) {
         G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
         G.streakTimer = 2.4;
         if (G.streak >= 2) G.streakPop = 1;
-        Sfx.play('kill', G.streak);
+        Sfx.play(hero.elite ? 'killElite' : 'kill', G.streak);
         // 시체는 쓰러지는 장식이라 많으면 오래된 것부터 지운다
         const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
         const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
@@ -119,14 +119,17 @@ function killHero(hero, pos, attacker) {
     G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
     G.streakTimer = 2.4;
     if (G.streak >= 2) G.streakPop = 1;
-    Sfx.play('kill', G.streak);
+    Sfx.play(hero.elite ? 'killElite' : 'kill', G.streak);
 
     if (!hero.boss) {
         // 타락이 꺼져 있으면 시체는 쓰러지는 동작과 짧은 사라짐만 보여 주는 장식이다
         const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
         const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
+        // 쓰러지는 동작이 없는 그림(Asteria 정예)은 걷는 그림을 납작하게 눕혀 보여 준다(Render.drawCorpse의 skin)
+        const skin = fall ? null : HEROES[hero.type];
         G.corpses.push({
             type: hero.type, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir,
+            skin, anim: hero.anim, kickX: hero.kickX, kickY: hero.kickY,
             age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul
         });
     }

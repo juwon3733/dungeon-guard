@@ -7,7 +7,7 @@ const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
-    Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
 function legacyLayout(f) {
     if (f === 'js/data/map.js') return fs.readFileSync(path.join(root, 'tools/legacy_map.js'), 'utf8');
@@ -945,6 +945,17 @@ assert.strictEqual(CORRUPTION_ENABLED, false);
     UI.update(0);
     tick(c.life + 0.2);
     assert(!Game.corpses.includes(c) && !Game.corpses.includes(c2), 'corpses fade out'); // 전투 중이라 새 시체는 생길 수 있다
+}
+// 쓰러지는 동작이 없는 정예(Asteria 그림)의 시체는 걷는 그림을 눕혀 그린다: skin이 있어야 그리기가 멈추지 않는다
+{
+    const e = createHero('elite_swordsman', 0, 0, false);
+    e.waiting = false;
+    Game.heroes.push(e);
+    const before = Game.corpses.length;
+    damageHero(e, 1e9);
+    const ec = Game.corpses[Game.corpses.length - 1];
+    assert(Game.corpses.length === before + 1 && ec.type === 'elite_swordsman', 'elite leaves a corpse');
+    assert(!HEROES.elite_swordsman.anim.death && ec.skin === HEROES.elite_swordsman && ec.skin.anim.walk.frames > 0, 'elite corpse uses its walking art');
 }
 
 // 타락: 비용 차감, 부하 생성, 최대 인원 제한. 꺼 둔 기능도 계속 검증하도록 잠시 켠다
@@ -6010,7 +6021,7 @@ console.log('smoke ok: equipment crafting');
 // 지금 해금 순서(옛 시험용으로 바꾸지 않은 표)
 {
     const real = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
-        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), real, { filename: f });
     vm.runInContext(`
     Meta.data.cleared = [];
