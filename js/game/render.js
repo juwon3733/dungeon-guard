@@ -647,6 +647,71 @@ const Render = {
         return { clip, name: this.plFrame(def, clip, m.dir, i) };
     },
 
+    // 영웅 이상 몬스터의 존재감: 등급 색 윤곽선, 피어오르는 도트 불티, 전설부터 발밑의 도는 점 고리.
+    // 등급이 높을수록 많고 진하다(영웅 fx 1, 전설 2, 신화 3). front가 거짓이면 몸 뒤, 참이면 몸 앞을 그린다
+    //   모두 시간과 몬스터 자리로 정해 판 결과와 무관하다
+    gradePresence(ctx, m, def, footY, name, clip, fx, front) {
+        const t = Game.time;
+        const seed = (m.homeX || m.x) * 0.0137 + (m.homeY || m.y) * 0.0071;
+        const grade = MONSTER_GRADES[def.grade];
+        const rainbow = grade.rainbow;
+        const colorAt = i => (rainbow ? rainbow[(i + Math.floor(t * 2)) % (rainbow.length - 1)] : grade.color);
+        const [cw] = def.art.cells || [1, 1];
+        const halfW = cw * TILE * 0.42;
+        const bodyH = (def.art.barY || 120) * 0.85;
+        const px = 2 * ART_SCALE;
+        // 발밑의 도는 점 고리(전설부터): 뒤쪽 반은 몸 뒤, 앞쪽 반은 몸 앞에 그린다(그림자에 가리지 않게)
+        if (fx >= 2) {
+            {
+                const rings = fx >= 3 ? 2 : 1;
+                for (let k = 0; k < rings; k++) {
+                    const rx = halfW * (1 + k * 0.25);
+                    const ry = rx * 0.32;
+                    const n = 18 + k * 6;
+                    ctx.fillStyle = k ? colorAt(1) : grade.color;
+                    ctx.globalAlpha = 0.9 - k * 0.2;
+                    for (let i = 0; i < n; i++) {
+                        if ((i + Math.floor(t * 6)) % 3 === 0) continue; // 점선이 돈다
+                        const ang = i / n * Math.PI * 2 + t * (k ? -0.6 : 0.8);
+                        if ((Math.sin(ang) > 0) !== front) continue;
+                        ctx.fillRect(snapWorld(m.x + Math.cos(ang) * rx), snapWorld(footY + Math.sin(ang) * ry), px * 2, px * 2);
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+        if (!front) {
+            // 윤곽선: 몸 뒤에 등급 색 실루엣을 한 도트씩 밀어 그린다
+            const pulse = 0.5 + Math.sin(t * 2.6 + seed * 9) * 0.5;
+            const pose = this.monsterPose(def, m);
+            const dot = (fx >= 2 ? 2 : 1) * ART_SCALE;
+            ctx.save();
+            ctx.globalAlpha = (fx >= 3 ? 1 : fx >= 2 ? 0.9 : 0.75) * (0.6 + pulse * 0.4);
+            const glow = Assets.tinted(name, colorAt(0), 1);
+            for (const [ox, oy] of [[-dot, 0], [dot, 0], [0, -dot], [0, dot]]) this.posedSprite(ctx, glow, def.art, clip, m.dir, m.x + ox, footY + oy, pose);
+            ctx.restore();
+        }
+        // 피어오르는 도트 불티: 반은 몸 뒤, 반은 몸 앞
+        const motes = [0, 6, 10, 16][fx];
+        for (let i = 0; i < motes; i++) {
+            if ((i % 2 === 1) !== front) continue;
+            const k = ((t * (0.35 + (i % 3) * 0.08) + i / motes + seed) % 1 + 1) % 1;
+            const x = m.x + Math.sin(i * 2.37 + seed * 5) * halfW + Math.sin(t * 1.7 + i) * 6;
+            const y = footY - 10 - k * bodyH;
+            const size = (i % 3 === 0 ? 6 : 4) * ART_SCALE;
+            ctx.globalAlpha = Math.min(1, Math.sin(k * Math.PI) * 1.4);
+            ctx.fillStyle = colorAt(i);
+            ctx.fillRect(snapWorld(x), snapWorld(y), size, size);
+            // 신화: 가끔 십자 반짝임
+            if (fx >= 3 && i % 4 === 0 && k > 0.4 && k < 0.6) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(snapWorld(x - size), snapWorld(y + size / 2 - ART_SCALE), size * 3, 2 * ART_SCALE);
+                ctx.fillRect(snapWorld(x + size / 2 - ART_SCALE), snapWorld(y - size), 2 * ART_SCALE, size * 3);
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+
     // 서 있는 몬스터 한 마리: 그림자와 그림. 건설 모드의 반투명 그림에도 쓴다
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
@@ -758,7 +823,10 @@ const Render = {
         let img = Assets.get(name);
         if (m.flash > 0) img = Assets.tinted(name, '#ffffff', 0.85);
         else if (stunned) img = Assets.tinted(name, '#7fc6ff', 0.55);
+        const fx = gradeInfo(def.grade, 'fx', 0);
+        if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, false);
         this.monsterBody(ctx, def, m, img, clip);
+        if (fx) this.gradePresence(ctx, m, def, footY, name, clip, fx, true);
         // 광폭화: 몸 위에 붉은 빛을 더한다(밝기는 맥박처럼 오르내린다)
         if (enraged && !(m.flash > 0)) {
             ctx.save();
