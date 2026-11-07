@@ -1525,31 +1525,30 @@ const UI = {
     // 놓은 칸에서 걸어 나갈 길 지점까지 점선과, 그 지점의 깃발 표시
     drawRallyPath(ctx, x0, y0, x1, y1) {
         ctx.save();
-        ctx.lineWidth = 4;
-        ctx.setLineDash([10, 8]);
-        ctx.lineDashOffset = -Game.time * 40;
-        ctx.strokeStyle = 'rgba(255,183,107,0.9)';
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(255,183,107,0.35)';
-        ctx.beginPath();
-        ctx.ellipse(x1, y1, 26, 10, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffb76b';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.fillStyle = '#3a2214';
-        ctx.fillRect(x1 - 2, y1 - 40, 4, 40);
+        // 도트 점선: 칸을 찍어 가며 마디마다 건너뛰고, 마디가 깃발 쪽으로 흐른다
+        const c = 3 * ART_SCALE;
+        const len = Math.hypot(x1 - x0, y1 - y0);
+        const n = Math.max(1, Math.floor(len / c));
+        const flow = Math.floor(Game.time * 12);
         ctx.fillStyle = '#ffb76b';
-        ctx.beginPath();
-        ctx.moveTo(x1 + 2, y1 - 40);
-        ctx.lineTo(x1 + 24, y1 - 32);
-        ctx.lineTo(x1 + 2, y1 - 24);
-        ctx.closePath();
-        ctx.fill();
+        ctx.globalAlpha = 0.9;
+        for (let i = 0; i <= n; i++) {
+            if (((i - flow) % 6 + 6) % 6 >= 3) continue;
+            ctx.fillRect(snapWorld(x0 + (x1 - x0) * i / n - c / 2), snapWorld(y0 + (y1 - y0) * i / n - c / 2), c, c);
+        }
+        ctx.globalAlpha = 0.35;
+        Render.pixelDisc(ctx, x1, y1, 26, 10, '#ffb76b', { k: 2 });
+        ctx.globalAlpha = 1;
+        Render.pixelRing(ctx, x1, y1, 26, 10, '#ffb76b', { k: 2 });
+        // 깃발: 장대와 세모 천(칸으로 찍는다)
+        const u = 2 * ART_SCALE;
+        ctx.fillStyle = '#3a2214';
+        ctx.fillRect(snapWorld(x1 - u / 2), snapWorld(y1 - 40), u, 40);
+        ctx.fillStyle = '#ffb76b';
+        for (let row = 0; row < 8; row++) {
+            const w = (row < 4 ? row + 1 : 8 - row) * 2;
+            ctx.fillRect(snapWorld(x1 + u / 2), snapWorld(y1 - 40 + row * u), w * u, u);
+        }
         ctx.restore();
     },
 
