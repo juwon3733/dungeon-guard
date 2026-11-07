@@ -83,6 +83,30 @@ const SCENES = {
         freeze: false
     },
 
+    // 주간 토벌전: 도전의 문 설명과 보스 전투
+    raidPortal: {
+        setup: () => {
+            Game.state = 'hq';
+            UI.hqView = 'portal';
+            UI.portalPick = 'raid';
+        }
+    },
+    raidPlay: {
+        setup: () => {
+            UI.startRaid();
+            for (const t of ['crystal_giant', 'phoenix_lord', 'vampire', 'orc_guard', 'dark_mage', 'minotaur', 'succubus', 'troll']) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            Game.waveIndex = 19;
+            Game.raidTier = 1;
+            Game.score = 38412850;
+            UI.scoreShown = Game.score;
+            Game.startWave();
+            advance(9);
+        }
+    },
+
     // 끝없는 심연: 도전의 문 설명, 고르기, 변이가 쌓인 전투
     abyssPortal: {
         setup: () => {

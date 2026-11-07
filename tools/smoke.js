@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
@@ -195,6 +195,8 @@ var SAVED_MYTHICS = {}, SAVED_SKILLS = {}, SAVED_RECIPES = [];
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].grade === 'mythic') { SAVED_MYTHICS[id] = MONSTERS[id]; delete MONSTERS[id]; }
 for (let i = MONSTER_RECIPES.length - 1; i >= 0; i--) if (SAVED_MYTHICS[MONSTER_RECIPES[i].result]) SAVED_RECIPES.unshift(MONSTER_RECIPES.splice(i, 1)[0]);
 for (const id of Object.keys(MONSTERS)) if (MONSTERS[id].skills) { SAVED_SKILLS[id] = MONSTERS[id].skills; delete MONSTERS[id].skills; }
+var SAVED_RAID = {};
+for (const id of Object.keys(RAID_BOSSES)) { SAVED_RAID[id] = BOSSES[id]; delete BOSSES[id]; }
 var SAVED_SWARM = Object.assign({}, SWARM_RULES);
 Object.assign(SWARM_RULES, { hpMul: 1, bountyMul: 1, leak: 1 });
 var SAVED_FIELD_MAX = MONSTER_GRADES.mythic.fieldMax;
@@ -3250,7 +3252,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', bestFloor: 0, bestScore: 0 }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -3997,7 +3999,7 @@ for (const f of HQ_FACILITIES) {
     assert(HQ_ROOM.decor.every(d => Number.isInteger(d.scale)), 'decor integer scale');
     assert(HQ_ROOM.wall.length * 192 >= GAME_WIDTH, 'wall covers the width');
 }
-assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.map(c => c.id).join() === 'daily,abyss', 'contents in the portal');
+assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.map(c => c.id).join() === 'daily,abyss,raid', 'contents in the portal');
 
 // ----- 첫 실행: 타이틀 → 본부. 작전 테이블에 느낌표, 도전의 문은 처음부터 들어간다(준비 중) -----
 freshWindow();
@@ -4013,7 +4015,7 @@ assert(hqGoblinLine().includes('작전 테이블'), 'goblin tells what to do fir
 btn('hq_portal');
 assert(UI.hqView === 'portal' && hasBtn('hq_close'), 'portal open on the first run');
 UI.update(0);
-same(UI.buttons.filter(b => b.content).map(b => b.id), ['content_daily', 'content_abyss'], 'challenge cards');
+same(UI.buttons.filter(b => b.content).map(b => b.id), ['content_daily', 'content_abyss', 'content_raid'], 'challenge cards');
 UI.onKey('Escape');
 assert(Game.state === 'hq' && !UI.hqView, 'Esc closes the portal');
 
@@ -4278,9 +4280,11 @@ for (const view of ['relics', 'armory', 'record', 'portal']) {
     UI.hqView = view;
     check('hq ' + view);
 }
+const portalContents = HQ_CONTENTS.splice(0); // 칸이 넘치지 않게 시험 항목만 둔다
 HQ_CONTENTS.push({ id: 'test_a', name: '시험 A', desc: '처음부터' }, { id: 'test_b', name: '시험 B', desc: '스테이지 4', unlockStage: 4 }, { id: 'test_c', name: '시험 C', desc: '스테이지 6', unlockStage: 6 });
 check('hq portal with contents');
 HQ_CONTENTS.length = 0;
+HQ_CONTENTS.push(...portalContents);
 UI.closeHqView();
 Meta.data = Meta.fresh();
 // 스토리 지도, 시작 전 대화, 해금 카드
@@ -4412,7 +4416,7 @@ console.log('smoke ok: zones');
     });
     const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
     const rctx = vm.createContext({ console, Math, Set, Map, Object, Array, Number, String, JSON, document });
-    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
+    for (const f of ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) {
         vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
     }
     vm.runInContext(`
@@ -4974,6 +4978,7 @@ console.log('smoke ok: melee in place');
 // ----- 고정 난수, 입력 기록, 일일 도전 -----
 vm.runInContext(`{
 Object.assign(SWARM_RULES, SAVED_SWARM);
+Object.assign(BOSSES, SAVED_RAID);
 const near = (a, b, msg) => assert(Math.abs(a - b) < 1e-9, msg + ': ' + a + ' vs ' + b);
 // 난수: 시드가 같으면 같고, 흐름끼리 서로 흔들지 않는다
 Rng.start('a');
@@ -5220,6 +5225,92 @@ Game.reset();
     assert.strictEqual(JSON.stringify(R2), P.r, 'abyss replay gives the same result');
     assert.strictEqual(Game.mutations.join(), P.muts, 'same mutations');
     assert.strictEqual(Game.zone, P.zone, 'same zone');
+}
+Game.reset();
+
+// ----- 주간 토벌전 -----
+{
+    const R1 = raidChallenge('2026-11-09');
+    assert.strictEqual(JSON.stringify(R1), JSON.stringify(raidChallenge('2026-11-09')), 'same week, same raid');
+    assert(BOSSES[R1.boss] && RAID_BOSSES[R1.boss], 'raid boss');
+    assert(R1.relics.length === 2 && R1.cards.length === 2 && R1.cards.every(k => RULE_CARDS[k].kind === 'hard'), 'conditions');
+    const weeks = new Set();
+    for (let i = 0; i < 40; i++) weeks.add(raidChallenge('w' + i).boss);
+    assert(weeks.size === Object.keys(RAID_BOSSES).length, 'every boss comes up');
+    Game.reset(null, null, R1);
+    assert.strictEqual(Game.waves[9].boss, R1.boss, 'weekly boss in the boss rounds');
+    assert.strictEqual(Game.waves[19].boss, R1.boss);
+    assert.strictEqual(WAVES[9].boss, 'archmage', 'the story table is untouched');
+    assert.strictEqual(Game.raidBossMul(), 1);
+    // 보스를 잡으면 단계가 오르고 다음 보스 체력이 2배
+    Game.state = 'wave';
+    const b1 = createHero(null, 9, 0, R1.boss, 'north');
+    const hp1 = b1.maxHp;
+    b1.waiting = false;
+    Game.heroes.push(b1);
+    const sBefore = Game.score;
+    damageHero(b1, 100, 0, 0);
+    assert(Game.score > sBefore, 'damage scores');
+    damageHero(b1, 1e9, 0, 0);
+    assert.strictEqual(Game.raidTier, 1, 'tier up');
+    near(createHero(null, 9, 0, R1.boss, 'north').maxHp, hp1 * 2, 'next boss is twice as hard');
+    // 과하게 때려도 남은 체력만큼만 점수가 오른다
+    Game.heroes = [];
+    const sc = () => { Game.score = 0; Game.raidTier = 1; const h = createHero(null, 0, 0, R1.boss, 'north'); h.waiting = false; Game.heroes.push(h); damageHero(h, h.hp * 1000, 0, 0); return Game.score; };
+    assert.strictEqual(sc(), sc(), 'overkill capped');
+    // 표에 없는 라운드도 보스가 이어진다
+    Game.heroes = [];
+    Game.state = 'wave';
+    Game.waveIndex = 58;
+    Game.roundTimer = 0;
+    Game.nextRound();
+    Game.heroes = [];
+    Game.state = 'wave';
+    Game.bossReward = null;
+    Game.nextRound();
+    Game.waves = Game.waves.slice(0, 62);
+    while (Game.waves.length < 75) Game.waves.push(Game.roundFor(Game.waves.length + 1, buildRound(Game.waves.length + 1)));
+    assert.strictEqual(Game.waves[69].boss, R1.boss, 'boss past the table');
+    // 기록: 단계가 먼저, 같으면 점수, 주가 바뀌면 새로
+    Meta.data.raid = { week: '', bestTier: 0, bestScore: 0 };
+    assert(Meta.finishRaid('w1', { tier: 3, score: 100 }, { inputs: [] }).isBest);
+    assert(!Meta.finishRaid('w1', { tier: 2, score: 9999 }, { inputs: [] }).isBest, 'lower tier');
+    assert(Meta.finishRaid('w1', { tier: 3, score: 101 }, { inputs: [] }).isBest, 'same tier, more score');
+    assert(Meta.finishRaid('w2', { tier: 1, score: 1 }, { inputs: [] }).isBest, 'new week');
+    assert.strictEqual(JSON.stringify(Meta.sanitize({ version: META_VERSION, raid: { week: 'w', bestTier: 2, bestScore: 3 } }).raid), JSON.stringify({ week: 'w', bestTier: 2, bestScore: 3 }));
+    // 다른 콘텐츠와 스토리에는 단계 배율과 피해 점수가 없다
+    Game.reset(null, null, dailyChallenge('2026-11-07'));
+    Game.raidTier = 5;
+    assert.strictEqual(Game.raidBossMul(), 1);
+    Game.scoreBossDamage(100);
+    assert.strictEqual(Game.score, 0);
+    // 입력 재생
+    const play = () => {
+        Game.reset(null, null, raidChallenge('w5'));
+        Game.state = 'prep';
+        let guard = 0;
+        while (Game.inPlay() && guard++ < 60 * 60 * 120) {
+            if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+            if (Game.tick % 20 === 0 && Game.waveIndex < 14) {
+                if (!Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+                const list = Game.monsters.filter(m => !m.removed);
+                for (const a of list) {
+                    const b = list.find(o => o !== a && MONSTERS[o.type].grade === MONSTERS[a.type].grade && Game.mergePlanFor(a, o).kind !== 'none');
+                    if (b) { Game.act({ kind: 'merge', src: a, dst: b }); break; }
+                }
+            }
+            Game.update(GAME_TICK);
+        }
+        return { r: JSON.stringify(Game.challengeResult), record: JSON.parse(JSON.stringify(Game.record)) };
+    };
+    const P = play();
+    assert(JSON.parse(P.r).tier >= 1, 'bot beat a boss: ' + P.r);
+    const orig = Math.random;
+    let x = 0.31;
+    Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
+    const R2 = replayChallenge(P.record);
+    Math.random = orig;
+    assert.strictEqual(JSON.stringify(R2), P.r, 'raid replay gives the same result');
 }
 Game.reset();
 

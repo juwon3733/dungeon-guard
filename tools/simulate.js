@@ -5,7 +5,7 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.join(__dirname, '..');
-const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
+const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
     'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js'];
 const context = vm.createContext({ console, Math, Set, Map, Object, Array, Infinity, JSON, Sfx: { play() {} } });
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), context, { filename: f });
@@ -25,7 +25,7 @@ function mergePair(G) {
     return best;
 }
 function play(bot, stageId, daily) {
-    if (daily) { Game.reset(null, null, daily.startsWith('abyss') ? abyssChallenge(daily, 'rift', []) : dailyChallenge(daily)); Game.state = 'prep'; }
+    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, 'rift', []) : dailyChallenge(daily)); Game.state = 'prep'; }
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
@@ -62,7 +62,7 @@ function play(bot, stageId, daily) {
         }
         G.update(DT);
     }
-    return { score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
+    return { tier: G.raidTier, score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
         n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
 }
 `, context);
@@ -97,5 +97,12 @@ if (process.argv[4] === 'abyss') {
     for (const d of ['abyss1', 'abyss2', 'abyss3']) {
         const r = JSON.parse(vm.runInContext(`JSON.stringify(play(${BOTS['합치기+강화+장비+번개']}, null, '${d}'))`, context));
         console.log(`심연 ${d} | ${r.wave}층 | ${R(r.time / 60)}분 | 점수 ${r.score.toLocaleString()} | 소환 ${r.summons} 합치기 ${r.merges} | 최고 ${GRADES[r.top]}`);
+    }
+}
+if (process.argv[4] === 'raid') {
+    for (const d of ['raid1', 'raid2', 'raid3', 'raid4']) {
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play(${BOTS['합치기+강화+장비+번개']}, null, '${d}'))`, context));
+        const boss = vm.runInContext(`BOSSES[raidChallenge('${d}').boss].name`, context);
+        console.log(`토벌 ${d} ${boss} | ${r.tier}단계 | ${r.wave}라운드 | ${R(r.time / 60)}분 | 점수 ${r.score.toLocaleString()} | 최고 ${GRADES[r.top]}`);
     }
 }

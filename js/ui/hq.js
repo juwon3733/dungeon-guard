@@ -62,7 +62,8 @@ const HQ_FACILITIES = [
 // 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
 const HQ_CONTENTS = [
     { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판', panel: 'drawDailyPanel', enter: () => UI.startDaily() },
-    { id: 'abyss', name: '끝없는 심연', desc: '이번 주 모두 같은 심연', panel: 'drawAbyssPanel', enter: () => UI.openAbyss() }
+    { id: 'abyss', name: '끝없는 심연', desc: '이번 주 모두 같은 심연', panel: 'drawAbyssPanel', enter: () => UI.openAbyss() },
+    { id: 'raid', name: '주간 토벌전', desc: '이번 주 보스를 잡아라', panel: 'drawRaidPanel', enter: () => UI.startRaid() }
 ];
 
 // 고블린 비서의 말풍선: 깬 스테이지 수가 cleared 이상인 마지막 줄. {no}, {name}은 다음 스테이지 번호와 이름
@@ -697,6 +698,47 @@ Object.assign(UI, {
             const y = 230 + i * 70;
             UIKit.ink(ctx, k, cx - 390, y, 28, T.inkSoft);
             UIKit.ink(ctx, v, cx + 390, y, 32, T.ink, 'right', 'bold');
+        });
+    },
+
+    // 이번 주 토벌전: 보스, 조건, 내 최고 기록
+    drawRaidPanel(ctx) {
+        const T = UI_THEME;
+        const week = abyssWeek();
+        const c = raidChallenge(week);
+        const boss = BOSSES[c.boss];
+        const x = GAME_WIDTH / 2 - 560;
+        const y = 310;
+        UIKit.panel(ctx, x, y, 1120, 520);
+        UIKit.ink(ctx, `이번 주 토벌 · ${boss.name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        const a = Meta.raidBest(week);
+        UIKit.ink(ctx, a.bestScore ? `이번 주 최고 ${a.bestTier}단계 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestScore ? T.ink : T.inkSoft, 'right', 'bold');
+        const img = Assets.get(`${boss.art.sprite}/rotations/south`);
+        if (img) {
+            const k = Math.min(1.5, 400 / img.height, 300 / img.width);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, x + 180 - img.width * k / 2, y + 490 - img.height * k, img.width * k, img.height * k);
+        }
+        const lx = x + 370;
+        UIKit.ink(ctx, boss.note, lx, y + 110, 22, '#ffb49a');
+        UIKit.ink(ctx, `${RAID_RULES.tierEvery}라운드마다 나오고, 잡을 때마다 체력이 ${RAID_RULES.tierHpGrowth}배가 됩니다`, lx, y + 146, 20, T.ink);
+        const lord = DEMON_LORDS[c.lord];
+        UIKit.ink(ctx, '마왕', lx, y + 200, 22, T.inkSoft, 'left', 'bold');
+        UIKit.ink(ctx, lord.name, lx + 76, y + 200, 24, T.ink, 'left', 'bold');
+        c.relics.forEach((id, i) => {
+            const ry = y + 226 + i * 70;
+            UIKit.ink(ctx, '유물', lx, ry + 34, 22, T.inkSoft, 'left', 'bold');
+            UIKit.slot(ctx, lx + 76, ry, 64, 64, 'iron');
+            this.drawRelicIcon(ctx, id, lx + 84, ry + 8);
+            UIKit.ink(ctx, RELICS[id].name, lx + 150, ry + 22, 22, T.ink, 'left', 'bold');
+            UIKit.ink(ctx, effectLines(RELICS[id].effects).join(', '), lx + 150, ry + 48, 18, T.inkGood);
+        });
+        c.cards.forEach((id, i) => {
+            const card = RULE_CARDS[id];
+            const ry = y + 396 + i * 42;
+            UIKit.ink(ctx, '규칙', lx, ry, 22, T.inkSoft, 'left', 'bold');
+            UIKit.ink(ctx, card.name, lx + 76, ry, 22, T.ink, 'left', 'bold');
+            UIKit.ink(ctx, effectLines(card.effects).join(', '), lx + 260, ry, 19, T.inkBad);
         });
     },
 

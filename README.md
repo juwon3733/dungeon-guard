@@ -21,3 +21,4 @@
 - 유물 19종(대가 없이 약한 효과). 표는 `docs/MONSTER_DESIGN.md`
 - 일일 도전: 본부 도전의 문. 날짜별 고정 시드, 입력 기록과 재생 검증. 규칙은 `docs/MONSTER_DESIGN.md`
 - 끝없는 심연: 본부 도전의 문. 일주일마다 바뀌는 공통 시드, 고른 마왕과 유물, 10층마다 변이. 규칙은 `docs/MONSTER_DESIGN.md`
+- 주간 토벌전: 본부 도전의 문. 이번 주 보스를 몇 단계까지 잡는지 겨룬다. 규칙은 `docs/MONSTER_DESIGN.md`

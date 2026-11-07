@@ -37,6 +37,7 @@ const Game = {
         this.challengeResult = null;
         this.challengeBest = null;
         this.tick = 0;
+        this.raidTier = 0; // 주간 토벌전에서 잡은 보스 수
         this.mutations = []; // 끝없는 심연에서 쌓인 변이(규칙 카드 id)
         this.leak = 0; // 아직 왕좌를 깎지 않은 일반 용사 피해
         this.goldLeft = 0; // 아직 주지 않은 처치 골드
@@ -46,7 +47,7 @@ const Game = {
         if (!challenge) Rng.stop(); // 스토리와 시험 판은 Math.random
         if (challenge) {
             Rng.start(challenge.seed);
-            this.record = { kind: challenge.kind, id: challenge.id, date: challenge.date, seed: challenge.seed, lord: challenge.lord, relics: challenge.relics.slice(), inputs: [] };
+            this.record = { kind: challenge.kind, id: challenge.id, date: challenge.date, seed: challenge.seed, week: challenge.week, lord: challenge.lord, relics: challenge.relics.slice(), inputs: [] };
             this.lord = challenge.lord;
             this.relics = challenge.relics.slice();
             this.mods = buildMods(challenge.lord, challenge.relics, challenge.cards);
@@ -67,7 +68,7 @@ const Game = {
         this.heroHpMul = stage ? stage.hpMul : 1;
         if (challenge) {
             this.zone = challenge.zone;
-            this.waves = WAVES.slice();
+            this.waves = WAVES.map((w, i) => this.roundFor(i + 1, w));
             this.heroHpMul = this.mods.heroHp;
         }
         this.gold = COMBAT_RULES.startGold + this.mods.startGold + (stage ? stage.goldBonus || 0 : 0);
@@ -692,7 +693,28 @@ const Game = {
     // 무한 라운드: 다음 라운드가 늘 표에 있게 한다
     extendRounds() {
         if (!this.challenge) return;
-        while (this.waves.length < this.waveIndex + 3) this.waves.push(buildRound(this.waves.length + 1));
+        while (this.waves.length < this.waveIndex + 3) this.waves.push(this.roundFor(this.waves.length + 1, buildRound(this.waves.length + 1)));
+    },
+
+    // 도전의 r번째 라운드: 토벌전은 보스 자리에 이번 주 보스를 세운다
+    roundFor(r, wave) {
+        const c = this.challenge;
+        if (!c || c.kind !== 'raid' || !wave.boss) return wave;
+        return Object.assign({}, wave, { boss: c.boss });
+    },
+
+    // 토벌전 보스 체력의 단계 배율. 곱셈을 되풀이한다(입력 재생)
+    raidBossMul() {
+        if (!this.challenge || this.challenge.kind !== 'raid') return 1;
+        let mul = 1;
+        for (let i = 0; i < this.raidTier; i++) mul *= RAID_RULES.tierHpGrowth;
+        return mul;
+    },
+
+    // 토벌전: 보스에게 준 피해도 점수다
+    scoreBossDamage(dealt) {
+        if (!this.challenge || this.challenge.kind !== 'raid') return;
+        this.addScore(dealt * RAID_RULES.bossDamageScore);
     },
 
     // 무한 라운드의 추가 체력 배율. 곱셈을 되풀이한다(Math.pow는 엔진마다 값이 다를 수 있어 입력 재생이 어긋난다)
@@ -976,9 +998,9 @@ const Game = {
         if (this.challenge) {
             // 도전은 스토리 저장을 건드리지 않고 최고 기록만 남긴다
             const c = this.challenge;
-            const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score };
+            const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score, tier: this.raidTier };
             this.challengeResult = r;
-            if (!this.replaying) this.challengeBest = c.kind === 'abyss' ? Meta.finishAbyss(c.seed, r, this.record) : Meta.finishDaily(c.date, r, this.record);
+            if (!this.replaying) this.challengeBest = c.kind === 'raid' ? Meta.finishRaid(c.week, r, this.record) : (c.kind === 'abyss' ? Meta.finishAbyss(c.seed, r, this.record) : Meta.finishDaily(c.date, r, this.record));
             if (!this.replaying) Sfx.play(victory ? 'victory' : 'defeat');
             return;
         }
