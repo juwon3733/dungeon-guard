@@ -45,7 +45,9 @@ const Assets = {
         list.push('prop2_throne');
         // 전투 효과는 모두 pixelfx 시트(assets/fx/)다
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
-        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HUD_SPRITES, ...MENU_ILLUSTS, ...HQ_SPRITES);
+        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HUD_SPRITES, ...MENU_ILLUSTS,
+            ...Object.keys(MONSTERS).filter(id => gradeInfo(MONSTERS[id].grade, 'fx', 0) >= 2).map(id => `orb_${id}`), // 전설과 신화의 궤도 오브젝트
+            ...HQ_SPRITES);
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 

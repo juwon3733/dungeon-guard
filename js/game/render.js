@@ -811,7 +811,7 @@ const Render = {
         const fx = gradeInfo(def.grade, 'fx', 0);
         if (fx < 2) return; // 전설부터
         const pal = MONSTER_PALETTES[m.type] || ['#5a3a6a', '#9a6cff', '#e2b0ff', '#ffffff'];
-        const img = this.orbiterImage(def.family, pal);
+        const img = Assets.get(`orb_${m.type}`) || this.orbiterImage(def.family, pal); // 몬스터 색으로 칠한 24px 그림(tools/import_orbiters.py)
         if (!img) return;
         const t = Game.time;
         const s = ART_SCALE;
