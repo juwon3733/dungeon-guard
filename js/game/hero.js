@@ -99,6 +99,7 @@ function updateHero(h, dt) {
     h.slip = Math.max(0, h.slip - dt);
     h.curse = Math.max(0, h.curse - dt);
     h.slow = Math.max(0, h.slow - dt);
+    if (Game.mods.heroRegen && !h.boss) h.hp = Math.min(h.maxHp, h.hp + h.maxHp * Game.mods.heroRegen * dt); // 계약 조항 사제 동행
     if (h.burn > 0) {
         // 화상은 정지와 막힘 중에도 탄다. 0.5초마다 피해(방어력 무시)
         h.burn -= dt;
@@ -298,9 +299,16 @@ function updateWindup(h, dt) {
 }
 
 // 보스 패턴: 체력 비율이 각 패턴의 at 이하가 되면 한 번씩 쓴다
+// 계약 조항 격노한 보스: 원래 패턴 사이사이에 같은 패턴을 한 번 더 쓴다(체력 비율을 조금 높여서)
+function bossPatterns(key) {
+    const base = BOSSES[key].patterns;
+    if (!Game.mods.bossFury) return base;
+    return base.concat(base.map(p => Object.assign({}, p, { at: Math.min(0.95, p.at + 0.15) })));
+}
+
 function updateBossPatterns(h, dt) {
     const ratio = h.hp / h.maxHp;
-    BOSSES[h.bossKey].patterns.forEach((rule, i) => {
+    bossPatterns(h.bossKey).forEach((rule, i) => {
         if (h.patternsDone[i] || ratio > rule.at) return;
         h.patternsDone[i] = true;
         const w = heroWorld(h);

@@ -17,8 +17,49 @@ const RULE_CARDS = {
     rich_spoils: { id: 'rich_spoils', name: '쌓이는 전리품', kind: 'boon', effects: { bounty: 1.2 } },
     cheap_summon: { id: 'cheap_summon', name: '할인 소환', kind: 'boon', effects: { summonBase: -5 } },
     keen_eyes: { id: 'keen_eyes', name: '날카로운 눈', kind: 'boon', effects: { range: 0.1 } },
-    elite_hunt: { id: 'elite_hunt', name: '정예 사냥', kind: 'boon', effects: { eliteDrop: 0.2 } }
+    elite_hunt: { id: 'elite_hunt', name: '정예 사냥', kind: 'boon', effects: { eliteDrop: 0.2 } },
+    // 금단의 계약 조항(kind 'pact'): 심연 난이도에만 붙는다. 일일 도전과 심연 변이는 고르지 않는다
+    pact_shield: { id: 'pact_shield', name: '방패 든 용사', kind: 'pact', effects: { heroShield: 0.3 } },
+    pact_rush: { id: 'pact_rush', name: '쉴 틈 없는 행군', kind: 'pact', effects: { roundTime: 0.67 } },
+    pact_revive: { id: 'pact_revive', name: '되살아나는 용사', kind: 'pact', effects: { heroRevive: 0.2 } },
+    pact_summon: { id: 'pact_summon', name: '소환 제한', kind: 'pact', effects: { summonPerRound: 8 } },
+    pact_priest: { id: 'pact_priest', name: '사제 동행', kind: 'pact', effects: { heroRegen: 0.02 } },
+    pact_split: { id: 'pact_split', name: '분열하는 정예', kind: 'pact', effects: { eliteSplit: 3 } },
+    pact_throne: { id: 'pact_throne', name: '금 간 왕좌', kind: 'pact', effects: { maxHp: -10 } },
+    pact_seal: { id: 'pact_seal', name: '권능 봉인', kind: 'pact', effects: { powerSeal: 1 } },
+    pact_boss5: { id: 'pact_boss5', name: '잦은 보스', kind: 'pact', effects: { bossEvery5: 1 } },
+    pact_iron: { id: 'pact_iron', name: '불사의 갑주', kind: 'pact', effects: { heroHp: 2.5 } },
+    pact_crumble: { id: 'pact_crumble', name: '무너지는 왕좌', kind: 'pact', effects: { maxHp: -15 } },
+    pact_fury: { id: 'pact_fury', name: '격노한 보스', kind: 'pact', effects: { bossFury: 1 } }
 };
+
+// 금단의 계약: 끝없는 심연에 들어가기 전에 서명하는 난이도. 위 난이도는 아래 조항을 물려받고 더 얹는다.
+// cards는 그 난이도의 전체 목록이다(혜택 카드도 같은 표). 순위는 난이도마다 따로, 가장 깊은 층으로 겨룬다
+const ABYSS_LEVELS = (() => {
+    const steps = [
+        ['베이직', ['full_vault', 'wide_field', 'war_fever']],
+        ['베리 이지', ['full_vault', 'wide_field']],
+        ['이지', ['full_vault']],
+        ['노말', []],
+        ['하드', ['+pact_shield']],
+        ['베리 하드', ['+pact_rush']],
+        ['익스퍼트', ['+pact_revive', '+pact_summon']],
+        ['익스트림', ['+pact_priest', '+pact_split', '+pact_throne']],
+        ['나이트메어', ['+pact_seal', '+pact_boss5']],
+        ['헬', ['+pact_iron', '+pact_fury', '-pact_throne', '+pact_crumble']]
+    ];
+    let pact = [];
+    return steps.map(([name, list], i) => {
+        // 혜택은 그 단계에만, 조항은 '+'로 쌓고 '-'로 바꾼다
+        if (list.some(k => k[0] === '+' || k[0] === '-')) {
+            for (const k of list) pact = k[0] === '-' ? pact.filter(c => c !== k.slice(1)) : pact.concat([k.slice(1)]);
+            return { id: i, name, cards: pact.slice() };
+        }
+        return { id: i, name, cards: list.slice() };
+    });
+})();
+const DEFAULT_ABYSS_LEVEL = 3; // 노말: 예전 심연(조항 없음)과 같다
+function abyssLevelOf(level) { return ABYSS_LEVELS[Number.isInteger(level) && level >= 0 && level < ABYSS_LEVELS.length ? level : DEFAULT_ABYSS_LEVEL]; }
 
 // 일일 도전: 무한 라운드. 유물 relics개, 규칙 카드 hard + boon장
 const DAILY_RULES = { relics: 2, hard: 2, boon: 1 };
@@ -122,9 +163,10 @@ function abyssWeek(now) {
     return new Date(kst.getTime() - sinceMonday * 86400 * 1000).toISOString().slice(0, 10);
 }
 
-function abyssChallenge(seed, lord, relics) {
+function abyssChallenge(seed, lord, relics, level) {
+    const L = abyssLevelOf(level);
     return {
-        kind: 'abyss', id: `abyss-${seed}`, name: '끝없는 심연', seed: String(seed), lord, relics: relics.slice(), cards: [],
+        kind: 'abyss', id: `abyss-${seed}-${L.id}`, name: '끝없는 심연', seed: String(seed), lord, relics: relics.slice(), level: L.id, cards: L.cards.slice(),
         hpFrom: ABYSS_RULES.hpFrom, hpGrowth: ABYSS_RULES.hpGrowth,
         map: seededPick(String(seed), 'map', MAP_IDS, 1)[0],
         zone: seededPick(String(seed), 'zone', ZONE_IDS, 1)[0]
@@ -149,7 +191,7 @@ function abyssZone(seed, mutations) {
 // 기록에서 도전 조건을 다시 만든다
 function challengeFromRecord(record) {
     if (record.kind === 'raid') return raidChallenge(record.week);
-    return record.kind === 'abyss' ? abyssChallenge(record.seed, record.lord, record.relics) : dailyChallenge(record.date);
+    return record.kind === 'abyss' ? abyssChallenge(record.seed, record.lord, record.relics, record.level) : dailyChallenge(record.date);
 }
 
 // 입력 기록을 처음부터 다시 돌려 결과를 낸다(뒤에 서버가 점수를 검증할 때 쓴다). 저장과 기록을 남기지 않는다

@@ -56,7 +56,7 @@ const Game = {
         if (!challenge) Rng.stop(); // 스토리와 시험 판은 Math.random
         if (challenge) {
             Rng.start(challenge.seed);
-            this.record = { kind: challenge.kind, id: challenge.id, date: challenge.date, seed: challenge.seed, week: challenge.week, lord: challenge.lord, relics: challenge.relics.slice(), inputs: [] };
+            this.record = { kind: challenge.kind, id: challenge.id, date: challenge.date, seed: challenge.seed, week: challenge.week, level: challenge.level, lord: challenge.lord, relics: challenge.relics.slice(), inputs: [] };
             this.lord = challenge.lord;
             this.relics = challenge.relics.slice();
             this.mods = buildMods(challenge.lord, challenge.relics, challenge.cards);
@@ -87,6 +87,7 @@ const Game = {
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
         this.summonCount = 0;
+        this.roundSummons = 0; // 이번 라운드에 소환한 수(계약 조항 소환 제한)
         this.summonLevel = 0;
         this.roundTimer = 0;
         this.bossDefeated = false;
@@ -250,7 +251,7 @@ const Game = {
     },
     // 마력 얻기. 권능이 없는 마왕은 모으지 않는다
     addMana(n, x, y) {
-        if (!this.lordPowers().length) return;
+        if (!this.lordPowers().length || this.mods.powerSeal) return; // 계약 조항 권능 봉인
         this.mana += n;
         if (x !== undefined) Fx.number({}, x, y, `+${n} 마력`, '#c9a6ff', false);
     },
@@ -482,6 +483,7 @@ const Game = {
         if (this.fieldFull()) return { ok: false, reason: 'full' };
         const cost = this.summonCost();
         if (!this.canPaySummon()) return { ok: false, reason: 'gold' };
+        if (this.mods.summonPerRound && this.roundSummons >= this.mods.summonPerRound) return { ok: false, reason: 'cap' }; // 계약 조항 소환 제한
         // 큰 몬스터가 나왔는데 자리가 없으면 다시 뽑는다(작은 몬스터가 들어갈 칸은 있을 수 있다)
         let type = this.rollSummon();
         let cell = this.pickSummonCell(type);
@@ -498,6 +500,7 @@ const Game = {
             Fx.addShake(4);
         }
         this.summonCount++;
+        this.roundSummons++;
         const m = createMonster(type, cell.col, cell.row);
         this.monsters.push(m);
         this.stats.summoned++;
@@ -878,6 +881,8 @@ const Game = {
     // 도전의 r번째 라운드: 토벌전은 보스 자리에 이번 주 보스를 세운다
     roundFor(r, wave) {
         const c = this.challenge;
+        // 계약 조항 잦은 보스: 10라운드 보스 사이(5, 15, 25...)에도 대마도사가 온다
+        if (c && this.mods.bossEvery5 && !wave.boss && r % 5 === 0) return Object.assign({}, wave, { boss: 'archmage' });
         if (!c || c.kind !== 'raid' || !wave.boss) return wave;
         return Object.assign({}, wave, { boss: c.boss });
     },
@@ -913,7 +918,7 @@ const Game = {
         const want = Math.floor(this.waveIndex / ABYSS_RULES.mutateEvery);
         if (this.mutations.length >= want) return;
         while (this.mutations.length < want) this.mutations.push(abyssMutation(c.seed, this.mutations.length));
-        this.mods = buildMods(c.lord, c.relics, this.mutations);
+        this.mods = buildMods(c.lord, c.relics, c.cards.concat(this.mutations)); // 서명한 계약 조항은 끝까지 붙어 있다
         this.applyPowerMods(); // 다시 만든 표에 찍은 권능을 더한다
         // 약해지는 변이가 겹쳐도 몬스터가 아예 못 싸우게 되지는 않는다
         this.mods.attackSpeed = Math.max(-0.5, this.mods.attackSpeed);
@@ -1170,7 +1175,11 @@ const Game = {
             const offset = this.entryOffset(route);
             for (let i = 0; i < counts[route]; i++) {
                 const delay = offset + i * gap;
-                this.heroes.push(createHero(queue[next++], this.waveLevel(wave), delay, false, route));
+                const h = createHero(queue[next++], this.waveLevel(wave), delay, false, route);
+                // 계약 조항: 일반 용사 일부가 방패를 들거나 한 번 되살아난다(시드 난수라 모두 같다)
+                if (!h.elite && this.mods.heroShield && rng('pact') < this.mods.heroShield) h.shield = 1;
+                if (!h.elite && this.mods.heroRevive && rng('pact') < this.mods.heroRevive) h.revive = 1;
+                this.heroes.push(h);
                 lastStart = Math.max(lastStart, delay + gap);
             }
         }
@@ -1184,7 +1193,8 @@ const Game = {
             Sfx.play('bossIntro');
         }
         this.state = 'wave';
-        this.roundTimer = wave.boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime;
+        this.roundTimer = (wave.boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime) * this.mods.roundTime;
+        this.roundSummons = 0;
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, lordLine('waveStart'), 2);
         Sfx.play('waveStart');
         return true;
@@ -1197,9 +1207,9 @@ const Game = {
         if (this.challenge) {
             // 도전은 스토리 저장을 건드리지 않고 최고 기록만 남긴다
             const c = this.challenge;
-            const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score, tier: this.raidTier };
+            const r = { rounds: this.waveIndex, kills: this.stats.kills, time: this.stats.time, victory, score: this.score, tier: this.raidTier, hp: Math.max(0, this.hp) };
             this.challengeResult = r;
-            if (!this.replaying) this.challengeBest = c.kind === 'raid' ? Meta.finishRaid(c.week, r, this.record) : (c.kind === 'abyss' ? Meta.finishAbyss(c.seed, r, this.record) : Meta.finishDaily(c.date, r, this.record));
+            if (!this.replaying) this.challengeBest = c.kind === 'raid' ? Meta.finishRaid(c.week, r, this.record) : (c.kind === 'abyss' ? Meta.finishAbyss(c.seed, c.level, r, this.record) : Meta.finishDaily(c.date, r, this.record));
             if (!this.replaying) Sfx.play(victory ? 'victory' : 'defeat');
             return;
         }

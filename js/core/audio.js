@@ -17,6 +17,7 @@ const SFX_MAP = {
     hitLightning: [['hitLightning', 0, 1]],
     hitCurse: [['hitPoison', 0, 0.8]],
     hitHeavy: [['hitThump', 0, 1]],
+    shieldBreak: [['shieldBlock', 0, 1]],
     // 용사
     spawn: [['footstep', 0, 1]],
     kill: arg => [['enemyDie', 0, 1 + Math.min(arg || 1, 12) * 0.03]], // 연속 처치일수록 조금씩 높아진다

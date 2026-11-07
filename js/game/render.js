@@ -419,6 +419,26 @@ const Render = {
         this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
     },
 
+    // 계약 조항 표시: 방패(가슴 앞 푸른 방패), 되살아나기(머리 위 금빛 고리). 칸으로 찍는다
+    pactMarks(ctx, h, x, footY) {
+        const u = 2 * ART_SCALE;
+        if (h.shield) {
+            const sx = x + (h.dir === 'left' ? -16 : 16);
+            const sy = footY - 46;
+            const rows = ['.###.', '#@@@#', '#@@@#', '#@@@#', '.#@#.', '..#..'];
+            rows.forEach((row, r) => [...row].forEach((ch, k) => {
+                if (ch === '.') return;
+                ctx.fillStyle = ch === '#' ? '#1c2a44' : '#8fd0ff';
+                ctx.fillRect(snapWorld(sx + (k - 2.5) * u), snapWorld(sy + r * u), u, u);
+            }));
+        }
+        if (h.revive) {
+            ctx.globalAlpha = 0.6 + Math.sin(Game.time * 4 + h.lane) * 0.3;
+            this.pixelRing(ctx, x, footY - (HEROES[h.type].barY || 70) - 4, 12, 4, '#ffe08a', { k: 2 });
+            ctx.globalAlpha = 1;
+        }
+    },
+
     // 서 있는 그림: 다음 파티 목록에 쓴다
     heroStandName(type) {
         return `${HEROES[type].sprite}/rotations/south`;
@@ -454,6 +474,7 @@ const Render = {
             const by = p.y + 10 + (h.kickY || 0) * push - hop;
             if (skin) this.plSprite(ctx, img, skin, skin.anim.walk, h.dir, bx, by);
             else this.heroSprite(ctx, img, def, h.atkPose, h.dir, bx, by);
+            if (h.shield || h.revive) this.pactMarks(ctx, h, bx, by);
             // 일반 용사는 다쳤을 때만 작은 체력바를 그린다
             if (h.elite) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
             else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');

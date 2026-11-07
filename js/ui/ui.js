@@ -911,7 +911,7 @@ const UI = {
     // 이번 주 시드로 심연을 시작한다. 스토리 중간 저장은 그대로 둔다
     startAbyssRun() {
         const L = cleanLoadout(this.loadout);
-        this.challenge = abyssChallenge(abyssWeek(), L.lord, L.relics);
+        this.challenge = abyssChallenge(abyssWeek(), L.lord, L.relics, this.abyssLevel);
         this.abyssSelect = false;
         this.stageId = null;
         this.startGame(true);
@@ -977,6 +977,7 @@ const UI = {
         }
         if (res.reason === 'full') this.showToast('자리 없음');
         else if (res.reason === 'gold') this.showToast(`소환 ${Game.summonCost()}G`);
+        else if (res.reason === 'cap') this.showToast(`이번 라운드 소환 ${Game.mods.summonPerRound}번 끝`);
         Sfx.play('mergeFail');
         return res;
     },
@@ -2526,6 +2527,7 @@ const UI = {
             if (b.lockedSlot) continue; // 잠긴 유물 칸도 drawSelect가 그린다
             if (b.stamp) continue; // 스토리 지도의 도장은 drawStoryMap이 그린다
             if (b.facility || b.content) continue; // 본부 시설과 도전의 문 콘텐츠는 drawHQ가 그린다
+            if (b.abyssLevel !== undefined) continue; // 심연 계약서의 난이도 줄은 drawAbyssPanel이 그린다
             const st = this.btnState(b);
             if (b.skill) this.drawSkillButton(ctx, b, st);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, st);
@@ -3394,8 +3396,9 @@ const UI = {
             const best = G.challengeBest;
             ctx.fillStyle = T.parchmentDark;
             ctx.fillRect(cx - 390, 588, 780, 3);
-            UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '가장 깊은 기록!' : `최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            if (abyss) UIKit.bigText(ctx, abyssLevelOf(G.challenge.level).name, cx, 650, 56, T.gold, 'center', '#fff4c0');
+            else UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
+            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '이번 주 가장 깊은 기록!' : `이번 주 최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
             return;
         }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내

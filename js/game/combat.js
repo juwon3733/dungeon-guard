@@ -13,6 +13,15 @@ const KILL_POWER = [
 
 function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.dead) return 0;
+    // 계약 조항 방패 든 용사: 첫 공격(지속 피해 제외)을 막고 방패가 깨진다
+    if (hero.shield > 0 && !dot) {
+        hero.shield = 0;
+        hero.flash = 0.12;
+        const w = heroWorld(hero);
+        Fx.burst(w.x, w.y - 30, '#bfe6ff', 6, 240, 0.3, 4);
+        Sfx.play('shieldBreak');
+        return 0;
+    }
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
     const big = hero.boss || hero.elite ? 1 + equipEffect(attacker && attacker.equip, 'bossDmg') : 1; // 장비: 정예와 보스 피해
@@ -44,8 +53,30 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     return dealt;
 }
 
+// 쓰러진 자리(길 위 거리)에서 용사를 새로 세운다: 계약 조항 되살아나기와 분열. 바로 걷는다
+function heroRises(src, type, hpFrac, lane) {
+    const h = createHero(type, Game.waveLevel(Game.currentWave()), 0, false, src.route);
+    h.d = src.d;
+    h.lane = lane === undefined ? src.lane : lane;
+    h.hp = h.maxHp * hpFrac;
+    h.waiting = false;
+    h.delay = 0;
+    Game.heroes.push(h);
+    return h;
+}
+
 function killHero(hero, pos, attacker) {
     hero.dead = true;
+    // 계약 조항: 되살아나는 용사는 체력 절반으로 다시 일어나고, 분열하는 정예는 일반 용사 여럿으로 갈라진다
+    if (hero.revive) {
+        heroRises(hero, hero.type, 0.5);
+        Fx.burst(pos.x, pos.y - 30, '#fff1b0', 10, 260, 0.45, 5);
+    }
+    if (hero.elite && Game.mods.eliteSplit) {
+        const base = HEROES[hero.type].base || 'warrior';
+        for (let i = 0; i < Game.mods.eliteSplit; i++) heroRises(hero, HEROES[base] ? base : 'warrior', 1, (i - (Game.mods.eliteSplit - 1) / 2) * 24);
+        Fx.burst(pos.x, pos.y - 40, '#ffb49a', 14, 300, 0.45, 5);
+    }
     if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
