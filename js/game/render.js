@@ -213,22 +213,14 @@ const Render = {
         ctx.fillRect(cx - ry * 1.7, cy - ry * 1.7, ry * 3.4, ry * 3.4);
         ctx.restore();
         // 테두리: 진한 테, 돌, 안쪽 테
-        const ring = (r1, r2, color) => {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, r1, r2, 0, 0, Math.PI * 2);
-            ctx.fill();
-        };
+        const ring = (r1, r2, color) => this.pixelDisc(ctx, cx, cy, r1, r2, color, { k: 2, hard: true });
         ring(rx + 20, ry + 20, rim);
         ring(rx + 14, ry + 14, body);
         ring(rx + 4, ry + 4, rim);
         ring(rx, ry, outer);
         // 나선: 세 갈래 팔을 작은 네모로 찍어 도트처럼 보이게 한다
         ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        ctx.clip();
-        const dot = 4.5;
+        const dot = 2 * ART_SCALE;
         for (let arm = 0; arm < 3; arm++) {
             for (let i = 0; i < 46; i++) {
                 const k = i / 46;
@@ -236,7 +228,7 @@ const Render = {
                 const px = cx + Math.cos(ang) * rx * (1 - k) * 0.98;
                 const py = cy + Math.sin(ang) * ry * (1 - k) * 0.98;
                 ctx.fillStyle = k > 0.55 ? '#ffffff' : (i % 3 ? inner : `rgb(${glow})`);
-                ctx.fillRect(Math.round(px / dot) * dot, Math.round(py / dot) * dot, dot * (k > 0.7 ? 2 : 1), dot);
+                ctx.fillRect(snapWorld(px), snapWorld(py), dot * (k > 0.7 ? 2 : 1), dot);
             }
         }
         ctx.globalCompositeOperation = 'lighter';
@@ -288,6 +280,91 @@ const Render = {
             ctx.restore();
         } else {
             ctx.drawImage(img, left, top, w, h);
+        }
+    },
+
+    // 도트 도형: 매끈한 선과 타원 대신 k화면px 칸으로 찍는다(칸 = k * ART_SCALE 세계 px).
+    //   칸 목록은 (가로 반지름, 세로 반지름, k, 두께)마다 한 번 만든다. [dx, dy, 각(위에서 시계 방향 0~1), 중심에서의 거리 0~1, 체크무늬]
+    shapeCells(rx, ry, k, thick) {
+        const key = `${Math.round(rx)}|${Math.round(ry)}|${k}|${thick}`;
+        this.cellCache = this.cellCache || new Map();
+        let cells = this.cellCache.get(key);
+        if (cells) return cells;
+        const c = k * ART_SCALE;
+        const nx = Math.max(1, Math.round(rx / c));
+        const ny = Math.max(1, Math.round(ry / c));
+        const inside = (i, j) => (i * i) / (nx * nx) + (j * j) / (ny * ny) <= 1;
+        cells = [];
+        for (let j = -ny; j <= ny; j++) {
+            for (let i = -nx; i <= nx; i++) {
+                if (!inside(i, j)) continue;
+                if (thick) {
+                    let edge = false;
+                    for (let n = 1; n <= thick && !edge; n++) edge = !inside(i + n, j) || !inside(i - n, j) || !inside(i, j + n) || !inside(i, j - n);
+                    if (!edge) continue;
+                }
+                cells.push([i * c, j * c, ((Math.atan2(i, -j) / (Math.PI * 2)) + 1) % 1, Math.sqrt((i * i) / (nx * nx) + (j * j) / (ny * ny)), (i + j) & 1]);
+            }
+        }
+        this.cellCache.set(key, cells);
+        return cells;
+    },
+
+    // 도트 고리. o: k(칸 크기, 기본 3), thick(두께 칸 수), dash(한 바퀴의 점선 마디 수), offset(마디 밀기), upto(위에서 시계 방향으로 여기까지만)
+    pixelRing(ctx, x, y, rx, ry, color, o = {}) {
+        const k = o.k || 3;
+        const c = k * ART_SCALE;
+        const upto = o.upto === undefined ? 1 : o.upto;
+        ctx.fillStyle = color;
+        for (const [dx, dy, ang] of this.shapeCells(rx, ry, k, o.thick || 1)) {
+            if (ang > upto) continue;
+            if (o.dash && ((Math.floor(ang * o.dash * 2 + (o.offset || 0)) % 2) + 2) % 2) continue;
+            ctx.fillRect(snapWorld(x + dx - c / 2), snapWorld(y + dy - c / 2), c, c);
+        }
+    },
+
+    // 도트 원판. 가장자리는 두 계단으로 옅어진다(안 65%는 그대로, 85%까지 0.6, 끝까지 0.3). hard면 꽉 채운다
+    //   한 번 그린 원판은 그림으로 남겨 다시 쓴다(큰 경고 범위도 매 프레임 칸을 찍지 않는다)
+    pixelDisc(ctx, x, y, rx, ry, color, o = {}) {
+        const k = o.k || 3;
+        const c = k * ART_SCALE;
+        const cells = this.shapeCells(rx, ry, k, 0);
+        if (typeof document === 'undefined') {
+            ctx.fillStyle = color;
+            for (const [dx, dy] of cells) ctx.fillRect(snapWorld(x + dx - c / 2), snapWorld(y + dy - c / 2), c, c);
+            return;
+        }
+        const nx = Math.max(1, Math.round(rx / c));
+        const ny = Math.max(1, Math.round(ry / c));
+        const key = `${nx}|${ny}|${k}|${o.hard ? 1 : 0}|${color}`;
+        this.discCache = this.discCache || new Map();
+        let img = this.discCache.get(key);
+        if (!img) {
+            if (this.discCache.size > 400) this.discCache.clear();
+            img = document.createElement('canvas');
+            img.width = (nx * 2 + 1) * k;
+            img.height = (ny * 2 + 1) * k;
+            const g = img.getContext('2d');
+            g.fillStyle = color;
+            for (const [dx, dy, , r] of cells) {
+                g.globalAlpha = o.hard || r <= 0.65 ? 1 : (r <= 0.85 ? 0.6 : 0.3);
+                g.fillRect(Math.round(dx / c + nx) * k, Math.round(dy / c + ny) * k, k, k);
+            }
+            this.discCache.set(key, img);
+        }
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, snapWorld(x - (nx + 0.5) * c), snapWorld(y - (ny + 0.5) * c), (nx * 2 + 1) * c, (ny * 2 + 1) * c);
+    },
+
+    // 도트 선: 굵기 w의 네모를 반 칸씩 겹쳐 찍는다
+    pixelLine(ctx, ax, ay, bx, by, color, w) {
+        const s = Math.max(2, Math.round(w * WORLD_ZOOM / 2) * 2) / WORLD_ZOOM;
+        const len = Math.hypot(bx - ax, by - ay);
+        const n = Math.max(1, Math.ceil(len / (s / 2)));
+        ctx.fillStyle = color;
+        for (let i = 0; i <= n; i++) {
+            const k = i / n;
+            ctx.fillRect(snapWorld(ax + (bx - ax) * k - s / 2), snapWorld(ay + (by - ay) * k - s / 2), s, s);
         }
     },
 
@@ -390,28 +467,22 @@ const Render = {
         if (h.curse > 0) this.curseMark(ctx, p.x, headY - 45, h.curse);
     },
 
-    // 빙결된 용사: 발밑 서리 고리와 몸을 덮는 푸른 빛, 떨어지는 얼음 조각
+    // 빙결된 용사: 발밑 서리 바닥과 떨어지는 얼음 조각
     frostAura(ctx, x, footY, headY, a) {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(120,200,255,${0.35 * a})`;
-        ctx.beginPath();
-        ctx.ellipse(x, footY, 50, 16, 0, 0, Math.PI * 2);
-        ctx.fill();
-        const g = ctx.createLinearGradient(0, headY, 0, footY);
-        g.addColorStop(0, 'rgba(140,210,255,0)');
-        g.addColorStop(1, `rgba(140,210,255,${0.3 * a})`);
-        ctx.fillStyle = g;
-        ctx.fillRect(x - 39, headY, 78, footY - headY);
+        ctx.globalAlpha = 0.35 * a;
+        this.pixelDisc(ctx, x, footY, 50, 16, '#78c8ff');
+        ctx.globalAlpha = 1;
         for (let i = 0; i < 4; i++) {
             const k = (Game.time * 0.8 + i / 4 + x * 0.003) % 1;
             ctx.fillStyle = `rgba(220,245,255,${(1 - k) * a})`;
-            ctx.fillRect(Math.round(x + Math.sin(i * 2.3 + x) * 33) - 3, Math.round(headY + k * (footY - headY)) - 3, 6, 6);
+            ctx.fillRect(snapWorld(x + Math.sin(i * 2.3 + x) * 33), snapWorld(headY + k * (footY - headY)), 4 * ART_SCALE, 4 * ART_SCALE);
         }
         ctx.restore();
     },
 
-    // 보스(부대장, 대마도사): PixelLab 동작 그림. 경고(windup) 동안은 공격 동작(windupLoop면 반복, 아니면 첫 프레임에 멈춤),
+    // 보스(부대장, 대마도사, 토벌 보스): Asteria 그림. 경고(windup) 동안은 공격 동작(windupLoop면 반복, 아니면 첫 프레임에 멈춤),
     // 공격은 공격 동작을 한 번 재생한다. 돌진 중에는 뒤에 보라 잔상을 남긴다
     drawArtBoss(ctx, h, p, art) {
         let clip = art.anim.walk;
@@ -438,13 +509,10 @@ const Render = {
             ctx.globalCompositeOperation = 'lighter';
             const hot = h.windup > 0 ? 1 : 0;
             const pulse = 0.45 + Math.sin(Game.time * (hot ? 30 : 5)) * 0.15 + hot * 0.3;
-            ctx.fillStyle = `rgba(90,180,255,${pulse * 0.35})`;
-            ctx.beginPath();
-            ctx.ellipse(p.x, p.y + 10, 96, 30, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.lineWidth = 6;
-            ctx.strokeStyle = `rgba(150,220,255,${pulse})`;
-            ctx.stroke();
+            ctx.globalAlpha = pulse * 0.35;
+            this.pixelDisc(ctx, p.x, p.y + 10, 96, 30, '#5ab4ff');
+            ctx.globalAlpha = Math.min(1, pulse);
+            this.pixelRing(ctx, p.x, p.y + 10, 96, 30, '#96dcff', { thick: 2, dash: hot ? 0 : 10, offset: Game.time * 3 });
             ctx.restore();
         }
         if (h.chargeTime > 0) {
@@ -466,10 +534,8 @@ const Render = {
         const snap = v => Math.round(v / 2) * 2;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = 'rgba(120,255,170,0.22)';
-        ctx.beginPath();
-        ctx.ellipse(x, y, 36 * size, 12 * size, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = 0.22;
+        this.pixelDisc(ctx, x, y, 36 * size, 12 * size, '#78ffaa');
         ctx.restore();
         for (let i = 0; i < 3; i++) {
             const k = (t * 0.9 + i / 3) % 1;
@@ -537,13 +603,9 @@ const Render = {
         ctx.globalCompositeOperation = 'lighter';
         // 고리 안쪽의 은은한 빛
         const pulse = 0.22 + Math.sin(t * 4) * 0.06;
-        const glow = ctx.createRadialGradient(x, y, 2, x, y, rx);
-        glow.addColorStop(0, `rgba(200,70,255,${pulse + 0.1})`);
-        glow.addColorStop(1, 'rgba(200,70,255,0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = pulse + 0.1;
+        this.pixelDisc(ctx, x, y, rx, ry, '#c846ff');
+        ctx.globalAlpha = 1;
         // 도트 고리: 작은 점 사이사이에 십자 모양 룬 4개
         const spin = t * 0.9;
         for (let i = 0; i < 20; i++) {
@@ -1006,10 +1068,8 @@ const Render = {
         if (m.buffT > 0) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = `rgba(255,215,110,${0.28 + Math.sin(Game.time * 6) * 0.08})`;
-            ctx.beginPath();
-            ctx.ellipse(m.x, footY, 60, 20, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.globalAlpha = 0.28 + Math.sin(Game.time * 6) * 0.08;
+            this.pixelDisc(ctx, m.x, footY, 60, 20, '#ffd76e');
             ctx.restore();
         }
         this.drawAuraRunes(ctx, m, footY);
@@ -1064,10 +1124,9 @@ const Render = {
         back.addColorStop(1, 'rgba(255,40,20,0)');
         ctx.fillStyle = back;
         ctx.fillRect(x - 120, footY - 186, 240, 240);
-        ctx.fillStyle = `rgba(255,70,40,${pulse * 0.5})`;
-        ctx.beginPath();
-        ctx.ellipse(x, footY, 58, 19, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = pulse * 0.5;
+        this.pixelDisc(ctx, x, footY, 58, 19, '#ff4628');
+        ctx.globalAlpha = 1;
         for (let i = 0; i < 5; i++) {
             const k = (t * 1.3 + i / 5) % 1;
             const ex = Math.round(x + Math.sin(i * 2.7 + seed * 3) * 38);
@@ -1220,19 +1279,16 @@ const Render = {
         const pulse = 0.8 + Math.sin(Game.time * 8) * 0.2;
         ctx.save();
         ctx.globalAlpha = hot ? 1 : pulse;
-        ctx.lineWidth = hot ? 8 : 5;
-        ctx.strokeStyle = color;
-        ctx.setLineDash(hot ? [] : [12, 8]);
-        ctx.lineDashOffset = -Game.time * 50;
-        ctx.beginPath();
-        ctx.ellipse(x, y, hot ? 54 : 46, hot ? 19 : 16, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        const rx = hot ? 54 : 46;
+        const ry = hot ? 19 : 16;
         if (hot) {
             ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = color;
             ctx.globalAlpha = 0.25;
-            ctx.fill();
+            this.pixelDisc(ctx, x, y, rx, ry, color);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1;
         }
+        this.pixelRing(ctx, x, y, rx, ry, color, { thick: hot ? 2 : 1, dash: hot ? 0 : 10, offset: Game.time * 4 });
         ctx.restore();
     },
 
@@ -1328,12 +1384,8 @@ const Render = {
         const x = m.homeX;
         const y = m.homeY + MONSTER_FOOT;
         ctx.save();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = `rgba(255,183,107,${0.35 + Math.sin(Game.time * 2 + x) * 0.08})`;
-        ctx.setLineDash([8, 6]);
-        ctx.beginPath();
-        ctx.ellipse(x, y, 40, 14, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.globalAlpha = 0.35 + Math.sin(Game.time * 2 + x) * 0.08;
+        this.pixelRing(ctx, x, y, 40, 14, '#ffb76b', { k: 2, dash: 9 });
         ctx.restore();
     },
 
@@ -1349,19 +1401,11 @@ const Render = {
         ctx.restore();
         const cy = footY - 60;
         ctx.save();
-        ctx.fillStyle = 'rgba(10,6,20,0.7)';
-        ctx.beginPath();
-        ctx.arc(x, cy, 30, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 7;
-        ctx.strokeStyle = '#3a2f4c';
-        ctx.beginPath();
-        ctx.arc(x, cy, 27, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = '#ffb76b';
-        ctx.beginPath();
-        ctx.arc(x, cy, 27, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left));
-        ctx.stroke();
+        ctx.globalAlpha = 0.7;
+        this.pixelDisc(ctx, x, cy, 30, 30, '#0a0614', { hard: true });
+        ctx.globalAlpha = 1;
+        this.pixelRing(ctx, x, cy, 29, 29, '#3a2f4c', { thick: 2 });
+        this.pixelRing(ctx, x, cy, 29, 29, '#ffb76b', { thick: 2, upto: 1 - left });
         ctx.restore();
         UIKit.text(ctx, String(Math.ceil(m.down)), x, cy, Math.round(22 / WORLD_ZOOM), '#ffe0c0', 'center');
     },
@@ -1440,13 +1484,8 @@ const Render = {
         ctx.fillRect(x - r, y - 50 - r, r * 2, r * 2);
         ctx.restore();
         ctx.save();
-        ctx.lineWidth = hot ? 7 : 5;
-        ctx.strokeStyle = hot ? '#fff1b0' : `rgba(255,215,106,${0.6 + pulse * 0.4})`;
-        ctx.setLineDash([18, 10]);
-        ctx.lineDashOffset = -Game.time * 60;
-        ctx.beginPath();
-        ctx.ellipse(x, y, hot ? 130 : 112, hot ? 46 : 40, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.globalAlpha = hot ? 1 : 0.6 + pulse * 0.4;
+        this.pixelRing(ctx, x, y, hot ? 130 : 112, hot ? 46 : 40, hot ? '#fff1b0' : '#ffd76a', { thick: hot ? 2 : 1, dash: 14, offset: Game.time * 3 });
         ctx.restore();
     },
 
@@ -1492,15 +1531,8 @@ const Render = {
 
         // 남은 시간 고리
         ctx.save();
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = '#120a22';
-        ctx.beginPath();
-        ctx.arc(c.x, c.y - 69, 12, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = ready ? '#ff6be6' : '#6a5f7c';
-        ctx.beginPath();
-        ctx.arc(c.x, c.y - 69, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
-        ctx.stroke();
+        this.pixelRing(ctx, c.x, c.y - 69, 14, 14, '#120a22', { k: 2, thick: 2 });
+        this.pixelRing(ctx, c.x, c.y - 69, 14, 14, ready ? '#ff6be6' : '#6a5f7c', { k: 2, thick: 2, upto: left });
         ctx.restore();
         UIKit.text(ctx, `${c.cost}`, c.x, c.y - 100, Math.round((hovered ? 24 : 18) / WORLD_ZOOM), ready ? '#ffd6fb' : '#8f8599', 'center');
     },
@@ -1659,13 +1691,8 @@ const Render = {
             const a = clamp((z.life - z.age) / 0.5, 0, 1) * clamp(z.age / 0.15, 0, 1);
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createRadialGradient(z.x, z.y, 4, z.x, z.y, z.radius);
-            g.addColorStop(0, `rgba(255,110,30,${0.35 * a})`);
-            g.addColorStop(1, 'rgba(255,60,10,0)');
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.ellipse(z.x, z.y, z.radius, z.radius * 0.55, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.globalAlpha = 0.3 * a;
+            this.pixelDisc(ctx, z.x, z.y, z.radius, z.radius * 0.55, '#ff6e1e', { k: 4 });
             ctx.restore();
             this.drawLoopSheet(ctx, 'fx_fire_ground', z.x, z.y, z.radius * 2, z.x * 0.01, a);
         }
@@ -1732,24 +1759,13 @@ const Render = {
         for (const b of Fx.beams) {
             const t = b.age / b.life;
             ctx.globalAlpha = 1 - t;
-            ctx.strokeStyle = b.color;
-            ctx.lineWidth = b.width * (1 - t * 0.6);
-            ctx.lineCap = 'butt';
-            ctx.beginPath();
-            ctx.moveTo(b.ax, b.ay);
-            ctx.lineTo(b.bx, b.by);
-            ctx.stroke();
+            this.pixelLine(ctx, b.ax, b.ay, b.bx, b.by, b.color, b.width * (1 - t * 0.6));
         }
         for (const b of Fx.bolts) {
             const t = b.age / b.life;
             ctx.globalAlpha = 1 - t;
-            for (const [color, width] of [[b.color, 16], ['#ffffff', 5]]) {
-                ctx.strokeStyle = color;
-                ctx.lineWidth = width;
-                ctx.lineJoin = 'miter';
-                ctx.beginPath();
-                b.points.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-                ctx.stroke();
+            for (const [color, width] of [[b.color, 14], ['#ffffff', 5]]) {
+                for (let i = 1; i < b.points.length; i++) this.pixelLine(ctx, b.points[i - 1][0], b.points[i - 1][1], b.points[i][0], b.points[i][1], color, width);
             }
         }
         ctx.restore();
@@ -1839,17 +1855,13 @@ const Render = {
             const k = t.age / t.life;
             const rgb = t.color || '255,70,110'; // 감전 경고는 푸른색
             ctx.save();
-            ctx.fillStyle = `rgba(${rgb},${0.12 + 0.18 * k})`;
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.lineWidth = 5;
-            ctx.strokeStyle = t.color ? `rgb(${rgb})` : '#ff5e7f';
-            ctx.stroke();
-            ctx.fillStyle = t.color ? `rgba(${rgb},0.35)` : 'rgba(255,90,130,0.35)';
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, t.radius * k, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.globalAlpha = 0.12 + 0.18 * k;
+            this.pixelDisc(ctx, t.x, t.y, t.radius, t.radius, `rgb(${rgb})`, { k: 4 });
+            ctx.globalAlpha = 1;
+            this.pixelRing(ctx, t.x, t.y, t.radius, t.radius, t.color ? `rgb(${rgb})` : '#ff5e7f', { k: 4 });
+            // 차오르는 안쪽: 다 차면 터진다
+            ctx.globalAlpha = 0.35;
+            this.pixelDisc(ctx, t.x, t.y, Math.max(4, t.radius * k), Math.max(4, t.radius * k), t.color ? `rgb(${rgb})` : '#ff5a82', { k: 4, hard: true });
             ctx.restore();
         }
 
