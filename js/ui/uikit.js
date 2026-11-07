@@ -183,9 +183,69 @@ const UIKit = {
         ctx.fillRect(x + 6, y + h - 8, w - 12, 2);
     },
 
+    // 전투 UI 재질: 그림(hud_panel, hud_slot)을 9칸으로 자른다. 모서리 c px는 그대로, 변과 가운데는 늘리지 않고 반복해 도트가 고르다
+    hudFrame(ctx, name, x, y, w, h, c) {
+        x = Math.round(x);
+        y = Math.round(y);
+        w = Math.round(w);
+        h = Math.round(h);
+        const key = `hud|${name}|${w}|${h}|${c}`;
+        let cv = this.cache.get(key);
+        if (!cv) {
+            const src = this.img(name);
+            if (!src) return;
+            const { c: canvas, g } = this.canvas(w, h);
+            const sw = src.width;
+            const sh = src.height;
+            const mw = sw - c * 2;
+            const mh = sh - c * 2;
+            const part = (sx, sy, cw, ch, dx, dy, dw, dh) => {
+                for (let py = 0; py < dh; py += ch) {
+                    for (let px = 0; px < dw; px += cw) {
+                        const pw = Math.min(cw, dw - px);
+                        const ph = Math.min(ch, dh - py);
+                        g.drawImage(src, sx, sy, pw, ph, dx + px, dy + py, pw, ph);
+                    }
+                }
+            };
+            part(c, c, mw, mh, c, c, w - c * 2, h - c * 2);
+            part(c, 0, mw, c, c, 0, w - c * 2, c);
+            part(c, sh - c, mw, c, c, h - c, w - c * 2, c);
+            part(0, c, c, mh, 0, c, c, h - c * 2);
+            part(sw - c, c, c, mh, w - c, c, c, h - c * 2);
+            part(0, 0, c, c, 0, 0, c, c);
+            part(sw - c, 0, c, c, w - c, 0, c, c);
+            part(0, sh - c, c, c, 0, h - c, c, c);
+            part(sw - c, sh - c, c, c, w - c, h - c, c, c);
+            cv = this.remember(key, canvas);
+        }
+        ctx.drawImage(cv, x, y);
+    },
+
+    // 전투 중 버튼: 쇠 칸에 상태색을 얕게 얹는다. 내용에 더할 dy를 돌려준다
+    battleButton(ctx, x, y, w, h, kind, st) {
+        const dy = st.pressed ? 2 : 0;
+        const hover = st.hover && !st.pressed;
+        this.hudFrame(ctx, 'hud_slot', x, y + dy, w, h, 14);
+        const tint = { primary: 'rgba(190,70,24,0.55)', danger: 'rgba(170,20,40,0.5)', tab: 'rgba(216,196,140,0.2)', off: 'rgba(0,0,0,0.45)' }[kind];
+        if (tint) {
+            ctx.fillStyle = tint;
+            ctx.fillRect(Math.round(x) + 12, Math.round(y) + 12 + dy, Math.round(w) - 24, Math.round(h) - 24);
+        }
+        if (hover && kind !== 'off') {
+            ctx.fillStyle = 'rgba(255,236,190,0.12)';
+            ctx.fillRect(Math.round(x) + 12, Math.round(y) + 12 + dy, Math.round(w) - 24, Math.round(h) - 24);
+        }
+        return dy;
+    },
+
     // 창: 남색 판, 가는 금선, 네 모서리 금장(ui_window). 이전 옵션(seal, iron)은 모두 같은 창이다
     panel(ctx, x, y, w, h, opts) {
         const o = opts || {};
+        if (this.battleSkin) {
+            this.hudFrame(ctx, 'hud_panel', x, y, w, h, 26);
+            return;
+        }
         this.nine(ctx, 'window', x, y, w, h, { tint: o.tint });
     },
 
@@ -217,6 +277,10 @@ const UIKit = {
 
     // 칸. kind: 'iron'(은테) | 'light'(밝은 은테) | 'gold'(금테)
     slot(ctx, x, y, w, h, kind, tint) {
+        if (this.battleSkin) {
+            this.battleButton(ctx, x, y, w, h, kind === 'gold' ? 'tab' : 'silver', { hover: tint === 'hover' });
+            return;
+        }
         if (kind === 'gold') this.nine(ctx, 'skillSlot', x, y, w, h, { tint, k: w >= 40 ? 2 : 1 });
         else this.nine(ctx, 'itemSlot', x, y, w, h, { tint: tint || (kind === 'light' ? 'rgba(200,225,255,0.08)' : null), k: w >= 40 ? 2 : 1 });
     },
@@ -224,6 +288,10 @@ const UIKit = {
     // 작은 창(설명, 말풍선, 쪽지): 남색 판과 가는 금테, 계단 모서리. red: 진한 빨강 판(보스, 위험)
     note(ctx, x, y, w, h, opts) {
         const o = opts || {};
+        if (this.battleSkin) {
+            this.battleButton(ctx, x, y, w, h, o.red ? 'danger' : 'silver', {});
+            return;
+        }
         x = Math.round(x);
         y = Math.round(y);
         w = Math.round(w);
@@ -351,6 +419,7 @@ const UIKit = {
     // 'tabOff'(꺼진 탭) | 'danger'(빨강) | 'off'(누를 수 없음). 누른 동안은 2px 내려앉는다. 내용에 더할 dy를 돌려준다
     button(ctx, x, y, w, h, kind, state) {
         const st = state || {};
+        if (this.battleSkin) return this.battleButton(ctx, x, y, w, h, kind, st);
         const dy = st.pressed ? 2 : 0;
         const hover = st.hover && !st.pressed;
         const k = h >= 40 ? 2 : 1;

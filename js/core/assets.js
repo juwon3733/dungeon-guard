@@ -1,6 +1,7 @@
 // 그림 불러오기와 색 입힌 사본 캐시. 색 입히기는 픽셀을 읽지 않아 index.html을 바로 열어도 동작한다.
 // UI 아이콘(uiicon_<이름>, 48px)과 UI 재질 그림(48px 9칸 원본: js/ui/uikit.js의 UI_SLICES가 잘라 쓴다)
 const UI_ICONS = ['summon', 'lord', 'attack', 'gold', 'soul', 'lock', 'book', 'bag', 'close', 'fast', 'pause', 'sound', 'gear', 'wave', 'retry', 'bolt'];
+const HUD_SPRITES = ['hud_vessel', 'hud_bossbar', 'hud_panel', 'hud_slab', 'hud_slot', 'hud_gold', 'decal_altar', 'decal_cursed']; // 전투 UI 재질과 맵 기믹(tools/import_hud.py)
 const UI_SHEETS = ['ui_window', 'ui_button', 'ui_buttonHover', 'ui_closeButton', 'ui_itemSlot', 'ui_skillSlot'];
 // 지역 그림(webp): 지역마다 우주 배경, 섬, 다리. 지역 표는 js/data/map.js의 ZONES
 const ZONE_ART = ['void', 'island', 'bridgedeck'];
@@ -43,7 +44,7 @@ const Assets = {
         list.push('prop2_throne');
         // 전투 효과는 모두 pixelfx 시트(assets/fx/)다
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
-        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HQ_SPRITES);
+        list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HUD_SPRITES, ...HQ_SPRITES);
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 

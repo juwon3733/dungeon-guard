@@ -2,15 +2,15 @@
 // 하단 바: 왼쪽 체력 구슬과 마왕 이름, 가운데 금장 틀의 슬롯 줄(탭, 소환 또는 마왕 스킬과 유물, 보관함), 오른쪽 골드
 const BAR_H = 124; // 하단 바가 차지하는 높이(누를 수 있는 칸은 이 안에). 구슬과 금장 틀은 이 위로 조금 솟는다
 const BAR_STRIP_Y = GAME_HEIGHT - 96; // 남색 띠가 시작하는 높이
-const BAR_ORB = { x: 112, y: 990, r: 78 }; // 체력 구슬 가운데와 반지름
-const BAR_NAME_X = 206; // 구슬 오른쪽 마왕 이름
-const BAR_FRAME = { x: 470, w: 966, top: GAME_HEIGHT - BAR_H - 6 }; // 가운데 금장 틀
+const BAR_ORB = { x: 108, y: 973, r: 54 }; // 체력 그릇(hud_vessel) 가운데와 안쪽 반지름
+const BAR_NAME_X = 232; // 그릇 오른쪽 마왕 이름
+const BAR_FRAME = { x: 470, w: 966, top: GAME_HEIGHT - BAR_H - 20 }; // 가운데 쇠와 뼈 틀. 아래 테두리는 화면 밖으로 나간다
 const BAR_TAB_X = 486; // 틀 왼쪽의 탭 둘(위아래)
 const BAR_TAB_W = 138;
 const BAR_SLOT_X = 640; // 소환 칸과 스킬 칸이 시작하는 곳
-const SUMMON_BTN_W = 240; // 몬스터 탭의 소환 칸(금테, 틀에서 가장 크다)
+const SUMMON_BTN_W = 318; // 몬스터 탭의 소환 석판(hud_slab, 틀에서 가장 크다)
+const SUMMON_BTN_H = 132;
 const UPGRADE_BTN_W = 150; // 소환 강화 칸
-const FIELD_COUNT_X = BAR_SLOT_X + SUMMON_BTN_W + 10 + UPGRADE_BTN_W + 12; // 맵 몬스터 수 표시(현재 수/상한)
 const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
@@ -40,6 +40,8 @@ const EQUIP_MAP_ICON = 24;
 const PARTY_X = 1290; // 다음 파티 창 왼쪽(너비 PARTY_W). 오른쪽 위 아이콘 버튼(x 1650부터) 왼쪽
 const PARTY_W = 350;
 const PARTY_ROW = 34; // 파티 목록 한 줄 높이
+const PARTY_CELL_W = 84; // 라운드 중 파티 칸 하나의 너비
+const BOSS_TROUGH = { x: 28, y: 18, w: 187, h: 12 }; // hud_bossbar에서 체력이 차는 칸(그림 px)
 const PLATE = { w: 620, h: 58, y: 12 }; // 위쪽 가운데 이름판(지역 이름, 스테이지, 라운드)
 // 선택 화면: 위쪽 마왕 카드, 아래쪽 유물 격자(48px 원래 크기)와 고른 유물 칸, 오른쪽 아래 시작 버튼
 const LORD_CARD_W = 500;
@@ -87,6 +89,8 @@ const UI = {
     popupEquipRect: null, // 팝업의 장비 칸(마우스를 올리면 설명)
     hoverCorpse: null,
     hoverButton: null,
+    goldShown: null, // 화면에 보이는 골드(굴러 올라간다)
+    bossTrail: null, // 보스 체력 잔상
     hpShown: null, // 왼쪽 아래 체력 막대에 보이는 체력. 제물로 오를 때는 천천히 차오르고, 깎일 때는 바로 줄어든다
     targeting: false,
     toast: null,
@@ -182,7 +186,7 @@ const UI = {
         const slotY = barY + 12;
         if (this.tab === 'monster') {
             const full = G.fieldFull();
-            this.button('summon', BAR_SLOT_X, slotY, SUMMON_BTN_W, 104, {
+            this.button('summon', BAR_SLOT_X, slotY - 26, SUMMON_BTN_W, SUMMON_BTN_H, {
                 summonBtn: true, disabled: full || !G.canPaySummon(), full,
                 onClick: () => this.doSummon()
             });
@@ -1316,6 +1320,15 @@ const UI = {
         // 끄는 몬스터가 맵에서 사라지면(판 종료 등) 끌기를 그만둔다
         if (this.drag && (!Game.inPlay() || !Game.typeAt(this.drag.src))) this.cancelDrag();
         // 체력 막대: 오를 때는 초당 6씩 차오르고, 깎이면 바로 맞춘다
+        // 골드 숫자는 실제 값을 빠르게 따라간다. 판 밖이나 씀(줄어듦)은 바로 맞춘다
+        if (this.goldShown === null || Game.gold < this.goldShown || !Game.inPlay()) this.goldShown = Game.gold;
+        else this.goldShown = Math.abs(Game.gold - this.goldShown) < 1 ? Game.gold : this.goldShown + (Game.gold - this.goldShown) * Math.min(1, dt * 10);
+        const trailBoss = Game.heroes && Game.heroes.find(h => h.boss && !h.waiting);
+        if (!trailBoss) this.bossTrail = null;
+        else {
+            const r = clamp(trailBoss.hp / trailBoss.maxHp, 0, 1);
+            this.bossTrail = this.bossTrail === null || r > this.bossTrail ? r : Math.max(r, this.bossTrail - dt * 0.18);
+        }
         if (this.hpShown === null || Game.hp < this.hpShown || !Game.inPlay()) this.hpShown = Game.hp;
         else this.hpShown = Math.min(Game.hp, this.hpShown + dt * 6);
         this.updateHint();
@@ -1484,6 +1497,7 @@ const UI = {
     },
 
     draw(ctx) {
+        UIKit.battleSkin = false; // 전투 화면에서만 쇠와 뼈 재질을 쓴다(아래에서 켠다)
         const G = Game;
         if (this.dialogue && !G.inPlay() && G.state !== 'victory') {
             // 시작 전 대화: 비운 맵 위에 대화만
@@ -1523,6 +1537,7 @@ const UI = {
             this.drawToast(ctx);
             return;
         }
+        UIKit.battleSkin = true;
         this.drawBottomBar(ctx);
         this.drawTopBar(ctx);
         this.drawChallengeScore(ctx);
@@ -1926,7 +1941,7 @@ const UI = {
         const y = PLATE.y;
         const h = PLATE.h;
         const cy = y + h / 2 + 1;
-        this.drawHexPlate(ctx, x, y, PLATE.w, h);
+        UIKit.hudFrame(ctx, 'hud_panel', x, y, PLATE.w, h, 26);
         const zone = ZONES[G.zone] || ZONES[DEFAULT_ZONE];
         UIKit.text(ctx, zone.name, x + 46, cy, 19, T.creamSoft);
         const st = stageDef(G.stage);
@@ -1955,135 +1970,69 @@ const UI = {
         }
     },
 
-    // 하단 바: 남색 띠(위쪽 금선), 왼쪽 체력 구슬과 마왕 이름, 가운데 금장 틀(슬롯 줄), 오른쪽 골드
+    // 하단 바: 띠 없이 묶음마다 쇠와 뼈 틀을 놓는다. 왼쪽 체력 그릇과 마왕 이름, 가운데 슬롯 줄, 오른쪽 골드
     drawBottomBar(ctx) {
         const G = Game;
         const T = UI_THEME;
-        const y = BAR_STRIP_Y;
-        ctx.fillStyle = T.outline;
-        ctx.fillRect(0, y - 6, GAME_WIDTH, GAME_HEIGHT - y + 6);
-        ctx.fillStyle = '#0a1226';
-        ctx.fillRect(0, y, GAME_WIDTH, GAME_HEIGHT - y);
-        ctx.fillStyle = '#14214a';
-        ctx.fillRect(0, y, GAME_WIDTH, 8);
-        ctx.fillStyle = T.goldDark;
-        ctx.fillRect(0, y - 2, GAME_WIDTH, 2);
-        ctx.fillStyle = T.goldLine;
-        ctx.fillRect(0, y - 4, GAME_WIDTH, 2);
+        // 틀 전체가 화면 안에 들어오고, 글자는 테두리 안쪽 가운데에 놓인다
+        const groupH = 104;
+        const groupY = GAME_HEIGHT - groupH - 4;
+        const shown = this.goldShown === null ? G.gold : this.goldShown;
+        const goldText = Math.round(shown).toLocaleString('en-US');
+        ctx.font = `bold 34px ${UI_FONT}`;
+        const goldW = Math.min(GAME_WIDTH - HUD_GOLD.x + 42 - 8, Math.max(220, Math.ceil(ctx.measureText(goldText).width) + 116));
+        UIKit.hudFrame(ctx, 'hud_panel', BAR_NAME_X - 26, groupY, 240, groupH, 26);
+        UIKit.hudFrame(ctx, 'hud_panel', HUD_GOLD.x - 42, groupY, goldW, groupH, 26);
         this.drawBarFrame(ctx);
         this.drawHp(ctx);
         // 마왕 이름과 이번 판 처치 수
         const lord = G.lordDef();
-        UIKit.text(ctx, lord.name, BAR_NAME_X, y + 30, 27, T.cream, 'left', 'bold');
-        UIKit.icon(ctx, 'attack', BAR_NAME_X - 6, y + 46, 0.75);
-        UIKit.text(ctx, '처치', BAR_NAME_X + 34, y + 66, 18, T.creamSoft);
-        UIKit.bigText(ctx, String(G.stats.kills), BAR_NAME_X + 82, y + 64, 32, T.gold, 'left', '#fff2b8');
-        // 골드: 코인이 도착하면 잠깐 커진다
-        const pulse = 1 + Fx.goldPulse * 0.2;
-        UIKit.icon(ctx, 'gold', HUD_GOLD.x - 24, HUD_GOLD.y - 26);
-        UIKit.bigText(ctx, G.gold.toLocaleString('en-US'), HUD_GOLD.x + 34, HUD_GOLD.y, Math.round(48 * pulse), T.gold, 'left', '#fff4c0');
-        UIKit.text(ctx, `소환 ${G.summonCost()}G`, HUD_GOLD.x + 36, HUD_GOLD.y + 46, 18, T.creamSoft);
+        UIKit.text(ctx, lord.name, BAR_NAME_X, groupY + 39, 20, T.cream, 'left', 'bold');
+        UIKit.text(ctx, `처치 ${G.stats.kills}`, BAR_NAME_X, groupY + 65, 18, T.creamSoft);
+        // 골드: 굴러 올라가는 숫자. 코인이 도착하면 잠깐 커진다
+        const pulse = 1 + Fx.goldPulse * 0.14;
+        const coin = Assets.get('hud_gold');
+        if (coin) ctx.drawImage(coin, HUD_GOLD.x - Math.round(coin.width / 2), HUD_GOLD.y - Math.round(coin.height / 2));
+        UIKit.bigText(ctx, goldText, HUD_GOLD.x + 42, HUD_GOLD.y, Math.round(34 * pulse), T.gold, 'left');
         this.drawBag(ctx);
         this.drawBarRelics(ctx);
-        // 라운드 중에는 바 위 오른쪽에 단축키 안내(준비 중에는 그 자리에 다음 라운드 버튼)
-        if (G.state === 'wave') UIKit.text(ctx, 'S 소환 · Tab 탭 · Q 번개 · F 배속 · P 일시정지', GAME_WIDTH - 24, y - 30, 18, T.creamSoft, 'right');
     },
 
-    // 가운데 금장 틀: 바 위로 솟은 남색 판, 위쪽 비스듬한 금선, 네 귀퉁이 금장
+    // 가운데 틀: 쇠와 뼈 창. 소환 석판이 그 위에 놓인다
     drawBarFrame(ctx) {
-        const T = UI_THEME;
         const F = BAR_FRAME;
-        const x = F.x;
-        const w = F.w;
-        const top = F.top;
-        const base = BAR_STRIP_Y;
-        const slope = 22;
-        const shape = (inset, color) => {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.moveTo(x + inset, GAME_HEIGHT);
-            ctx.lineTo(x + inset, base);
-            ctx.lineTo(x + slope + inset, top + inset);
-            ctx.lineTo(x + w - slope - inset, top + inset);
-            ctx.lineTo(x + w - inset, base);
-            ctx.lineTo(x + w - inset, GAME_HEIGHT);
-            ctx.closePath();
-            ctx.fill();
-        };
-        shape(0, T.outline);
-        shape(3, T.goldLine);
-        shape(5, T.goldDark);
-        shape(7, '#0d1630');
-        ctx.fillStyle = '#16244a';
-        ctx.fillRect(x + slope + 7, top + 7, w - slope * 2 - 14, 6);
-        for (const [nx, ny] of [[x + slope, top + 3], [x + w - slope, top + 3], [x + 4, base + 2], [x + w - 4, base + 2]]) UIKit.nail(ctx, nx, ny);
+        UIKit.hudFrame(ctx, 'hud_panel', F.x, F.top, F.w, GAME_HEIGHT - F.top + 26, 26);
     },
 
-    // 왼쪽 아래 체력 구슬: 금 고리 안의 붉은 물이 체력만큼 차고, 가운데 큰 숫자. 제물로 차오를 때 구슬이 빛난다
+    // 왼쪽 아래 체력 그릇: 그림(hud_vessel) 안의 피가 체력만큼 찬다. 도트 줄로 그려 그림과 밀도가 같다. 제물로 차오를 때 그릇이 빛난다
     drawHp(ctx) {
         const G = Game;
-        const T = UI_THEME;
         const O = BAR_ORB;
         const shown = this.hpShown === null ? G.hp : this.hpShown;
         const ratio = this.hpRatio();
         const low = shown <= G.maxHp() * 0.3;
-        const disc = (r, color) => {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(O.x, O.y, r, 0, Math.PI * 2);
-            ctx.fill();
-        };
-        if (Fx.hpGlow > 0) {
+        const vessel = Assets.get('hud_vessel');
+        if (vessel) ctx.drawImage(vessel, O.x - 128, O.y - 128);
+        const px = 2;
+        const level = Math.round((O.y + O.r - O.r * 2 * ratio) / px) * px;
+        const blink = low && Math.floor(G.time * 4) % 2 === 0;
+        for (let dy = -O.r; dy < O.r; dy += px) {
+            const y = O.y + dy;
+            if (y < level) continue;
+            const half = Math.floor(Math.sqrt(O.r * O.r - (dy + 1) * (dy + 1)) / px) * px;
+            const wave = ratio < 1 && y - level < px ? Math.round(Math.sin(G.time * 3 + dy) * 2) * px : 0;
+            const depth = (y - level) / (O.r * 2);
+            ctx.fillStyle = y - level < px * 2 ? '#ff7a70' : (blink ? '#e8384a' : (depth < 0.35 ? '#c81e36' : (depth < 0.7 ? '#a01228' : '#780a20')));
+            ctx.fillRect(O.x - half + wave, y, half * 2 - wave * 2, px);
+        }
+        if (Fx.hpGlow > 0 && vessel) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createRadialGradient(O.x, O.y, O.r * 0.6, O.x, O.y, O.r * 1.7);
-            g.addColorStop(0, `rgba(255,220,130,${0.6 * Fx.hpGlow})`);
-            g.addColorStop(1, 'rgba(255,220,130,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(O.x - O.r * 2, O.y - O.r * 2, O.r * 4, O.r * 4);
+            ctx.globalAlpha = 0.6 * Fx.hpGlow;
+            ctx.drawImage(vessel, O.x - 128, O.y - 128);
             ctx.restore();
         }
-        disc(O.r + 12, T.outline);
-        disc(O.r + 10, T.goldDark);
-        disc(O.r + 8, T.goldLine);
-        disc(O.r + 4, T.outline);
-        disc(O.r, '#1c0810');
-        // 붉은 물: 아래부터 체력만큼, 윗면은 살짝 일렁인다
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(O.x, O.y, O.r, 0, Math.PI * 2);
-        ctx.clip();
-        const level = O.y + O.r - O.r * 2 * ratio;
-        const liquid = ctx.createLinearGradient(0, O.y - O.r, 0, O.y + O.r);
-        liquid.addColorStop(0, low ? '#ff6a5a' : '#ff4d63');
-        liquid.addColorStop(1, '#7a0a22');
-        ctx.fillStyle = liquid;
-        ctx.beginPath();
-        ctx.moveTo(O.x - O.r, O.y + O.r);
-        for (let i = 0; i <= 16; i++) {
-            const px = O.x - O.r + i * O.r / 8;
-            ctx.lineTo(px, level + Math.sin(Game.time * 3 + i * 0.8) * (ratio > 0 && ratio < 1 ? 3 : 0));
-        }
-        ctx.lineTo(O.x + O.r, O.y + O.r);
-        ctx.closePath();
-        ctx.fill();
-        if (low) {
-            ctx.fillStyle = `rgba(255,80,80,${0.12 + 0.12 * Math.sin(Game.time * 6)})`;
-            ctx.fillRect(O.x - O.r, O.y - O.r, O.r * 2, O.r * 2);
-        }
-        // 유리 광택
-        ctx.fillStyle = 'rgba(255,255,255,0.22)';
-        ctx.beginPath();
-        ctx.ellipse(O.x - O.r * 0.3, O.y - O.r * 0.45, O.r * 0.45, O.r * 0.24, -0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        // 고리의 금장 넷
-        for (let i = 0; i < 4; i++) {
-            const a = Math.PI / 4 + i * Math.PI / 2;
-            UIKit.nail(ctx, O.x + Math.cos(a) * (O.r + 7), O.y + Math.sin(a) * (O.r + 7));
-        }
-        UIKit.bigText(ctx, String(Math.floor(shown)), O.x, O.y - 10, 42, low ? '#ffd0c8' : '#ffffff', 'center');
-        UIKit.text(ctx, `/ ${G.maxHp()}`, O.x, O.y + 26, 20, T.creamSoft, 'center');
+        UIKit.bigText(ctx, String(Math.floor(shown)), O.x, O.y - 2, 40, low ? '#ffd0c8' : '#ffffff', 'center');
     },
 
     // 장비 그림(48px)을 (x, y)에 scale배로 그린다. 정수 배율이거나 절반이라 도트가 흐려지지 않는다
@@ -2150,51 +2099,61 @@ const UI = {
         }
     },
 
-    // 다음 파티 목록 줄: 일반과 정예는 한 종류에 한 줄, 보스는 맨 아래 줄. drawParty와 drawPartyTip이 같이 쓴다
+    // 파티 목록 칸: 준비 중에는 한 줄씩(이름과 수), 라운드 중에는 얼굴과 수만 가로로. drawParty와 drawPartyTip이 같이 쓴다
     partyCells() {
         const G = Game;
         const wave = G.currentWave();
-        const top = 8 + 88;
-        const cells = [];
         const list = [...Object.entries(wave.members).map(([t, n]) => [t, n, false]), ...Object.entries(wave.elites || {}).map(([t, n]) => [t, n, true])];
-        list.forEach(([type, count, elite], i) => {
+        const items = list.map(([type, count, elite]) => {
             const def = HEROES[type];
-            cells.push({ x: PARTY_X + 14, y: top + i * PARTY_ROW, w: PARTY_W - 28, h: PARTY_ROW - 2, portrait: this.heroPortrait(type), name: def.name, note: def.counter, count, elite });
+            return { portrait: this.heroPortrait(type), name: def.name, note: def.counter, count, elite };
         });
         if (wave.boss) {
             const def = BOSSES[wave.boss];
-            cells.push({ x: PARTY_X + 14, y: top + list.length * PARTY_ROW, w: PARTY_W - 28, h: PARTY_ROW - 2, portrait: def.portrait, name: def.name, note: `${def.note} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽 입구`, count: 1, boss: true });
+            items.push({ portrait: def.portrait, name: def.name, note: `${def.note} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽 입구`, count: 1, boss: true });
         }
-        return cells;
+        if (G.state === 'wave') {
+            // 이름판(오른쪽 끝)과 겹치지 않게 칸이 많으면 좁힌다
+            const room = PARTY_X + PARTY_W - 36 - (GAME_WIDTH / 2 + PLATE.w / 2 + 8);
+            const cw = Math.min(PARTY_CELL_W, Math.floor(room / items.length));
+            const left = PARTY_X + PARTY_W - 18 - items.length * cw;
+            return items.map((c, i) => Object.assign(c, { x: left + i * cw, y: 8 + 16, w: cw - 4, h: PARTY_ROW + 2 }));
+        }
+        const top = 8 + 88;
+        return items.map((c, i) => Object.assign(c, { x: PARTY_X + 22, y: top + i * PARTY_ROW, w: PARTY_W - 44, h: PARTY_ROW - 2 }));
     },
 
-    // 다음 파티: 남색 창 목록. 파티 이름, 입구별 인원, 종류마다 얼굴과 이름, 수(정예는 금색, 보스는 빨강). 설명은 마우스를 올릴 때(drawPartyTip)
+    // 파티 창. 준비 중에는 다음 파티의 이름과 입구별 인원, 종류마다 얼굴과 이름과 수.
+    // 라운드 중에는 맵을 가리지 않게 얼굴과 수만 한 줄로 줄인다. 설명은 마우스를 올릴 때(drawPartyTip)
     drawParty(ctx) {
         const G = Game;
         const T = UI_THEME;
         const wave = G.currentWave();
-        // Why: 맵이 화면 위쪽까지 차서 오른쪽 위 버튼 왼쪽, 건설 칸이 없는 곳(18~29열, 0~4줄) 위에 둔다.
-        // 아래로 왕좌의 마왕과 5줄의 건설 칸을 가리지 않게 y 320 위에서 끝난다
-        const x = PARTY_X;
-        const y = 8;
         const cells = this.partyCells();
-        const last = cells.length ? cells[cells.length - 1] : { y: y + 88, h: 0 };
-        const h = last.y + last.h + 16 - y;
-        UIKit.panel(ctx, x, y, PARTY_W, h);
-        UIKit.text(ctx, G.state === 'wave' ? '이번 파티' : '다음 파티', x + 24, y + 26, 18, T.gold, 'left', 'bold');
-        const counts = G.entryCounts(wave);
-        UIKit.text(ctx, ROUTE_IDS.map(id => `${ROUTE_NAMES[id]} ${counts[id]}`).join(' · '), x + PARTY_W - 24, y + 26, 18, T.creamSoft, 'right');
-        UIKit.text(ctx, wave.party, x + 24, y + 62, 26, T.cream, 'left', 'bold');
-        ctx.fillStyle = T.parchmentDark;
-        ctx.fillRect(x + 16, y + 84, PARTY_W - 32, 2);
-        for (const c of cells) {
-            const box = c.h - 2;
-            if (c.boss) {
-                ctx.fillStyle = 'rgba(200,40,60,0.25)';
-                ctx.fillRect(c.x - 4, c.y, c.w + 8, c.h);
-            }
+        const portrait = (c, box) => {
             UIKit.slot(ctx, c.x, c.y + 1, box, box, c.elite ? 'gold' : 'iron');
             this.drawPortrait(ctx, c.portrait, c.x + 3, c.y + 4, box - 6);
+        };
+        if (G.state === 'wave') {
+            const x = cells[0].x - 18;
+            UIKit.hudFrame(ctx, 'hud_panel', x, 8, PARTY_X + PARTY_W - x, 68, 26);
+            for (const c of cells) {
+                portrait(c, c.h - 2);
+                UIKit.text(ctx, c.boss ? '보스' : `${c.count}`, c.x + c.h + 2, c.y + c.h / 2 + 1, c.boss ? 16 : 20, c.boss ? '#ff9a8a' : (c.elite ? T.gold : '#ffffff'), 'left', 'bold');
+            }
+            return;
+        }
+        const x = PARTY_X;
+        const y = 8;
+        const last = cells[cells.length - 1];
+        UIKit.hudFrame(ctx, 'hud_panel', x, y, PARTY_W, last.y + last.h + 22 - y, 26);
+        UIKit.text(ctx, '다음 파티', x + 28, y + 32, 18, T.gold, 'left', 'bold');
+        const counts = G.entryCounts(wave);
+        UIKit.text(ctx, ROUTE_IDS.map(id => `${ROUTE_NAMES[id]} ${counts[id]}`).join(' · '), x + PARTY_W - 28, y + 32, 18, T.creamSoft, 'right');
+        UIKit.text(ctx, wave.party, x + 28, y + 64, 24, T.cream, 'left', 'bold');
+        for (const c of cells) {
+            const box = c.h - 2;
+            portrait(c, box);
             UIKit.text(ctx, c.name, c.x + box + 10, c.y + c.h / 2 + 1, 19, c.boss ? '#ff9a8a' : (c.elite ? T.gold : T.cream), 'left', c.boss ? 'bold' : '');
             const label = c.boss ? `${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽 · 보스` : `x${c.count}`;
             UIKit.text(ctx, label, c.x + c.w, c.y + c.h / 2 + 1, c.boss ? 17 : 24, c.boss ? T.creamSoft : (c.elite ? T.gold : '#ffffff'), 'right', 'bold');
@@ -2240,26 +2199,38 @@ const UI = {
         }
     },
 
-    // 보스 체력: 이름판 바로 아래 남색 띠에 초상, 이름, 굵은 빨간 막대와 % . 건설 칸(2줄, y 128부터)을 덮지 않게 y 128 위에서 끝난다
+    // 보스 체력: 이름판 아래의 전용 틀(hud_bossbar 2배). 맞으면 깎인 부분이 뼈색 잔상으로 남았다가 늦게 줄어든다. 눈금은 1/4마다
     drawBossBar(ctx) {
         const boss = Game.heroes.find(h => h.boss && !h.waiting);
         if (!boss) return;
-        const T = UI_THEME;
-        const cx = GAME_WIDTH / 2;
-        const x = cx - 330;
-        const y = 76;
-        UIKit.note(ctx, x, y, 660, 48, { red: true });
-        UIKit.slot(ctx, x + 6, y + 4, 40, 40, 'gold');
-        this.drawPortrait(ctx, BOSSES[boss.bossKey].portrait, x + 8, y + 6, 36);
-        UIKit.text(ctx, boss.name, x + 58, y + 24, 20, T.cream, 'left', 'bold');
-        ctx.font = `bold 20px ${UI_FONT}`;
-        const bx = x + 74 + ctx.measureText(boss.name).width;
-        const bw = x + 600 - bx;
-        UIKit.bar(ctx, bx, y + 14, bw, 20, boss.hp / boss.maxHp, '#e2384a');
-        UIKit.text(ctx, `${Math.ceil(boss.hp / boss.maxHp * 100)}%`, x + 646, y + 24, 18, T.cream, 'right', 'bold');
+        const img = Assets.get('hud_bossbar');
+        if (!img) return;
+        const w = img.width * 2;
+        const x = Math.round(GAME_WIDTH / 2 - w / 2);
+        const y = 80;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, x, y, w, img.height * 2);
+        const bx = x + BOSS_TROUGH.x * 2;
+        const by = y + BOSS_TROUGH.y * 2;
+        const bw = BOSS_TROUGH.w * 2;
+        const bh = BOSS_TROUGH.h * 2;
+        const ratio = clamp(boss.hp / boss.maxHp, 0, 1);
+        const trail = clamp(this.bossTrail === null ? ratio : this.bossTrail, ratio, 1);
+        ctx.fillStyle = '#e8d8a8';
+        ctx.fillRect(bx, by, Math.round(bw * trail), bh);
+        const fill = Math.round(bw * ratio);
+        ctx.fillStyle = '#b81a30';
+        ctx.fillRect(bx, by, fill, bh);
+        ctx.fillStyle = '#e8485c';
+        ctx.fillRect(bx, by, fill, 4);
+        ctx.fillStyle = '#760a20';
+        ctx.fillRect(bx, by + bh - 6, fill, 6);
+        ctx.fillStyle = '#12080c';
+        for (let i = 1; i < 4; i++) ctx.fillRect(bx + Math.round(bw * i / 4) - 1, by, 2, bh);
+        UIKit.text(ctx, boss.name, bx + bw / 2, by + bh / 2 + 1, 18, UI_THEME.cream, 'center', 'bold');
     },
 
-    // 연속 처치: 체력 구슬 오른쪽 위 금테 남색 알약에 큰 숫자(Asteria 연격 표시처럼). 많이 이을수록 크고 뜨거운 색
+    // 연속 처치: 체력 그릇 오른쪽 위에 큰 숫자. 많이 이을수록 크고 뜨거운 색
     drawStreak(ctx) {
         const G = Game;
         if (G.streak < 2) return;
@@ -2274,14 +2245,8 @@ const UI = {
         const label = `${G.streak}`;
         ctx.font = `bold ${size}px ${UI_FONT}`;
         const nw = ctx.measureText(label).width;
-        const w = Math.round(nw + 170);
-        UIKit.note(ctx, x, y - 26, w, 52);
-        // 별 장식
-        ctx.fillStyle = T.goldLight;
-        ctx.fillRect(x + 16, y - 2, 12, 4);
-        ctx.fillRect(x + 20, y - 6, 4, 12);
-        UIKit.bigText(ctx, label, x + 38, y, size, color, 'left', '#ffffff');
-        UIKit.text(ctx, '연속 처치', x + 46 + nw, y + 2, 22, T.cream, 'left', 'bold');
+        UIKit.bigText(ctx, label, x, y, size, color, 'left');
+        UIKit.text(ctx, '연속 처치', x + 8 + nw, y + 2, 22, T.cream, 'left', 'bold');
         ctx.restore();
     },
 
@@ -2681,41 +2646,29 @@ const UI = {
         const T = UI_THEME;
         const cost = G.summonCost();
         const dy = st.pressed ? 2 : 0;
-        UIKit.slot(ctx, b.x, b.y + dy, b.w, b.h, b.disabled ? 'iron' : 'gold', st.hover && !st.pressed ? 'hover' : null);
-        if (!b.disabled) {
-            // 칸 안쪽 보랏빛 마법진 빛
+        const slab = Assets.get('hud_slab');
+        ctx.save();
+        if (b.disabled) ctx.globalAlpha = 0.65;
+        if (slab) ctx.drawImage(slab, b.x, b.y + dy);
+        ctx.restore();
+        // 마우스를 올리거나 아직 몬스터가 없으면 석판의 룬이 달아오른다
+        const heat = b.disabled ? 0 : (st.hover && !st.pressed ? 0.3 : (G.monsters.length === 0 ? (Math.sin(G.time * 5) * 0.5 + 0.5) * 0.4 : 0));
+        if (heat > 0 && slab) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createRadialGradient(b.x + 68, b.y + b.h / 2 + dy, 6, b.x + 68, b.y + b.h / 2 + dy, 70);
-            g.addColorStop(0, `rgba(190,110,255,${0.32 + Math.sin(G.time * 3) * 0.08})`);
-            g.addColorStop(1, 'rgba(190,110,255,0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(b.x + 8, b.y + 8 + dy, b.w - 16, b.h - 16);
+            ctx.globalAlpha = heat;
+            ctx.drawImage(slab, b.x, b.y + dy);
             ctx.restore();
         }
-        const pulse = !b.disabled && G.monsters.length === 0 ? Math.sin(G.time * 5) * 0.5 + 0.5 : 0;
-        if (pulse > 0) {
-            ctx.save();
-            ctx.globalAlpha = pulse * 0.8;
-            UIKit.gradeFrame(ctx, b.x - 6, b.y - 6, b.w + 12, b.h + 12, '#ffe08a', 4);
-            ctx.restore();
-        }
-        ctx.save();
-        if (b.disabled) ctx.globalAlpha = 0.55;
-        UIKit.icon(ctx, 'summon', b.x + 18, b.y + (b.h - 96) / 2 + dy, 2);
-        ctx.restore();
-        this.drawKeyCap(ctx, 'S', b.x + 6, b.y + 6 + dy, 16);
-        const tx = b.x + 126;
-        UIKit.text(ctx, '소환', tx, b.y + 34 + dy, 34, b.disabled ? '#b4bdd2' : T.cream, 'left', 'bold');
-        if (b.full) {
-            UIKit.text(ctx, '자리 없음', tx, b.y + 76 + dy, 24, T.bad, 'left', 'bold');
-        } else {
-            UIKit.bigText(ctx, `${cost}G`, tx, b.y + 76 + dy, 32, G.gold < cost ? T.bad : T.gold, 'left', G.gold < cost ? null : '#fff4c0');
-        }
+        this.drawKeyCap(ctx, 'S', b.x + 32, b.y + 32 + dy, 16);
+        const tx = b.x + 66;
+        UIKit.text(ctx, '소환', tx, b.y + 48 + dy, 36, b.disabled ? '#a89cb0' : T.cream, 'left', 'bold');
+        if (b.full) UIKit.text(ctx, '자리 없음', tx, b.y + 90 + dy, 22, T.bad, 'left', 'bold');
+        else UIKit.bigText(ctx, `${cost}G`, tx, b.y + 90 + dy, 30, G.gold < cost ? T.bad : T.gold, 'left');
         // 맵 몬스터 수: 상한에 닿으면 빨갛게
-        const n = G.monsters.length;
-        UIKit.text(ctx, '맵 몬스터', FIELD_COUNT_X, b.y + 24, 19, T.creamSoft);
-        UIKit.bigText(ctx, `${n}/${G.maxField()}`, FIELD_COUNT_X, b.y + 70, 38, b.full ? T.bad : T.cream, 'left');
+        const rx = b.x + b.w - 44;
+        UIKit.text(ctx, '맵 몬스터', rx, b.y + 50 + dy, 16, T.creamSoft, 'right');
+        UIKit.bigText(ctx, `${G.monsters.length}/${G.maxField()}`, rx, b.y + 84 + dy, 30, b.full ? T.bad : T.cream, 'right');
         if (st.hover) {
             const o = G.summonOdds();
             const odds = GRADE_ORDER.filter(g => o[g] > 0).map(g => `${MONSTER_GRADES[g].name} ${Math.round(o[g] * 100)}%`).join(' · ');

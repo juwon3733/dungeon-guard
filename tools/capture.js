@@ -426,7 +426,7 @@ const SCENES = {
     mergeEpic: {
         setup: () => {
             setupBoard();
-            const b = Game.monsterAt(8, 2);
+            const b = Game.monsterAt(10, 3);
             dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], cellCenter(13, 5));
             advance(MERGE_REVEAL + 0.16);
             freezeScene();
@@ -441,7 +441,7 @@ const SCENES = {
             startRun();
             Game.place('death_lord', 7, 4);
             Game.place('archlich', 3, 5);
-            Game.place('hell_general', 8, 2);
+            Game.place('hell_general', 10, 3);
             advance(1.6);
             Fx.reset();
             const a = Game.monsterAt(3, 5);
@@ -458,7 +458,7 @@ const SCENES = {
     hidden: {
         setup: () => {
             setupBoard();
-            const b = Game.monsterAt(8, 2);
+            const b = Game.monsterAt(10, 3);
             const m = Game.monsterAt(7, 4);
             dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], [m.x * WORLD_ZOOM, (m.y - 10) * WORLD_ZOOM]);
             advance(MERGE_REVEAL + 0.7);
@@ -475,7 +475,7 @@ const SCENES = {
             Game.skills.lightning = 20;
             advance(0.1);
             const throne = [tileX(THRONE_TILE.col) * WORLD_ZOOM, (tileY(THRONE_TILE.row) - 40) * WORLD_ZOOM];
-            const b = Game.monsterAt(8, 2);
+            const b = Game.monsterAt(10, 3);
             dragDrop([b.x * WORLD_ZOOM, (b.y - 10) * WORLD_ZOOM], throne);
             advance(MERGE_REVEAL + 0.25);
             const s = Game.monsterAt(13, 5);
@@ -760,8 +760,8 @@ const SCENES = {
         setup: () => {
             startRun();
             Game.gold = 2000;
-            const knight = Game.place('bone_knight', 10, 2);
-            const shooter = Game.place('curse_shooter', 14, 2);
+            const knight = Game.place('bone_knight', 10, 4);
+            const shooter = Game.place('curse_shooter', 14, 3);
             if (!knight || !shooter) throw new Error('재료를 놓지 못했습니다');
             setMonsterRank(knight, 3);
             setMonsterRank(shooter, 3);
@@ -770,7 +770,7 @@ const SCENES = {
             Game.startWave();
             Fx.reset();
             dragDrop([shooter.x * WORLD_ZOOM, (shooter.y - 10) * WORLD_ZOOM], [knight.x * WORLD_ZOOM, (knight.y - 10) * WORLD_ZOOM]);
-            const lord = Game.monsterAt(10, 2);
+            const lord = Game.monsterAt(10, 4);
             if (!lord || lord.type !== 'death_lord') throw new Error('죽음의 군주가 나오지 않았습니다');
             const put = (type, d, lane) => {
                 const h = createHero(type, Game.waveIndex, 0, false);
@@ -1085,7 +1085,7 @@ const PAGE_HELPERS = () => {
         Game.place('dark_mage', 3, 5);
         Game.place('orc_guard', 13, 8);
         Game.place('curse_shooter', 13, 5);
-        Game.place('orc_berserker', 8, 2);
+        Game.place('orc_berserker', 10, 3);
         advance(1.6); // 오크가 길로 걸어 나가고 설치 효과가 사라진다
         Fx.reset();
     };
