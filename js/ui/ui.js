@@ -2315,8 +2315,8 @@ const UI = {
         // 능력: 한 줄에 하나. 이름과 설명은 ABILITY_KINDS에서 온다
         for (const a of def.abilities) {
             const kind = ABILITY_KINDS[a.kind];
-            UIKit.ink(ctx, kind.name, p.x + 22, y + 12, 18, ABILITY_INK, 'left', 'bold');
-            const nameW = ctx.measureText(kind.name).width;
+            UIKit.ink(ctx, abilityName(a), p.x + 22, y + 12, 18, ABILITY_INK, 'left', 'bold');
+            const nameW = ctx.measureText(abilityName(a)).width;
             UIKit.ink(ctx, kind.desc(a), p.x + 34 + nameW, y + 12, 17, T.ink);
             y += POPUP_ABILITY_H;
         }
@@ -2524,7 +2524,7 @@ const UI = {
             let ly = 392;
             for (const a of def.abilities) {
                 const kind = ABILITY_KINDS[a.kind];
-                UIKit.ink(ctx, kind.name, cx, ly, 20, ABILITY_INK, 'center', 'bold');
+                UIKit.ink(ctx, abilityName(a), cx, ly, 20, ABILITY_INK, 'center', 'bold');
                 ly += 26;
                 ctx.font = `17px ${UI_FONT}`;
                 for (const line of this.wrapLines(ctx, kind.desc(a), w - 80).slice(0, 2)) {
@@ -3472,7 +3472,7 @@ const UI = {
         }
         for (const a of def.abilities) {
             const kind = ABILITY_KINDS[a.kind];
-            UIKit.ink(ctx, kind.name, x, y, 24, ABILITY_INK, 'left', 'bold');
+            UIKit.ink(ctx, abilityName(a), x, y, 24, ABILITY_INK, 'left', 'bold');
             y += 34;
             ctx.font = `20px ${UI_FONT}`;
             for (const line of this.wrapLines(ctx, kind.desc(a), maxW).slice(0, 3)) {

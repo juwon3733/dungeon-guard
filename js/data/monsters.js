@@ -197,6 +197,9 @@ const SKILL_KINDS = {
 };
 function skillDesc(s) { return `${SKILL_KINDS[s.kind](s)} · ${s.cooldown}초마다`; }
 
+// 능력에 name을 적으면 ABILITY_KINDS의 이름 대신 그 이름을 보여 준다(효과는 같고 몬스터에 맞는 이름만 다르다)
+function abilityName(a) { return a.name || ABILITY_KINDS[a.kind].name; }
+
 const AURA_STATS = { heal: '체력 회복', damage: '피해', attackSpeed: '공격 속도' };
 const ABILITY_KINDS = {
     enrage: { name: '광폭화', desc: a => `체력 ${Math.round(a.below * 100)}% 이하면 공격 간격 x${a.intervalMul}` },
@@ -703,7 +706,7 @@ const MONSTERS = {
         id: 'phoenix_lord', name: '불사조', role: 'area', family: 'beast', grade: 'legendary',
         sprite: ASTERIA_ART.phoenix_lord.sprite, cost: 500, summon: false,
         stats: { hp: 150, damage: 90, interval: 1.6, range: 4.5, splash: 2 },
-        abilities: [{ kind: 'burnGround', radius: 1.2, dps: 20, duration: 4 }], unlock: 'start',
+        abilities: [{ kind: 'burnGround', name: '불바다', radius: 1.2, dps: 20, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'heal', name: '재생의 불꽃', cooldown: 25, ratio: 0.25, revive: true }],
         desc: '지나간 자리를 불바다로 만듭니다.',
         art: astArt('phoenix_lord', { glow: '255,150,50', shot: 'bolt' })
@@ -760,7 +763,7 @@ const MONSTERS = {
         id: 'element_sage', name: '운명의 현자', role: 'area', family: 'spirit', grade: 'legendary',
         sprite: ASTERIA_ART.element_sage.sprite, cost: 500, summon: false,
         stats: { hp: 130, damage: 95, interval: 1.7, range: 4.5, splash: 2 },
-        abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }, { kind: 'burnGround', radius: 1, dps: 15, duration: 3 }], unlock: 'start',
+        abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }, { kind: 'burnGround', name: '일곱 빛 불꽃', radius: 1, dps: 15, duration: 3 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '운명의 실', cooldown: 18, radius: 'map', mul: 0.5, slow: 5 }],
         desc: '일곱 빛깔 실로 용사의 발을 묶고 태웁니다.',
         art: astArt('element_sage', { glow: '255,210,240', shot: 'bolt' })
@@ -807,7 +810,7 @@ const MONSTERS = {
         id: 'bone_dragon', name: '뼈 용', role: 'area', family: 'undead', grade: 'mythic',
         sprite: ASTERIA_ART.bone_dragon.sprite, cost: 1000,
         stats: { hp: 280, damage: 175, interval: 1.7, range: 5, splash: 2.2 },
-        abilities: [{ kind: 'burnGround', radius: 1.2, dps: 25, duration: 4 }], unlock: 'start',
+        abilities: [{ kind: 'burnGround', name: '죽음의 불길', radius: 1.2, dps: 25, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '죽음의 숨결', cooldown: 10, reach: 6, radius: 2.5, mul: 3, curse: 4 }, { kind: 'nova', name: '뼈의 비명', cooldown: 18, radius: 4, mul: 1, stun: 2 }],
         desc: '초록 숨결로 넓은 땅을 태웁니다.',
         art: astArt('bone_dragon', { glow: '120,240,130', shot: 'bolt' })
@@ -854,7 +857,7 @@ const MONSTERS = {
         id: 'sun_god', name: '태양신', role: 'area', family: 'demon', grade: 'mythic',
         sprite: ASTERIA_ART.sun_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
         stats: { hp: 400, damage: 270, interval: 1.4, range: 6, splash: 2.6 },
-        abilities: [{ kind: 'burnGround', radius: 1.5, dps: 40, duration: 4 }], unlock: 'start',
+        abilities: [{ kind: 'burnGround', name: '태양의 불길', radius: 1.5, dps: 40, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '태양 폭발', cooldown: 16, radius: 'map', mul: 2.5, burn: 5 }, { kind: 'heal', name: '여명', cooldown: 24, ratio: 0.4, revive: true }],
         desc: '히든 신화. 맵 전체를 불태우고 쓰러진 몬스터를 일으킵니다.',
         art: astArt('sun_god', { glow: '255,210,110', shot: 'bolt' })
