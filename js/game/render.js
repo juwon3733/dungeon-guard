@@ -920,15 +920,17 @@ const Render = {
         const bodyW = def.art.hand ? def.art.hand.x / 0.3 : TILE * w;
         const rx = Math.max(TILE * 0.3, bodyW * 0.42);
         const sx = m.x + pose.dx * 0.6;
-        this.shadow(ctx, sx, footY - 2, rx, rx * 0.3, 0.42);
-        this.shadow(ctx, sx, footY - 2, rx * 0.55, rx * 0.16, 0.4); // 발이 닿는 곳은 더 진하다
+        const lift = clamp(1 + Math.min(0, pose.dy) / 90, 0.7, 1); // 몸이 뜨면 그림자가 작아진다
+        this.shadow(ctx, sx, footY - 2, rx * lift, rx * 0.3 * lift, 0.42);
+        this.shadow(ctx, sx, footY - 2, rx * 0.55 * lift, rx * 0.16 * lift, 0.4); // 발이 닿는 곳은 더 진하다
         this.posedSprite(ctx, img, def.art, clip, m.dir, m.x, footY, pose);
     },
 
     // 프레임이 적은 Asteria 그림(art.breathe)의 자세. 배율을 바꾸지 않고 위치와 가로줄 밀기만 쓴다(도트가 일그러지지 않는다)
-    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양, bob: 윗몸을 올리는 그림 px
+    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양(공격 때만)
+    //   대기 때는 그림 한 장을 통째로 위아래로 움직인다(그림을 자르지 않아 이음선이 생기지 않는다). 나는 몬스터는 크게 떠오른다
     monsterPose(def, m) {
-        const pose = { dx: 0, dy: 0, shear: 0, bob: 0 };
+        const pose = { dx: 0, dy: 0, shear: 0 };
         if (!def.art.breathe) return pose;
         if (m.atkPose > 0) {
             const t = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
@@ -951,8 +953,12 @@ const Render = {
             pose.shear = dir[0] * k * 0.3 * size;
             return pose;
         }
-        if (m.moving) pose.bob = Math.round(Math.abs(Math.sin(m.anim * 9)) * 2);
-        else pose.bob = Math.floor(Game.time * 1.4 + (m.x || 0) * 0.013) % 2; // 대기: 윗몸이 1px씩 오르내린다
+        const phase = (m.homeX || m.x || 0) * 0.013 + (m.homeY || m.y || 0) * 0.007;
+        if (m.moving) pose.dy = -Math.round(Math.abs(Math.sin(m.anim * 9)) * 3) * ART_SCALE;
+        else {
+            const amp = FLYING_MONSTERS.has(m.type) ? 6 : 2;
+            pose.dy = -Math.round((Math.sin(Game.time * (FLYING_MONSTERS.has(m.type) ? 1.8 : 2.4) + phase) + 1) / 2 * amp) * ART_SCALE;
+        }
         return pose;
     },
 
@@ -961,8 +967,8 @@ const Render = {
         if (!img) return;
         const pick = this.plPick(clip, dir);
         const footPx = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
-        if (!pose.dx && !pose.dy && !pose.shear && !pose.bob) {
-            this.sprite(ctx, img, x, footY, art.scale, footPx, pick.flip);
+        if (!pose.shear) {
+            this.sprite(ctx, img, x + pose.dx, footY + pose.dy, art.scale, footPx, pick.flip);
             return;
         }
         const s = art.scale;
@@ -970,7 +976,6 @@ const Render = {
         const ih = img.height;
         const left = snapWorld(x + pose.dx - iw * s / 2);
         const top = snapWorld(footY + pose.dy - footPx * s);
-        const seam = Math.round(footPx * 0.55); // 이 줄 위가 윗몸이다
         ctx.imageSmoothingEnabled = false;
         ctx.save();
         if (pick.flip) {
@@ -983,10 +988,7 @@ const Render = {
         for (let sy = 0; sy < ih; sy += band) {
             const bh = Math.min(band, ih - sy);
             const shift = Math.round(pose.shear * Math.max(0, footPx - sy)) * (pick.flip ? -1 : 1);
-            const up = pose.bob && sy < seam ? pose.bob : 0;
-            ctx.drawImage(img, 0, sy, iw, bh, shift * s, (sy - up) * s, iw * s, bh * s);
-            // 윗몸을 올리면 생기는 틈을 바로 아래 줄로 메운다
-            if (pose.bob && sy < seam && sy + band >= seam) ctx.drawImage(img, 0, seam - pose.bob, iw, pose.bob, shift * s, (seam - pose.bob) * s, iw * s, pose.bob * s);
+            ctx.drawImage(img, 0, sy, iw, bh, shift * s, sy * s, iw * s, bh * s);
         }
         ctx.restore();
     },
