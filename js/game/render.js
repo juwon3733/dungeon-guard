@@ -348,7 +348,9 @@ const Render = {
             const def = HEROES[h.type];
             // 막혀 싸우는 동안 공격 사이에는 걷기 대신 서 있는 그림(걷기 0번 프레임)을 쓴다
             const anim = h.blocker ? 0 : h.anim;
-            const name = this.heroSpriteName(h.type, h.dir, anim, h.atkPose, h.atkPoseMax);
+            const skin = h.skin;
+            const name = skin ? this.plFrame(skin, skin.anim.walk, h.dir, Math.floor(anim) % skin.anim.walk.frames)
+                : this.heroSpriteName(h.type, h.dir, anim, h.atkPose, h.atkPoseMax);
             if (h.elite) {
                 this.shadow(ctx, p.x, p.y + 9, 46, 15);
                 this.eliteRing(ctx, p.x, p.y + 9);
@@ -356,7 +358,8 @@ const Render = {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);
             }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
+            if (skin) this.plSprite(ctx, img, skin, skin.anim.walk, h.dir, p.x, p.y + 10);
+            else this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
             // 일반 용사는 다쳤을 때만 작은 체력바를 그린다
             if (h.elite) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
             else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');
@@ -610,7 +613,7 @@ const Render = {
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
         const w = def.art.cells ? def.art.cells[0] : 1;
-        this.shadow(ctx, m.x, footY - 2, w > 1 ? 44 * w : 33, w > 1 ? 15 * w : 12);
+        this.shadow(ctx, m.x, footY - 2, 24 * w + 6, 7 * w + 3);
         ctx.save();
         this.monsterMotion(ctx, def, m, footY);
         this.plSprite(ctx, img, def.art, clip, m.dir, m.x, footY);
@@ -659,7 +662,7 @@ const Render = {
         // 뒤쪽 빛: 어두운 바닥에서 몬스터의 실루엣이 먼저 보이게 한다
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const glowAlpha = 0.22 + Math.sin(Game.time * 2.4 + m.x) * 0.04 + (m.tier - 1) * 0.06;
+        const glowAlpha = 0.1 + Math.sin(Game.time * 2.4 + m.x) * 0.02 + (m.tier - 1) * 0.06;
         const back = ctx.createRadialGradient(m.x, footY - 66, 8, m.x, footY - 66, 110);
         back.addColorStop(0, `rgba(${def.art.glow},${glowAlpha})`);
         back.addColorStop(1, `rgba(${def.art.glow},0)`);
@@ -704,7 +707,7 @@ const Render = {
         }
 
         // 등급 표시: 발밑의 등급 색 마름모. 강화를 켜면 단계 표시도 함께 그린다
-        this.gradeMark(ctx, m.x, footY + 24, def.grade);
+        this.gradeMark(ctx, m.x, footY + 16, def.grade);
         this.rankMark(ctx, m, footY);
         if (m.equip) this.equipMark(ctx, m.equip, m.x - 38, footY + 22);
         for (let i = 0; MONSTER_UPGRADE_ENABLED && i < m.tier; i++) {
@@ -782,7 +785,7 @@ const Render = {
     gradeMark(ctx, x, y, grade) {
         const fx = gradeInfo(grade, 'fx', 0);
         const legend = fx >= 2;
-        const s = grade === 'common' ? 8 : (fx >= 3 ? 17 : (legend ? 14 : 11));
+        const s = grade === 'common' ? 6 : (fx >= 3 ? 11 : (legend ? 10 : 8));
         const color = UIKit.gradeFill(ctx, MONSTER_GRADES[grade].color, x - s, y - s, s * 2, s * 2);
         const diamond = r => {
             ctx.beginPath();
@@ -791,14 +794,6 @@ const Render = {
             ctx.fill();
         };
         ctx.save();
-        if (grade !== 'common') {
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.fillStyle = `rgba(${MONSTER_GRADES[grade].glow},${(legend ? 0.4 : 0.25) + Math.sin(Game.time * 4 + x) * 0.08})`;
-            ctx.beginPath();
-            ctx.ellipse(x, y - 20, fx >= 3 ? 76 : (legend ? 60 : 42), fx >= 3 ? 25 : (legend ? 20 : 14), 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-        }
         ctx.fillStyle = '#1e120a';
         diamond(s + 6);
         ctx.fillStyle = color;
@@ -828,9 +823,9 @@ const Render = {
         const top = rank === MONSTER_RANKS.length - 1;
         const up = m.rankUp > 0 ? m.rankUp / 1.2 : 0;
         if (rank > 0) {
-            const x = m.x + 34;
-            const y = footY + 24;
-            const size = Math.round((top ? 30 : 24) * (1 + up * 0.6));
+            const x = m.x + 22;
+            const y = footY + 16;
+            const size = Math.round((top ? 22 : 18) * (1 + up * 0.6));
             if (top) {
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';

@@ -160,3 +160,7 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 ### Asteria 몬스터 그림 (2026-11-07)
 
 `assets/sprites/ast_mon_<id>/`는 사용자 게임 Asteria 빌드의 몹·보스 그림이다. PixelLab과 같은 폴더 구조이고 `tools/import_asteria_monsters.py`로 다시 만든다. 어떤 몬스터에 어떤 원본을 쓰는지는 그 스크립트의 `ART` 표에 있다.
+
+### 전투 그림 밀도 맞추기 (2026-11-07)
+
+모든 몬스터와 일반 용사의 그림 1px은 화면 1px이다. 맞는 Asteria 그림이 없는 몬스터 15종은 PixelLab 88px로 새로 그렸다(`tools/import_hd_monsters.py`, `assets/sprites/hd_mon_<id>/`). 일반 용사는 Asteria 모험가 12가지를 섞는다(`tools/import_asteria_heroes.py`, `assets/sprites/ast_hero_<이름>/`).
