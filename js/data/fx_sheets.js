@@ -3,6 +3,11 @@
 // pivot은 Fx.anim에 넘긴 좌표가 닿는 그림 속 점, life는 재생 길이(초), fit은 화면 1배로 그리는 기준 size(화면 px)다.
 // loop가 true면 상태 표시처럼 Game.time에 맞춰 반복해 그린다(Render.drawLoopSheet). shot이 true면 투사체 그림이다(날아가는 방향으로 돌린다)
 const FX_SHEETS = {
+    // 정예 용사 오라: Asteria 모험가 오라 그대로(tools/import_asteria_heroes.py). 몸 뒤에서 돈다
+    fx_aura_elite_swordsman: { image: 'pfx_aura_nightExecutioner', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
+    fx_aura_elite_tamer: { image: 'pfx_aura_mistBlade', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
+    fx_aura_elite_stormcaller: { image: 'pfx_aura_thunderSage', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
+    fx_aura_elite_rhapsodist: { image: 'pfx_aura_sunMoonDance', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
     fx_hit_physical: { image: 'pfx_hit_spark', w: 122, h: 71, cols: 8, frames: 15, pivotX: 34, pivotY: 36, life: 0.5, fit: 110 }, // impacts/hit-spark
     fx_hit_crit: { image: 'pfx_crit_hit', w: 174, h: 131, cols: 8, frames: 18, pivotX: 77, pivotY: 76, life: 0.6, fit: 150 }, // impacts/crit-hit
     fx_explosion: { image: 'pfx_poof', w: 91, h: 76, cols: 8, frames: 18, pivotX: 43, pivotY: 40, life: 0.6, fit: 100 }, // spawn/poof

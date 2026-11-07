@@ -342,18 +342,6 @@ const Render = {
         this.plSprite(ctx, img, def, atkPose > 0 ? def.anim.attack : def.anim.walk, dir, x, footY);
     },
 
-    // 정예 표시: 발밑의 금색 빛 고리
-    eliteRing(ctx, x, y) {
-        const px = 2 * ART_SCALE;
-        const t = Game.time;
-        ctx.fillStyle = '#ffc63d';
-        for (let i = 0; i < 16; i++) {
-            if ((i + Math.floor(t * 6)) % 4 === 0) continue;
-            const a = i / 16 * Math.PI * 2 + t * 0.9;
-            ctx.fillRect(snapWorld(x + Math.cos(a) * 46), snapWorld(y + Math.sin(a) * 15), px * 2, px * 2);
-        }
-    },
-
     // 서 있는 그림: 다음 파티 목록에 쓴다
     heroStandName(type) {
         return `${HEROES[type].sprite}/rotations/south`;
@@ -373,7 +361,11 @@ const Render = {
                 : this.heroSpriteName(h.type, h.dir, anim, h.atkPose, h.atkPoseMax);
             if (h.elite) {
                 this.shadow(ctx, p.x, p.y + 9, 46, 15);
-                this.eliteRing(ctx, p.x, p.y + 9);
+                // 정예 표시: 몸 뒤에서 도는 Asteria 오라(그림 1px = 화면 1px). 검은 바탕 그림이라 빛을 더해 그린다
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                this.drawLoopSheet(ctx, `fx_aura_${h.type}`, p.x, p.y + 10 - def.barY * 0.45, 128 * ART_SCALE, h.lane * 0.13, 0.9);
+                ctx.restore();
             } else {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);
             }
@@ -436,11 +428,9 @@ const Render = {
         // 걷는 그림이 한 장인 보스: 발끝을 기준으로 뒤뚱거린다
         const bob = art.bob && !h.windup;
         if (bob) {
+            // 그림을 기울이거나 늘리지 않는다(도트가 일그러진다). 한 장을 통째로 들썩인다
             ctx.save();
-            ctx.translate(p.x, p.y + 10);
-            ctx.rotate(Math.sin(h.anim * 0.9) * 0.03);
-            ctx.scale(1, 1 + Math.abs(Math.sin(h.anim * 0.9)) * 0.025);
-            ctx.translate(-p.x, -(p.y + 10));
+            ctx.translate(0, -Math.round(Math.abs(Math.sin(h.anim * 0.9)) * 4) * ART_SCALE);
         }
         if (art.windupLoop) {
             // 발밑의 푸른 전류 고리: 경고 중에는 더 밝게 떤다

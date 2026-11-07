@@ -93,6 +93,15 @@ for (const [id, b] of Object.entries(RAID_BOSSES)) {
     }, b);
 }
 
+// 이야기 보스(용사단 부대장과 대마도사)도 Asteria 그림을 쓴다. 패턴과 능력치는 BOSSES 그대로다
+// 초상은 얼굴 쪽으로 좁혀 자른다([x, y, 크기])
+for (const [id, key, crop] of [['fallen_knight', 'story_captain', [54, 6, 80]], ['archmage', 'story_archmage', [39, 9, 80]]]) {
+    const a = ASTERIA_BOSS_ART[key];
+    const portrait = { sprite: `${a.sprite}/rotations/south`, crop };
+    Object.assign(BOSSES[id], { portrait, starY: a.height * 1.2 + 20, art: { sprite: a.sprite, scale: a.scale, anim: a.anim, bob: true, windupLoop: BOSSES[id].art.windupLoop } });
+    STORY_CAST[id === 'fallen_knight' ? 'captain' : id].portrait = portrait;
+}
+
 function raidChallenge(week) {
     const seed = `raid-${week}`;
     const hard = Object.keys(RULE_CARDS).filter(k => RULE_CARDS[k].kind === 'hard');
