@@ -673,7 +673,10 @@ const UI = {
         const recipes = publicRecipesFor(type);
         const upgrades = MONSTER_UPGRADE_ENABLED && def.branches ? (f.tier === 1 ? 1 : (f.tier === 2 ? 2 : 0)) : 0;
         const w = 460;
-        const h = POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
+        // 재료가 모이면 S랭크 전설의 창에만 뜨는 히든 조합 버튼. 찾기 전에는 이름을 숨긴다
+        const full = Game.fullRecipePlan(f);
+        const showFull = full.kind === 'recipe' || full.reason === 'unique';
+        const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + 40 + POPUP_SACRIFICE_H + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
@@ -686,7 +689,7 @@ const UI = {
                 }
             });
         }
-        let y = o.y + h - 64 - POPUP_MERGE_H - upgrades * 88;
+        let y = o.y + h - 64 - POPUP_MERGE_H - upgrades * 88 - (showFull ? POPUP_MERGE_H : 0);
         if (upgrades === 1) {
             const cost = upgradeCost(f.type, 2);
             this.button('up2', o.x + 12, y, w - 24, 80, {
@@ -705,6 +708,19 @@ const UI = {
                 });
                 y += 88;
             }
+        }
+        if (showFull) {
+            const known = Meta.hasRecipe(full.recipe);
+            this.button('fullRecipe', o.x + 12, y, w - 24, 52, {
+                label: known ? `합치기 · ${MONSTERS[full.recipe.result].name}` : '??? 합치기', theme: 'gold', size: 24,
+                onClick: () => {
+                    const res = Game.act({ kind: 'fullRecipe', monster: f });
+                    if (res.ok) { this.clearSelection(); return; }
+                    this.showToast((res.plan && this.mergeFailText(res.plan, f.type)) || '합칠 수 없습니다.');
+                    Sfx.play('mergeFail');
+                }
+            });
+            y += POPUP_MERGE_H;
         }
         // 합치기: 같은 등급 gradeCount마리를 끌기와 같은 판단으로 골라 이 몬스터 칸에서 합친다(조합식은 보지 않는다)
         const quick = Game.quickMergePlan(f);
@@ -2940,10 +2956,21 @@ const UI = {
             const label = MONSTERS[type].name + (rank ? ` ${rank}` : '');
             UIKit.text(ctx, label, x, ry + size / 2 + 28, big ? 32 : 24, big ? MONSTER_GRADES[MONSTERS[type].grade].light : T.cream, 'center', 'bold');
         };
-        icon(d.a, d.aRank, cx - 400, 96);
-        UIKit.bigText(ctx, '+', cx - 275, ry, 56, T.cream, 'center');
-        icon(d.b, d.bRank, cx - 150, 96);
-        UIKit.bigText(ctx, '=', cx + 40, ry, 56, T.gold, 'center');
+        if (d.parts) {
+            // 재료가 여럿인 조합식: 일반 x2 + 영웅 + S랭크 전설
+            const p = d.parts[0];
+            icon(p.type, null, cx - 560, 96);
+            UIKit.bigText(ctx, `x${p.count}`, cx - 492, ry + 30, 34, T.gold, 'left');
+            UIKit.bigText(ctx, '+', cx - 395, ry, 48, T.cream, 'center');
+            icon(d.b, d.bRank, cx - 280, 96);
+            UIKit.bigText(ctx, '+', cx - 165, ry, 48, T.cream, 'center');
+            icon(d.a, d.aRank, cx - 50, 96);
+        } else {
+            icon(d.a, d.aRank, cx - 400, 96);
+            UIKit.bigText(ctx, '+', cx - 275, ry, 56, T.cream, 'center');
+            icon(d.b, d.bRank, cx - 150, 96);
+        }
+        UIKit.bigText(ctx, '=', cx + (d.parts ? 75 : 40), ry, 56, T.gold, 'center');
         if (myth) UIKit.gradeFrame(ctx, rx - 124, ry - 124, 248, 248, MONSTER_GRADES[d.grade].color, 8);
         icon(d.type, null, rx, myth ? 230 : (legend ? 200 : 152));
         ctx.restore();
@@ -3495,9 +3522,26 @@ const UI = {
                 const label = show ? MONSTERS[type].name + (rank ? ` ${rank}+` : '') : '???';
                 UIKit.text(ctx, label, x + 84, cy, 19, show ? T.cream : T.creamSoft);
             };
-            side(r.a, r.aRank, c.x + 16, open);
-            UIKit.text(ctx, '+', c.x + 284, cy, 30, T.cream, 'center');
-            side(r.b, r.bRank, c.x + 306, open);
+            if (r.parts) {
+                // 재료가 여럿인 히든 조합식: 본 몬스터는 찾기 전에도 재료 칸이 하나씩 드러난다
+                const slot = (type, label, x, count) => {
+                    const show = open || Meta.hasSeen(type);
+                    if (show) this.drawMonsterIcon(ctx, type, x, c.y + 14, 72);
+                    else unknownBox(x);
+                    if (count) UIKit.text(ctx, `x${count}`, x + 68, c.y + 74, 22, T.gold, 'right', 'bold');
+                    UIKit.text(ctx, show ? label : '???', x + 80, cy, 16, show ? T.cream : T.creamSoft);
+                };
+                const p = r.parts[0];
+                slot(p.type, MONSTERS[p.type].name, c.x + 12, p.count);
+                UIKit.text(ctx, '+', c.x + 204, cy, 24, T.cream, 'center');
+                slot(r.b, MONSTERS[r.b].name, c.x + 216);
+                UIKit.text(ctx, '+', c.x + 394, cy, 24, T.cream, 'center');
+                slot(r.a, `${MONSTERS[r.a].name} ${r.aRank}`, c.x + 404);
+            } else {
+                side(r.a, r.aRank, c.x + 16, open);
+                UIKit.text(ctx, '+', c.x + 284, cy, 30, T.cream, 'center');
+                side(r.b, r.bRank, c.x + 306, open);
+            }
             UIKit.text(ctx, '=', c.x + 576, cy, 30, T.gold, 'center');
             // 결과: 등급 표의 secret(전설, 신화)은 찾기 전까지 숨긴다
             const res = MONSTERS[r.result];

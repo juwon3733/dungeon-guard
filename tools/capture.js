@@ -20,6 +20,52 @@ const SCENES = {
     // 타이틀은 열린 그대로 찍는다
     title: { setup: () => {}, freeze: false },
 
+    // 도감 조합식 마지막 쪽: 히든 신화 조합식은 본 재료만 드러난다
+    recipeDex: {
+        setup: () => {
+            Meta.seeMonster('fire_imp');
+            Meta.seeMonster('vampire');
+            Meta.seeMonster('grave_keeper');
+            UI.openCollection();
+            UI.collection.tab = 'recipe';
+            UI.collection.page = UI.collectionPages('recipe') - 1;
+        }
+    },
+
+    // 재료가 모인 S랭크 전설의 정보 창(??? 합치기 버튼)
+    hiddenRecipe: {
+        setup: () => {
+            startRun();
+            const put = t => {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                const [c, r] = key.split(',').map(Number);
+                return Game.place(t, c, r);
+            };
+            const lord = put('death_lord');
+            setMonsterRank(lord, 4);
+            put('vampire'); put('grave_keeper'); put('grave_keeper');
+            Fx.reset();
+            UI.selectedMonster = lord;
+        }
+    },
+
+    // 히든 조합 발견 연출(4마리 재료)
+    hiddenFound: {
+        setup: () => {
+            startRun();
+            const put = t => {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                const [c, r] = key.split(',').map(Number);
+                return Game.place(t, c, r);
+            };
+            const lord = put('phoenix_lord');
+            setMonsterRank(lord, 4);
+            put('flame_demon'); put('fire_imp'); put('fire_imp');
+            Game.act({ kind: 'fullRecipe', monster: lord });
+            advance(1.6);
+        }
+    },
+
     // 신화와 전설 스킬이 쓰이는 전투(정보 창은 히든 신화)
     mythicSkills: {
         setup: () => {

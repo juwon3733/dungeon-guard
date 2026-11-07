@@ -926,16 +926,17 @@ const MONSTER_RECIPES = [
     { a: 'hydra_warrior', aRank: 'A', b: 'flame_demon', bRank: 'A', result: 'phoenix_lord', hidden: true },
     { a: 'moon_priestess', aRank: 'A', b: 'storm_archer', bRank: 'A', result: 'element_sage', hidden: true },
     { a: 'ancient_treant', aRank: 'A', b: 'storm_archer', bRank: 'A', result: 'crystal_giant', hidden: true },
-    // 히든 신화: S랭크 전설 2마리
-    { a: 'phoenix_lord', aRank: 'S', b: 'hell_general', bRank: 'S', result: 'sun_god', hidden: true },
-    { a: 'element_sage', aRank: 'S', b: 'fallen_angel', bRank: 'S', result: 'moon_god', hidden: true },
-    { a: 'death_lord', aRank: 'S', b: 'archlich', bRank: 'S', result: 'death_god', hidden: true },
-    { a: 'giant_king', aRank: 'S', b: 'crystal_giant', bRank: 'S', result: 'god_king', hidden: true }
+    // 히든 신화: S랭크 전설(a) + 영웅(b) + 일반 2마리(parts). 끌어 합치지 않고 전설의 정보 창 버튼으로 합친다(Game.fullRecipePlan)
+    { a: 'phoenix_lord', aRank: 'S', b: 'flame_demon', parts: [{ type: 'fire_imp', count: 2 }], result: 'sun_god', hidden: true },
+    { a: 'element_sage', aRank: 'S', b: 'moon_priestess', parts: [{ type: 'wisp_acolyte', count: 2 }], result: 'moon_god', hidden: true },
+    { a: 'death_lord', aRank: 'S', b: 'vampire', parts: [{ type: 'grave_keeper', count: 2 }], result: 'death_god', hidden: true },
+    { a: 'giant_king', aRank: 'S', b: 'war_drummer', parts: [{ type: 'orc_guard', count: 2 }], result: 'god_king', hidden: true }
 ];
 
 // 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'
 function recipeKey(r) {
-    return [r.a + (r.aRank ? `:${r.aRank}` : ''), r.b + (r.bRank ? `:${r.bRank}` : '')].sort().join('+');
+    const parts = (r.parts || []).map(p => `${p.type}*${p.count}`);
+    return [r.a + (r.aRank ? `:${r.aRank}` : ''), r.b + (r.bRank ? `:${r.bRank}` : ''), ...parts].sort().join('+');
 }
 
 // 등급별 소환 후보(소환, 보스 보상). 등급 표의 summon과 몬스터의 summon이 false가 아닌 것. 표 순서를 따른다
@@ -971,9 +972,9 @@ function recipeSideOk(input, type, need) {
 function findRecipe(a, b) {
     const A = mergeInput(a);
     const B = mergeInput(b);
-    return MONSTER_RECIPES.find(r =>
+    return MONSTER_RECIPES.find(r => !r.parts && (
         (recipeSideOk(A, r.a, r.aRank) && recipeSideOk(B, r.b, r.bRank)) ||
-        (recipeSideOk(B, r.a, r.aRank) && recipeSideOk(A, r.b, r.bRank))) || null;
+        (recipeSideOk(B, r.a, r.aRank) && recipeSideOk(A, r.b, r.bRank)))) || null;
 }
 
 // 등급 합치기 결과 등급. 다음 등급에 합치기 후보가 없으면(최고 등급) null

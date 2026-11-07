@@ -4566,10 +4566,13 @@ for (const m of Object.values(MONSTERS)) {
     for (const s of m.skills || []) { assert(SKILL_KINDS[s.kind], s.kind); assert(s.name && s.cooldown > 0, m.id); assert(skillDesc(s).length > 5); }
     for (const a of m.abilities) assert(ABILITY_KINDS[a.kind], m.id + ' ' + a.kind);
 }
-// 히든 신화는 S랭크 조합식으로만 나온다
+// 히든 신화 조합식: S랭크 전설 + 영웅 + 일반 2마리
 for (const m of hiddenM) {
     const r = MONSTER_RECIPES.filter(x => x.result === m.id);
-    assert(r.length === 1 && r[0].hidden && r[0].aRank === 'S' && r[0].bRank === 'S', m.id + ' recipe');
+    assert(r.length === 1 && r[0].hidden && r[0].aRank === 'S', m.id + ' recipe');
+    assert.strictEqual(MONSTERS[r[0].a].grade, 'legendary');
+    assert.strictEqual(MONSTERS[r[0].b].grade, 'epic');
+    assert(r[0].parts.length === 1 && r[0].parts[0].count === 2 && MONSTERS[r[0].parts[0].type].grade === 'common', m.id + ' parts');
 }
 // 합성 신화보다 히든이 강하다
 const power = m => m.stats.damage;
@@ -4679,26 +4682,51 @@ const myth1 = Game.place('time_witch', ...seat('time_witch'));
 assert(!Game.mergeResultPool('mythic', []).includes('time_witch'), 'same species excluded');
 assert.strictEqual(Game.mergeResultPool('mythic', [myth1]).length, 8, 'a material does not count');
 // S랭크 조합식으로 히든 신화
-const s1 = legend('death_lord'), s2 = legend('archlich');
-let plan = Game.mergePlanFor(s1, s2);
-assert(plan.kind === 'recipe' && plan.result === 'death_god', 'hidden recipe');
+const put1 = t => Game.place(t, ...seat(t));
+const s1 = legend('death_lord');
+let plan = Game.fullRecipePlan(s1);
+assert(plan.kind === 'none' && plan.reason === 'count', 'materials missing');
+const vamp = put1('vampire'), g1 = put1('grave_keeper');
+assert.strictEqual(Game.fullRecipePlan(s1).reason, 'count', 'one common is not enough');
+const g2 = put1('grave_keeper');
+plan = Game.fullRecipePlan(s1);
+assert(plan.kind === 'recipe' && plan.result === 'death_god' && plan.extra.length === 2, 'hidden recipe');
+assert.strictEqual(mergePlan(s1, vamp).kind, 'none', 'dragging two materials does not use it');
+assert.strictEqual(findRecipe(s1, vamp), null, 'not a two-monster recipe');
 setMonsterRank(s1, 3);
-plan = Game.mergePlanFor(s1, s2);
-assert(plan.kind !== 'recipe', 'rank A is not enough');
+assert.strictEqual(Game.fullRecipePlan(s1).reason, 'rank', 'rank A is not enough');
+assert.strictEqual(Game.fullRecipePlan(vamp).reason, 'none', 'only the legendary starts it');
 setMonsterRank(s1, 4);
-const res = Game.merge({ monster: s1 }, { monster: s2 });
-assert(res.ok && res.type === 'death_god' && res.hidden);
+Game.state = 'wave';
+const res = Game.act({ kind: 'fullRecipe', monster: s1 });
+assert(res.ok && res.type === 'death_god' && res.hidden && res.discovered, 'made');
+assert(s1.removed && vamp.removed && g1.removed && g2.removed, 'all four used');
+assert.strictEqual(res.monster.rank, 4, 'rank from the legendary');
+assert(Fx.discovery && Fx.discovery.parts, 'discovery shows parts');
+assert(Meta.hasRecipe(MONSTER_RECIPES.find(r => r.result === 'death_god')), 'recorded');
 // 다른 히든 신화는 함께 둘 수 있다
-const s3 = legend('giant_king'), s4 = legend('crystal_giant');
-plan = Game.mergePlanFor(s3, s4);
+const s3 = legend('giant_king');
+put1('war_drummer'); put1('orc_guard'); put1('orc_guard');
+plan = Game.fullRecipePlan(s3);
 assert(plan.kind === 'recipe' && plan.result === 'god_king', 'second hidden mythic allowed');
 // 같은 히든 신화는 또 만들 수 없다
-const s6 = legend('death_lord'), s7 = legend('archlich');
-plan = Game.mergePlanFor(s6, s7);
-assert(plan.kind === 'none' && plan.reason === 'unique' && plan.sameKind, 'same mythic refused');
+const s6 = legend('death_lord');
+put1('vampire'); put1('grave_keeper'); put1('grave_keeper');
+plan = Game.fullRecipePlan(s6);
+assert(plan.reason === 'unique' && plan.sameKind, 'same mythic refused');
 // 3마리를 채우면 더 못 만든다
-Game.place('kraken', ...seat('kraken'));
-assert.strictEqual(Game.mergePlanFor(s3, s4).reason, 'unique', 'three mythics max');
+put1('kraken');
+assert.strictEqual(Game.fullRecipePlan(s3).reason, 'unique', 'three mythics max');
+// 정보 창: 재료가 모인 S랭크 전설에만 버튼이 뜬다
+UI.selectedMonster = s3;
+UI.layout();
+assert(UI.buttons.some(b => b.id === 'fullRecipe'), 'button on the legendary');
+UI.selectedMonster = Game.monsters.find(x => x.type === 'kraken');
+UI.layout();
+assert(!UI.buttons.some(b => b.id === 'fullRecipe'), 'no button elsewhere');
+UI.clearSelection();
+// 저장된 기록의 조합식 열쇠가 살아 있다
+assert(Meta.sanitize({ version: META_VERSION, recipes: [recipeKey(MONSTER_RECIPES.find(r => r.result === 'sun_god'))] }).recipes.length === 1, 'recipe key kept');
 // 저장과 팝업: 스킬이 있는 몬스터의 팝업이 오류 없이 만들어진다
 const pm = Game.monsters.find(x => x.type === 'death_god');
 assert(MONSTERS[pm.type].skills.length === 2);
