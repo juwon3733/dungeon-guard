@@ -1,14 +1,16 @@
 // 게임 세계 그리기. 상태를 읽기만 하고 바꾸지 않는다(UI 버튼 제외).
-const HP_BAR_W = 60; // 머리 위 체력바 너비(세계 px, 화면 40px)
-const HP_BAR_H = 9; // 체력바 높이(세계 px, 화면 6px)
-const DECK_W = 132; // 다리 길 폭(세계 px, 화면 88px). 칸(96)보다 조금 넓다
-const ISLAND_RECT = [-70, -36, 2060, 1430]; // 섬 그림을 그릴 화면 네모 [x, y, 너비, 높이]. 윗면이 0~12줄을 덮고 절벽은 하단 바 뒤로
+const HP_BAR_W = 60; // 머리 위 체력바 너비(세계 px, 화면 50px)
+const HP_BAR_H = 6; // 체력바 높이(세계 px, 화면 5px)
+const DECK_W = 132; // 다리 길 폭(세계 px, 화면 110px). 칸(96)보다 조금 넓다
+const ISLAND_RECT = [-70, -36, 2060, 1500]; // 섬 그림을 그릴 화면 네모 [x, y, 너비, 높이]. 윗면이 0~12줄을 덮고 절벽은 하단 바 뒤로
+const GROUND_DESAT = 0.6; // 배경 채도를 빼는 세기
+const ROAD_DESAT = 0.35; // 길 채도를 빼는 세기
 const THRONE_BACK = 180; // 왕좌 의자의 발끝을 왕좌 칸 가운데에서 위로 올린 거리(세계 px). 왕좌 둘레 뒷줄에 서서 등받이가 마왕 머리 위로 보인다
 
 const Render = {
     mapLayer: null,
 
-    // 바닥 층(지역마다 한 번 그린다): 우주 배경 위에 떠 있는 섬, 다리 길, 왕좌 받침, 은은한 빛과 지역 색 비네트.
+    // 바닥 층(지역마다 한 번 그린다): 어둡게 누른 우주 배경과 섬, 중간 명도의 다리 길과 왕좌 받침, 지역 색 비네트.
     // 소품과 입구 소용돌이 문은 world에서 그린다(문은 돌아가고, 소품은 y 순서로 캐릭터와 섞인다)
     mapZone: null,
     buildMap(zoneId) {
@@ -25,18 +27,37 @@ const Render = {
         const island = Assets.get(`island_${id}`);
         const [ix, iy, iw, ih] = zone.island || ISLAND_RECT;
         if (island) g.drawImage(island, ix / WORLD_ZOOM, iy / WORLD_ZOOM, iw / WORLD_ZOOM, ih / WORLD_ZOOM);
-        // 섬 가운데를 지역 빛으로 살짝 밝힌다(어둡게 덮지 않는다)
-        const [lr, lg, lb, la] = zone.light;
+        // 명도 단계: 배경은 채도와 밝기를 낮춰 뒤로 물리고, 그 위에 길과 유닛을 원래 밝기로 올린다
+        // Why: 지역 그림을 그대로 쓰면 용암이나 수정이 유닛보다 눈에 띈다. 파일 그림은 픽셀을 못 읽으니 합성으로 처리한다
         g.save();
-        g.globalCompositeOperation = 'lighter';
-        const lift = g.createRadialGradient(WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, 60, WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.42, 1100 / WORLD_ZOOM);
-        lift.addColorStop(0, `rgba(${lr},${lg},${lb},${la})`);
-        lift.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
-        g.fillStyle = lift;
+        g.globalCompositeOperation = 'saturation';
+        g.fillStyle = `rgba(128,128,128,${GROUND_DESAT})`;
+        g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        g.globalCompositeOperation = 'multiply';
+        g.fillStyle = zone.tone[0];
         g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         g.restore();
-        this.drawDeck(g, id);
-        this.drawThroneDais(g, id);
+        // 길과 왕좌 받침은 중간 명도: 배경보다 밝고 유닛보다 어둡게 따로 그려 얹는다(눈길 같은 밝은 길이 유닛을 가리지 않게)
+        const road = document.createElement('canvas');
+        road.width = c.width;
+        road.height = c.height;
+        const rg = road.getContext('2d');
+        rg.imageSmoothingEnabled = false;
+        this.drawDeck(rg, id);
+        this.drawThroneDais(rg, id);
+        const shape = document.createElement('canvas');
+        shape.width = c.width;
+        shape.height = c.height;
+        shape.getContext('2d').drawImage(road, 0, 0);
+        rg.globalCompositeOperation = 'saturation';
+        rg.fillStyle = `rgba(128,128,128,${ROAD_DESAT})`;
+        rg.fillRect(0, 0, c.width, c.height);
+        rg.globalCompositeOperation = 'multiply';
+        rg.fillStyle = zone.tone[1];
+        rg.fillRect(0, 0, c.width, c.height);
+        rg.globalCompositeOperation = 'destination-in';
+        rg.drawImage(shape, 0, 0);
+        g.drawImage(road, 0, 0);
         // 비네트: 가장자리에 지역 색을 얹는다(검게 덮지 않는다)
         const [vr, vg, vb, va] = zone.vignette;
         const v = g.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 760 / WORLD_ZOOM, WORLD_WIDTH / 2, WORLD_HEIGHT * 0.45, 1260 / WORLD_ZOOM);

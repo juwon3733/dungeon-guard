@@ -7,7 +7,7 @@ from PIL import Image
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 WWW = os.path.join(os.environ['USERPROFILE'], r'Downloads\Asteria-stove-3.2.0-win64\resources\www')
 OUT = os.path.join(ROOT, 'assets', 'sprites')
-HEIGHT = 46  # 몸 높이(화면 px)
+HEIGHT = 54  # 몸 높이(화면 px)
 
 SKINS = {
     'warrior': ['guardianKnight', 'guardianKnight_female', 'wildBrawler', 'demolisher'],
@@ -66,7 +66,7 @@ for hero, names in SKINS.items():
                 if n == 0 and facing == 'south':
                     rot = os.path.join(OUT, sprite, 'rotations'); os.makedirs(rot, exist_ok=True)
                     small.save(os.path.join(rot, 'south.png'))
-        out[hero].append({'sprite': sprite, 'scale': 1.5, 'anim': {'walk': {'folder': 'walking', 'frames': 6, 'dirs': ['south', 'east', 'north'], 'footPx': foot}}})
+        out[hero].append({'sprite': sprite, 'scale': 1.2, 'anim': {'walk': {'folder': 'walking', 'frames': 6, 'dirs': ['south', 'east', 'north'], 'footPx': foot}}})
     print(hero, len(out[hero]))
 with open(os.path.join(ROOT, 'js', 'data', 'asteria_heroes.js'), 'w', encoding='utf8', newline='\n') as f:
     f.write('// tools/import_asteria_heroes.py가 만든 표다. 일반 용사의 생김새(떼가 복사한 듯 보이지 않게 섞는다).\n')

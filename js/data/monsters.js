@@ -241,10 +241,10 @@ const ABILITY_KINDS = {
 function plClip(folder, frames, south, east, north) {
     return { folder, frames, dirs: PL_DIRS, footPx: { south, east, north } };
 }
-// Asteria 그림(js/data/asteria_art.js)이나 88px로 새로 그린 그림(js/data/hd_monster_art.js) 하나: 그림 1px이 화면 1px(세계 배율 1.5)이다. breathe로 숨 쉬기와 내지르기를 코드가 그린다
+// Asteria 그림(js/data/asteria_art.js)이나 88px로 새로 그린 그림(js/data/hd_monster_art.js) 하나: 그림 1px이 화면 1px(ART_SCALE)이다. breathe로 숨 쉬기와 내지르기를 코드가 그린다
 function astArt(id, opts) {
     const a = ASTERIA_ART[id] || HD_MONSTER_ART[id];
-    const scale = 1.5;
+    const scale = ART_SCALE;
     return Object.assign({ scale, barY: Math.round(a.height * scale) + 14, idleFps: 0, glow: '200,200,255', breathe: true, cells: a.cells,
         hand: { x: Math.round(a.width * scale * 0.3), y: Math.round(a.height * scale * 0.6) }, anim: a.anim }, opts);
 }

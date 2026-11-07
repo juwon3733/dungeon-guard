@@ -1,15 +1,16 @@
-// 화면 규격: 1920x1080 가상 해상도. 세계는 WORLD_ZOOM배로 줄여 그리고, 칸(TILE 96)은 화면에서 64px이다.
-// 도트 1칸 = 화면 2픽셀: 캐릭터와 소품은 세계 배율 3(PIXEL_SCALE)으로 그려 화면에서 정확히 2배가 된다.
+// 화면 규격: 1920x1080 가상 해상도. 세계는 WORLD_ZOOM배로 줄여 그리고, 칸(TILE 96)은 화면에서 80px이다.
+// 그림 배율은 화면 기준 정수배다: ART_SCALE은 그림 1px = 화면 1px, PIXEL_SCALE은 그림 1px = 화면 2px.
 const GAME_WIDTH = 1920;
 const GAME_HEIGHT = 1080;
 const TILE = 96; // 세계 좌표의 칸 크기. 화면에는 TILE * WORLD_ZOOM으로 보인다
-const WORLD_ZOOM = 2 / 3; // 세계를 줄여 칸을 64px로 표시한다. UI는 줄이지 않는다
+const WORLD_ZOOM = 5 / 6; // 세계를 줄여 칸을 80px로 표시한다. UI는 줄이지 않는다
 const WORLD_WIDTH = GAME_WIDTH / WORLD_ZOOM;
 const WORLD_HEIGHT = GAME_HEIGHT / WORLD_ZOOM;
-const MAP_COLS = 30; // 30 x 15칸 = 화면 1920 x 960. 아래는 하단 바다
-const MAP_ROWS = 15;
+const MAP_COLS = 24; // 24 x 12칸 = 화면 1920 x 960. 아래는 하단 바다
+const MAP_ROWS = 12;
 const MAP_TOP = 0;
-const PIXEL_SCALE = 3; // 그림 1px을 화면 2px로 그리는 세계 배율(3 x WORLD_ZOOM = 2)
+const ART_SCALE = 1 / WORLD_ZOOM; // 그림 1px을 화면 1px로 그리는 세계 배율
+const PIXEL_SCALE = 2 / WORLD_ZOOM; // 그림 1px을 화면 2px로 그리는 세계 배율
 const HERO_SCALE = PIXEL_SCALE; // 용사, 정예, 타락 유닛
 const BOSS_SCALE = PIXEL_SCALE; // 보스와 마왕도 같은 도트 크기다(그림 자체가 크다)
 const UI_FONT = "'Galmuri11', 'Malgun Gothic', sans-serif";
