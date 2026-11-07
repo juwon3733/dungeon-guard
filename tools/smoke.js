@@ -4570,6 +4570,9 @@ for (const m of hiddenM) {
     assert.strictEqual(MONSTERS[r[0].b].grade, 'epic');
     assert(r[0].parts.length === 1 && r[0].parts[0].count === 2 && MONSTERS[r[0].parts[0].type].grade === 'common', m.id + ' parts');
 }
+// 능력 이름은 몬스터별로 바꿀 수 있고 효과는 같다
+assert.strictEqual(abilityName(MONSTERS.phoenix_lord.abilities[0]), '불바다');
+assert.strictEqual(abilityName(MONSTERS.flame_demon.abilities[0]), '용암 장판');
 // 합성 신화보다 히든이 강하다
 const power = m => m.stats.damage;
 const best = Math.max(...mythics.filter(m => !m.hiddenMythic && m.role !== 'melee').map(power));
