@@ -116,8 +116,8 @@ const Fx = {
         this.bolts.push({ points, color, age: 0, life: 0.28 });
     },
 
-    coin(x, y, amount) {
-        const n = Math.min(9, Math.max(3, Math.round(amount / 2)));
+    coin(x, y, amount, count) {
+        const n = count || Math.min(9, Math.max(3, Math.round(amount / 2)));
         for (let i = 0; i < n; i++) {
             // 동전은 HUD로 날아가므로 화면 좌표로 바꿔 둔다
             this.coins.push({ x: x * WORLD_ZOOM, y: y * WORLD_ZOOM, vx: randRange(-170, 170), vy: randRange(-420, -220), age: 0, delay: 0.42 + i * 0.03 });

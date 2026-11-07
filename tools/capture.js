@@ -66,6 +66,23 @@ const SCENES = {
         }
     },
 
+    // 일반 용사 떼를 광역 몬스터가 터뜨리는 후반 전투(프레임 측정용)
+    swarm: {
+        setup: () => {
+            startRun();
+            for (const t of ['hell_general', 'phoenix_lord', 'archlich', 'flame_demon', 'chaos_mage', 'dark_mage', 'dark_mage', 'frost_witch', 'orc_guard', 'troll']) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            Game.waveIndex = 55;
+            Game.gold = 500;
+            Game.startWave();
+            Game.speed = 3;
+            advance(5);
+        },
+        freeze: false
+    },
+
     // 도전의 문: 오늘의 일일 도전 조건
     dailyPortal: {
         setup: () => {

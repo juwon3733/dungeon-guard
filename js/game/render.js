@@ -353,11 +353,13 @@ const Render = {
                 this.shadow(ctx, p.x, p.y + 9, 46, 15);
                 this.eliteRing(ctx, p.x, p.y + 9);
             } else {
-                this.shadow(ctx, p.x, p.y + 9, 28, 9);
+                this.shadow(ctx, p.x, p.y + 6, 15, 5);
             }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
             this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
-            this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
+            // 일반 용사는 다쳤을 때만 작은 체력바를 그린다
+            if (h.elite) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
+            else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');
         }
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
