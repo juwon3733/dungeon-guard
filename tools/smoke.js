@@ -5629,19 +5629,31 @@ assert.strictEqual(Game.powerCheck('nope').reason, 'none');
     assert.strictEqual(Game.powerCheck(start).reason, 'owned');
     const up = next(start).find(id => map.nodes.find(n => n.id === id).tier === 1);
     assert(up && Game.powerCheck(up).ok, 'owning a node opens its links');
-    // 맨 끝 겹은 갈래마다 하나
+    // 한 겹에서 하나만
     fresh(100);
-    const top = branches[0].tiers[3];
-    Game.powers[top[0].id] = true;
-    Game.powers[branches[0].tiers[2][0].id] = true;
-    Game.powers[branches[0].tiers[2][1].id] = true;
-    assert.strictEqual(Game.powerCheck(top[1].id).reason, 'exclusive', 'top ring picks one');
-    // 상한
+    const br = branches[0];
+    Game.powers[br.tiers[0][0].id] = true;
+    assert.strictEqual(Game.powerCheck(br.tiers[0][1].id).reason, 'tier', 'one per tier');
+    // 한 판에 한 갈래만
+    assert.strictEqual(Game.powerCheck(branches[1].tiers[0][0].id).reason, 'branch', 'one branch per run');
+    for (const b of buildPowerMap('rift', 'x').edges) {
+        const tierOf = id => (id === 'core' ? -1 : Game.powerNode(id).tier);
+        const brOf = id => (id === 'core' ? null : Game.powerNode(id).branch);
+        assert(b.includes('core') || brOf(b[0]) === brOf(b[1]), 'no bridges between branches');
+        assert(Math.abs(tierOf(b[0]) - tierOf(b[1])) <= 1);
+    }
+    // 4개를 찍으면 갈래가 끝난다
     fresh(100);
-    ids.slice(0, POWER_RULES.maxNodes).forEach(id => { Game.powers[id] = true; });
-    const open = ids.slice(POWER_RULES.maxNodes).find(id => Game.powerLinked(id) && Game.powerCheck(id).reason !== 'exclusive');
-    assert.strictEqual(Game.powerCheck(open).reason, 'limit', 'cannot take everything');
-    assert(!Game.powerReady(), 'nothing to buy at the limit');
+    const pathIds = [];
+    for (let t = 0; t < 4; t++) {
+        const next = Game.powerMap().nodes.find(n => Game.powerCheck(n.id).ok);
+        assert(next, 'a node is open at tier ' + t);
+        Game.act({ kind: 'power', id: next.id });
+        pathIds.push(next.id);
+    }
+    assert.strictEqual(Game.powerCount(), 4);
+    assert(!Game.powerReady(), 'nothing to buy after a full branch');
+    assert(new Set(pathIds.map(id => Game.powerNode(id).branch.id)).size === 1, 'all from one branch');
 }
 // 수치 효과
 fresh(100);
@@ -5893,7 +5905,9 @@ for (const lord of Object.keys(DEMON_LORDS)) {
             if (q.id === target) return q.first;
             for (const [a, b] of edges) {
                 const to = a === q.id ? b : (b === q.id ? a : null);
-                if (to && !seen.has(to)) { seen.add(to); queue.push({ id: to, first: q.first || to }); }
+                // 갈래 안에서 바깥 겹으로만 나아간다(겹마다 하나라 옆 칸으로는 못 간다)
+                const tier = id => (id === 'core' ? -1 : Game.powerNode(id).tier);
+                if (to && !seen.has(to) && tier(to) === tier(q.id) + 1) { seen.add(to); queue.push({ id: to, first: q.first || to }); }
             }
         }
         return null;

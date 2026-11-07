@@ -43,7 +43,9 @@ const STAGES = [
         ],
         outro: [
             ['goblin', '다 쫓아냈습니다! 용사 지갑이랑 뿔, 심장을 주웠어요.'],
-            ['rift', '스테이지를 처음 깰 때마다 이런 게 풀리는군. 유물 칸도 하나 짜 둬.']
+            ['bone_queen', '(벽을 부수고) 시끄러워서 못 자겠네. 나 옆방 세입자야.'],
+            ['bone_queen', '용사 잡는 거면 나도 끼워 줘. 백 년 만의 손님이거든.'],
+            ['rift', '월세는 뼈로 받지. 고블린, 유물 칸도 하나 짜 둬.']
         ],
         unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'slot' }, { kind: 'relic', id: 'greedy_vault' }, { kind: 'relic', id: 'legion_banner' }, { kind: 'relic', id: 'glass_heart' }]
     },
@@ -51,24 +53,25 @@ const STAGES = [
         id: 's2', mapId: 'parallel', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
         intro: [
             ['goblin', '도굴꾼입니다! 벽을 몰래 파고 있어요!'],
-            ['bone_queen', '(벽 너머) 거기 시끄러워! 뼈 울린다고!'],
-            ['rift', '...방금 벽이 말했나? 도굴꾼부터 막자.']
+            ['bone_queen', '내 방 벽이잖아! 군주, 같이 막아.'],
+            ['rift', '세입자 첫 출근이군.']
         ],
         outro: [
             ['goblin', '성배, 주사위, 촛불, 석판을 흘리고 갔습니다.'],
-            ['bone_queen', '(벽 너머) 그 주사위 내 거야! ...아니, 아무것도 아니야.']
+            ['gold_king', '실례합니다. 이 던전 분양 대금이 아직 안 들어왔는데요?'],
+            ['gold_king', '채무자가 망하면 곤란하지. 다 받을 때까지 여기 묵으마.']
         ],
         unlocks: [{ kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'usury_ledger' }, { kind: 'relic', id: 'mad_dice' }, { kind: 'relic', id: 'dead_horn' }, { kind: 'relic', id: 'sniper_mark' }]
     },
     {
         id: 's3', mapId: 'coil', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
         intro: [
-            ['bone_queen', '난 백 년째 옆방에 살았어. 계약서는... 묻혔지.'],
-            ['archmage', '불법 거주 마왕이 둘! 한 번에 신고 처리한다!'],
-            ['bone_queen', '불법이라니! ...좋아, 이번만 같이 싸워 줄게.']
+            ['archmage', '불법 거주 마왕이 셋! 한 번에 신고 처리한다!'],
+            ['bone_queen', '계약서? 백 년 전에 묻혔어.'],
+            ['gold_king', '내 담보를 건드리면 곤란하지.']
         ],
         outro: [
-            ['bone_queen', '생각보다 쓸 만하네. 앞으로 같이 지내 줄게.'],
+            ['bone_queen', '생각보다 쓸 만하네, 군주.'],
             ['rift', '월세는?'],
             ['bone_queen', '뼈로 낼게. 족쇄랑 북, 눈알도 덤이야.']
         ],
@@ -77,9 +80,8 @@ const STAGES = [
     {
         id: 's4', mapId: 'merge', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
         intro: [
-            ['gold_king', '실례합니다. 이 던전 분양 대금이 아직 안 들어왔는데요?'],
-            ['goblin', '그, 그 와중에 왕국 정찰대가 옵니다!'],
-            ['gold_king', '채무자가 죽으면 곤란하지. 구경은 해 주마.']
+            ['goblin', '왕국 정찰대가 옵니다!'],
+            ['gold_king', '구경은 해 주마. 수수료는 따로 받고.']
         ],
         outro: [
             ['gold_king', '잘했다. 유물 칸 하나 더 짜 주지. 이 해골 손, 모래시계, 열쇠는 담보로 맡겨 두마.'],
@@ -92,7 +94,7 @@ const STAGES = [
         intro: [
             ['archmage', '지난번 민원은 반려됐지만, 이번엔 직접 철거한다!'],
             ['gold_king', '이 던전이 철거되면 내 돈은 누가 갚지? 군주, 이번엔 나도 싸운다.'],
-            ['bone_queen', '어머, 돈 냄새 나는 동료가 왔네.']
+            ['bone_queen', '어머, 돈만 세던 양반이 드디어 일하네.']
         ],
         outro: [
             ['gold_king', '대금은 분할 상환해 주지. 대신 여기 살면서 수금하겠다.'],

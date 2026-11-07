@@ -52,11 +52,11 @@ const LORD_EFFECTS = {
 };
 
 // 마왕 권능 지도: 왕좌를 가운데 둔 연결망. 큰 갈래 3개가 뻗고, 갈래마다 4겹에 2개씩 있다. 판 안에서 마력을 써서 찍는다.
-// 왕좌나 이미 찍은 곳과 이어진 항목만 찍을 수 있다. 맨 바깥 겹은 갈래마다 하나만 고른다.
+// 한 판에 한 갈래만 찍는다(처음 찍은 갈래로 정해진다). 겹마다 2개 중 하나를 고르고, 왕좌나 찍은 곳과 이어진 항목만 찍을 수 있다.
 // 항목의 자리와 연결은 시드로 정해 판마다 갈 수 있는 길이 다르다(같은 시드 도전은 모두 같은 지도).
-// 한 판에 maxNodes개까지라 전부 찍을 수 없다(빌드). 마력은 판이 끝나면 사라진다(오래 한 사람이 랭킹에서 유리해지지 않게).
+// 그래서 한 판의 빌드는 갈래 하나와 겹마다 고른 4개다. 마력은 판이 끝나면 사라진다(오래 한 사람이 랭킹에서 유리해지지 않게).
 // 수치는 플레이 후 고칠 초안이다.
-const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1 };
+const POWER_RULES = { maxNodes: 4, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1 };
 const LORD_POWERS = {
     rift: [
         { id: 'storm', name: '폭풍', desc: '번개를 넓고 세게', tiers: [
@@ -169,13 +169,6 @@ function buildPowerMap(lordId, seed) {
                 if (next() < 0.35) edges.push([rows[t - 1][1 - side].id, n.id]);
             });
         }
-    });
-    // 갈래 사이의 다리: 이웃한 갈래의 가까운 항목을 잇는다. 어느 겹에서 이어질지 시드로 정해 섞인 빌드의 길이 판마다 다르다
-    branches.forEach((br, b) => {
-        const other = grid[(b + 1) % branches.length];
-        if (!other || branches.length < 2) return;
-        const tier = next() < 0.5 ? 1 : 2;
-        edges.push([grid[b][tier][1].id, other[tier][0].id]);
     });
     return { nodes, edges };
 }

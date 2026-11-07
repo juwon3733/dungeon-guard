@@ -2936,7 +2936,7 @@ const UI = {
             const p = this.powerPoint(n);
             const check = G.powerCheck(n.id);
             const owned = check.reason === 'owned';
-            const open = check.ok || check.reason === 'mana' || check.reason === 'limit';
+            const open = check.ok || check.reason === 'mana';
             const color = POWER_SECTORS[n.branch].color;
             const r = n.tier === 3 ? 26 : 16 + n.tier * 2;
             const hot = m.x >= b.x && m.x <= b.x + b.w && m.y >= b.y && m.y <= b.y + b.h;
@@ -2975,7 +2975,7 @@ const UI = {
             UIKit.text(ctx, at.branch.name, px, W.y + 120, 18, POWER_SECTORS[hover.branch].color, 'left', 'bold');
             UIKit.text(ctx, at.node.name, px, W.y + 156, 28, T.cream, 'left', 'bold');
             this.drawWrappedPower(ctx, at.node.desc, px, W.y + 196, pw, T.cream);
-            const say = { owned: ['찍음', T.good], locked: ['아직 이어지지 않음', T.creamSoft], exclusive: ['이 갈래의 끝은 하나만', T.creamSoft], limit: ['더 찍을 수 없음', T.bad], mana: [`마력 ${check.cost} 필요`, T.bad] }[check.reason] || [`마력 ${check.cost}로 찍기`, T.gold];
+            const say = { owned: ['찍음', T.good], locked: ['아직 이어지지 않음', T.creamSoft], branch: ['다른 갈래를 골랐음', T.creamSoft], tier: ['이 겹은 하나만', T.creamSoft], limit: ['더 찍을 수 없음', T.bad], mana: [`마력 ${check.cost} 필요`, T.bad] }[check.reason] || [`마력 ${check.cost}로 찍기`, T.gold];
             UIKit.text(ctx, say[0], px, W.y + 278, 20, say[1], 'left', 'bold');
         } else {
             this.drawWrappedPower(ctx, '', px, W.y + 130, pw, T.creamSoft);

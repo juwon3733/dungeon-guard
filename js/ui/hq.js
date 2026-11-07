@@ -70,9 +70,9 @@ const HQ_CONTENTS = [
 const HQ_GOBLIN_LINES = [
     { cleared: 0, text: '사장님, 첫 손님이 문 앞에 와 있어요! 작전 테이블로 가요.' },
     { cleared: 1, text: '사장님, {no}번 스테이지 손님이 기다려요. 차는 제가 낼게요.' },
-    { cleared: 2, text: '벽 너머에서 뼈 소리가 나요. {no}번 {name}, 가 보시죠.' },
+    { cleared: 2, text: '황금 마왕님이 장부를 펴셨어요. {no}번 {name}, 가 보시죠.' },
     { cleared: 3, text: '여왕님이 월세를 뼈로 냈어요. 다음은 {no}번이에요, 사장님.' },
-    { cleared: 4, text: '금고 냄새 맡은 분이 오신대요. {no}번에서 수금 막아 주세요!' },
+    { cleared: 4, text: '철거반이 온대요. {no}번에서 막아 주세요!' },
     { cleared: 5, text: '마지막 손님 부대장님이에요! {no}번만 깨면 이야기 끝!' },
     { cleared: 6, text: '이야기는 끝! 이제 도전의 문이 진짜 장사예요, 사장님.' }
 ];
