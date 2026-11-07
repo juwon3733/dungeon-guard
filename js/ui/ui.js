@@ -39,6 +39,8 @@ const POPUP_EQUIP_H = 70; // 팝업의 장비 줄 높이
 const EQUIP_MAP_ICON = 24;
 const PARTY_X = 1290; // 다음 파티 창 왼쪽(너비 PARTY_W). 오른쪽 위 아이콘 버튼(x 1650부터) 왼쪽
 const PARTY_W = 350;
+const POWER_WIN = { x: 80, y: 50, w: 1760, h: 800 }; // 권능 창
+const POWER_MAP = { w: 1270, cx: 740, cy: 480, rx: 560, ry: 320 }; // 권능 지도: 바탕 너비, 가운데, 가로와 세로 반지름
 const PARTY_ROW = 34; // 파티 목록 한 줄 높이
 const PARTY_CELL_W = 84; // 라운드 중 파티 칸 하나의 너비
 const BOSS_TROUGH = { x: 28, y: 18, w: 187, h: 12 }; // hud_bossbar에서 체력이 차는 칸(그림 px)
@@ -89,6 +91,7 @@ const UI = {
     popupEquipRect: null, // 팝업의 장비 칸(마우스를 올리면 설명)
     hoverCorpse: null,
     hoverButton: null,
+    powerOpen: false, // 권능 창이 열려 있는지(판이 멈춘다)
     popupAge: 1, // 정보 창이 열린 뒤 지난 초
     rewardAge: 0, // 보스 보상 화면이 열린 뒤 지난 초
     goldShown: null, // 화면에 보이는 골드(굴러 올라간다)
@@ -164,6 +167,10 @@ const UI = {
             return;
         }
 
+        if (this.powerOpen) {
+            this.layoutPowers();
+            return;
+        }
         // 오른쪽 위 아이콘 버튼: 소리, 효과 줄이기, 일시정지, 배속. 켜진 쪽(소리 끔, 효과 줄임, 멈춤, 2배)은 밝은 은청색에 금테
         let bx = GAME_WIDTH - TOP_BTN - 12;
         const small = (id, icon, on, onClick, opts) => {
@@ -200,9 +207,11 @@ const UI = {
         } else {
             // 스킬 칸 둘과 오른쪽의 유물 칸(2줄). 유물 칸이 늘면 스킬 칸이 좁아진다
             const relicW = this.barRelicWidth();
-            const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - 20) / 2);
+            const portal = G.power('gate'); // 권능으로 3번째 스킬 칸이 열린다
+            const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - (portal ? 30 : 20)) / (portal ? 3 : 2));
             this.button('lightning', BAR_SLOT_X, slotY, skillW, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
             this.button('roar', BAR_SLOT_X + skillW + 10, slotY, skillW, 104, { skill: 'roar', onClick: () => this.useRoar() });
+            if (portal) this.button('portal', BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: 'portal', onClick: () => this.usePortal() });
             for (let i = 0; i < Meta.relicSlots(); i++) {
                 const r = this.barRelicRect(i);
                 this.button(`barRelic${i}`, r.x, r.y, r.w, r.h, { barRelic: i });
@@ -214,6 +223,12 @@ const UI = {
             this.button(`bag${i}`, r.x, r.y, r.w, r.h, { bagSlot: i });
         }
         // 자동 합치기: 다음 라운드 버튼 위. 켜면 다음 판에도 이어진다
+        if (G.lordPowers().length) {
+            const ready = G.powerReady();
+            this.button('powers', GAME_WIDTH - 270, 80, 258, 50, {
+                label: `권능 · 마력 ${G.mana} (R)`, size: 22, theme: ready ? 'gold' : undefined, onClick: () => this.togglePowers()
+            });
+        }
         this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y - 58, NEXT_BTN_W, 50, {
             label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
         });
@@ -1007,7 +1022,7 @@ const UI = {
         this.press = null;
         this.cancelEquipDrag();
         const b = this.buttonAt(x, y);
-        const inGame = Game.inPlay() && !Game.bossReward && !this.dialogue && !this.unlockCards; // 보상을 고르는 동안 맵의 몬스터를 누르거나 끌지 않는다
+        const inGame = Game.inPlay() && !this.powerOpen && !Game.bossReward && !this.dialogue && !this.unlockCards; // 보상을 고르는 동안 맵의 몬스터를 누르거나 끌지 않는다
         if (b && b.bagSlot !== undefined) {
             // 보관함 칸: 장비가 있으면 끌 준비(떼는 순간 끌기인지 누르기인지 나눈다)
             const id = Game.equipBag[b.bagSlot];
@@ -1106,6 +1121,26 @@ const UI = {
         }
         this.targeting = !this.targeting;
         this.clearSelection();
+    },
+
+    usePortal() {
+        this.setTab('demon');
+        if (!Game.power('gate')) return;
+        if (!Game.act({ kind: 'portal' }).ok) this.showToast(Game.skills.portal > 0 ? `균열 재사용까지 ${Math.ceil(Game.skills.portal)}초` : '되돌릴 용사가 없습니다.');
+    },
+
+    // 권능 창: 여는 동안 판이 멈춘다
+    togglePowers() {
+        if (!this.powerOpen && !Game.lordPowers().length) return;
+        this.powerOpen = !this.powerOpen;
+        if (this.powerOpen) {
+            this.powerWasPaused = Game.paused;
+            Game.paused = true;
+            this.targeting = false;
+            this.clearSelection();
+        } else {
+            Game.paused = this.powerWasPaused;
+        }
     },
 
     useRoar() {
@@ -1282,6 +1317,12 @@ const UI = {
             else if (code === 'KeyP') G.paused = !G.paused;
             return;
         }
+        if (this.powerOpen) {
+            if (code === 'KeyR' || code === 'Escape') this.togglePowers();
+            return;
+        }
+        if (code === 'KeyR') { this.togglePowers(); return; }
+        if (code === 'KeyE') { this.usePortal(); return; }
         if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyU') this.doSummonUpgrade();
@@ -1583,6 +1624,8 @@ const UI = {
         } else if (G.state === 'victory' || G.state === 'defeat') {
             this.drawResult(ctx);
             this.drawButtons(ctx);
+        } else if (this.powerOpen) {
+            this.drawPowers(ctx);
         } else if (G.paused) {
             this.drawPause(ctx);
         }
@@ -2432,6 +2475,7 @@ const UI = {
 
     drawButtons(ctx) {
         for (const b of this.buttons) {
+            if (b.powerNode || b.powerClose) continue; // 권능 창은 drawPowers가 그린다
             if (b.reward) continue; // 보상 카드는 어둡게 깐 화면 위에 drawBossReward가 그린다
             if (b.bagSlot !== undefined) continue; // 보관함 칸은 drawBag이 그린다
             if (b.barRelic !== undefined) continue; // 마왕 탭 유물 칸은 drawBarRelics가 그린다
@@ -2723,9 +2767,10 @@ const UI = {
     drawSkillButton(ctx, b, st) {
         const T = UI_THEME;
         const lightning = b.skill === 'lightning';
+        const portal = b.skill === 'portal';
         const cd = Game.skills[b.skill];
         const max = Game.skillCooldown(b.skill);
-        const locked = !lightning && Game.roarLocked();
+        const locked = b.skill === 'roar' && Game.roarLocked();
         const active = lightning && this.targeting;
         const dy = st.pressed ? 2 : 0;
         const ss = b.h;
@@ -2739,6 +2784,7 @@ const UI = {
         }
         UIKit.slot(ctx, sx, sy, ss, ss, cd > 0 || locked ? 'iron' : 'gold', st.hover && !st.pressed ? 'hover' : null);
         if (lightning) UIKit.icon(ctx, 'bolt', sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
+        else if (portal) UIKit.icon(ctx, 'wave', sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
         else this.drawLordPortrait(ctx, Game.lordDef(), sx + 10, sy + 10, ss - 20);
         if (cd > 0 || locked) {
             const ratio = locked ? 1 : cd / max;
@@ -2747,22 +2793,175 @@ const UI = {
             if (locked) UIKit.icon(ctx, 'lock', sx + (ss - 48) / 2, sy + (ss - 48) / 2);
             else UIKit.bigText(ctx, String(Math.ceil(cd)), sx + ss / 2, sy + ss / 2, 40, '#ffffff', 'center');
         }
-        this.drawKeyCap(ctx, lightning ? 'Q' : 'W', sx + 6, sy + 6, 16);
+        this.drawKeyCap(ctx, lightning ? 'Q' : (portal ? 'E' : 'W'), sx + 6, sy + 6, 16);
         const tx = sx + ss + 14;
-        const name = lightning ? '번개' : '호통';
+        const name = lightning ? '번개' : (portal ? '균열' : '호통');
         UIKit.text(ctx, name, tx, b.y + 34 + dy, 26, locked ? T.creamSoft : T.cream, 'left', 'bold');
         let status = '준비됨';
         let color = T.good;
         if (active) { status = '조준 중'; color = '#9fe0ff'; }
-        else if (locked) { status = `체력 ${COMBAT_RULES.roar.unlockHp} 이하`; color = T.creamSoft; }
+        else if (locked) { status = Game.power('frenzy') ? '폭주 중' : (b.w < 250 ? `${COMBAT_RULES.roar.unlockHp} 이하` : `체력 ${COMBAT_RULES.roar.unlockHp} 이하`); color = T.creamSoft; }
         else if (cd > 0) { status = `${Math.ceil(cd)}초`; color = T.bad; }
         UIKit.text(ctx, status, tx, b.y + 74 + dy, 20, color, 'left', 'bold');
         if (st.hover) {
-            const title = lightning ? '마왕의 번개' : '마왕의 호통';
-            const desc = lightning ? `범위 피해 ${Math.round(Game.lightningDamage())}, 재사용 ${Math.round(max * 10) / 10}초`
+            const title = lightning ? '마왕의 번개' : (portal ? '균열 열기' : '마왕의 호통');
+            const desc = portal ? `왕좌에 가까운 용사 ${COMBAT_RULES.portal.count}명을 ${COMBAT_RULES.portal.back}칸 뒤로, 재사용 ${Math.round(max * 10) / 10}초` : lightning ? `범위 피해 ${Math.round(Game.lightningDamage())}, 재사용 ${Math.round(max * 10) / 10}초`
                 : `모든 용사 ${COMBAT_RULES.roar.duration}초 정지, 체력 ${COMBAT_RULES.roar.unlockHp} 이하, 재사용 ${Math.round(max * 10) / 10}초`;
             this.drawTooltip(ctx, b.x, b.y - 100, title, desc);
         }
+    },
+
+    // 권능 지도의 화면 자리
+    powerPoint(n) {
+        return { x: Math.round(POWER_MAP.cx + n.x * POWER_MAP.rx), y: Math.round(POWER_MAP.cy + n.y * POWER_MAP.ry) };
+    },
+
+    // 권능 창 배치: 지도 위 항목마다 누르는 자리
+    layoutPowers() {
+        const G = Game;
+        for (const n of G.powerMap().nodes) {
+            const p = this.powerPoint(n);
+            this.button(`power_${n.id}`, p.x - 30, p.y - 30, 60, 60, { powerNode: n, disabled: !G.powerCheck(n.id).ok, onClick: () => { G.act({ kind: 'power', id: n.id }); } });
+        }
+        this.button('powerClose', POWER_WIN.x + POWER_WIN.w - 196, POWER_WIN.y + 24, 160, 52, { powerClose: true, onClick: () => this.togglePowers() });
+    },
+
+    // 도트 마름모 하나(화면 2px 단위)
+    powerGem(ctx, x, y, r, color) {
+        ctx.fillStyle = color;
+        const n = Math.round(r / 2);
+        for (let i = -n; i <= n; i++) {
+            const half = (n - Math.abs(i)) * 2;
+            ctx.fillRect(x - half - 1, y + i * 2 - 1, half * 2 + 2, 2);
+        }
+    },
+
+    // 권능 창: 별자리 같은 연결망. 왕좌에서 뻗어 나가며, 이어진 곳만 찍을 수 있다. 오른쪽은 고른 항목 설명과 찍은 목록
+    drawPowers(ctx) {
+        const G = Game;
+        const T = UI_THEME;
+        const W = POWER_WIN;
+        const M = POWER_MAP;
+        ctx.fillStyle = T.dim;
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        UIKit.hudFrame(ctx, 'hud_panel', W.x, W.y, W.w, W.h, 26);
+        // 지도 바탕: 지역의 우주 그림을 어둡게 깐다
+        const space = Assets.get('void_starChoir');
+        if (space) {
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(space, W.x + 26, W.y + 90, M.w, W.h - 116);
+            ctx.fillStyle = 'rgba(6,4,14,0.74)';
+            ctx.fillRect(W.x + 26, W.y + 90, M.w, W.h - 116);
+            ctx.restore();
+        }
+        UIKit.text(ctx, '균열 지도', W.x + 44, W.y + 50, 32, T.cream, 'left', 'bold');
+        UIKit.bigText(ctx, `마력 ${G.mana}`, W.x + 230, W.y + 50, 28, '#c9a6ff', 'left');
+        UIKit.text(ctx, `${G.powerCount()}/${POWER_RULES.maxNodes}개`, W.x + 400, W.y + 50, 22, G.powerCount() >= POWER_RULES.maxNodes ? T.bad : T.creamSoft, 'left');
+        const close = this.buttons.find(b => b.powerClose);
+        if (close) {
+            const dy = UIKit.button(ctx, close.x, close.y, close.w, close.h, 'silver', this.btnState(close));
+            UIKit.text(ctx, '닫기 (R)', close.x + close.w / 2, close.y + close.h / 2 + dy, 22, T.cream, 'center', 'bold');
+        }
+        const map = G.powerMap();
+        const pointOf = id => (id === 'core' ? { x: M.cx, y: M.cy } : this.powerPoint(map.nodes.find(n => n.id === id)));
+        const on = id => id === 'core' || G.power(id);
+        // 연결선: 도트 점선. 찍은 곳에서 뻗은 선은 밝고, 양쪽 다 찍으면 이어진다
+        for (const [a, b] of map.edges) {
+            const p = pointOf(a);
+            const q = pointOf(b);
+            const both = on(a) && on(b);
+            const lit = on(a) || on(b);
+            const len = Math.sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y));
+            const step = both ? 4 : 12;
+            ctx.fillStyle = both ? '#ffe9b0' : (lit ? '#c9b48a' : '#4c4658');
+            for (let d = 0; d <= len; d += step) {
+                const k = d / (len || 1);
+                ctx.fillRect(Math.round((p.x + (q.x - p.x) * k) / 2) * 2, Math.round((p.y + (q.y - p.y) * k) / 2) * 2, 4, 4);
+            }
+        }
+        // 왕좌: 가운데의 마왕 얼굴
+        UIKit.hudFrame(ctx, 'hud_slot', M.cx - 44, M.cy - 44, 88, 88, 14);
+        this.drawLordPortrait(ctx, G.lordDef(), M.cx - 34, M.cy - 34, 68);
+        // 항목
+        const m = this.mouse;
+        let hover = null;
+        for (const b of this.buttons) {
+            if (!b.powerNode) continue;
+            const n = b.powerNode;
+            const p = this.powerPoint(n);
+            const check = G.powerCheck(n.id);
+            const owned = check.reason === 'owned';
+            const open = check.ok || check.reason === 'mana' || check.reason === 'limit';
+            const color = POWER_SECTORS[n.branch].color;
+            const r = n.tier === 3 ? 26 : 16 + n.tier * 2;
+            const hot = m.x >= b.x && m.x <= b.x + b.w && m.y >= b.y && m.y <= b.y + b.h;
+            if (hot) hover = n;
+            this.powerGem(ctx, p.x, p.y, r + 4, '#0c0814');
+            if (owned) {
+                this.powerGem(ctx, p.x, p.y, r, color);
+                this.powerGem(ctx, p.x, p.y, Math.round(r / 2), '#ffffff');
+            } else if (open) {
+                const pulse = check.ok && Math.floor(this.popupAge * 3) % 2 === 0;
+                this.powerGem(ctx, p.x, p.y, r, check.ok ? (pulse ? '#ffffff' : color) : '#6d6578');
+                this.powerGem(ctx, p.x, p.y, r - 6, '#1a1224');
+            } else {
+                this.powerGem(ctx, p.x, p.y, r, '#3a3444');
+                this.powerGem(ctx, p.x, p.y, r - 6, '#16121e');
+            }
+            if (hot) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(p.x - r - 8, p.y - 2, 4, 4);
+                ctx.fillRect(p.x + r + 4, p.y - 2, 4, 4);
+                ctx.fillRect(p.x - 2, p.y - r - 8, 4, 4);
+                ctx.fillRect(p.x - 2, p.y + r + 4, 4, 4);
+            }
+            // 이름은 찍었거나 지금 닿는 항목에만 쓴다
+            if (owned || open) {
+                const at = G.powerNode(n.id);
+                UIKit.text(ctx, at.node.name, p.x, p.y + r + 16, 15, owned ? '#ffffff' : T.creamSoft, 'center', owned ? 'bold' : '');
+            }
+        }
+        // 오른쪽: 고른 항목 설명과 찍은 목록
+        const px = W.x + M.w + 50;
+        const pw = W.x + W.w - 40 - px;
+        if (hover) {
+            const at = G.powerNode(hover.id);
+            const check = G.powerCheck(hover.id);
+            UIKit.text(ctx, at.branch.name, px, W.y + 120, 18, POWER_SECTORS[hover.branch].color, 'left', 'bold');
+            UIKit.text(ctx, at.node.name, px, W.y + 156, 28, T.cream, 'left', 'bold');
+            this.drawWrappedPower(ctx, at.node.desc, px, W.y + 196, pw, T.cream);
+            const say = { owned: ['찍음', T.good], locked: ['아직 이어지지 않음', T.creamSoft], exclusive: ['이 갈래의 끝은 하나만', T.creamSoft], limit: ['더 찍을 수 없음', T.bad], mana: [`마력 ${check.cost} 필요`, T.bad] }[check.reason] || [`마력 ${check.cost}로 찍기`, T.gold];
+            UIKit.text(ctx, say[0], px, W.y + 278, 20, say[1], 'left', 'bold');
+        } else {
+            this.drawWrappedPower(ctx, '왕좌나 찍은 곳과 이어진 항목을 찍습니다. 지도는 판마다 다릅니다.', px, W.y + 130, pw, T.creamSoft);
+        }
+        ctx.fillStyle = T.goldDark;
+        ctx.fillRect(px, W.y + 316, pw, 2);
+        UIKit.text(ctx, '찍은 권능', px, W.y + 346, 20, T.gold, 'left', 'bold');
+        map.nodes.filter(n => G.power(n.id)).forEach((n, i) => {
+            const y = W.y + 384 + i * 36;
+            this.powerGem(ctx, px + 10, y, 8, POWER_SECTORS[n.branch].color);
+            UIKit.text(ctx, G.powerNode(n.id).node.name, px + 30, y, 19, T.cream, 'left');
+        });
+    },
+
+    // 설명을 칸 너비에 맞춰 띄어쓰기 단위로 줄을 나눈다
+    drawWrappedPower(ctx, text, x, y, w, color) {
+        ctx.font = `17px ${UI_FONT}`;
+        let line = '';
+        let ly = y;
+        for (const word of text.split(' ')) {
+            const next = line ? `${line} ${word}` : word;
+            if (line && ctx.measureText(next).width > w) {
+                UIKit.text(ctx, line, x, ly, 17, color, 'left');
+                line = word;
+                ly += 24;
+            } else {
+                line = next;
+            }
+        }
+        if (line) UIKit.text(ctx, line, x, ly, 17, color, 'left');
     },
 
     // 설명 창(남색, 금테): 제목과 설명 한 줄. titleColor는 제목 색

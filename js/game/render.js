@@ -1589,7 +1589,7 @@ const Render = {
 
         if (UI.targeting) {
             const rule = COMBAT_RULES.lightning;
-            this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, rule.radius * TILE, 'rgba(160,220,255,1)');
+            this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, Game.lightningRadius() * TILE, 'rgba(160,220,255,1)');
         }
 
         this.drawHazards(ctx);

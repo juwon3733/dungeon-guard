@@ -160,6 +160,11 @@ function updateHero(h, dt) {
         Fx.burst(w.x, w.y, '#b98bff', 1, 80, 0.3, 6);
     }
     if (h.d >= ROUTES[h.route].length - 56) {
+        // 권능 문전박대: 5명째마다 왕좌를 때리지 않고 입구로 돌아간다
+        if (!h.boss && G.power('turnback') && ++G.arrivals % 5 === 0) {
+            h.d = 0;
+            return;
+        }
         h.dead = true;
         h.arrived = true;
         const w = heroWorld(h);
@@ -167,7 +172,7 @@ function updateHero(h, dt) {
         if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
-            G.leak = (G.leak || 0) + h.throneDamage;
+            G.leak = (G.leak || 0) + h.throneDamage * (G.power('ward') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;

@@ -5525,4 +5525,243 @@ Game.reset();
 console.log('smoke ok: seeded runs and daily challenge');
 }`, ctx, { filename: 'smoke-daily' });
 
+// ----- 마왕 권능 나무와 마력 -----
+vm.runInContext(`{
+const fresh = (mana) => { Game.reset({ lord: 'rift', relics: [] }); Game.mana = mana; };
+// 효과 시험은 지도와 상관없이 항목을 켠다. 찍기 규칙은 아래에서 따로 본다
+const buy = (...ids) => { for (const id of ids) Game.powers[id] = true; };
+// 표: 3갈래, 4겹, 겹마다 2개, 겹치지 않는 id
+const branches = LORD_POWERS.rift;
+assert.strictEqual(branches.length, 3);
+const ids = branches.flatMap(b => b.tiers.flat().map(n => n.id));
+assert.strictEqual(ids.length, 24);
+assert.strictEqual(new Set(ids).size, 24, 'node ids are unique');
+for (const b of branches) { assert.strictEqual(b.tiers.length, POWER_RULES.tierCost.length); for (const t of b.tiers) assert.strictEqual(t.length, 2); }
+// 지도: 같은 시드는 같고 시드가 다르면 달라지며, 어떤 시드든 모든 항목에 닿을 수 있고 왕좌와 이어진 곳이 있다
+const mapText = seed => JSON.stringify(buildPowerMap('rift', seed));
+assert.strictEqual(mapText('a'), mapText('a'), 'same seed, same map');
+const shapes = new Set();
+for (let i = 0; i < 40; i++) {
+    const map = buildPowerMap('rift', 'seed' + i);
+    shapes.add(JSON.stringify(map.edges));
+    assert.strictEqual(map.nodes.length, 24);
+    const seen = new Set(['core']);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const [a, b] of map.edges) {
+            if (seen.has(a) !== seen.has(b)) { seen.add(a); seen.add(b); grew = true; }
+        }
+    }
+    assert.strictEqual(seen.size, 25, 'every node is reachable');
+    for (const n of map.nodes) assert(Math.abs(n.x) < 1.1 && Math.abs(n.y) < 1.1, 'node inside the map');
+}
+assert(shapes.size > 20, 'maps differ by seed: ' + shapes.size);
+assert.strictEqual(buildPowerMap('gold_king', 'a').nodes.length, 0, 'lord without powers');
+// 지도를 만들어도 판의 난수는 그대로다
+Rng.start('x');
+const r0 = rng('summon');
+Rng.start('x');
+buildPowerMap('rift', 'y');
+assert.strictEqual(rng('summon'), r0, 'map uses its own numbers');
+Rng.stop();
+// 도전은 시드가 같으면 지도가 같다
+{
+    const C = dailyChallenge('2026-11-07');
+    Game.reset(null, null, C);
+    const A = Game.powerSeed;
+    Game.reset(null, null, C);
+    assert.strictEqual(Game.powerSeed, A, 'challenge map is fixed');
+    assert.strictEqual(A, String(C.seed));
+}
+// 찍기 규칙: 이어진 곳, 비용, 맨 끝 택1, 개수 상한, 없는 항목
+fresh(0);
+assert.strictEqual(Game.powerCheck('nope').reason, 'none');
+{
+    const map = Game.powerMap();
+    const next = (from) => map.edges.filter(e => e.includes(from)).map(e => (e[0] === from ? e[1] : e[0])).filter(x => x !== 'core');
+    const start = map.edges.find(e => e[0] === 'core')[1];
+    assert.strictEqual(Game.powerCheck(start).reason, 'mana', 'linked to the throne but no mana');
+    const far = map.nodes.find(n => n.tier === 3);
+    assert.strictEqual(Game.powerCheck(far.id).reason, 'locked', 'far node is not linked');
+    Game.mana = 100;
+    assert(Game.act({ kind: 'power', id: start }).ok);
+    assert.strictEqual(Game.mana, 100 - POWER_RULES.tierCost[map.nodes.find(n => n.id === start).tier], 'cost by ring');
+    assert.strictEqual(Game.powerCheck(start).reason, 'owned');
+    const up = next(start).find(id => map.nodes.find(n => n.id === id).tier === 1);
+    assert(up && Game.powerCheck(up).ok, 'owning a node opens its links');
+    // 맨 끝 겹은 갈래마다 하나
+    fresh(100);
+    const top = branches[0].tiers[3];
+    Game.powers[top[0].id] = true;
+    Game.powers[branches[0].tiers[2][0].id] = true;
+    Game.powers[branches[0].tiers[2][1].id] = true;
+    assert.strictEqual(Game.powerCheck(top[1].id).reason, 'exclusive', 'top ring picks one');
+    // 상한
+    fresh(100);
+    ids.slice(0, POWER_RULES.maxNodes).forEach(id => { Game.powers[id] = true; });
+    const open = ids.slice(POWER_RULES.maxNodes).find(id => Game.powerLinked(id) && Game.powerCheck(id).reason !== 'exclusive');
+    assert.strictEqual(Game.powerCheck(open).reason, 'limit', 'cannot take everything');
+    assert(!Game.powerReady(), 'nothing to buy at the limit');
+}
+// 수치 효과
+fresh(100);
+const dmg = Game.lightningDamage();
+const cd = Game.skillCooldown('lightning');
+const roarCd = Game.skillCooldown('roar');
+buy('wide', 'focus', 'quick', 'roarDrill');
+assert.strictEqual(Game.lightningRadius(), COMBAT_RULES.lightning.radius + 0.5);
+assert(Math.abs(Game.lightningDamage() - dmg * 1.3) < 1e-9, 'focus');
+assert(Math.abs(Game.skillCooldown('lightning') - cd * 0.85) < 1e-9, 'quick');
+assert(Math.abs(Game.skillCooldown('roar') - roarCd * 0.7) < 1e-9, 'roarDrill');
+// 번개 시험 준비: 용사 하나를 정해진 자리에 세운다
+const arena = () => {
+    Game.state = 'prep'; Game.startWave();
+    const list = Game.heroes.filter(h => !h.boss && !h.elite);
+    Game.heroes = list.slice(0, 6);
+    Game.heroes.forEach((h, i) => { h.waiting = false; h.hp = h.maxHp = 1e6; h.armor = 0; h.lane = 0; h.route = 'north'; h.d = 1000 + i * 480; });
+    return Game.heroes;
+};
+const strikeAt = (h, extra) => { const p = heroWorld(h); resolveStrike(Object.assign({ x: p.x, y: p.y, t: 0 }, extra)); };
+// 폭풍
+fresh(100); buy('focus', 'static'); let hs = arena();
+let hp = hs[0].hp; strikeAt(hs[0]);
+assert(Math.abs(hp - hs[0].hp - Game.lightningDamage()) < 1e-6, 'strike hits');
+assert(hs[0].slow > 0 && hs[0].slowMul === 0.7, 'static slows');
+assert(hs[5].hp === hs[5].maxHp, 'far hero untouched without chain');
+fresh(100); hs = arena(); strikeAt(hs[0]); const baseCurse = hs[0].curse;
+fresh(100); buy('wide', 'markLong'); hs = arena(); strikeAt(hs[0]);
+assert.strictEqual(hs[0].curse, baseCurse + 3, 'markLong');
+fresh(100); buy('wide', 'static', 'chain'); hs = arena(); strikeAt(hs[0]);
+assert.strictEqual(hs.filter(h => h.hp < h.maxHp).length, 4, 'chain hits three more');
+fresh(100); buy('wide', 'static', 'echo'); hs = arena(); strikeAt(hs[0]);
+assert.strictEqual(Game.pendingStrikes.length, 1, 'echo queued');
+assert.strictEqual(Game.pendingStrikes[0].mul, 0.5);
+hp = hs[0].hp; resolveStrike(Game.pendingStrikes[0]);
+assert(Math.abs(hp - hs[0].hp - Game.lightningDamage() * 0.5 * hs[0].curseMul) < 1e-6, 'echo half damage');
+assert.strictEqual(Game.pendingStrikes.length, 1, 'echo makes no new echo');
+fresh(100); buy('wide', 'static', 'echo', 'smite'); hs = arena(); hs[0].elite = true;
+hp = hs[0].hp; strikeAt(hs[0]);
+assert(hp - hs[0].hp > Game.lightningDamage() * 1.9, 'smite doubles on elite');
+fresh(100); buy('wide', 'static', 'echo', 'auto'); hs = arena();
+Game.skills.lightning = 0; Game.update(GAME_TICK);
+assert(Game.skills.lightning > 0 && Game.pendingStrikes.length === 1, 'auto casts by itself');
+// 균열
+fresh(100); buy('tear'); hs = arena(); strikeAt(hs[0]);
+assert(hs[0].stun >= 1 && hs[0].stun < 2 && hs[0].d === 1000, 'tear stuns without moving');
+fresh(100); buy('tear', 'pull'); hs = arena(); strikeAt(hs[0]);
+assert.strictEqual(hs[0].d, 1000 - 2 * TILE, 'pull');
+fresh(100); buy('tear', 'pull', 'longTear', 'exile'); hs = arena(); strikeAt(hs[0]);
+assert.strictEqual(hs[0].stun, 2, 'longTear');
+assert.strictEqual(hs[0].d, 1000 - 4 * TILE, 'exile doubles pull');
+fresh(100); buy('tear', 'pull', 'longTear', 'abyss'); hs = arena(); strikeAt(hs[0]);
+assert(hs[0].curse === 5 && hs[0].curseMul === 1.4, 'abyss');
+// 왕좌 결계와 문전박대
+fresh(100); buy('ward'); hs = arena(); hs[0].d = ROUTES[hs[0].route].length; Game.leak = 0;
+updateHero(hs[0], GAME_TICK);
+assert(hs[0].dead && Math.abs(Game.leak - hs[0].throneDamage * 0.8) < 1e-9, 'ward');
+fresh(100); buy('ward', 'turnback'); hs = arena();
+for (let i = 0; i < 5; i++) { hs[i].d = ROUTES[hs[i].route].length; updateHero(hs[i], GAME_TICK); }
+assert(hs[4].d < 100 && !hs[4].dead, 'fifth arrival goes back to the gate');
+assert(hs[0].dead && hs[3].dead, 'others still arrive');
+// 균열 열기
+fresh(100);
+assert(!Game.act({ kind: 'portal' }).ok, 'gate needs the node');
+buy('tear', 'pull', 'gate');
+assert(!Game.act({ kind: 'portal' }).ok, 'gate needs heroes');
+hs = arena();
+const near = hs[5].d, far = hs[0].d;
+assert(Game.act({ kind: 'portal' }).ok);
+assert.strictEqual(hs[5].d, near - COMBAT_RULES.portal.back * TILE, 'nearest pushed back');
+assert.strictEqual(Game.skills.portal, Game.skillCooldown('portal'));
+assert(!Game.act({ kind: 'portal' }).ok, 'gate on cooldown');
+assert(far >= 0);
+// 과부하
+const killOne = (h) => { h.hp = 1; damageHero(h, 10, 0, 0); assert(h.dead, 'killed'); };
+fresh(100); buy('quick', 'killCharge'); hs = arena(); Game.skills.lightning = 10; killOne(hs[0]);
+assert(Math.abs(Game.skills.lightning - 9.9) < 1e-9, 'killCharge');
+fresh(100); buy('quick', 'killCharge', 'circuit', 'frenzy'); hs = arena(); Game.skills.lightning = 10; killOne(hs[0]);
+assert(Math.abs(Game.skills.lightning - 9.7) < 1e-9, 'frenzy charges more');
+Game.hp = 1;
+assert(Game.roarLocked(), 'frenzy locks roar');
+fresh(100); buy('quick', 'killCharge', 'eliteCharge'); hs = arena(); hs[0].elite = true; Game.skills.lightning = 10; killOne(hs[0]);
+assert.strictEqual(Game.skills.lightning, 0, 'eliteCharge');
+fresh(100); buy('quick', 'killCharge', 'circuit', 'rally'); arena(); Game.hp = 1; Game.skills.lightning = 10;
+assert(Game.act({ kind: 'roar' }).ok);
+assert.strictEqual(Game.skills.lightning, 0, 'rally');
+fresh(100); buy('quick', 'sacCharge'); Game.gold = 9999; Game.state = 'prep';
+const sac = Game.place('orc_guard', 3, 6);
+assert(sac, 'placed a sacrifice');
+const sacGain = Game.sacrificeGain(sac);
+Game.skills.lightning = 100;
+assert(Game.sacrifice(sac).ok);
+assert(Math.abs(Game.skills.lightning - (100 - sacGain.lightning * 2)) < 1e-9, 'sacCharge');
+// 권능이 없는 마왕은 마력을 모으지 않고 찍을 수도 없다
+Game.reset({ lord: 'rift', relics: [] });
+Game.lord = 'gold_king';
+Game.addMana(3);
+assert.strictEqual(Game.mana, 0);
+assert.strictEqual(Game.powerCheck('wide').reason, 'none');
+// 왕좌가 맞지 않은 라운드만 마력을 주고, 마력 회로는 하나 더 준다
+Game.reset({ lord: 'rift', relics: [] });
+Game.state = 'prep'; Game.startWave();
+Game.heroes = [];
+Game.endWave();
+assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound, 'clean round');
+Game.state = 'prep'; Game.startWave();
+damageThrone(1);
+Game.heroes = [];
+Game.endWave();
+assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound, 'hit round gives nothing');
+fresh(0); Game.powers.circuit = true;
+Game.state = 'prep'; Game.startWave();
+Game.heroes = [];
+Game.endWave();
+assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound + 1, 'circuit');
+// 권능을 찍고 쓴 판도 입력 재생 결과가 같다(번 마력으로만 찍는다). 마왕이 균열의 군주로 정해지는 날을 고른다
+{
+    let date = null;
+    for (let d = 1; d <= 28 && !date; d++) {
+        const text = '2026-11-' + String(d).padStart(2, '0');
+        if (dailyChallenge(text).lord === 'rift') date = text;
+    }
+    assert(date, 'a rift day exists');
+    Game.reset(null, null, dailyChallenge(date));
+    Game.state = 'prep';
+    assert.strictEqual(Game.lord, 'rift');
+    let guard = 0;
+    while (Game.inPlay() && guard++ < 60 * 60 * 120) {
+        if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+        if (Game.tick % 20 === 0 && Game.waveIndex < 14) {
+            if (!Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+            const ms = Game.monsters.filter(m => !m.removed);
+            for (const a of ms) {
+                const b = ms.find(o => o !== a && MONSTERS[o.type].grade === MONSTERS[a.type].grade && Game.mergePlanFor(a, o));
+                if (b) { Game.act({ kind: 'merge', src: a, dst: b }); break; }
+            }
+        }
+        // 지도에서 지금 찍을 수 있는 첫 항목을 찍는다
+        const next = Game.powerMap().nodes.find(n => Game.powerCheck(n.id).ok);
+        if (next) Game.act({ kind: 'power', id: next.id });
+        if (Game.tick % 300 === 0 && Game.state === 'wave' && !Game.power('auto')) Game.act({ kind: 'lightning', x: 700, y: 500 });
+        if (Game.tick % 400 === 0 && Game.power('gate')) Game.act({ kind: 'portal' });
+        Game.update(GAME_TICK);
+    }
+    const record = JSON.parse(JSON.stringify(Game.record));
+    const result = Game.challengeResult;
+    const built = Object.assign({}, Game.powers);
+    const buys = record.inputs.filter(x => x.kind === 'power').length;
+    assert(result && buys >= 4, 'bot earned mana and bought powers: ' + buys);
+    const orig = Math.random;
+    let x = 0.321;
+    Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
+    const R = replayChallenge(record);
+    Math.random = orig;
+    assert.strictEqual(JSON.stringify(R), JSON.stringify(result), 'replay with powers gives the same result');
+    assert.strictEqual(JSON.stringify(Game.powers), JSON.stringify(built), 'replay builds the same powers');
+    console.log('smoke power replay: ' + date + ' buys ' + buys + ' ' + Object.keys(built).join(',') + ' score ' + result.score);
+}
+Game.reset();
+console.log('smoke ok: lord powers');
+}`, ctx, { filename: 'smoke-powers' });
+
 require('./smoke_maps.js');

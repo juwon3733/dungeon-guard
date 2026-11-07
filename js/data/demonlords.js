@@ -51,6 +51,88 @@ const LORD_EFFECTS = {
     heroHp: { name: '용사 체력', mode: 'mul', low: true }
 };
 
+// 마왕 권능 지도: 왕좌를 가운데 둔 연결망. 큰 갈래 3개가 뻗고, 갈래마다 4겹에 2개씩 있다. 판 안에서 마력을 써서 찍는다.
+// 왕좌나 이미 찍은 곳과 이어진 항목만 찍을 수 있다. 맨 바깥 겹은 갈래마다 하나만 고른다.
+// 항목의 자리와 연결은 시드로 정해 판마다 갈 수 있는 길이 다르다(같은 시드 도전은 모두 같은 지도).
+// 한 판에 maxNodes개까지라 전부 찍을 수 없다(빌드). 마력은 판이 끝나면 사라진다(오래 한 사람이 랭킹에서 유리해지지 않게).
+// 수치는 플레이 후 고칠 초안이다.
+const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1 };
+const LORD_POWERS = {
+    rift: [
+        { id: 'storm', name: '폭풍', desc: '번개를 넓고 세게', tiers: [
+            [{ id: 'wide', name: '넓은 낙뢰', desc: '번개 범위 +0.5칸' }, { id: 'focus', name: '벼락 집중', desc: '번개 피해 +30%' }],
+            [{ id: 'markLong', name: '깊은 낙인', desc: '감전 낙인 +3초' }, { id: 'static', name: '정전기', desc: '맞은 용사 3초간 이동 -30%' }],
+            [{ id: 'chain', name: '연쇄 낙뢰', desc: '범위 밖 가까운 용사 3명에게 작은 번개' }, { id: 'echo', name: '메아리', desc: '1초 뒤 같은 자리에 피해 50% 번개' }],
+            [{ id: 'smite', name: '천벌', desc: '번개가 정예와 보스에게 피해 2배' }, { id: 'auto', name: '폭풍의 눈', desc: '번개가 준비되면 맨 앞 용사에게 저절로 떨어짐' }]
+        ] },
+        { id: 'portal', name: '균열', desc: '용사를 되돌린다', tiers: [
+            [{ id: 'tear', name: '찢긴 틈', desc: '번개에 맞은 용사 1초 정지' }, { id: 'ward', name: '왕좌 결계', desc: '일반 용사의 왕좌 피해 -20%' }],
+            [{ id: 'pull', name: '끌어당김', desc: '번개에 맞은 용사 2칸 뒤로(보스 제외)' }, { id: 'turnback', name: '문전박대', desc: '왕좌에 닿는 일반 용사 5명째마다 입구로' }],
+            [{ id: 'gate', name: '균열 열기', desc: '새 스킬(E): 왕좌에 가까운 용사 8명을 6칸 뒤로' }, { id: 'longTear', name: '긴 틈', desc: '번개에 맞은 용사 2초 정지' }],
+            [{ id: 'abyss', name: '심연의 손길', desc: '번개에 맞거나 균열로 되돌린 용사 5초간 받는 피해 +40%' }, { id: 'exile', name: '먼 추방', desc: '되돌리는 거리 2배' }]
+        ] },
+        { id: 'overload', name: '과부하', desc: '번개와 호통을 자주 쓴다', tiers: [
+            [{ id: 'quick', name: '빠른 충전', desc: '번개 재사용 -15%' }, { id: 'roarDrill', name: '호통 단련', desc: '호통 재사용 -30%' }],
+            [{ id: 'killCharge', name: '처치 충전', desc: '일반 용사 처치마다 번개 재사용 -0.1초' }, { id: 'sacCharge', name: '제물 충전', desc: '제물의 번개 단축 2배' }],
+            [{ id: 'eliteCharge', name: '사냥 충전', desc: '정예 처치 시 번개 재사용이 끝남' }, { id: 'circuit', name: '마력 회로', desc: '왕좌가 안 맞은 라운드 마력 +1' }],
+            [{ id: 'frenzy', name: '폭주', desc: '처치마다 번개 재사용 -0.3초, 대신 호통 불가' }, { id: 'rally', name: '맞불', desc: '호통을 쓰면 번개 재사용이 끝남' }]
+        ] }
+    ]
+};
+
+// 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
+const POWER_SECTORS = [{ angle: 205, color: '#7fd8ff' }, { angle: 335, color: '#c98bff' }, { angle: 90, color: '#ff9a4d' }];
+
+// 지도를 시드로 만든다: { nodes: [{ id, branch, tier, x, y }], edges: [[id, id]] }. x, y는 가운데 0, 끝 1인 값
+// 판의 난수 흐름과 따로 계산해 지도를 만들어도 소환 결과가 바뀌지 않는다
+function buildPowerMap(lordId, seed) {
+    const branches = LORD_POWERS[lordId] || [];
+    let state = hashSeed(`${seed}/powermap/${lordId}`);
+    const next = () => {
+        state = (state + 0x6D2B79F5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const nodes = [];
+    const edges = [];
+    const grid = []; // grid[갈래][겹][왼쪽0 오른쪽1] = 항목
+    branches.forEach((br, b) => {
+        const sector = POWER_SECTORS[b];
+        grid[b] = br.tiers.map((list, tier) => {
+            const order = next() < 0.5 ? [list[0], list[1]] : [list[1], list[0]];
+            const spread = 30 - tier * 3;
+            return order.map((node, side) => {
+                const ang = (sector.angle + (side ? spread : -spread) + (next() - 0.5) * 10) * Math.PI / 180;
+                const r = (tier + 1) / br.tiers.length + (next() - 0.5) * 0.05;
+                const n = { id: node.id, branch: b, tier, side, x: Math.cos(ang) * r, y: Math.sin(ang) * r };
+                nodes.push(n);
+                return n;
+            });
+        });
+        const rows = grid[b];
+        // 첫 겹은 하나만 왕좌와 이어질 수도 있다. 그래도 옆 칸으로 건너갈 수 있어 모두 닿는다
+        const firstBoth = next() < 0.6;
+        const openSide = next() < 0.5 ? 0 : 1;
+        rows[0].forEach((n, side) => { if (firstBoth || side === openSide) edges.push(['core', n.id]); });
+        edges.push([rows[0][0].id, rows[0][1].id]);
+        for (let t = 1; t < rows.length; t++) {
+            rows[t].forEach((n, side) => {
+                edges.push([rows[t - 1][side].id, n.id]);
+                if (next() < 0.35) edges.push([rows[t - 1][1 - side].id, n.id]);
+            });
+        }
+    });
+    // 갈래 사이의 다리: 이웃한 갈래의 가까운 항목을 잇는다. 어느 겹에서 이어질지 시드로 정해 섞인 빌드의 길이 판마다 다르다
+    branches.forEach((br, b) => {
+        const other = grid[(b + 1) % branches.length];
+        if (!other || branches.length < 2) return;
+        const tier = next() < 0.5 ? 1 : 2;
+        edges.push([grid[b][tier][1].id, other[tier][0].id]);
+    });
+    return { nodes, edges };
+}
+
 // 유물 효과의 상한과 기준 수
 const RELIC_LIMITS = { goldStep: 200, goldDamageMax: 0.15, altarDamageMax: 0.15, interestMax: 15, fewCount: 6 };
 
