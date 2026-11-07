@@ -16,21 +16,21 @@ ART = {
     # 언데드
     'zombie': ('e:drownedPirate', 1, 1), 'grave_keeper': ('e:lanternWraith', 1, 1),
     'curse_shooter': ('e:pirateGunner', 1, 1), 'wraith_swordsman': ('e:shadowKnight', 1, 1), 'plague_ghoul': ('e:mistWraith', 1, 1),
-    'bone_knight': ('b:mid_riftKnight', 2, 2), 'vampire': ('b:mid_vampireCount', 2, 2), 'bone_priest': ('b:bog_witch', 1, 2),
+    'bone_knight': ('b:mid_riftKnight', 1, 1), 'vampire': ('b:mid_vampireCount', 1, 1), 'bone_priest': ('b:bog_witch', 1, 2),
     'death_lord': ('b:fallen_knight', 2, 3), 'archlich': ('b:abyssJailer', 2, 3),
     # 오크(맞는 그림만)
     'orc_charger': ('a:boarWarrior', 1, 1), 'orc_high_chief': ('b:mid_boarWarlord', 3, 2), 'giant_king': ('b:fb_ashSmith', 3, 3),
     # 악마
     'fire_imp': ('e:fireImp', 1, 1), 'hellhound_warrior': ('e:lavaHound', 1, 1), 'flame_archer': ('e:emberKnight', 1, 1),
-    'flame_demon': ('b:mid_infernalSmith', 2, 2), 'executioner': ('b:mid_shadowReaper', 2, 2), 'chaos_mage': ('b:abyssMirror', 1, 2),
+    'flame_demon': ('b:mid_infernalSmith', 1, 1), 'executioner': ('b:mid_shadowReaper', 1, 1), 'chaos_mage': ('b:abyssMirror', 1, 2),
     'hell_general': ('b:flame_lord', 3, 3), 'fallen_angel': ('b:eclipsa', 2, 3),
     # 야수
     'boar_warrior': ('e:rusher', 1, 1), 'spider_archer': ('e:gemBeetle', 1, 1), 'bear_warrior': ('e:yeti', 1, 1), 'eagle_hunter': ('e:featherArcher', 1, 1),
-    'saber_warrior': ('e:crownLion', 2, 1), 'hydra_warrior': ('b:mid_bogHydra', 2, 2), 'earth_behemoth': ('b:thorn_king', 3, 2), 'phoenix_lord': ('b:mid_phoenix', 3, 2),
+    'saber_warrior': ('e:crownLion', 2, 1), 'hydra_warrior': ('b:mid_bogHydra', 1, 1), 'earth_behemoth': ('b:thorn_king', 3, 2), 'phoenix_lord': ('b:mid_phoenix', 3, 2),
     # 정령
     'wisp_acolyte': ('e:frostWisp', 1, 1), 'rock_spirit': ('e:mudGolem', 1, 1), 'wind_sylph': ('e:gustSprite', 1, 1),
     'frost_witch': ('e:snowShaman', 1, 1), 'water_spirit': ('e:tideSkipper', 1, 1), 'lightning_spirit': ('e:voidOrb', 1, 1),
-    'ancient_treant': ('b:mid_elderTreant', 2, 2), 'moon_priestess': ('e:moonPriestess', 1, 1), 'storm_archer': ('b:storm_griffin', 2, 2),
+    'ancient_treant': ('b:mid_elderTreant', 1, 1), 'moon_priestess': ('e:moonPriestess', 1, 1), 'storm_archer': ('b:storm_griffin', 1, 1),
     'element_sage': ('b:fateGod', 2, 3), 'crystal_giant': ('b:crystal_colossus', 3, 3),
     # 신화
     'abyss_dragon_king': ('b:abyss_wyrm', 3, 3), 'time_witch': ('b:chronos', 2, 3), 'soul_devourer': ('b:abyssDevourer', 3, 2),
@@ -39,6 +39,9 @@ ART = {
     # 히든 신화
     'sun_god': ('b:sunGod', 2, 3), 'moon_god': ('b:moonGod', 3, 3), 'death_god': ('b:deathGod', 2, 3), 'god_king': ('b:godKing', 3, 3),
 }
+# 1칸을 차지하지만 일반보다 조금 크게 그리는 영웅(화면 px)
+EPIC_BOX = {k: 112 for k in ('bone_knight', 'vampire', 'flame_demon', 'executioner', 'hydra_warrior', 'ancient_treant', 'storm_archer')}
+current = None
 RANGED = {'curse_shooter', 'bone_priest', 'vampire', 'archlich', 'fire_imp', 'chaos_mage', 'fallen_angel', 'spider_archer', 'eagle_hunter', 'hydra_warrior',
           'phoenix_lord', 'wisp_acolyte', 'wind_sylph', 'frost_witch', 'water_spirit', 'lightning_spirit', 'moon_priestess', 'storm_archer', 'element_sage',
           'time_witch', 'abyss_dragon_king', 'soul_devourer', 'bone_dragon', 'frost_queen', 'star_whale', 'frost_drake', 'sun_god', 'moon_god'}
@@ -78,6 +81,7 @@ def fit(im, w_cells, h_cells):
     # 가로는 칸 너비의 1.25배, 세로는 칸 높이에 머리 위 여유를 둔다
     box_w = w_cells * CELL * 1.25
     box_h = h_cells * CELL + 40
+    if current in EPIC_BOX: box_w = box_h = EPIC_BOX[current]  # 1칸 영웅: 일반보다 조금 크게
     k = min(1.5 if w_cells * h_cells >= 4 else 1, box_w / im.width, box_h / im.height)
     if k == 1: return im
     return im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS if k < 1 else Image.NEAREST)
@@ -102,6 +106,7 @@ def flip(im):
 
 art = {}
 for mid, (src, w, h) in ART.items():
+    current = mid
     kind, name = src.split(':')
     sprite = f'ast_mon_{mid}'
     shutil.rmtree(os.path.join(OUT, sprite), ignore_errors=True)

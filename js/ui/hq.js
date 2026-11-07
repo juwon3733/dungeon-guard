@@ -784,6 +784,7 @@ Object.assign(UI, {
             ctx.font = `20px ${UI_FONT}`;
             ex += ctx.measureText(text).width + 24;
         }
+        UIKit.ink(ctx, `패시브 · ${lord.passive.name}: ${lord.passive.desc}`, x + 40, y + 500, 19, T.inkWax);
         c.relics.forEach((id, i) => {
             const ry = y + 148 + i * 72;
             UIKit.ink(ctx, '유물', x + 40, ry + 34, 22, T.inkSoft, 'left', 'bold');

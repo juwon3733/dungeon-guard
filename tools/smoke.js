@@ -201,6 +201,8 @@ MAPS.merge.cursed = [];
 var SAVED_STAGE_MAPS = STAGES.map(st => st.mapId);
 for (const st of STAGES) st.mapId = 'merge';
 setMap('merge');
+var SAVED_PASSIVES = {};
+for (const l of Object.values(DEMON_LORDS)) { SAVED_PASSIVES[l.id] = l.passive; delete l.passive; }
 var SAVED_RAID = {};
 for (const id of Object.keys(RAID_BOSSES)) { SAVED_RAID[id] = BOSSES[id]; delete BOSSES[id]; }
 var SAVED_SWARM = Object.assign({}, SWARM_RULES);
@@ -4524,7 +4526,8 @@ for (const id of Object.keys(SAVED_CELLS)) if (SAVED_CELLS[id]) MONSTERS[id].art
 assert.deepStrictEqual([...monsterCells('crystal_giant')], [3, 3]);
 assert.deepStrictEqual([...monsterCells('orc_guard')], [1, 1]);
 const shapes = new Set(Object.keys(MONSTERS).map(id => monsterCells(id).join('x')));
-assert(['1x1', '2x1', '1x2', '2x2', '3x2', '2x3', '3x3'].every(x => shapes.has(x)), 'shapes vary by monster');
+assert(['1x1', '2x1', '1x2', '3x2', '2x3', '3x3'].every(x => shapes.has(x)), 'shapes vary by monster');
+assert(Object.values(MONSTERS).filter(m => m.grade === 'epic').every(m => monsterCells(m.id).join() !== '2,2'), 'no 2x2 epics');
 // 모든 칸 모양이 맵에 놓일 자리가 있다
 const fit = (type) => [...BUILD_CELLS].filter(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(type, c, r); });
 Game.reset();
@@ -4769,6 +4772,7 @@ console.log('smoke ok: mythics and skills');
 
 // ----- 유물 19종의 효과 -----
 vm.runInContext(`{
+for (const l of Object.values(DEMON_LORDS)) l.passive = SAVED_PASSIVES[l.id];
 MAPS.merge.altars = SAVED_TILES.altars;
 MAPS.merge.cursed = SAVED_TILES.cursed;
 STAGES.forEach((st, i) => { st.mapId = SAVED_STAGE_MAPS[i]; });
@@ -5373,6 +5377,107 @@ Game.reset();
 }
 Game.reset();
 
+// ----- 자동 합치기 -----
+{
+    Game.reset();
+    Game.state = 'wave';
+    const cells = () => [...BUILD_CELLS].map(k => k.split(',').map(Number)).filter(([c, r]) => Game.canPlace('orc_guard', c, r));
+    const put = t => Game.place(t, ...cells()[0]);
+    for (let i = 0; i < 3; i++) put('orc_guard');
+    for (let i = 0; i < 3; i++) put('troll');
+    assert.strictEqual(Game.autoMerge, false, 'off by default');
+    Game.update(GAME_TICK * 2);
+    assert.strictEqual(Game.monsters.length, 6, 'nothing merges when off');
+    assert(Game.act({ kind: 'autoMerge', on: true }).ok);
+    assert(Game.autoMergeStep().ok);
+    assert.strictEqual(Game.monsters.filter(m => MONSTERS[m.type].grade === 'common').length, 0, 'lowest grade first');
+    // S랭크는 재료로 쓰지 않는다
+    Game.reset();
+    Game.state = 'wave';
+    const a = put('troll'), b = put('troll'), c2 = put('troll');
+    setMonsterRank(a, 4);
+    assert.strictEqual(Game.autoMergeStep().ok, false, 'S rank is kept');
+    assert(!a.removed && !b.removed && !c2.removed);
+    // 켜 두면 0.5초마다 저절로 합친다
+    Game.reset();
+    Game.state = 'wave';
+    for (let i = 0; i < 3; i++) put('orc_guard');
+    Game.act({ kind: 'autoMerge', on: true });
+    for (let i = 0; i < AUTO_MERGE_TICKS + 1; i++) Game.update(GAME_TICK);
+    assert.strictEqual(Game.monsters.length, 1, 'merged on its own');
+    Game.reset();
+    assert.strictEqual(Game.autoMerge, false, 'reset clears it');
+    // 입력 재생
+    Game.reset(null, null, dailyChallenge('2026-11-11'));
+    Game.state = 'prep';
+    Game.act({ kind: 'autoMerge', on: true });
+    let guard = 0;
+    while (Game.inPlay() && guard++ < 60 * 60 * 120) {
+        if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+        if (Game.tick % 20 === 0 && Game.waveIndex < 12 && !Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+        Game.update(GAME_TICK);
+    }
+    const first = JSON.stringify(Game.challengeResult);
+    assert(Game.stats.merged > 0, 'auto merge merged');
+    const rec = JSON.parse(JSON.stringify(Game.record));
+    const orig = Math.random;
+    let x = 0.31;
+    Math.random = () => { x = (x * 9301 + 0.49297) % 1; return x; };
+    const again = replayChallenge(rec);
+    Math.random = orig;
+    assert.strictEqual(JSON.stringify(again), first, 'auto merge replays the same');
+}
+// ----- 마왕 패시브 -----
+{
+    for (const l of Object.values(DEMON_LORDS)) assert(l.passive && l.passive.name && l.passive.desc, l.id + ' passive');
+    assert.strictEqual(new Set(Object.values(DEMON_LORDS).map(l => l.passive.kind)).size, 3, 'all different');
+    const makeHero = t => { const h = createHero(t || 'warrior', 0, 0, null, 'north'); h.waiting = false; h.delay = 0; h.d = 200; h.hp = h.maxHp = 1e6; Game.heroes.push(h); return h; };
+    const start = lord => { Game.reset(null, null, { kind: 'test', id: 't', seed: 's', lord, relics: [], cards: [], map: 'merge', zone: 'ember' }); Game.state = 'wave'; };
+    // 균열의 군주: 번개에 맞으면 저주
+    start('rift');
+    let h = makeHero();
+    const p = heroWorld(h);
+    resolveStrike({ x: p.x, y: p.y });
+    assert(h.curse > 0 && h.curseMul === 1.3, 'lightning curse');
+    start('gold_king');
+    h = makeHero();
+    resolveStrike({ x: heroWorld(h).x, y: heroWorld(h).y });
+    assert(!(h.curse > 0), 'only the rift lord');
+    // 황금 마왕: 소환 강화 할인, 정예 처치 골드 2배
+    assert.strictEqual(Game.summonUpgradeCost(), Math.round(SUMMON_LEVELS[1].cost * 0.75), 'upgrade discount');
+    let e = createHero('elite_swordsman', 0, 0, null, 'north');
+    e.waiting = false;
+    Game.heroes.push(e);
+    let g0 = Game.gold;
+    Game.goldLeft = 0;
+    damageHero(e, 1e9, 0, 0);
+    const twice = Game.gold - g0;
+    start('rift');
+    e = createHero('elite_swordsman', 0, 0, null, 'north');
+    e.waiting = false;
+    Game.heroes.push(e);
+    g0 = Game.gold;
+    Game.goldLeft = 0;
+    damageHero(e, 1e9, 0, 0);
+    assert(twice > Game.gold - g0, 'elite gold doubled');
+    assert.strictEqual(Game.summonUpgradeCost(), SUMMON_LEVELS[1].cost, 'no discount for others');
+    // 뼈의 여왕: 25명마다 망령이 앞선 용사를 때린다
+    start('bone_queen');
+    const front = makeHero();
+    Game.stats.kills = 24;
+    const v = makeHero();
+    v.hp = 1;
+    damageHero(v, 10, 0, 0);
+    assert.strictEqual(Game.stats.kills, 25);
+    assert(front.hp < front.maxHp, 'soul volley hits');
+    const hp1 = front.hp;
+    const w2 = makeHero();
+    w2.hp = 1;
+    damageHero(w2, 10, 0, 0);
+    assert.strictEqual(front.hp, hp1, 'only on the 25th');
+    Game.heroes = [];
+    Game.reset();
+}
 // 떼로 나오는 일반 용사
 Game.reset();
 Game.state = 'wave';

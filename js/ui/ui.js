@@ -207,6 +207,10 @@ const UI = {
             const r = this.bagRect(i);
             this.button(`bag${i}`, r.x, r.y, r.w, r.h, { bagSlot: i });
         }
+        // 자동 합치기: 다음 라운드 버튼 위. 켜면 다음 판에도 이어진다
+        this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y - 58, NEXT_BTN_W, 50, {
+            label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
+        });
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
@@ -626,8 +630,9 @@ const UI = {
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
         let y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
         // 다음 라운드 버튼을 가리지 않는다: 위로 올리고, 자리가 없으면 왼쪽에 연다
-        if (x + w > NEXT_BTN_X && y + h > NEXT_BTN_Y) {
-            if (NEXT_BTN_Y - 8 - h >= 80) y = NEXT_BTN_Y - 8 - h;
+        const nextTop = NEXT_BTN_Y - 58; // 자동 합치기 버튼까지
+        if (x + w > NEXT_BTN_X && y + h > nextTop) {
+            if (nextTop - 8 - h >= 80) y = nextTop - 8 - h;
             else x = cx - 64 - w;
         }
         return { x, y };
@@ -889,6 +894,11 @@ const UI = {
         this.dialogue = null;
         this.unlockCards = null;
         Game.speed = 1;
+        // 자동 합치기는 판마다 입력으로 켠다(입력 재생에 같은 순서로 남는다)
+        if (this.autoMergeOn === undefined) {
+            try { this.autoMergeOn = localStorage.getItem('dungeonGuard.autoMerge') === '1'; } catch (e) { this.autoMergeOn = false; }
+        }
+        if (this.autoMergeOn) Game.act({ kind: 'autoMerge', on: true });
         this.cancel();
         this.returning = [];
         this.tab = 'monster';
@@ -901,6 +911,12 @@ const UI = {
         this.tab = tab;
         if (tab !== 'monster') this.cancelDrag();
         if (tab !== 'demon') this.targeting = false;
+    },
+
+    toggleAutoMerge() {
+        this.autoMergeOn = !Game.autoMerge;
+        Game.act({ kind: 'autoMerge', on: this.autoMergeOn });
+        try { localStorage.setItem('dungeonGuard.autoMerge', this.autoMergeOn ? '1' : '0'); } catch (e) { /* 저장소 없음 */ }
     },
 
     // 소환 버튼과 S 키
@@ -1262,6 +1278,7 @@ const UI = {
         if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyU') this.doSummonUpgrade();
+        else if (code === 'KeyA') this.toggleAutoMerge();
         else if (code === 'KeyQ') this.toggleLightning();
         else if (code === 'KeyW') this.useRoar();
         else if (code === 'Tab') this.setTab(this.tab === 'monster' ? 'demon' : 'monster');
@@ -1271,6 +1288,8 @@ const UI = {
     },
 
     update(dt) {
+        if (this.drag && this.drag.src.monster && this.drag.src.monster.removed) this.cancelDrag();
+        if (this.selectedMonster && this.selectedMonster.removed) this.clearSelection();
         this.wipeArmed = Math.max(0, this.wipeArmed - dt);
         if (this.dialogue) {
             const D = this.dialogue;
@@ -1731,7 +1750,10 @@ const UI = {
             UIKit.ink(ctx, lord.name, cx, b.y + 296, 36, on ? T.inkWax : T.ink, 'center', 'bold');
             const y = this.drawEffectLines(ctx, lord.effects, cx, b.y + 336, 22, 29, 'center');
             ctx.font = `18px ${UI_FONT}`;
-            this.wrapLines(ctx, lord.desc, b.w - 80).slice(0, 3).forEach((line, i) => UIKit.ink(ctx, line, cx, y + 6 + i * 24, 18, T.inkSoft, 'center'));
+            // 고유 패시브: 이름과 설명
+            UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, cx, y + 8, 20, T.inkWax, 'center', 'bold');
+            ctx.font = `17px ${UI_FONT}`;
+            this.wrapLines(ctx, lord.passive.desc, b.w - 60).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, cx, y + 34 + i * 22, 17, T.ink, 'center'));
         }
 
         // 유물 격자: 은테 칸. 고른 유물은 금테 칸, 잠긴 유물은 흐린 그림 위에 자물쇠와 풀리는 스테이지 번호(도장)
