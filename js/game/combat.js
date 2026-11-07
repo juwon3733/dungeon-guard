@@ -2,6 +2,15 @@
 
 // attacker: 피해를 준 몬스터. 이 피해로 쓰러지면 그 몬스터가 처치 경험치를 받는다(번개, 타락 유닛은 넘기지 않는다)
 // dot이 true면 지속 피해(화상, 불 장판): 방어력을 무시하고 타격 섬광 없이 숫자만 띄운다. 실제로 준 피해를 돌려준다(흡혈)
+const HERO_KICK_TIME = 0.14; // 맞아서 밀렸다 돌아오는 시간(초)
+const KILL_POWER = [
+    { size: 110, sparks: 3, shake: 0 }, // 일반 몬스터의 처치
+    { size: 130, sparks: 4, shake: 0 },
+    { size: 160, sparks: 6, shake: 2 },
+    { size: 210, sparks: 8, shake: 4 },
+    { size: 260, sparks: 10, shake: 6 } // 신화
+];
+
 function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.dead) return 0;
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
@@ -12,6 +21,15 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);
     const small = !hero.boss && !hero.elite; // 떼로 나오는 일반 용사는 숫자를 띄우지 않아 화면을 가리지 않는다
+    // 맞으면 때린 쪽 반대로 잠깐 밀린다(연출만, 길 위 거리는 그대로다)
+    if (!dot && !hero.boss && fromX !== undefined) {
+        const kx = p.x - fromX;
+        const ky = p.y - fromY;
+        const len = Math.sqrt(kx * kx + ky * ky) || 1;
+        hero.kick = HERO_KICK_TIME;
+        hero.kickX = kx / len;
+        hero.kickY = ky / len;
+    }
     if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     if (!dot && small) {
         hero.flash = 0.09;
@@ -43,24 +61,26 @@ function killHero(hero, pos, attacker) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
         const y = pos.y - 24;
         if (bounty > 0) Fx.coin(pos.x, pos.y - 30, 1, 1);
-        Fx.anim('fx_explosion', pos.x, y, 170, 0.3);
-        Fx.burst(pos.x, y, '#ffffff', 5, 300, 0.35, 5);
-        Fx.burst(pos.x, y, '#ff9d4d', 5, 240, 0.4, 4);
-        Fx.addShake(1.5);
+        // 처치한 몬스터의 등급만큼 크게 터진다. 흔들림은 영웅 이상만: 약한 처치까지 흔들면 화면이 늘 떨린다
+        const killer = attacker && MONSTERS[attacker.type];
+        const power = KILL_POWER[killer ? Math.max(0, GRADE_ORDER.indexOf(killer.grade)) : 0];
+        Fx.anim('fx_explosion', pos.x, y, power.size, 0.3);
+        Fx.burst(pos.x, y, '#ffffff', power.sparks, 300, 0.35, 5);
+        Fx.burst(pos.x, y, '#ff9d4d', power.sparks, 240, 0.4, 4);
+        if (power.shake) Fx.addShake(power.shake);
         G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
         G.streakTimer = 2.4;
         if (G.streak >= 2) G.streakPop = 1;
-        // 연속 처치 글자는 10명마다
-        if (G.streak % 10 === 0) Fx.number({}, pos.x, pos.y - 150, `${G.streak} 연속!`, G.streak >= 50 ? '#ff7a5c' : '#9fe0ff', G.streak % 50 === 0);
         Sfx.play('kill', G.streak);
         // 시체는 쓰러지는 장식이라 많으면 오래된 것부터 지운다
         const fall = HEROES[hero.type].anim && HEROES[hero.type].anim.death;
         const life = CORRUPTION_ENABLED ? COMBAT_RULES.corpseTime : (fall ? fall.frames / CORPSE_FALL_FPS : 0) + CORPSE_FADE_TIME;
         if (!CORRUPTION_ENABLED && G.corpses.length >= 40) G.corpses.shift();
-        G.corpses.push({ type: hero.type, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir, age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul });
+        G.corpses.push({ type: hero.type, skin: hero.skin, anim: hero.anim, kickX: hero.kickX, kickY: hero.kickY, x: pos.x, y: pos.y, route: hero.route, d: hero.d, dir: hero.dir, age: 0, life, cost: bounty * COMBAT_RULES.corruptCostMul });
         return;
     }
     Fx.coin(pos.x, pos.y - 60, bounty);
+    Fx.hitStop(hero.boss ? 0.2 : 0.06); // 큰 처치에는 시간이 잠깐 멎는다
     // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)
     const cy = pos.y - (hero.boss ? 140 : 45);
     Fx.burst(pos.x, cy, hero.boss ? '#c893ff' : '#ffffff', hero.boss ? 70 : 20, hero.boss ? 680 : 380, 0.5, 7);
@@ -85,8 +105,6 @@ function killHero(hero, pos, attacker) {
     G.streak = G.streakTimer > 0 ? G.streak + 1 : 1;
     G.streakTimer = 2.4;
     if (G.streak >= 2) G.streakPop = 1;
-    // 연속 처치가 이어지면 처치 자리에 큰 글자(5, 10, 15...마다 더 크게)
-    if (G.streak >= 3) Fx.number({}, pos.x, pos.y - (hero.boss ? 420 : 250), `${G.streak} 연속!`, G.streak >= 10 ? '#ff7a5c' : '#9fe0ff', G.streak % 5 === 0);
     Sfx.play('kill', G.streak);
 
     if (!hero.boss) {

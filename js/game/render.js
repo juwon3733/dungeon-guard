@@ -381,8 +381,13 @@ const Render = {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);
             }
             const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
-            if (skin) this.plSprite(ctx, img, skin, skin.anim.walk, h.dir, p.x, p.y + 10);
-            else this.heroSprite(ctx, img, def, h.atkPose, h.dir, p.x, p.y + 10);
+            // 맞으면 잠깐 밀리고, 일반 용사는 걸음마다 2px씩 들썩인다
+            const push = h.kick > 0 ? h.kick / HERO_KICK_TIME * (h.elite ? 8 : 14) : 0;
+            const hop = !h.elite && !h.stun && !h.blocker ? Math.round(Math.abs(Math.sin(h.anim * Math.PI / 3)) * 2) * ART_SCALE : 0;
+            const bx = p.x + (h.kickX || 0) * push;
+            const by = p.y + 10 + (h.kickY || 0) * push - hop;
+            if (skin) this.plSprite(ctx, img, skin, skin.anim.walk, h.dir, bx, by);
+            else this.heroSprite(ctx, img, def, h.atkPose, h.dir, bx, by);
             // 일반 용사는 다쳤을 때만 작은 체력바를 그린다
             if (h.elite) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
             else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');
@@ -646,37 +651,75 @@ const Render = {
     monsterBody(ctx, def, m, img, clip) {
         const footY = m.y + MONSTER_FOOT;
         const w = def.art.cells ? def.art.cells[0] : 1;
-        this.shadow(ctx, m.x, footY - 2, 24 * w + 6, 7 * w + 3);
-        ctx.save();
-        this.monsterMotion(ctx, def, m, footY);
-        this.plSprite(ctx, img, def.art, clip, m.dir, m.x, footY);
-        ctx.restore();
+        const pose = this.monsterPose(def, m);
+        this.shadow(ctx, m.x + pose.dx * 0.6, footY - 2, 24 * w + 6, 7 * w + 3);
+        this.posedSprite(ctx, img, def.art, clip, m.dir, m.x, footY, pose);
     },
 
-    // 프레임이 적은 Asteria 그림(art.breathe)의 움직임: 발끝을 기준으로 숨 쉬고, 공격 때 앞으로 내지른다
-    monsterMotion(ctx, def, m, footY) {
-        if (!def.art.breathe) return;
-        let dx = 0;
-        let dy = 0;
-        let grow = 0;
-        let lean = 0;
+    // 프레임이 적은 Asteria 그림(art.breathe)의 자세. 배율을 바꾸지 않고 위치와 가로줄 밀기만 쓴다(도트가 일그러지지 않는다)
+    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양, bob: 윗몸을 올리는 그림 px
+    monsterPose(def, m) {
+        const pose = { dx: 0, dy: 0, shear: 0, bob: 0 };
+        if (!def.art.breathe) return pose;
         if (m.atkPose > 0) {
-            // 살짝 뒤로 젖혔다가 앞으로 내지른다. 근접은 크게, 공격 그림이 여러 장이면 그림이 움직이므로 작게
             const t = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
-            const k = t < 0.3 ? -Math.sin(t / 0.3 * Math.PI) * 0.35 : Math.sin((t - 0.3) / 0.7 * Math.PI);
             const melee = MONSTER_ROLES[def.role].melee;
-            const size = (melee ? 1 : 0.4) * (def.art.anim.attack.frames > 2 ? 0.4 : 1);
             const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[m.dir] || [0, 1];
-            dx = dir[0] * k * 54 * size;
-            dy = dir[1] * k * 24 * size;
-            lean = dir[0] * k * 0.2 * size;
-            grow = Math.max(0, k) * 0.1 * size;
+            let k;
+            if (melee) {
+                // 뒤로 젖혔다가(준비) 빠르게 내지르고, 잠깐 멈췄다가 돌아온다
+                if (t < 0.25) k = -Math.sin(t / 0.25 * Math.PI / 2) * 0.5;
+                else if (t < 0.4) k = -0.5 + (t - 0.25) / 0.15 * 1.5;
+                else if (t < 0.6) k = 1;
+                else k = 1 - (t - 0.6) / 0.4;
+            } else {
+                // 원거리: 쏘는 순간 뒤로 조금 밀린다
+                k = t < 0.15 ? t / 0.15 * 0.2 : -Math.sin((t - 0.15) / 0.85 * Math.PI) * 0.5;
+            }
+            const size = (melee ? 1 : 0.6) * (def.art.anim.attack.frames > 2 ? 0.4 : 1);
+            pose.dx = dir[0] * k * 40 * size;
+            pose.dy = dir[1] * k * 20 * size;
+            pose.shear = dir[0] * k * 0.3 * size;
+            return pose;
         }
-        const breath = m.moving ? Math.abs(Math.sin(m.anim * 9)) * 0.03 : Math.sin(Game.time * 2.2 + m.homeX * 0.013) * 0.016;
-        ctx.translate(m.x + dx, footY + dy);
-        if (lean) ctx.rotate(lean);
-        ctx.scale(1 + grow - breath * 0.5, 1 + grow + breath);
-        ctx.translate(-m.x, -footY);
+        if (m.moving) pose.bob = Math.round(Math.abs(Math.sin(m.anim * 9)) * 2);
+        else pose.bob = Math.floor(Game.time * 1.4 + (m.x || 0) * 0.013) % 2; // 대기: 윗몸이 1px씩 오르내린다
+        return pose;
+    },
+
+    // 자세대로 그린다. 그림을 4px 가로줄로 나눠 밀기 때문에 기울여도 도트 크기가 그대로다
+    posedSprite(ctx, img, art, clip, dir, x, footY, pose) {
+        if (!img) return;
+        const pick = this.plPick(clip, dir);
+        const footPx = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
+        if (!pose.dx && !pose.dy && !pose.shear && !pose.bob) {
+            this.sprite(ctx, img, x, footY, art.scale, footPx, pick.flip);
+            return;
+        }
+        const s = art.scale;
+        const iw = img.width;
+        const ih = img.height;
+        const left = snapWorld(x + pose.dx - iw * s / 2);
+        const top = snapWorld(footY + pose.dy - footPx * s);
+        const seam = Math.round(footPx * 0.55); // 이 줄 위가 윗몸이다
+        ctx.imageSmoothingEnabled = false;
+        ctx.save();
+        if (pick.flip) {
+            ctx.translate(left + iw * s, top);
+            ctx.scale(-1, 1);
+        } else {
+            ctx.translate(left, top);
+        }
+        const band = 4;
+        for (let sy = 0; sy < ih; sy += band) {
+            const bh = Math.min(band, ih - sy);
+            const shift = Math.round(pose.shear * Math.max(0, footPx - sy)) * (pick.flip ? -1 : 1);
+            const up = pose.bob && sy < seam ? pose.bob : 0;
+            ctx.drawImage(img, 0, sy, iw, bh, shift * s, (sy - up) * s, iw * s, bh * s);
+            // 윗몸을 올리면 생기는 틈을 바로 아래 줄로 메운다
+            if (pose.bob && sy < seam && sy + band >= seam) ctx.drawImage(img, 0, seam - pose.bob, iw, pose.bob, shift * s, (seam - pose.bob) * s, iw * s, pose.bob * s);
+        }
+        ctx.restore();
     },
 
     drawMonster(ctx, m) {
@@ -699,26 +742,6 @@ const Render = {
             return;
         }
         const stunned = m.stun > 0;
-        // 뒤쪽 빛: 어두운 바닥에서 몬스터의 실루엣이 먼저 보이게 한다
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const glowAlpha = 0.1 + Math.sin(Game.time * 2.4 + m.x) * 0.02 + (m.tier - 1) * 0.06;
-        const back = ctx.createRadialGradient(m.x, footY - 66, 8, m.x, footY - 66, 110);
-        back.addColorStop(0, `rgba(${def.art.glow},${glowAlpha})`);
-        back.addColorStop(1, `rgba(${def.art.glow},0)`);
-        ctx.fillStyle = back;
-        ctx.fillRect(m.x - 110, footY - 176, 220, 220);
-        ctx.restore();
-        if (m.tier >= 2) {
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const color = m.tier >= 3 ? '255,190,90' : '160,110,255';
-            ctx.fillStyle = `rgba(${color},${0.2 + Math.sin(Game.time * 3 + m.x) * 0.05})`;
-            ctx.beginPath();
-            ctx.ellipse(m.x, footY, 56, 19, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
         if (m.buffT > 0) {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -741,8 +764,7 @@ const Render = {
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
             ctx.globalAlpha = 0.45 + Math.sin(Game.time * 9 + m.x) * 0.15;
-            this.monsterMotion(ctx, def, m, footY);
-            this.plSprite(ctx, Assets.tinted(name, '#ff2a12', 1), def.art, clip, m.dir, m.x, footY);
+            this.posedSprite(ctx, Assets.tinted(name, '#ff2a12', 1), def.art, clip, m.dir, m.x, footY, this.monsterPose(def, m));
             ctx.restore();
         }
 
@@ -876,7 +898,7 @@ const Render = {
             ctx.save();
             ctx.globalAlpha = Math.min(1, up * 2.5);
             const pop = up > 0.8 ? 1 + (up - 0.8) * 2.5 : 1;
-            UIKit.bigText(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(34 * pop / WORLD_ZOOM), r.color, 'center', 'rgba(255,255,255,0.5)');
+            if (rank >= 3) UIKit.bigText(ctx, `랭크 ${r.name}!`, m.x, footY - MONSTERS[m.type].art.barY - 30 - lift, Math.round(34 * pop / WORLD_ZOOM), r.color, 'center', 'rgba(255,255,255,0.5)');
             ctx.restore();
         }
     },
@@ -1164,6 +1186,23 @@ const Render = {
 
     drawCorpse(ctx, c) {
         const def = HEROES[c.type];
+        if (c.skin) {
+            const k = clamp(c.age / 0.22, 0, 1);
+            const name = this.plFrame(c.skin, c.skin.anim.walk, c.dir, Math.floor(c.anim) % c.skin.anim.walk.frames);
+            const fade = clamp((c.life - c.age) / 0.5, 0, 1);
+            const img = Assets.tinted(name, '#1b1030', 0.25 + k * 0.45);
+            if (!img) return;
+            const footY = c.y + 10 + (c.kickY || 0) * 18 * k;
+            const x = c.x + (c.kickX || 0) * 18 * k;
+            ctx.save();
+            ctx.globalAlpha = 0.9 * fade;
+            ctx.translate(x, footY);
+            ctx.scale(1, 1 - k * 0.72);
+            ctx.translate(-x, -footY);
+            this.plSprite(ctx, img, c.skin, c.skin.anim.walk, c.dir, x, footY);
+            ctx.restore();
+            return;
+        }
         const fall = def.anim.death; // 쓰러지는 동작을 재생한 뒤 마지막 프레임을 유지한다
         const name = this.plFrame(def, fall, c.dir, Math.min(fall.frames - 1, Math.floor(c.age * CORPSE_FALL_FPS)));
         const left = 1 - c.age / c.life;
@@ -1398,7 +1437,7 @@ const Render = {
         for (const g of Fx.glows) {
             const a = 1 - g.age / g.life;
             const grad = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, g.radius);
-            grad.addColorStop(0, g.color.replace(',1)', `,${0.7 * a})`));
+            grad.addColorStop(0, g.color.replace(',1)', `,${0.3 * a})`));
             grad.addColorStop(1, g.color.replace(',1)', ',0)'));
             ctx.fillStyle = grad;
             ctx.fillRect(g.x - g.radius, g.y - g.radius, g.radius * 2, g.radius * 2);
@@ -1414,11 +1453,15 @@ const Render = {
         for (const r of Fx.rings) {
             const t = r.age / r.life;
             ctx.globalAlpha = 1 - t;
-            ctx.strokeStyle = r.color;
-            ctx.lineWidth = 8 * (1 - t) + 2;
-            ctx.beginPath();
-            ctx.arc(r.x, r.y, r.radius * (0.25 + 0.75 * Math.sqrt(t)), 0, Math.PI * 2);
-            ctx.stroke();
+            // 매끈한 선 대신 도트 점으로 퍼진다
+            const radius = r.radius * (0.25 + 0.75 * Math.sqrt(t));
+            const size = (t < 0.5 ? 4 : 2) * ART_SCALE;
+            const n = Math.max(10, Math.round(radius * Math.PI * 2 / 20));
+            ctx.fillStyle = r.color;
+            for (let i = 0; i < n; i++) {
+                const a = i / n * Math.PI * 2;
+                ctx.fillRect(snapWorld(r.x + Math.cos(a) * radius), snapWorld(r.y + Math.sin(a) * radius), size, size);
+            }
         }
         for (const b of Fx.beams) {
             const t = b.age / b.life;
@@ -1449,11 +1492,11 @@ const Render = {
     drawNumbers(ctx) {
         for (const n of Fx.numbers) {
             // 처음 150ms는 크게 튀어나온다. 굵은 글자에 두꺼운 외곽선, 위쪽 반은 밝게(Asteria 피해 숫자처럼)
-            const pop = n.age < 0.15 ? 1.8 - (n.age / 0.15) * 0.8 : 1;
-            const size = Math.round((n.big ? 60 : 34) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
+            const pop = n.age < 0.12 ? 1.35 - (n.age / 0.12) * 0.35 : 1;
+            const size = Math.round((n.big ? 44 : 26) * pop / WORLD_ZOOM); // 글자는 세계와 함께 줄지 않게 한다
             ctx.save();
             ctx.globalAlpha = clamp((n.life - n.age) / 0.25, 0, 1);
-            UIKit.bigText(ctx, String(n.amount), n.x, n.y, size, n.color, 'center', 'rgba(255,255,255,0.55)');
+            UIKit.bigText(ctx, String(n.amount), n.x, n.y, size, n.color, 'center');
             ctx.restore();
         }
     },
