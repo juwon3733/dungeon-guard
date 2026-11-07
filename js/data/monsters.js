@@ -343,7 +343,7 @@ const MONSTERS = {
         art: astArt('curse_shooter', { glow: '170,90,255' })
     },
     bone_knight: {
-        id: 'bone_knight', name: '균열 기사', role: 'tank', family: 'undead', grade: 'epic',
+        id: 'bone_knight', name: '해골 기사', role: 'tank', family: 'undead', grade: 'epic',
         sprite: ASTERIA_ART.bone_knight.sprite, cost: 250,
         stats: { hp: 500, damage: 30, interval: 1.0, range: 0.9, block: 5, respawn: 6 },
         abilities: [{ kind: 'deathStun', radius: 2, duration: 1.5 }], unlock: 'start',
@@ -373,7 +373,7 @@ const MONSTERS = {
         }
     },
     zombie: {
-        id: 'zombie', name: '수몰 좀비', role: 'tank', family: 'undead', grade: 'common',
+        id: 'zombie', name: '좀비', role: 'tank', family: 'undead', grade: 'common',
         sprite: ASTERIA_ART.zombie.sprite, cost: 60,
         stats: { hp: 170, damage: 6, interval: 1.2, range: 0.8, block: 3, respawn: 7 },
         abilities: [{ kind: 'regen', perSec: 3 }], unlock: 'start',
@@ -400,7 +400,7 @@ const MONSTERS = {
         }
     },
     wisp_acolyte: {
-        id: 'wisp_acolyte', name: '서리 도깨비불', role: 'support', family: 'spirit', grade: 'common',
+        id: 'wisp_acolyte', name: '도깨비불 수련사', role: 'support', family: 'spirit', grade: 'common',
         sprite: ASTERIA_ART.wisp_acolyte.sprite, cost: 60,
         stats: { hp: 30, damage: 3, interval: 1.5, range: 2 },
         abilities: [{ kind: 'aura', stat: 'heal', radius: 2, value: 3 }], unlock: 'start',
@@ -430,7 +430,7 @@ const MONSTERS = {
         }
     },
     frost_witch: {
-        id: 'frost_witch', name: '눈의 주술사', role: 'area', family: 'spirit', grade: 'rare',
+        id: 'frost_witch', name: '서리 마녀', role: 'area', family: 'spirit', grade: 'rare',
         sprite: ASTERIA_ART.frost_witch.sprite, cost: 120,
         stats: { hp: 40, damage: 14, interval: 2.0, range: 3, splash: 1 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2 }], unlock: 'start',
@@ -531,11 +531,11 @@ const MONSTERS = {
         art: astArt('wraith_swordsman', { glow: '150,110,255' })
     },
     plague_ghoul: {
-        id: 'plague_ghoul', name: '역병 망령', role: 'area', family: 'undead', grade: 'rare',
+        id: 'plague_ghoul', name: '독 구울', role: 'area', family: 'undead', grade: 'rare',
         sprite: ASTERIA_ART.plague_ghoul.sprite, cost: 120,
         stats: { hp: 50, damage: 12, interval: 1.8, range: 3, splash: 1 },
         abilities: [{ kind: 'curseShot', duration: 3, takenMul: 1.2 }], unlock: 'start',
-        desc: '역병 안개를 던져 맞은 용사들이 더 큰 피해를 받게 합니다.',
+        desc: '독 안개를 던져 맞은 용사들이 더 큰 피해를 받게 합니다.',
         art: astArt('plague_ghoul', { glow: '190,170,240', shot: 'bolt' })
     },
     bone_priest: {
@@ -555,7 +555,7 @@ const MONSTERS = {
         art: PL_NEW_ART.goblin_thrower
     },
     orc_charger: {
-        id: 'orc_charger', name: '멧돼지 돌격대장', role: 'melee', family: 'orc', grade: 'epic',
+        id: 'orc_charger', name: '돌격대장', role: 'melee', family: 'orc', grade: 'epic',
         sprite: ASTERIA_ART.orc_charger.sprite, cost: 250,
         stats: { hp: 460, damage: 44, interval: 0.9, range: 1, block: 3, respawn: 6 },
         abilities: [{ kind: 'enrage', below: 0.5, intervalMul: 0.6 }], unlock: 'start',
@@ -613,7 +613,7 @@ const MONSTERS = {
         art: PL_NEW_ART.succubus
     },
     flame_archer: {
-        id: 'flame_archer', name: '화염 기사', role: 'tank', family: 'demon', grade: 'rare',
+        id: 'flame_archer', name: '화염 궁수', role: 'tank', family: 'demon', grade: 'rare',
         sprite: ASTERIA_ART.flame_archer.sprite, cost: 120,
         stats: { hp: 240, damage: 18, interval: 1.0, range: 0.8, block: 3, respawn: 7 },
         abilities: [{ kind: 'thorns', ratio: 0.2 }], unlock: 'start',
@@ -654,15 +654,15 @@ const MONSTERS = {
         art: astArt('boar_warrior', { glow: '255,160,80' })
     },
     spider_archer: {
-        id: 'spider_archer', name: '보석 딱정벌레', role: 'ranged', family: 'beast', grade: 'common',
+        id: 'spider_archer', name: '독거미', role: 'ranged', family: 'beast', grade: 'common',
         sprite: ASTERIA_ART.spider_archer.sprite, cost: 60,
         stats: { hp: 35, damage: 9, interval: 0.9, range: 2.5 },
         abilities: [{ kind: 'slowShot', speedMul: 0.8, duration: 1.5 }], unlock: 'start',
-        desc: '보석 조각을 뱉어 용사를 느리게 합니다.',
+        desc: '독을 뱉어 용사를 느리게 합니다.',
         art: astArt('spider_archer', { glow: '100,210,255', shot: 'bolt' })
     },
     bear_warrior: {
-        id: 'bear_warrior', name: '설원 예티', role: 'tank', family: 'beast', grade: 'rare',
+        id: 'bear_warrior', name: '곰 전사', role: 'tank', family: 'beast', grade: 'rare',
         sprite: ASTERIA_ART.bear_warrior.sprite, cost: 120,
         stats: { hp: 360, damage: 16, interval: 1.2, range: 0.8, block: 4, respawn: 7 },
         abilities: [{ kind: 'regen', perSec: 5 }], unlock: 'start',
@@ -670,7 +670,7 @@ const MONSTERS = {
         art: astArt('bear_warrior', { glow: '190,225,255' })
     },
     eagle_hunter: {
-        id: 'eagle_hunter', name: '깃털 궁수', role: 'ranged', family: 'beast', grade: 'rare',
+        id: 'eagle_hunter', name: '독수리 사냥꾼', role: 'ranged', family: 'beast', grade: 'rare',
         sprite: ASTERIA_ART.eagle_hunter.sprite, cost: 120,
         stats: { hp: 45, damage: 24, interval: 0.9, range: 4.5 },
         abilities: [{ kind: 'goldOnKill', gold: 1 }], unlock: 'start',
@@ -678,15 +678,15 @@ const MONSTERS = {
         art: astArt('eagle_hunter', { glow: '255,190,200' })
     },
     saber_warrior: {
-        id: 'saber_warrior', name: '왕관 사자', role: 'melee', family: 'beast', grade: 'epic',
+        id: 'saber_warrior', name: '검치호 전사', role: 'melee', family: 'beast', grade: 'epic',
         sprite: ASTERIA_ART.saber_warrior.sprite, cost: 250,
         stats: { hp: 420, damage: 56, interval: 0.8, range: 1, block: 3, respawn: 6 },
         abilities: [{ kind: 'lifesteal', ratio: 0.25 }], unlock: 'start',
-        desc: '물어뜯은 만큼 회복하는 사자 왕입니다.',
+        desc: '물어뜯은 만큼 회복하는 맹수입니다.',
         art: astArt('saber_warrior', { glow: '255,215,120' })
     },
     hydra_warrior: {
-        id: 'hydra_warrior', name: '늪 히드라', role: 'area', family: 'beast', grade: 'epic',
+        id: 'hydra_warrior', name: '히드라', role: 'area', family: 'beast', grade: 'epic',
         sprite: ASTERIA_ART.hydra_warrior.sprite, cost: 250,
         stats: { hp: 110, damage: 38, interval: 1.6, range: 3.5, splash: 1.2 },
         abilities: [{ kind: 'chain', count: 2, ratio: 0.5, jump: 2 }], unlock: 'start',
@@ -694,12 +694,12 @@ const MONSTERS = {
         art: astArt('hydra_warrior', { glow: '160,220,90', shot: 'bolt' })
     },
     earth_behemoth: {
-        id: 'earth_behemoth', name: '가시 거수', role: 'tank', family: 'beast', grade: 'legendary',
+        id: 'earth_behemoth', name: '대지의 거수', role: 'tank', family: 'beast', grade: 'legendary',
         sprite: ASTERIA_ART.earth_behemoth.sprite, cost: 500, summon: false,
         stats: { hp: 1500, damage: 55, interval: 1.2, range: 1, block: 9, respawn: 6 },
         abilities: [{ kind: 'thorns', ratio: 0.5 }, { kind: 'regen', perSec: 15 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '가시 폭풍', cooldown: 14, radius: 3.5, mul: 2, slow: 3 }],
-        desc: '때릴수록 가시에 찔리는 거대한 멧돼지입니다.',
+        desc: '때릴수록 가시에 찔리는 거대한 짐승입니다.',
         art: astArt('earth_behemoth', { glow: '220,90,80' })
     },
     phoenix_lord: {
@@ -752,7 +752,7 @@ const MONSTERS = {
         art: astArt('moon_priestess', { glow: '200,220,255', shot: 'bolt' })
     },
     storm_archer: {
-        id: 'storm_archer', name: '폭풍 그리핀', role: 'ranged', family: 'spirit', grade: 'epic',
+        id: 'storm_archer', name: '폭풍의 궁수', role: 'ranged', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.storm_archer.sprite, cost: 250,
         stats: { hp: 90, damage: 46, interval: 1.0, range: 4.5 },
         abilities: [{ kind: 'chain', count: 2, ratio: 0.6, jump: 2.5 }], unlock: 'start',
@@ -760,7 +760,7 @@ const MONSTERS = {
         art: astArt('storm_archer', { glow: '140,190,255', shot: 'bolt' })
     },
     element_sage: {
-        id: 'element_sage', name: '운명의 현자', role: 'area', family: 'spirit', grade: 'legendary',
+        id: 'element_sage', name: '원소의 현자', role: 'area', family: 'spirit', grade: 'legendary',
         sprite: ASTERIA_ART.element_sage.sprite, cost: 500, summon: false,
         stats: { hp: 130, damage: 95, interval: 1.7, range: 4.5, splash: 2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.6, duration: 2.5 }, { kind: 'burnGround', name: '일곱 빛 불꽃', radius: 1, dps: 15, duration: 3 }], unlock: 'start',
