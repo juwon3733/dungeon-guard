@@ -22,7 +22,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         name: src.name,
         route: route || 'north',
         d: 0, // route 길 위에서 입구로부터 이동한 거리
-        lane: bossDef ? 0 : randRange(-34, 34), // 넓게 퍼져 무리로 보이게 한다
+        lane: bossDef ? 0 : rngRange('spawn', -34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
         speed: src.speed * TILE * Game.mods.heroSpeed, // 마왕과 유물의 용사 이동 속도(heroSpeed)
         damage: src.damage,
@@ -41,8 +41,8 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         curse: 0, curseMul: 1, // 저주(curseShot): 남은 초와 받는 피해 배율
         burn: 0, burnDps: 0, burnTick: 0, burnOwner: null, // 화상(burnShot): 남은 초, 초당 피해, 다음 피해까지 초, 건 몬스터
         slow: 0, slowMul: 1, // 빙결(slowShot): 남은 초와 이동 속도 배율
-        cast: !bossDef && def.stunEvery ? randRange(1.5, def.stunEvery) : 0,
-        song: !bossDef && def.song ? randRange(1, def.song.every) : 0,
+        cast: !bossDef && def.stunEvery ? rngRange('spawn', 1.5, def.stunEvery) : 0,
+        song: !bossDef && def.song ? rngRange('spawn', 1, def.song.every) : 0,
         haste: 0, hasteMul: 1, // 음유시인 노래로 받은 가속: 남은 초와 배율
         blockTime: 0, // 지금 막힌 채로 지난 초(검사 돌파)
         slip: 0, // 남은 초 동안 막히지 않는다(검사 돌파 직후)

@@ -44,7 +44,9 @@ const LORD_EFFECTS = {
     commonDamage: { name: '일반 몬스터 피해', mode: 'ratio' },
     fullHpDamage: { name: '체력이 가득할 때 피해', mode: 'ratio' },
     hpSummon: { name: '골드가 모자라면 체력 1로 소환', mode: 'add', unit: '회', text: v => `골드 부족 시 체력 1로 소환(판당 ${v}회)` },
-    mergedSlow: { name: '합류 뒤 용사 이동 속도', mode: 'mul', low: true }
+    mergedSlow: { name: '합류 뒤 용사 이동 속도', mode: 'mul', low: true },
+    // 규칙 카드 전용
+    heroHp: { name: '용사 체력', mode: 'mul', low: true }
 };
 
 // 유물 효과의 상한과 기준 수
@@ -125,9 +127,10 @@ function emptyMods() {
 }
 
 // 마왕과 유물의 효과를 하나로 합친다. 모르는 id와 키는 건너뛴다
-function buildMods(lordId, relicIds) {
+function buildMods(lordId, relicIds, cardIds) {
     const mods = emptyMods();
-    const sources = [hasEntry(DEMON_LORDS, lordId) && DEMON_LORDS[lordId], ...(relicIds || []).map(id => hasEntry(RELICS, id) && RELICS[id])].filter(Boolean);
+    const sources = [hasEntry(DEMON_LORDS, lordId) && DEMON_LORDS[lordId], ...(relicIds || []).map(id => hasEntry(RELICS, id) && RELICS[id]),
+        ...(cardIds || []).map(id => hasEntry(RULE_CARDS, id) && RULE_CARDS[id])].filter(Boolean);
     for (const src of sources) {
         for (const [key, v] of Object.entries(src.effects)) {
             if (!hasEntry(LORD_EFFECTS, key)) continue;

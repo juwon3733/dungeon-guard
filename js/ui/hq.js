@@ -60,7 +60,9 @@ const HQ_FACILITIES = [
 
 // 도전의 문 콘텐츠. 스토리를 다 깨지 않아도 문에는 처음부터 들어간다. 콘텐츠마다 unlockStage(스테이지 번호)를 깨면 열리고,
 // 없으면 처음부터 열려 있다. 항목: { id, name, desc, unlockStage?, enter?() }. 지금은 비어 있어 "준비 중" 안내만 보인다
-const HQ_CONTENTS = [];
+const HQ_CONTENTS = [
+    { id: 'daily', name: '일일 도전', desc: '오늘은 모두 같은 판입니다 · 시도는 무제한, 최고 기록만 남습니다', enter: () => UI.startDaily() }
+];
 
 // 고블린 비서의 말풍선: 깬 스테이지 수가 cleared 이상인 마지막 줄. {no}, {name}은 다음 스테이지 번호와 이름
 const HQ_GOBLIN_LINES = [
@@ -697,6 +699,44 @@ Object.assign(UI, {
         });
     },
 
+    // 오늘의 일일 도전 조건과 내 최고 기록
+    drawDailyPanel(ctx) {
+        const T = UI_THEME;
+        const c = dailyChallenge(kstDate());
+        const x = GAME_WIDTH / 2 - 560;
+        const y = 400;
+        UIKit.panel(ctx, x, y, 1120, 520);
+        UIKit.ink(ctx, `오늘의 판 · ${c.date} · ${c.rounds}라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
+        const best = Meta.data.daily[c.date];
+        UIKit.ink(ctx, best ? `오늘 최고 ${best.score.toLocaleString()}점 · ${best.rounds}라운드` : '아직 오늘 기록이 없습니다', x + 1080, y + 50, 24, best ? T.ink : T.inkSoft, 'right', 'bold');
+        const lord = DEMON_LORDS[c.lord];
+        UIKit.ink(ctx, '마왕', x + 40, y + 110, 22, T.inkSoft, 'left', 'bold');
+        UIKit.ink(ctx, lord.name, x + 120, y + 110, 26, T.ink, 'left', 'bold');
+        // 마왕 효과는 좋은 것과 나쁜 것이 섞여 있어 하나씩 색을 나눈다
+        let ex = x + 340;
+        for (const [key, value] of Object.entries(lord.effects)) {
+            const text = effectText(key, value);
+            UIKit.ink(ctx, text, ex, y + 110, 20, effectGood(key, value) ? T.inkGood : T.inkBad);
+            ctx.font = `20px ${UI_FONT}`;
+            ex += ctx.measureText(text).width + 24;
+        }
+        c.relics.forEach((id, i) => {
+            const ry = y + 148 + i * 72;
+            UIKit.ink(ctx, '유물', x + 40, ry + 34, 22, T.inkSoft, 'left', 'bold');
+            UIKit.slot(ctx, x + 120, ry, 64, 64, 'iron');
+            this.drawRelicIcon(ctx, id, x + 128, ry + 8);
+            UIKit.ink(ctx, RELICS[id].name, x + 200, ry + 34, 24, T.ink, 'left', 'bold');
+            UIKit.ink(ctx, effectLines(RELICS[id].effects).join(', '), x + 460, ry + 34, 20, T.inkGood);
+        });
+        c.cards.forEach((id, i) => {
+            const card = RULE_CARDS[id];
+            const ry = y + 330 + i * 52;
+            UIKit.ink(ctx, card.kind === 'hard' ? '규칙' : '혜택', x + 40, ry, 22, T.inkSoft, 'left', 'bold');
+            UIKit.ink(ctx, card.name, x + 120, ry, 24, T.ink, 'left', 'bold');
+            UIKit.ink(ctx, effectLines(card.effects).join(', '), x + 340, ry, 20, card.kind === 'hard' ? T.inkBad : T.inkGood);
+        });
+    },
+
     // 도전의 문: 콘텐츠 목록. 비어 있으면 준비 중 안내
     drawHqPortal(ctx) {
         const T = UI_THEME;
@@ -710,6 +750,7 @@ Object.assign(UI, {
             UIKit.ink(ctx, '"사장님, 랭킹 게시판도 걸어 둘게요." - 고블린 비서', cx, 720, 21, T.inkFaint, 'center');
             return;
         }
+        this.drawDailyPanel(ctx);
         for (const b of this.buttons) {
             if (!b.content) continue;
             const c = b.content;

@@ -3,6 +3,7 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let ready = false;
 let lastTime = 0;
+let tickLeft = 0; // 아직 돌리지 않은 판 시간(초)
 
 function fitCanvas() {
     const dpr = window.devicePixelRatio || 1;
@@ -51,8 +52,12 @@ function frame(now) {
     if (!Game.inPlay()) { // 타이틀, 스토리 지도, 선택 화면, 결과: 연출 시간만 흐른다
         Game.update(dt);
     } else if (!Game.paused) {
-        // Why: 2배속도 한 번에 큰 시간을 넘기지 않아야 충돌과 조준이 어긋나지 않는다.
-        for (let i = 0; i < Game.speed; i++) Game.update(dt);
+        // Why: 판은 늘 같은 시간 단위로 돌린다. 화면 주사율과 배속이 달라도 같은 입력이면 같은 판이 나와 입력 재생으로 점수를 검증할 수 있다.
+        tickLeft = Math.min(tickLeft + dt * Game.speed, GAME_TICK * 12);
+        while (tickLeft >= GAME_TICK && Game.inPlay() && !Game.paused) {
+            tickLeft -= GAME_TICK;
+            Game.update(GAME_TICK);
+        }
     }
 
     Render.world(ctx);

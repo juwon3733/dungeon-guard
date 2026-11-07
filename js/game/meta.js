@@ -8,6 +8,8 @@
 // 창을 열 때 main.js가 Meta.load()를 부른다. 부르지 않으면(시험 도구) 초기값에서 메모리로만 기록한다.
 const META_KEY = 'dungeonGuard.meta';
 const META_VERSION = 3;
+const DAILY_KEEP_DAYS = 30;
+const DAILY_RECORD_KEY = 'dungeonGuard.dailyRecord';
 
 // 0 이상의 정수(아니면 0)
 function metaCount(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? Math.floor(v) : 0; }
@@ -36,7 +38,7 @@ const Meta = {
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
+        return { version: META_VERSION, daily: {}, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -46,6 +48,12 @@ const Meta = {
         const d = this.fresh();
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return d;
         const keys = new Set(MONSTER_RECIPES.map(recipeKey));
+        d.daily = {};
+        if (raw.daily && typeof raw.daily === 'object' && !Array.isArray(raw.daily)) {
+            for (const [date, v] of Object.entries(raw.daily)) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(date) && v && Number.isFinite(v.score) && Number.isFinite(v.rounds)) d.daily[date] = { score: v.score, rounds: v.rounds, victory: !!v.victory };
+            }
+        }
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
         d.runs = metaCount(raw.runs);
@@ -158,6 +166,25 @@ const Meta = {
     // 판이 끝날 때 한 번 부른다. 판 수와 승리 수를 남기고, 스테이지(stageId, 없으면 시험 도구의 판)를 처음 깼으면
     // 깬 목록에 넣는다. 해금은 처음 깰 때만 준다.
     // { stage, victory, waves: 막은 웨이브 수, firstClear, unlocks: 이번에 풀린 것(처음 깰 때만), bestStage: 새 최고 기록인지 }
+    // 일일 도전 판 끝: 날짜별 최고 기록을 남기고, 최고면 입력 기록도 남긴다(뒤에 서버 제출과 검증에 쓴다).
+    // { best: 그날 최고 점수, isBest: 이번이 최고인지 }
+    finishDaily(date, result, record) {
+        const d = this.data;
+        d.runs++;
+        if (result.victory) d.wins++;
+        const old = d.daily[date];
+        const isBest = !old || result.score > old.score;
+        if (isBest) {
+            d.daily[date] = { score: result.score, rounds: result.rounds, victory: result.victory };
+            // 오래된 날짜는 지운다
+            const dates = Object.keys(d.daily).sort();
+            while (dates.length > DAILY_KEEP_DAYS) delete d.daily[dates.shift()];
+            try { localStorage.setItem(DAILY_RECORD_KEY, JSON.stringify({ date, score: result.score, record })); } catch (e) { /* 저장소 없음 */ }
+        }
+        this.save();
+        return { best: d.daily[date].score, isBest };
+    },
+
     finishRun(stageId, victory, waves) {
         const d = this.data;
         const stage = hasStage(stageId) ? stageDef(stageId) : null;

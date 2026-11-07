@@ -387,3 +387,10 @@
 | 빈민의 투구 | 일반 몬스터 피해 +20% |
 | 피의 계약서 | 골드 부족 시 체력 1로 소환(판당 3회) |
 | 흔들리는 다리 | 합류 뒤 용사 이동 속도 x0.92 |
+
+## 고정 난수, 입력 기록, 일일 도전 (2026-11-07 사용자 결정)
+
+- 판은 늘 `GAME_TICK`(1/60초) 단위로 돌린다. 판 결과를 바꾸는 난수는 `rng(흐름)`이고, 연출 난수는 `randRange`, `randItem`(Math.random)이다. 흐름은 summon, cell, merge, reward, spawn, battle이다.
+- 플레이어 입력은 모두 `Game.act`로 들어오고 도전 중에는 `Game.record.inputs`에 틱과 함께 남는다. `replayChallenge(record)`가 처음부터 다시 돌려 같은 점수를 낸다(서버 검증에 쓴다).
+- 일일 도전(`js/data/challenge.js`): 한국 시간 자정에 바뀌는 날짜로 시드, 마왕 1, 유물 2, 규칙 카드 3(어렵게 2, 쉽게 1), 지역을 정한다. 40라운드라 신화까지 닿을 수 있다. 시도는 무제한이고 최고 기록만 남는다. 점수는 `SCORE_RULES`다.
+- 기록은 아직 이 컴퓨터에만 남는다(`Meta.data.daily`, 입력 기록은 `dungeonGuard.dailyRecord`). 랭킹 제출은 Supabase 연결 뒤에 붙인다.

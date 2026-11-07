@@ -212,14 +212,14 @@ const UI = {
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
                 label: G.waveIndex === 0 ? '첫 라운드' : '다음 라운드', icon: 'wave', theme: 'gold', size: 30,
                 sub: `${bonus > 0 ? `+${bonus}G · ` : ''}${Math.ceil(Math.max(0, G.prepTimer))}초 뒤 자동`,
-                onClick: () => { G.startWave(); this.clearSelection(); }
+                onClick: () => { G.act({ kind: 'startWave' }); this.clearSelection(); }
             });
         } else if (G.state === 'wave' && G.waveIndex + 1 < G.waves.length) {
             // 라운드 중에도 다음 라운드를 불러 남은 시간만큼 골드를 받는다
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
                 label: '다음 라운드', icon: 'wave', size: 30,
                 sub: `+${Math.floor(G.roundTimer * COMBAT_RULES.earlyGoldPerSecond)}G · ${Math.ceil(G.roundTimer)}초 뒤 자동`,
-                onClick: () => { G.nextRound(); }
+                onClick: () => { G.act({ kind: 'nextRound' }); }
             });
         }
 
@@ -264,6 +264,7 @@ const UI = {
 
     // 고르기 화면. stageId는 이번에 할 스토리 스테이지(없으면 스토리 없는 판). 직전 선택이 남아 있다(잠긴 마왕과 유물은 기본값으로)
     openSelect(stageId) {
+        this.challenge = null;
         this.stageId = hasStage(stageId) ? stageId : null;
         this.loadout = cleanLoadout(this.loadout || this.loadLoadout());
         this.collection = null;
@@ -420,6 +421,11 @@ const UI = {
         const G = Game;
         const cx = GAME_WIDTH / 2;
         const win = G.state === 'victory';
+        if (G.challenge) {
+            this.button('retry', cx - 420, 770, 410, 90, { label: '다시 도전', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.startDaily() });
+            this.button('to_hq', cx + 10, 770, 410, 90, { label: '본부로', icon: 'lord', size: 30, onClick: () => this.leaveChallenge() });
+            return;
+        }
         if (!G.stage) {
             this.button('retry', cx - 210, 770, 420, 90, {
                 label: win ? '다시 도전' : '첫 라운드부터 다시', icon: 'retry', theme: 'gold', size: 30, onClick: () => this.openSelect(null)
@@ -684,7 +690,7 @@ const UI = {
             this.button('unequip', o.x + w - 120, o.y + POPUP_TOP + 166 + POPUP_RANK_H + 8, 104, 56, {
                 label: '빼기', icon: 'bag', size: 20,
                 onClick: () => {
-                    const res = Game.unequipMonster(f);
+                    const res = Game.act({ kind: 'unequip', monster: f });
                     if (!res.ok && res.reason === 'full') this.showToast('보관함이 가득 차 뺄 수 없습니다.');
                 }
             });
@@ -695,7 +701,7 @@ const UI = {
             this.button('up2', o.x + 12, y, w - 24, 80, {
                 upgrade: { name: '2단계 강화', desc: f.blocks ? '피해·체력 +50%' : '피해 +50%', cost },
                 disabled: Game.gold < cost,
-                onClick: () => { if (!Game.upgrade(f)) this.showToast('골드가 부족합니다.'); }
+                onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f }).ok) this.showToast('골드가 부족합니다.'); }
             });
             y += 88;
         } else if (upgrades === 2) {
@@ -704,7 +710,7 @@ const UI = {
                 const b = def.branches[key];
                 this.button(`up3${key}`, o.x + 12, y, w - 24, 80, {
                     upgrade: { name: b.name, desc: b.desc, cost }, disabled: Game.gold < cost,
-                    onClick: () => { if (!Game.upgrade(f, key)) this.showToast('골드가 부족합니다.'); }
+                    onClick: () => { if (!Game.act({ kind: 'upgrade', monster: f, branch: key }).ok) this.showToast('골드가 부족합니다.'); }
                 });
                 y += 88;
             }
@@ -760,7 +766,7 @@ const UI = {
 
     // 카드 클릭과 1, 2, 3 키
     pickReward(i) {
-        const res = Game.pickBossReward(i);
+        const res = Game.act({ kind: 'pickReward', i });
         if (res.ok) return res;
         if (res.reason === 'full') this.showToast('몬스터를 놓을 자리가 없습니다. 골드를 고르세요.');
         else if (res.reason === 'bagFull') this.showToast('보관함이 가득 찼습니다. 다른 카드를 고르세요.');
@@ -807,7 +813,7 @@ const UI = {
             }
             return null;
         }
-        const res = Game.equipMonster(m, d.index);
+        const res = Game.act({ kind: 'equip', monster: m, i: d.index });
         if (res.ok && res.swapped) this.showToast(`맞바꿨습니다. ${EQUIPMENT[res.swapped].name}은(는) 보관함으로 돌아갔습니다.`, 2.2);
         return res;
     },
@@ -823,15 +829,30 @@ const UI = {
     resumeRun() {
         const d = Game.readRunSave();
         if (!d) return false;
+        this.challenge = null;
         this.stageId = d.stage || null;
         this.loadout = { lord: d.lord, relics: d.relics || [] };
         this.startGame(true);
         return Game.loadRun(d);
     },
 
+    // 도전 결과에서 본부로
+    leaveChallenge() {
+        this.challenge = null;
+        (this.openHQ())();
+    },
+
+    // 도전의 문에서 오늘의 일일 도전을 시작한다. 스토리 중간 저장은 그대로 둔다
+    startDaily() {
+        this.challenge = dailyChallenge(kstDate());
+        this.stageId = null;
+        this.hqView = null;
+        this.startGame(true);
+    },
+
     startGame(keepSave) {
         if (!keepSave) Game.clearRunSave();
-        Game.reset(this.loadout || cleanLoadout(null), this.stageId);
+        Game.reset(this.loadout || cleanLoadout(null), this.stageId, this.challenge);
         this.afterRun = Game.stage ? 'pending' : null; // 스테이지를 이기면 승리 대화와 해금 카드
         this.dialogue = null;
         this.unlockCards = null;
@@ -863,7 +884,7 @@ const UI = {
 
     doSummon() {
         this.setTab('monster');
-        const res = Game.summon();
+        const res = Game.act({ kind: 'summon' });
         if (res.ok) {
             this.targeting = false;
             return res;
@@ -1038,7 +1059,7 @@ const UI = {
             this.showToast(`마왕 체력 ${COMBAT_RULES.roar.unlockHp} 이하에서 쓸 수 있습니다.`);
             return;
         }
-        if (!castRoar()) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
+        if (!Game.act({ kind: 'roar' }).ok) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
     },
 
     // 타락이 꺼져 있으면 시체는 누를 수 없는 장식이라 클릭과 끌기를 가로막지 않는다
@@ -1121,14 +1142,14 @@ const UI = {
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
         if (this.targeting) {
-            if (castLightning(wx, wy)) this.targeting = false;
+            if (Game.act({ kind: 'lightning', x: wx, y: wy }).ok) this.targeting = false;
             return;
         }
         const col = Math.floor(wx / TILE);
         const row = Math.floor((wy - MAP_TOP) / TILE);
         const corpse = this.corpseAt(wx, wy);
         if (corpse) {
-            const res = corruptCorpse(corpse);
+            const res = Game.act({ kind: 'corrupt', i: Game.corpses.indexOf(corpse) });
             if (!res.ok) this.showToast(res.reason === 'gold' ? `타락에는 ${corpse.cost}골드가 필요합니다.` : `타락 유닛은 층당 ${COMBAT_RULES.corruptMax}명까지입니다.`);
             this.corruptHintShown = true;
             return;
@@ -1205,7 +1226,7 @@ const UI = {
             else if (code === 'KeyP') G.paused = !G.paused;
             return;
         }
-        if (code === 'Space') { if (G.state === 'wave') G.nextRound(); else G.startWave(); this.clearSelection(); }
+        if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
         else if (code === 'KeyU') this.doSummonUpgrade();
         else if (code === 'KeyQ') this.toggleLightning();
@@ -1830,7 +1851,7 @@ const UI = {
         const zone = ZONES[G.zone] || ZONES[DEFAULT_ZONE];
         UIKit.text(ctx, zone.name, x + 46, cy, 19, T.creamSoft);
         const st = stageDef(G.stage);
-        UIKit.text(ctx, st ? `${st.no}. ${st.name}` : '시험 판', x + PLATE.w / 2 - 6, cy, 27, T.cream, 'center', 'bold');
+        UIKit.text(ctx, st ? `${st.no}. ${st.name}` : (G.challenge ? G.challenge.name : '시험 판'), x + PLATE.w / 2 - 6, cy, 27, T.cream, 'center', 'bold');
         // 라운드 남은 시간 막대(이름판 아래)
         if (G.state === 'wave') {
             const full = G.currentWave().boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime;
@@ -3067,6 +3088,15 @@ const UI = {
             UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
             UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');
         });
+        // 도전 결과: 점수와 오늘 최고 기록
+        if (G.challengeResult) {
+            const best = G.challengeBest;
+            ctx.fillStyle = T.parchmentDark;
+            ctx.fillRect(cx - 390, 588, 780, 3);
+            UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
+            UIKit.ink(ctx, best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`, cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            return;
+        }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내
         const res = G.runResult;
         let line = win ? '"고생했다. 다음 지역은 2단계에서 만들어 두마."' : '"내 의자 다시 사 와."';

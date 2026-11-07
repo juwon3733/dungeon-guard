@@ -31,8 +31,22 @@ const Game = {
 
     // loadout: 선택 화면의 { lord, relics }. 없으면 효과 없이 시작한다(tools/simulate.js와 시험 도구)
     // stageId: 스토리 스테이지(STAGES의 id). 없으면 WAVES 전부를 체력 배율 1, 골드 보너스 없이 돈다
-    reset(loadout, stageId) {
-        if (loadout) {
+    // challenge가 있으면 그 도전의 시드와 조건으로 시작하고 입력을 기록한다
+    reset(loadout, stageId, challenge) {
+        this.challenge = challenge || null;
+        this.challengeResult = null;
+        this.challengeBest = null;
+        this.tick = 0;
+        this.nextUid = 1;
+        this.record = null;
+        if (!challenge) Rng.stop(); // 스토리와 시험 판은 Math.random
+        if (challenge) {
+            Rng.start(challenge.seed);
+            this.record = { id: challenge.id, date: challenge.date, inputs: [] };
+            this.lord = challenge.lord;
+            this.relics = challenge.relics.slice();
+            this.mods = buildMods(challenge.lord, challenge.relics, challenge.cards);
+        } else if (loadout) {
             const clean = cleanLoadout(loadout);
             this.lord = clean.lord;
             this.relics = clean.relics;
@@ -47,6 +61,11 @@ const Game = {
         this.zone = zoneOf(this.stage); // 맵 지역(js/data/map.js의 ZONES). 그리기만 바뀐다
         this.waves = stage ? stageWaves(stage) : WAVES;
         this.heroHpMul = stage ? stage.hpMul : 1;
+        if (challenge) {
+            this.zone = challenge.zone;
+            this.waves = WAVES.slice(0, challenge.rounds);
+            this.heroHpMul = this.mods.heroHp;
+        }
         this.gold = COMBAT_RULES.startGold + this.mods.startGold + (stage ? stage.goldBonus || 0 : 0);
         this.hp = this.maxHp();
         this.waveIndex = 0;
@@ -124,11 +143,11 @@ const Game = {
     // 유물 대장장이의 망치: 돌아오는 장비가 확률로 한 등급 위 장비가 된다(Math.random은 유물이 있을 때만)
     returnedEquipId(id) {
         const mods = this.mods;
-        if (!mods.equipUp || Math.random() >= mods.equipUp) return id;
+        if (!mods.equipUp || rng('merge') >= mods.equipUp) return id;
         const grades = ['common', 'rare', 'epic'];
         const next = grades[grades.indexOf(EQUIPMENT[id].grade) + 1];
         if (!next) return id;
-        return randItem(Object.keys(EQUIPMENT).filter(k => EQUIPMENT[k].grade === next));
+        return rngItem('merge', Object.keys(EQUIPMENT).filter(k => EQUIPMENT[k].grade === next));
     },
 
     lightningDamage() { return COMBAT_RULES.lightning.damage * this.mods.lightningDamage; },
@@ -270,20 +289,21 @@ const Game = {
     rollSummon() {
         const odds = this.summonOdds();
         const grades = GRADE_ORDER.filter(g => odds[g] > 0 && summonPool(g).length);
-        let r = Math.random();
+        let r = rng('summon');
         let grade = grades[0];
         for (const g of grades) {
             if (r < odds[g]) { grade = g; break; }
             r -= odds[g];
         }
-        return randItem(summonPool(grade));
+        return rngItem('summon', summonPool(grade));
     },
 
     // 소환한 몬스터를 세울 칸. 없으면 null
     //   원거리: 칸에서 길까지 거리가 사거리 안인 칸만
     //   막는 몬스터: 길 지점(rally)이 이미 있는 막는 몬스터의 길 지점과 blockerSpacing칸 안으로 겹치지 않는 칸을 먼저. 없으면 아무 빈 칸
     //   그중 길에 가장 가까운 칸들에서 무작위로 하나(Math.random 한 번)
-    pickSummonCell(type) {
+    // peek이면 자리가 있는지만 본다. 화면이 프레임마다 물어도 난수를 쓰지 않아 입력 재생이 어긋나지 않는다
+    pickSummonCell(type, peek) {
         const blocks = monsterBlocks(type);
         const range = MONSTERS[type].stats.range * TILE;
         let cells = [];
@@ -307,7 +327,8 @@ const Game = {
         }
         if (!cells.length) return null;
         const best = Math.min(...cells.map(c => c.gap));
-        const pick = randItem(cells.filter(c => c.gap <= best + 0.5));
+        const near = cells.filter(c => c.gap <= best + 0.5);
+        const pick = peek ? near[0] : rngItem('cell', near);
         return { col: pick.col, row: pick.row };
     },
 
@@ -338,7 +359,7 @@ const Game = {
         this.monsters.push(m);
         this.stats.summoned++;
         // 유물 거울 쌍둥이: 같은 몬스터가 공짜로 1마리 더
-        if (this.mods.twinSummon && Math.random() < this.mods.twinSummon && !this.fieldFull()) {
+        if (this.mods.twinSummon && rng('summon') < this.mods.twinSummon && !this.fieldFull()) {
             const spot = this.pickSummonCell(type);
             if (spot) {
                 const twin = createMonster(type, spot.col, spot.row);
@@ -362,24 +383,24 @@ const Game = {
         const used = [];
         const cards = [];
         for (let i = 0; i < R.monsterCards; i++) {
-            const first = Math.random() < R.epicChance ? 'epic' : 'rare';
+            const first = rng('reward') < R.epicChance ? 'epic' : 'rare';
             const second = first === 'epic' ? 'rare' : 'epic';
             const left = g => gradePool(g).filter(t => !used.includes(t));
             const pool = left(first).length ? left(first) : left(second);
             if (!pool.length) break;
-            const type = randItem(pool);
+            const type = rngItem('reward', pool);
             used.push(type);
             cards.push({ kind: 'monster', type });
         }
-        const equipGrade = Math.random() < EQUIP_RULES.rewardEpicChance ? 'epic' : 'rare';
-        cards.push({ kind: 'equip', id: randItem(equipPool(equipGrade)) });
+        const equipGrade = rng('reward') < EQUIP_RULES.rewardEpicChance ? 'epic' : 'rare';
+        cards.push({ kind: 'equip', id: rngItem('reward', equipPool(equipGrade)) });
         cards.push({ kind: 'gold', gold: R.gold });
         return { cards };
     },
 
     // 보상 몬스터를 맵에 세울 수 있는지(상한과 빈 칸)
     canTakeRewardMonster(type) {
-        return !this.fieldFull() && !!this.pickSummonCell(type);
+        return !this.fieldFull() && !!this.pickSummonCell(type, true);
     },
 
     // 보상 카드를 고를 수 있는지: 몬스터는 맵에 자리가 있어야, 장비는 보관함에 자리가 있어야 한다
@@ -465,9 +486,9 @@ const Game = {
     // Math.random을 세 번까지 쓴다
     eliteDrop(x, y) {
         const R = EQUIP_RULES;
-        if (Math.random() >= R.eliteDrop + this.mods.eliteDrop) return null;
-        const grade = Math.random() < R.eliteRareChance ? 'rare' : 'common';
-        const id = randItem(equipPool(grade));
+        if (rng('reward') >= R.eliteDrop + this.mods.eliteDrop) return null;
+        const grade = rng('reward') < R.eliteRareChance ? 'rare' : 'common';
+        const id = rngItem('reward', equipPool(grade));
         const res = this.gainEquip(id, x, y);
         if (res.kind === 'bag') Fx.notice = `장비 획득: ${EQUIPMENT[id].name}`;
         return res;
@@ -664,13 +685,49 @@ const Game = {
         return Object.assign(this.mergePlanFor(src, m, null, true), { src, dst: m });
     },
 
+    // 입력 기록 한 줄: 몬스터는 개체 번호(uid)로 적는다. 실패한 입력도 적는다(소환 실패도 난수를 쓰므로 그대로 재생해야 같다)
+    encodeInput(cmd) {
+        const out = { t: this.tick };
+        for (const [k, v] of Object.entries(cmd)) {
+            if (k === 'monster' || k === 'src' || k === 'dst') out[k] = v ? v.uid : null;
+            else if (k === 'extra') out[k] = v ? v.map(m => m.uid) : v;
+            else out[k] = v;
+        }
+        return out;
+    },
+
+    // 기록 한 줄을 다시 실행한다. 없는 몬스터를 가리키면 건너뛴다
+    applyInput(input) {
+        const byUid = id => this.monsters.find(m => m.uid === id);
+        const cmd = {};
+        for (const [k, v] of Object.entries(input)) {
+            if (k === 't') continue;
+            if (k === 'monster' || k === 'src' || k === 'dst') {
+                cmd[k] = byUid(v);
+                if (!cmd[k]) return { ok: false, reason: 'missing' };
+            } else if (k === 'extra') cmd[k] = v ? v.map(byUid).filter(Boolean) : v;
+            else cmd[k] = v;
+        }
+        return this.act(cmd);
+    },
+
     // 행동 하나: 입력(끌어 놓기, 버튼)과 처리를 이 함수로 모은다(뒤에 고정 난수와 입력 기록을 여기에 넣는다).
     //   { kind: 'merge', src, dst, extra? }  끌어 합치기(src, dst는 맵의 몬스터. extra는 고른 나머지 재료, 없으면 자동)
     //   { kind: 'quickMerge', monster }       팝업의 합치기 버튼
     //   { kind: 'fullRecipe', monster }       재료가 여럿인 히든 조합식(monster는 S랭크 전설)
     //   { kind: 'summon' } | { kind: 'sell', monster } | { kind: 'sacrifice', monster } | { kind: 'move', monster, col, row }
     act(cmd) {
+        if (this.record && !this.replaying && this.inPlay()) this.record.inputs.push(this.encodeInput(cmd));
         switch (cmd.kind) {
+            case 'pickReward': return this.pickBossReward(cmd.i);
+            case 'equip': return this.equipMonster(cmd.monster, cmd.i);
+            case 'unequip': return this.unequipMonster(cmd.monster);
+            case 'upgrade': return { ok: !!this.upgrade(cmd.monster, cmd.branch) };
+            case 'lightning': return { ok: !!castLightning(cmd.x, cmd.y) };
+            case 'roar': return { ok: !!castRoar() };
+            case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
+            case 'startWave': this.startWave(); return { ok: true };
+            case 'nextRound': return { ok: !!this.nextRound() };
             case 'merge': return this.merge({ monster: cmd.src }, { monster: cmd.dst }, cmd.extra);
             case 'quickMerge': {
                 if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
@@ -706,11 +763,11 @@ const Game = {
         if (plan.kind === 'none') return { ok: false, reason: plan.reason, plan };
         // 유물 미치광이의 주사위: 등급 합치기가 확률로 두 등급 오른다(전설까지)
         let resultGrade = plan.grade;
-        if (plan.kind === 'grade' && this.mods.mergeJump && Math.random() < this.mods.mergeJump) {
+        if (plan.kind === 'grade' && this.mods.mergeJump && rng('merge') < this.mods.mergeJump) {
             const higher = nextGrade(plan.grade);
             if (higher && higher !== 'mythic') resultGrade = higher;
         }
-        const type = plan.kind === 'recipe' ? plan.result : randItem(this.mergeResultPool(resultGrade, [src.monster, dst.monster, ...(plan.extra || [])]));
+        const type = plan.kind === 'recipe' ? plan.result : rngItem('merge', this.mergeResultPool(resultGrade, [src.monster, dst.monster, ...(plan.extra || [])]));
         const hidden = !!(plan.recipe && plan.recipe.hidden);
         // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
         const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;
@@ -829,7 +886,7 @@ const Game = {
         }
         // 직업이 섞여 파티처럼 보이도록 순서를 섞는다
         for (let i = queue.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(rng('spawn') * (i + 1));
             [queue[i], queue[j]] = [queue[j], queue[i]];
         }
         // 섞인 순서의 앞에서부터 입구별 인원(entryCounts)만큼 나눠 준다. 출발 간격은 입구마다 따로 센다
@@ -865,6 +922,16 @@ const Game = {
     finish(victory) {
         if (this.state === 'victory' || this.state === 'defeat') return;
         this.state = victory ? 'victory' : 'defeat';
+        if (this.challenge) {
+            // 도전은 스토리 저장을 건드리지 않고 최고 기록만 남긴다
+            const c = this.challenge;
+            const r = { rounds: victory ? this.waves.length : this.waveIndex, hp: Math.max(0, this.hp), kills: this.stats.kills, time: this.stats.time, victory };
+            r.score = challengeScore(c, r);
+            this.challengeResult = r;
+            if (!this.replaying) this.challengeBest = Meta.finishDaily(c.date, r, this.record);
+            if (!this.replaying) Sfx.play(victory ? 'victory' : 'defeat');
+            return;
+        }
         this.clearRunSave();
         this.runResult = Meta.finishRun(this.stage, victory, victory ? this.waves.length : this.waveIndex);
         Sfx.play(victory ? 'victory' : 'defeat');
@@ -872,6 +939,7 @@ const Game = {
 
     update(dt) {
         this.time += dt;
+        if (this.inPlay()) this.tick++;
         Fx.update(dt);
         this.throneFlash = Math.max(0, this.throneFlash - dt);
         this.throneBless = Math.max(0, this.throneBless - dt);
@@ -919,6 +987,7 @@ const Game = {
     // 중간 저장: 라운드가 끝나 준비 단계에 들어갈 때 판을 저장한다. 저장소가 없어도 게임은 돈다.
     // 뒤에 입력 기록으로 바꿀 수 있게 저장과 복원을 이 세 함수에 모은다
     saveRun() {
+        if (this.challenge) return; // 도전은 한 번에 끝낸다(시도는 무제한이다)
         const data = { v: 1, lord: this.lord, relics: this.relics, stage: this.stage, gold: this.gold, hp: this.hp, waveIndex: this.waveIndex,
             prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, equipBag: this.equipBag, bossReward: this.bossReward,
             skills: this.skills, stats: this.stats,
