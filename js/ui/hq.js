@@ -54,7 +54,7 @@ const HQ_FACILITIES = [
         news: () => (Meta.data.equips.length ? String(Meta.data.equips.length) : null) },
     { id: 'goblin_desk', sprite: 'hq_goblin_desk', name: '고블린 비서', desc: '기록 장부 · 기록 지우기', x: 1450, y: 780, scale: 3, view: 'record',
         news: () => null },
-    { id: 'portal', sprite: 'hq_portal', name: '도전의 문', desc: '도전 콘텐츠 · 처음부터 열려 있습니다', x: 800, y: 396, scale: 5, view: 'portal', main: true,
+    { id: 'portal', sprite: 'hq_portal', name: '도전의 문', desc: '도전 콘텐츠', x: 800, y: 396, scale: 5, view: 'portal', main: true,
         news: () => { const open = HQ_CONTENTS.filter(hqContentOpen); return open.length ? open.map(c => c.id).join() : null; } }
 ];
 
@@ -209,7 +209,7 @@ Object.assign(UI, {
         const bx = GAME_WIDTH - TOP_BTN - 12;
         const save = Game.readRunSave();
         if (save) {
-            this.button('hq_resume', GAME_WIDTH / 2 - 220, 12, 440, 76, { label: `이어하기 · 라운드 ${save.waveIndex + 1}`, icon: 'retry', size: 28, onClick: () => { if (!this.resumeRun()) { this.openHQ(); this.showToast('저장한 판을 불러오지 못했습니다.'); } } });
+            this.button('hq_resume', GAME_WIDTH / 2 - 220, 12, 440, 76, { label: `이어하기 · 라운드 ${save.waveIndex + 1}`, icon: 'retry', size: 28, onClick: () => { if (!this.resumeRun()) { this.openHQ(); this.showToast('불러오기 실패'); } } });
         }
         this.button('hq_settings', bx, 12, TOP_BTN, TOP_BTN, { icon: 'gear', iconOnly: true, tip: '설정', onClick: () => { this.hqSettings = true; } });
         this.button('mute', bx - TOP_BTN - 6, 12, TOP_BTN, TOP_BTN, {
@@ -239,18 +239,18 @@ Object.assign(UI, {
     },
 
     hqContentRect(i) {
-        return { x: GAME_WIDTH / 2 - 560 + i * 282, y: 150, w: 274, h: 132 };
+        return { x: GAME_WIDTH / 2 - 560 + i * 380, y: 110, w: 360, h: 190 };
     },
 
     // 콘텐츠를 누른다: 잠겼으면 열리는 스테이지, 열렸으면 그 콘텐츠의 enter(아직 없으면 준비 중)
     pickContent(c) {
         if (!hqContentOpen(c)) {
-            this.showToast(`${c.name}: 스테이지 ${c.unlockStage}을(를) 깨면 열립니다.`);
+            this.showToast(`${c.name}: 스테이지 ${c.unlockStage} 먼저`);
             Sfx.play('mergeFail');
             return;
         }
         if (c.enter) c.enter();
-        else this.showToast(`${c.name}: 곧 열립니다.`);
+        else this.showToast(`${c.name}: 준비 중`);
     },
 
     // 본부 키: 1~6 시설, Esc 닫기(안 화면 → 방 → 타이틀)
@@ -355,6 +355,14 @@ Object.assign(UI, {
         g.fillRect(0, HQ_WALL_H - 10, GAME_WIDTH, 14);
         g.fillStyle = 'rgba(20,10,4,0.35)';
         g.fillRect(0, HQ_WALL_H + 4, GAME_WIDTH, 10);
+        // 바닥과 벽의 채도와 밝기를 눌러 시설과 글자가 앞으로 나오게 한다
+        g.globalCompositeOperation = 'saturation';
+        g.fillStyle = 'rgba(128,128,128,0.55)';
+        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        g.globalCompositeOperation = 'multiply';
+        g.fillStyle = '#5e5258';
+        g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        g.globalCompositeOperation = 'source-over';
         if (tiles && Assets.get(HQ_ROOM.wall[0])) this.hqBg = c; // 그림이 모두 있을 때만 남겨 둔다
         return c;
     },
@@ -409,18 +417,19 @@ Object.assign(UI, {
         const hover = this.hoverButton === b;
         const fs = f.main ? 30 : 24;
         ctx.font = `bold ${fs}px ${UI_FONT}`;
-        const w = Math.ceil(ctx.measureText(f.name).width) + 92;
+        const w = Math.ceil(ctx.measureText(f.name).width) + 52;
         const x = Math.round(f.x + size / 2 - w / 2);
         const y = f.y + size + 4;
         UIKit.note(ctx, x, y, w, HQ_PLATE_H, { tint: hover ? 'hover' : null });
-        this.drawKeyCap(ctx, String(b.key), x + 10, y + (HQ_PLATE_H - 30) / 2, 18);
-        UIKit.text(ctx, f.name, x + 50 + (w - 64) / 2, y + HQ_PLATE_H / 2 + 1, fs, f.main ? T.gold : T.cream, 'center', 'bold');
-        if (this.hqHasNews(f)) {
+        UIKit.text(ctx, f.name, x + w / 2, y + HQ_PLATE_H / 2 + 1, fs, f.main ? T.gold : T.cream, 'center', 'bold');
+        // 새 소식 표시는 첫 시설 하나에만(여러 개를 동시에 재촉하지 않는다)
+        const first = this.buttons.find(x => x.facility && this.hqHasNews(x.facility));
+        if (first === b) {
             const bob = Math.round(Math.sin(Game.time * 4) * 3);
             const sx = f.x + size - 34;
             const sy = f.y + 28 + bob;
-            this.drawWaxSeal(ctx, sx, sy, 22);
-            UIKit.text(ctx, '!', sx, sy + 1, 30, T.cream, 'center', 'bold');
+            this.powerGem(ctx, sx, sy, 22, '#0c0814');
+            this.powerGem(ctx, sx, sy, 16, '#ff9a4d');
         }
     },
 
@@ -551,7 +560,7 @@ Object.assign(UI, {
             }
         }
         UIKit.text(ctx, '유물', HQ_GRID.x, HQ_GRID.y - 30, 30, T.cream, 'left', 'bold');
-        UIKit.text(ctx, '판을 시작할 때 유물 칸에 넣어 씁니다', HQ_GRID.x + 80, HQ_GRID.y - 28, 19, T.creamSoft);
+        UIKit.text(ctx, '', HQ_GRID.x + 80, HQ_GRID.y - 28, 19, T.creamSoft);
         for (const r of relicRects) {
             const owned = Meta.hasRelic(r.id);
             const st = unlockStage('relic', r.id);
@@ -606,7 +615,7 @@ Object.assign(UI, {
         }
         const nextSlot = Meta.relicSlots() < Meta.maxSlots() ? unlockStage('slot', Meta.relicSlots() + 1) : null;
         UIKit.text(ctx, `유물 칸 ${Meta.relicSlots()} / ${Meta.maxSlots()}${nextSlot ? ` · 다음 칸은 스테이지 ${nextSlot.no}에서 해금` : ''}`, 70, 960, 24, T.gold, 'left', 'bold');
-        UIKit.text(ctx, '판 중에는 유물을 얻지 않습니다 · Esc 본부로', 70, 1000, 19, T.creamSoft);
+        UIKit.text(ctx, '', 70, 1000, 19, T.creamSoft);
     },
 
     // 유물 그림(48px)을 2배로
@@ -621,7 +630,7 @@ Object.assign(UI, {
     drawHqArmory(ctx) {
         const T = UI_THEME;
         const ids = Object.keys(EQUIPMENT);
-        this.drawHqTitle(ctx, 'hq_weapon_rack', '무기고', `얻은 장비 ${ids.filter(id => Meta.hasEquip(id)).length} / ${ids.length} · 판에서 얻은 장비가 기록됩니다`);
+        this.drawHqTitle(ctx, 'hq_weapon_rack', '무기고', `얻은 장비 ${ids.filter(id => Meta.hasEquip(id)).length} / ${ids.length}`);
         // 얻는 법 요약
         UIKit.panel(ctx, 70, 150, 1198, 330);
         ['common', 'rare', 'epic'].forEach((g, i) => {
@@ -631,7 +640,7 @@ Object.assign(UI, {
             UIKit.text(ctx, `${equipPool(g).length}종`, 110 + cw + 14, y + 1, 22, T.creamSoft, 'left', 'bold');
             UIKit.text(ctx, equipSources(g), 330, y + 1, 24, grade.light, 'left', 'bold');
         });
-        UIKit.text(ctx, `정예 용사 처치 ${Math.round(EQUIP_RULES.eliteDrop * 100)}% · 보스 보상의 장비 카드 · 맵의 몬스터 위로 끌어 끼웁니다`, 110, 440, 19, T.creamSoft);
+        UIKit.text(ctx, `정예 용사 처치 ${Math.round(EQUIP_RULES.eliteDrop * 100)}% · 보스 보상의 장비 카드`, 110, 440, 19, T.creamSoft);
         const rects = ids.map((id, i) => Object.assign({ id }, this.hqGridRect(i)));
         const hot = this.hqHotCell(rects);
         for (const r of rects) {
@@ -669,7 +678,7 @@ Object.assign(UI, {
                 y += 40;
             }
         } else {
-            UIKit.text(ctx, '판에서 얻으면 기록됩니다', x, y, 24, T.creamSoft, 'left', 'bold');
+            UIKit.text(ctx, '', x, y, 24, T.creamSoft, 'left', 'bold');
         }
     },
 
@@ -708,11 +717,11 @@ Object.assign(UI, {
         const c = raidChallenge(week);
         const boss = BOSSES[c.boss];
         const x = GAME_WIDTH / 2 - 560;
-        const y = 310;
-        UIKit.panel(ctx, x, y, 1120, 520);
+        const y = 320;
+        UIKit.panel(ctx, x, y, 1120, 540);
         UIKit.ink(ctx, `이번 주 토벌 · ${boss.name} · ${MAPS[c.map].name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const a = Meta.raidBest(week);
-        UIKit.ink(ctx, a.bestScore ? `이번 주 최고 ${a.bestTier}단계 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestScore ? T.ink : T.inkSoft, 'right', 'bold');
+        UIKit.ink(ctx, a.bestScore ? `이번 주 최고 ${a.bestTier}단계 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록 없음', x + 1080, y + 50, 24, a.bestScore ? T.ink : T.inkSoft, 'right', 'bold');
         const img = Assets.get(`${boss.art.sprite}/rotations/south`);
         if (img) {
             const k = Math.min(1.5, 400 / img.height, 300 / img.width);
@@ -721,7 +730,7 @@ Object.assign(UI, {
         }
         const lx = x + 370;
         UIKit.ink(ctx, boss.note, lx, y + 110, 22, '#ffb49a');
-        UIKit.ink(ctx, `${RAID_RULES.tierEvery}라운드마다 나오고, 잡을 때마다 체력이 ${RAID_RULES.tierHpGrowth}배가 됩니다`, lx, y + 146, 20, T.ink);
+        UIKit.ink(ctx, `${RAID_RULES.tierEvery}라운드마다 등장, 처치마다 체력 x${RAID_RULES.tierHpGrowth}`, lx, y + 146, 20, T.ink);
         const lord = DEMON_LORDS[c.lord];
         UIKit.ink(ctx, '마왕', lx, y + 200, 22, T.inkSoft, 'left', 'bold');
         UIKit.ink(ctx, lord.name, lx + 76, y + 200, 24, T.ink, 'left', 'bold');
@@ -746,19 +755,19 @@ Object.assign(UI, {
     drawAbyssPanel(ctx) {
         const T = UI_THEME;
         const x = GAME_WIDTH / 2 - 560;
-        const y = 310;
-        UIKit.panel(ctx, x, y, 1120, 520);
+        const y = 320;
+        UIKit.panel(ctx, x, y, 1120, 540);
         const week = abyssWeek();
         const a = Meta.abyssBest(week);
         UIKit.ink(ctx, `이번 주 심연 · ${MAPS[abyssChallenge(week, DEFAULT_LORD, []).map].name}`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
-        UIKit.ink(ctx, a.bestFloor ? `이번 주 최고 ${a.bestFloor}층 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록이 없습니다', x + 1080, y + 50, 24, a.bestFloor ? T.ink : T.inkSoft, 'right', 'bold');
+        UIKit.ink(ctx, a.bestFloor ? `이번 주 최고 ${a.bestFloor}층 · ${a.bestScore.toLocaleString()}점` : '이번 주 기록 없음', x + 1080, y + 50, 24, a.bestFloor ? T.ink : T.inkSoft, 'right', 'bold');
         const rows = [
-            '이번 주는 모두 같은 시드입니다. 소환 순서와 변이 순서가 같습니다',
-            '스토리에서 해금한 마왕과 유물을 직접 골라 들어갑니다',
-            `${ABYSS_RULES.mutateEvery}층마다 어려운 변이가 하나씩 쌓이고 지역이 바뀝니다`,
-            `쌓인 변이 하나당 점수가 ${Math.round(ABYSS_RULES.scorePerMutation * 100)}%씩 늘어납니다`,
-            `${ABYSS_RULES.hpFrom}층부터 용사가 빠르게 강해집니다. 일일 도전보다 가파릅니다`,
-            '시도는 무제한이고 가장 깊은 기록만 남으며, 월요일에 새로 겨룹니다'
+            '',
+            '',
+            `${ABYSS_RULES.mutateEvery}층마다 변이 +1, 지역 변경`,
+            `변이당 점수 +${Math.round(ABYSS_RULES.scorePerMutation * 100)}%`,
+            `${ABYSS_RULES.hpFrom}층부터 용사 급성장`,
+            ''
         ];
         rows.forEach((text, i) => UIKit.ink(ctx, text, x + 40, y + 120 + i * 58, 24, T.ink));
     },
@@ -768,11 +777,11 @@ Object.assign(UI, {
         const T = UI_THEME;
         const c = dailyChallenge(kstDate());
         const x = GAME_WIDTH / 2 - 560;
-        const y = 310;
-        UIKit.panel(ctx, x, y, 1120, 520);
+        const y = 320;
+        UIKit.panel(ctx, x, y, 1120, 540);
         UIKit.ink(ctx, `오늘의 판 · ${MAPS[c.map].name} · 무한 라운드`, x + 40, y + 50, 30, T.gold, 'left', 'bold');
         const best = Meta.data.daily[c.date];
-        UIKit.ink(ctx, best ? `오늘 최고 ${best.score.toLocaleString()}점 · ${best.rounds}라운드` : '아직 오늘 기록이 없습니다', x + 1080, y + 50, 24, best ? T.ink : T.inkSoft, 'right', 'bold');
+        UIKit.ink(ctx, best ? `오늘 최고 ${best.score.toLocaleString()}점 · ${best.rounds}라운드` : '오늘 기록 없음', x + 1080, y + 50, 24, best ? T.ink : T.inkSoft, 'right', 'bold');
         const lord = DEMON_LORDS[c.lord];
         UIKit.ink(ctx, '마왕', x + 40, y + 110, 22, T.inkSoft, 'left', 'bold');
         UIKit.ink(ctx, lord.name, x + 120, y + 110, 26, T.ink, 'left', 'bold');
@@ -806,7 +815,7 @@ Object.assign(UI, {
     drawHqPortal(ctx) {
         const T = UI_THEME;
         const cx = GAME_WIDTH / 2;
-        this.drawHqTitle(ctx, 'hq_portal', '도전의 문', '스토리를 다 깨지 않아도 들어올 수 있습니다');
+        this.drawHqTitle(ctx, 'hq_portal', '도전의 문', '');
         if (!HQ_CONTENTS.length) {
             UIKit.panel(ctx, cx - 520, 260, 1040, 520);
             this.drawHqSprite(ctx, 'hq_portal', cx - 128, 300, 4);
@@ -824,14 +833,24 @@ Object.assign(UI, {
             if (!b.content) continue;
             const c = b.content;
             const hover = this.hoverButton === b;
-            UIKit.note(ctx, b.x, b.y, b.w, b.h, { pin: true, tint: b.locked ? 'shade' : (hover ? 'hover' : null) });
-            UIKit.ink(ctx, c.name, b.x + 24, b.y + 48, 28, b.locked ? T.inkFaint : T.gold, 'left', 'bold');
-            UIKit.ink(ctx, c.desc || '', b.x + 24, b.y + 92, 18, b.locked ? T.inkFaint : T.inkSoft);
-            if (b.locked) {
-                this.drawStageBadge(ctx, c.unlockStage, b.x + b.w - 32, b.y + 40, 16);
-                UIKit.ink(ctx, `스테이지 ${c.unlockStage} 깨면 열림`, b.x + 24, b.y + 118, 16, T.inkSoft, 'left', 'bold');
-            } else {
+            const picked = this.portalPick === c.id || (!this.portalPick && c === HQ_CONTENTS[0]);
+            // 카드: 일러스트를 잘라 깔고 아래에 이름. 고른 카드만 밝다
+            const img = Assets.get(`ill_${c.id}`);
+            UIKit.hudFrame(ctx, 'hud_slot', b.x, b.y, b.w, b.h, 14);
+            if (img) {
+                ctx.save();
+                ctx.imageSmoothingEnabled = false;
+                const iw = b.w - 20;
+                const ih = b.h - 20;
+                ctx.drawImage(img, Math.round((img.width - iw) / 2), Math.round((img.height - ih) / 2), iw, ih, b.x + 10, b.y + 10, iw, ih);
+                ctx.fillStyle = b.locked ? 'rgba(6,4,12,0.72)' : (picked || hover ? 'rgba(6,4,12,0.08)' : 'rgba(6,4,12,0.45)');
+                ctx.fillRect(b.x + 10, b.y + 10, iw, ih);
+                ctx.fillStyle = 'rgba(6,4,12,0.78)';
+                ctx.fillRect(b.x + 10, b.y + b.h - 62, iw, 52);
+                ctx.restore();
             }
+            UIKit.text(ctx, c.name, b.x + 26, b.y + b.h - 36, 26, b.locked ? T.creamSoft : (picked ? T.gold : T.cream), 'left', 'bold');
+            if (b.locked) UIKit.text(ctx, `스테이지 ${c.unlockStage} 필요`, b.x + b.w - 26, b.y + b.h - 36, 16, T.creamSoft, 'right', 'bold');
         }
     }
 });
