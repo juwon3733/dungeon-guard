@@ -44,7 +44,7 @@ const FX_SHEETS = {
     fx_burning: { image: 'pfx_burning', w: 76, h: 98, cols: 8, frames: 15, pivotX: 38, pivotY: 70, life: 1.5, fit: 100, loop: true }, // fire/spirit-flame(불)
     fx_fire_ground: { image: 'pfx_fire_ground', w: 152, h: 117, cols: 8, frames: 8, pivotX: 76, pivotY: 82, life: 0.8, fit: 160, loop: true, px: 1 }, // fire/fire-ring
     fx_snowflake: { image: 'pfx_snowflake', w: 120, h: 113, cols: 8, frames: 20, pivotX: 60, pivotY: 73, life: 0.8, fit: 130 }, // ice/snowflake-burst
-    fx_stunned: { image: 'pfx_stunned', w: 50, h: 37, cols: 8, frames: 15, pivotX: 24, pivotY: 55, life: 1, fit: 50, loop: true, px: 1 }, // status/stunned
+    fx_stunned: { image: 'pfx_stunned', w: 50, h: 37, cols: 8, frames: 15, pivotX: 24, pivotY: 37, life: 1, fit: 50, loop: true, px: 1 }, // status/stunned
     fx_heal: { image: 'pfx_heal', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.7, fit: 80 }, // pickups/collect-burst(초록)
     fx_lifesteal: { image: 'pfx_lifesteal', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.6, fit: 80 }, // pickups/collect-burst(붉은)
     fx_gold: { image: 'pfx_gold', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.8, fit: 80 }, // pickups/collect-burst(금색)

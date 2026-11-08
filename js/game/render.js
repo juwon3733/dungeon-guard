@@ -484,7 +484,7 @@ const Render = {
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
-        if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1); // 묶인 용사는 별 대신 사슬
+        if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY + (h.boss ? 40 : 30), h.boss ? 100 : 56, h.lane * 0.1); // 머리 바로 위에 작게(기준점이 그림 아래 끝) // 묶인 용사는 별 대신 사슬
         if (h.bound > 0) this.chainShackle(ctx, p.x, p.y + 10, h.boss ? 2 : 1, h.bound, h.elite || h.boss);
         if (h.poison > 0) this.poisonBubbles(ctx, p.x, headY - 10, h.boss ? 2 : 1, h.lane, Math.min(1, h.poison * 2));
         if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 195 : 105, h.lane * 0.07, Math.min(1, h.burn * 2));
