@@ -24,7 +24,7 @@ const Game = {
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     hazards: [], // 땅에 남는 장판(불 장판 burnGround): { kind, x, y, radius(px), dps, life, age, tick, owner }
-    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0 },
+    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 },
     mana: 0, // 마력(권능을 찍는다). 판이 끝나면 사라진다
     powers: {}, // 찍은 권능: { 항목 id: true }
     powerSeed: '', // 권능 지도의 시드
@@ -103,13 +103,20 @@ const Game = {
         this.equipBag = [];
         this.runResult = null;
         this.clearField();
-        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0 };
+        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 };
         this.graves = [];
         this.corpseCount = 0;
         this.poisonKills = 0; // 역병의 군주: 독으로 쓰러뜨린 수(대유행)
         this.poisonKill = false; // 지금 주는 피해가 독인지(처치 보너스를 고른다)
         this.bindCount = 0; // 사슬의 군주: 묶인 일반 용사 수(구덩이)
         this.mirrorBlocks = 0; // 거울 마녀: 이번 라운드에 거울 방패가 막은 수
+        // 시계탑의 마왕: 늦춰진 시간, 몰아치기, 시간 정지 남은 초, 되감기 대기, 마지막 1초를 썼는지
+        this.clockSlowT = 0;
+        this.clockHasteT = 0;
+        this.timeStopT = 0;
+        this.rewinds = [];
+        this.rewindDebt = 0;
+        this.rewindUsed = false;
         this.mana = 0;
         this.powers = {};
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
@@ -1023,6 +1030,7 @@ const Game = {
             case 'miasma': return { ok: !!castMiasma() };
             case 'jail': return { ok: !!castJail() };
             case 'mirrorClone': return { ok: !!castMirrorClone() };
+            case 'timeStop': return { ok: !!castTimeStop() };
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
@@ -1310,6 +1318,17 @@ const Game = {
 
         updateAuras(this.monsters); // 지원 몬스터의 오라를 먼저 정한다(같은 프레임의 공격 속도와 피해에 쓴다)
         for (const m of this.monsters) updateMonster(m, dt);
+        // 시계탑의 마왕: 타이머와 되감기(늦게 돌아오는 체력)
+        this.clockSlowT = Math.max(0, this.clockSlowT - dt);
+        this.clockHasteT = Math.max(0, this.clockHasteT - dt);
+        this.timeStopT = Math.max(0, this.timeStopT - dt);
+        if (this.rewinds.length) {
+            for (let i = 0; i < this.rewinds.length; i++) this.rewinds[i] -= dt;
+            while (this.rewinds.length && this.rewinds[0] <= 0) {
+                this.rewinds.shift();
+                if (this.hp > 0) this.hp = Math.min(this.maxHp(), this.hp + 1);
+            }
+        }
         // 거울 분신: 시간이 다 되면 깨져 사라진다
         for (const m of this.monsters.slice()) {
             if (!m.clone) continue;
@@ -1377,7 +1396,7 @@ const Game = {
             for (const f of Object.keys(MONSTER_FAMILIES)) if (d.familyLevels && Number.isInteger(d.familyLevels[f]) && d.familyLevels[f] > 0) this.familyLevels[f] = d.familyLevels[f];
             this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
             this.bossReward = d.bossReward || null;
-            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0 }, d.skills);
+            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 }, d.skills);
             this.mana = d.mana || 0;
             this.powers = d.powers || {};
             this.applyPowerMods();
@@ -1402,6 +1421,9 @@ const Game = {
     // 라운드 시간이 다 됐거나 플레이어가 불렀다: 남은 용사를 그대로 두고 다음 라운드를 시작한다.
     // 일찍 부르면 남은 시간만큼 골드를 받는다. 마지막 라운드는 다 잡아야 끝난다
     // 라운드가 막 시작했다: 다음 라운드를 부르지 못한다
+    // 이번 라운드가 시작되고 지난 판 시간(초). 라운드 중이 아니면 0
+    roundAge() { return this.state === 'wave' && this.roundFull > 0 ? this.roundFull - this.roundTimer : 0; },
+
     nextRoundLocked() {
         return this.state === 'wave' && this.roundFull > 0 && this.roundFull - this.roundTimer < COMBAT_RULES.nextRoundLock; // 이어하기로 불러온 판은 roundFull이 없어 잠기지 않는다
     },
@@ -1410,7 +1432,8 @@ const Game = {
         if (this.state !== 'wave' || this.waveIndex + 1 >= this.waves.length) return false;
         if (this.nextRoundLocked()) return false;
         const n = this.waveIndex + 1;
-        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
+        const early = this.roundTimer * COMBAT_RULES.earlyGoldPerSecond * (this.power('rewindGold') ? 1.5 : 1); // 권능 이른 종
+        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(early);
         const calledEarly = this.roundTimer > 0;
         this.addScore(SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
         const bossDown = this.bossDefeated;
@@ -1435,7 +1458,8 @@ const Game = {
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
         // 왕좌가 맞지 않고 다 잡은 라운드는 마력을 준다
-        if (!this.roundHit) this.addMana(POWER_RULES.manaCleanRound + (this.power('circuit') ? 1 : 0));
+        if (!this.roundHit) this.addMana(POWER_RULES.manaCleanRound + (this.power('circuit') || this.power('rewindMana') ? 1 : 0));
+        if (this.power('rewindHeal')) this.hp = Math.min(this.maxHp(), this.hp + 1); // 권능 수리공
         if (this.power('goldMana') && this.gold >= 500) this.addMana(1);
         // 다 잡고 끝낸 라운드: 완료 점수와 남은 시간 점수
         const scored = this.addScore(SCORE_RULES.clear + SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
