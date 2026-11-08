@@ -57,6 +57,18 @@ const SUMMON_LEVELS = [
 
 SUMMON_RULES.odds = SUMMON_LEVELS[0].odds; // 레벨 1의 확률(시험과 이전 코드용)
 
+// 종족 강화: 판 안에서 골드로 종족(MONSTER_FAMILIES)마다 레벨을 올린다. 그 종족 몬스터 전체의 피해 +damagePer x 레벨.
+// 비용은 cost에서 레벨마다 costStep씩 오르고 상한이 없다(후반 골드를 받아 준다).
+// sureLevels 레벨까지는 반드시 성공하고, 그 뒤로 레벨마다 chanceStep씩 성공률이 내려가 minChance에서 멈춘다.
+// 실패해도 골드는 쓰고 레벨은 그대로다. 성공 여부는 시드 난수(입력 재생이 같은 결과를 낸다)
+const FAMILY_UPGRADE = { damagePer: 0.08, cost: 50, costStep: 50, sureLevels: 3, chanceStep: 0.1, minChance: 0.3 };
+function familyUpgradeCost(level) { return FAMILY_UPGRADE.cost + FAMILY_UPGRADE.costStep * level; }
+function familyUpgradeChance(level) {
+    const F = FAMILY_UPGRADE;
+    if (level < F.sureLevels) return 1;
+    return Math.max(F.minChance, Math.round((1 - (level - F.sureLevels + 1) * F.chanceStep) * 100) / 100);
+}
+
 // 보스 보상 3택: 마지막 웨이브가 아닌 보스를 처치하면 그 웨이브가 끝나고 준비 단계에서 카드를 띄운다.
 //   monsterCards: 몬스터 카드 수(서로 다른 몬스터). 등급은 epicChance 확률로 영웅, 아니면 희귀.
 //   후보는 그 등급의 소환 후보(gradePool)라 전설, 신화와 summon: false 몬스터는 나오지 않는다.

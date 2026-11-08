@@ -32,6 +32,7 @@ const SFX_MAP = {
     rankUp: arg => [[(arg || 0) >= 4 ? 'levelUp' : 'buff', 0, 1.2]],
     build: [['item', 0, 1]],
     upgrade: [['enhanceSuccess', 0, 1]],
+    upgradeFail: [['enhanceFail', 0, 1]],
     sell: [['gold', 0, 1]],
     pickup: [['lootDrop', 0, 1]],
     mergeFail: [['error', 0, 1]],

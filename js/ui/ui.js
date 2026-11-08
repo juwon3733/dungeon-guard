@@ -14,6 +14,7 @@ const UPGRADE_BTN_W = 150; // 소환 강화 칸
 const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
+const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 420, w: 640, h: 400 }; // 종족 강화 창(오른쪽 버튼 줄 왼쪽)
 const TOP_BTN = 60; // 오른쪽 위 아이콘 버튼
 const ABILITY_INK = '#e8a6ff'; // 능력 이름 글자(남색 창 위)
 const HINT_SHOWS = 3; // 화면 가운데 안내 쪽지는 종류마다 이만큼만 나온다(이번 창에서)
@@ -232,6 +233,10 @@ const UI = {
         this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y - 58, NEXT_BTN_W, 50, {
             label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
         });
+        this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 116, NEXT_BTN_W, 50, {
+            label: '종족 강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
+        });
+        if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
@@ -651,7 +656,7 @@ const UI = {
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
         let y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
         // 다음 라운드 버튼을 가리지 않는다: 위로 올리고, 자리가 없으면 왼쪽에 연다
-        const nextTop = NEXT_BTN_Y - 58; // 자동 합치기 버튼까지
+        const nextTop = NEXT_BTN_Y - 116; // 자동 합치기와 종족 강화 버튼까지
         if (x + w > NEXT_BTN_X && y + h > nextTop) {
             if (nextTop - 8 - h >= 80) y = nextTop - 8 - h;
             // 키가 커서 올릴 자리가 없으면 버튼 왼쪽으로 옮긴다(칸 왼쪽에 열어도 버튼에 걸칠 수 있다)
@@ -1151,6 +1156,39 @@ const UI = {
         else this.showToast('지금 못 씀');
     },
 
+    // 종족 강화 창: 판은 멈추지 않는다
+    toggleFamily() {
+        this.familyOpen = !this.familyOpen;
+        Sfx.play('click');
+    },
+
+    // 창 바탕(뒤 맵을 누르지 않게 먼저 깐다)과 종족 다섯 줄의 강화 버튼
+    layoutFamily() {
+        const P = FAMILY_PANEL;
+        this.button('familyPanel', P.x, P.y, P.w, P.h, { famPanel: true, onClick: () => {} });
+        Object.keys(MONSTER_FAMILIES).forEach((f, i) => {
+            const cost = familyUpgradeCost(Game.familyLevel(f));
+            this.button(`family_${f}`, P.x + P.w - 190, P.y + 74 + i * 64, 170, 54, {
+                famRow: f, label: `${cost}G`, disabled: Game.gold < cost, onClick: () => this.doFamilyUp(f)
+            });
+        });
+    },
+
+    doFamilyUp(family) {
+        const res = Game.act({ kind: 'familyUp', family });
+        const name = MONSTER_FAMILIES[family];
+        if (!res.ok) {
+            this.showToast(res.reason === 'gold' ? `${name} 강화 ${familyUpgradeCost(Game.familyLevel(family))}G` : '지금 못 씀');
+            Sfx.play('mergeFail');
+        } else if (res.success) {
+            this.showToast(`${name} Lv${res.level} · 피해 +${Math.round(res.level * FAMILY_UPGRADE.damagePer * 100)}%`);
+            Sfx.play('upgrade');
+        } else {
+            this.showToast(`${name} 강화 실패`);
+            Sfx.play('upgradeFail');
+        }
+    },
+
     // 권능 창: 여는 동안 판이 멈춘다
     togglePowers() {
         if (!this.powerOpen && !Game.lordPowers().length) return;
@@ -1346,6 +1384,8 @@ const UI = {
             return;
         }
         if (code === 'KeyR') { this.togglePowers(); return; }
+        if (code === 'KeyG') { this.toggleFamily(); return; }
+        if (code === 'Escape' && this.familyOpen) { this.familyOpen = false; return; }
         if (code === 'KeyE') { this.useThirdSkill(); return; }
         if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
@@ -1633,6 +1673,7 @@ const UI = {
         this.drawDiscovery(ctx);
         if (G.bossReward) this.drawBossReward(ctx);
         this.drawPartyTip(ctx);
+        if (this.familyOpen && G.inPlay() && !this.powerOpen && !this.focus()) this.drawFamily(ctx);
         this.drawTopTip(ctx);
         this.drawToast(ctx);
         if (this.dialogue) {
@@ -1649,6 +1690,30 @@ const UI = {
             this.drawPowers(ctx);
         } else if (G.paused) {
             this.drawPause(ctx);
+        }
+    },
+
+    // 종족 강화 창: 종족마다 레벨, 피해 보너스, 다음 성공률과 강화 버튼
+    drawFamily(ctx) {
+        const T = UI_THEME;
+        const P = FAMILY_PANEL;
+        UIKit.hudFrame(ctx, 'hud_panel', P.x, P.y, P.w, P.h, 26);
+        UIKit.text(ctx, '종족 강화', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
+        UIKit.text(ctx, `레벨당 피해 +${Math.round(FAMILY_UPGRADE.damagePer * 100)}%`, P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
+        for (const b of this.buttons) {
+            if (!b.famRow) continue;
+            const f = b.famRow;
+            const level = Game.familyLevel(f);
+            const y = b.y + b.h / 2;
+            const chance = Math.round(familyUpgradeChance(level) * 100);
+            UIKit.text(ctx, MONSTER_FAMILIES[f], P.x + 28, y + 1, 26, T.cream, 'left', 'bold');
+            UIKit.text(ctx, `Lv${level}`, P.x + 120, y + 1, 26, level ? T.gold : T.creamSoft, 'left', 'bold');
+            UIKit.text(ctx, level ? `피해 +${Math.round(level * FAMILY_UPGRADE.damagePer * 100)}%` : '-', P.x + 200, y + 1, 21, level ? T.good : T.creamSoft, 'left');
+            UIKit.text(ctx, `성공 ${chance}%`, b.x - 14, y + 1, 20, chance < 100 ? '#ffb49a' : T.creamSoft, 'right', 'bold');
+            const st = this.btnState(b);
+            const kind = b.disabled ? 'off' : 'primary';
+            const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
+            UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2 + dy + 1, 24, UIKit.buttonInk(kind), 'center');
         }
     },
 
@@ -2528,6 +2593,7 @@ const UI = {
             if (b.stamp) continue; // 스토리 지도의 도장은 drawStoryMap이 그린다
             if (b.facility || b.content) continue; // 본부 시설과 도전의 문 콘텐츠는 drawHQ가 그린다
             if (b.abyssLevel !== undefined) continue; // 심연 계약서의 난이도 줄은 drawAbyssPanel이 그린다
+            if (b.famPanel || b.famRow) continue; // 종족 강화 창은 drawFamily가 그린다
             const st = this.btnState(b);
             if (b.skill) this.drawSkillButton(ctx, b, st);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, st);

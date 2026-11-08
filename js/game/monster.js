@@ -44,6 +44,7 @@ function monsterStats(m) {
     const mods = Game.mods;
     stats.hp *= 1 + mods.hp;
     stats.damage *= (1 + mods.damage) * (1 + Game.relicDamage(m));
+    stats.damage *= 1 + FAMILY_UPGRADE.damagePer * Game.familyLevel(def.family); // 종족 강화
     stats.range *= 1 + mods.range;
     stats.interval /= (1 + mods.attackSpeed) * (Game.earlyBoost ? 1 + mods.earlyAttackSpeed : 1);
     stats.armor = 1 - (1 - stats.armor) * (1 - mods.monsterArmor);
