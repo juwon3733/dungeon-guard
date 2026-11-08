@@ -31,7 +31,7 @@ const LORD_EFFECTS = {
     refund: { name: '판매 환불', mode: 'mul' },
     sacrifice: { name: '제물 효과', mode: 'mul' }, // 체력 회복과 번개 감소에 곱한다(체력은 내림)
     // 유물 전용. 상한과 기준 수는 RELIC_LIMITS
-    goldDamage: { name: '200G당 몬스터 피해', mode: 'ratio', note: '최대 15%' },
+    goldDamage: { name: '보유 골드 100G당 몬스터 피해', mode: 'ratio', note: '최대 30%' },
     interest: { name: '라운드 종료 이자', mode: 'ratio', note: '최대 15G' },
     mergeJump: { name: '합치기 2단계 상승 확률', mode: 'ratio' },
     monsterArmor: { name: '몬스터 받는 피해 감소', mode: 'ratio' },
@@ -47,6 +47,46 @@ const LORD_EFFECTS = {
     fullHpDamage: { name: '체력이 가득할 때 피해', mode: 'ratio' },
     hpSummon: { name: '골드가 모자라면 체력 1로 소환', mode: 'add', unit: '회', text: v => `골드 부족 시 체력 1로 소환(판당 ${v}회)` },
     mergedSlow: { name: '합류 뒤 용사 이동 속도', mode: 'mul', low: true },
+    // 유물 2판(47종). 효과 설명은 유물의 desc가 화면에 나오고, 이 이름은 "이번 판 효과" 요약에 쓴다
+    critChance: { name: '치명타 확률', mode: 'ratio' },
+    critDamage: { name: '치명타 피해', mode: 'ratio' },
+    pierce: { name: '원거리 관통', mode: 'add', unit: '명' },
+    meleeSpeed: { name: '근접 몬스터 공격 속도', mode: 'ratio' },
+    farDamage: { name: '먼 적 추가 피해', mode: 'ratio', note: '최대' },
+    doubleHit: { name: '한 번 더 공격할 확률', mode: 'ratio' },
+    earlyGold: { name: '라운드 스킵 골드', mode: 'add', unit: 'G' },
+    undeadOdds: { name: '언데드 등장 확률', mode: 'ratio' },
+    orcOdds: { name: '오크 등장 확률', mode: 'ratio' },
+    demonOdds: { name: '악마 등장 확률', mode: 'ratio' },
+    beastOdds: { name: '야수 등장 확률', mode: 'ratio' },
+    spiritOdds: { name: '정령 등장 확률', mode: 'ratio' },
+    undeadCrit: { name: '언데드 치명타 확률', mode: 'ratio' },
+    orcSpeed: { name: '오크 공격 속도', mode: 'ratio' },
+    demonBurn: { name: '악마 공격 화상(초당 공격력)', mode: 'ratio' },
+    beastFrenzy: { name: '야수 처치 후 공격 속도', mode: 'ratio' },
+    spiritSplash: { name: '정령 공격 튀김', mode: 'ratio' },
+    statusDamage: { name: '상태 이상 적이 받는 피해', mode: 'ratio' },
+    freezeChance: { name: '빙결 확률', mode: 'ratio' },
+    bigDamage: { name: '큰 몬스터 피해', mode: 'ratio' },
+    smallSpeed: { name: '1칸 몬스터 공격 속도', mode: 'ratio' },
+    killBlast: { name: '처치 폭발 확률', mode: 'ratio' },
+    eliteCrit: { name: '정예·보스 치명타 확률', mode: 'ratio' },
+    perMonsterDamage: { name: '몬스터 한 마리당 피해', mode: 'ratio', note: '최대 45%' },
+    manaGain: { name: '마력 획득', mode: 'ratio' },
+    bossTime: { name: '보스 라운드 시간', mode: 'add', unit: '초' },
+    seventhStar: { name: '7번째 소환 영웅 이상', mode: 'add', text: () => '7번째 소환마다 영웅 이상' },
+    pureDamage: { name: '한 종족일 때 피해', mode: 'ratio' },
+    allFamilies: { name: '5종족이 모두 있을 때 피해', mode: 'ratio' },
+    gamble: { name: '소환 비용 도박', mode: 'add', text: () => '소환 비용 15% 0, 10% 2배' },
+    freshSpeed: { name: '새 몬스터 10초 공격 속도', mode: 'ratio' },
+    mythicGold: { name: '신화 합성 골드', mode: 'add', unit: 'G' },
+    equipSlots: { name: '장비 칸', mode: 'add', unit: '칸', text: () => '장비 2개 장착' },
+    slaughterBell: { name: '학살의 종', mode: 'add', text: () => '처치 게이지 1000에 전체 피해' },
+    soulScythe: { name: '영혼 수확 낫', mode: 'add', text: () => '정예 영혼 5개에 공격 속도 +50%' },
+    undying: { name: '부활', mode: 'add', text: () => '1회 부활해 라운드 다시' },
+    maxHpHalf: { name: '최대 체력 절반', mode: 'add', low: true, text: () => '마왕 최대 체력 절반' },
+    feast: { name: '합성마다 쌓이는 피해', mode: 'ratio' },
+    critSplash: { name: '치명타 처치 주변 피해', mode: 'ratio' },
     // 규칙 카드 전용
     heroHp: { name: '용사 체력', mode: 'mul', low: true },
     // 금단의 계약 조항 전용(심연 난이도). 판 규칙을 바꾼다
@@ -192,7 +232,7 @@ const LORD_POWERS = {
         { id: 'slow', name: '감속', desc: '용사 감속', tiers: [
             [{ id: 'slowLong', name: '느린 초침', desc: '멈춘 초침 +2초' }, { id: 'slowDeep', name: '무거운 초침', desc: '멈춘 초침 감속 -55%' }],
             [{ id: 'slowElite', name: '늦춰진 시간', desc: '정예 처치 시 모든 용사 2초간 이동 -30%' }, { id: 'slowHit', name: '모래 바람', desc: '적중 시 10% 확률로 1.5초간 이동 -30%' }],
-            [{ id: 'timeStop', name: '시간 정지', desc: '새 스킬(E): 모든 용사 3초 정지(보스 1초)' }, { id: 'slowAura', name: '시계탑 그림자', desc: '왕좌 3칸 안 용사 이동 -25%' }],
+            [{ id: 'timeStop', name: '시간 정지', desc: '새 스킬(E): 모든 용사 3초 정지(보스 1초)' }, { id: 'slowAura', name: '시계 소리', desc: '감속 중인 용사 받는 피해 +15%' }],
             [{ id: 'stopLong', name: '긴 정지', desc: '시간 정지 +1.5초' }, { id: 'slowBoss', name: '태엽 감기', desc: '보스도 멈춘 초침 감속 그대로' }]
         ] },
         { id: 'haste', name: '가속', desc: '몬스터 가속', tiers: [
@@ -268,7 +308,7 @@ function buildPowerMap(lordId, seed) {
 }
 
 // 유물 효과의 상한과 기준 수
-const RELIC_LIMITS = { goldStep: 200, goldDamageMax: 0.15, altarDamageMax: 0.15, interestMax: 15, fewCount: 6 };
+const RELIC_LIMITS = { goldStep: 100, goldDamageMax: 0.3, altarDamageMax: 0.15, interestMax: 15, fewCount: 6, perMonsterMax: 0.45, gaugeMax: 1000, soulMax: 5 };
 
 // 마왕. 스킬은 셋 다 번개와 호통이다(전용 몬스터는 다음 단계).
 //   sprite: 왕좌의 대기 그림, cast: 주문 그림(없으면 sprite를 쓰고 빛 효과로 구분), footPx: 128px 캔버스 안의 발끝 높이
@@ -365,25 +405,53 @@ const DEFAULT_LORD = 'rift';
 
 // 유물: 시작할 때 유물 칸 수만큼 고른다. 대가 없이 약하게, 판의 방식을 바꾸는 효과 위주다. 그림은 assets/sprites/relic_<id>.png(48px)
 const RELICS = {
-    greedy_vault: { id: 'greedy_vault', name: '탐욕의 금주머니', effects: { goldDamage: 0.01 } },
-    legion_banner: { id: 'legion_banner', name: '군단의 깃발', effects: { fieldMax: 3 } },
-    glass_heart: { id: 'glass_heart', name: '유리 심장', effects: { fullHpDamage: 0.1 } },
-    usury_ledger: { id: 'usury_ledger', name: '고리대금 장부', effects: { interest: 0.03 } },
-    mad_dice: { id: 'mad_dice', name: '미치광이의 주사위', effects: { mergeJump: 0.05 } },
-    dead_horn: { id: 'dead_horn', name: '망자의 뿔피리', effects: { meleeDamage: 0.15 } },
-    sniper_mark: { id: 'sniper_mark', name: '저격수의 표식', effects: { range: 0.1 } },
-    iron_oath: { id: 'iron_oath', name: '철벽 서약', effects: { meleeRange: 0.5 } },
-    blood_altar: { id: 'blood_altar', name: '피의 제단', effects: { altarDamage: 0.005 } },
-    broken_hourglass: { id: 'broken_hourglass', name: '깨진 모래시계', effects: { earlyAttackSpeed: 0.1 } },
-    storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.75 } },
-    mad_drum: { id: 'mad_drum', name: '광기의 북', effects: { roarAnytime: 1 } },
-    smith_hammer: { id: 'smith_hammer', name: '대장장이의 망치', effects: { equipUp: 0.1 } },
-    equip_eater: { id: 'equip_eater', name: '장비 먹는 괴물', effects: { equipPower: 0.2 } },
-    mirror_twin: { id: 'mirror_twin', name: '거울 쌍둥이', effects: { twinSummon: 0.05 } },
-    lone_crown: { id: 'lone_crown', name: '고독한 왕관', effects: { fewDamage: 0.25 } },
-    pauper_helm: { id: 'pauper_helm', name: '빈민의 투구', effects: { commonDamage: 0.2 } },
-    blood_contract: { id: 'blood_contract', name: '피의 계약서', effects: { hpSummon: 3 } },
-    shaky_bridge: { id: 'shaky_bridge', name: '흔들리는 다리', effects: { mergedSlow: 0.92 } }
+    greedy_vault: { id: 'greedy_vault', name: '탐욕의 금주머니', effects: { goldDamage: 0.03 }, desc: '보유 골드 100G당 몬스터 피해가 3% 증가한다(최대 30%)' },
+    legion_banner: { id: 'legion_banner', name: '군단의 깃발', effects: { fieldMax: 5 }, desc: '맵 몬스터 상한이 5 증가한다' },
+    glass_heart: { id: 'glass_heart', name: '유리 심장', effects: { fullHpDamage: 0.2 }, desc: '체력이 가득할 때 피해가 20% 증가한다' },
+    merchant_bond: { id: 'merchant_bond', name: '상인의 보증서', effects: { startGold: 100 }, desc: '게임 시작 시 골드를 100G 더 받는다' },
+    lord_armor: { id: 'lord_armor', name: '마왕의 갑옷', effects: { maxHp: 10 }, desc: '마왕의 최대 체력이 10 증가한다' },
+    tome_xp: { id: 'tome_xp', name: '경험의 서', effects: { xp: 0.5 }, desc: '처치로 얻는 경험치가 50% 증가한다' },
+    pierce_tip: { id: 'pierce_tip', name: '꿰뚫는 화살촉', effects: { pierce: 1 }, desc: '원거리 공격이 용사 1명을 더 관통한다' },
+    usury_ledger: { id: 'usury_ledger', name: '고리대금 장부', effects: { interest: 0.03 }, desc: '라운드 종료 시 현재 보유 골드의 3%만큼 이자를 받는다(최대 15G)' },
+    mad_dice: { id: 'mad_dice', name: '미치광이의 주사위', effects: { mergeJump: 0.05 }, desc: '합성 시 5% 확률로 2단계 더 높은 등급의 몬스터가 나온다' },
+    dead_horn: { id: 'dead_horn', name: '망자의 뿔피리', effects: { meleeDamage: 0.15, meleeSpeed: 0.15 }, desc: '근접 몬스터의 피해와 공격 속도가 15% 증가한다' },
+    sniper_mark: { id: 'sniper_mark', name: '저격수의 표식', effects: { range: 0.1, farDamage: 0.2 }, desc: '몬스터의 사거리가 10% 증가하고, 멀리 있는 적일수록 최대 20%의 추가 피해를 준다' },
+    blood_cup: { id: 'blood_cup', name: '피의 잔', effects: { critChance: 0.15, critDamage: 0.5 }, desc: '치명타 확률이 15%, 치명타 피해가 50% 증가한다' },
+    twin_blade: { id: 'twin_blade', name: '쌍날 검', effects: { doubleHit: 0.15 }, desc: '공격할 때 15% 확률로 한 번 더 공격한다' },
+    broken_hourglass: { id: 'broken_hourglass', name: '깨진 모래시계', effects: { earlyGold: 30, earlyAttackSpeed: 0.1 }, desc: '라운드를 스킵하면 30G를 받고, 모든 몬스터의 공격 속도가 10% 증가한다' },
+    undead_grail: { id: 'undead_grail', name: '망자의 성배', effects: { undeadOdds: 1, undeadCrit: 0.3 }, desc: '소환 시 언데드가 나올 확률이 100% 증가하고, 언데드의 치명타 확률이 30% 증가한다' },
+    war_cry: { id: 'war_cry', name: '전쟁 함성', effects: { orcOdds: 1, orcSpeed: 0.25 }, desc: '소환 시 오크가 나올 확률이 100% 증가하고, 오크의 공격 속도가 25% 증가한다' },
+    torture_kit: { id: 'torture_kit', name: '고문 도구', effects: { statusDamage: 0.2 }, desc: '상태 이상에 걸린 적이 받는 피해가 20% 증가한다' },
+    ice_fang: { id: 'ice_fang', name: '얼음 송곳니', effects: { freezeChance: 0.1 }, desc: '공격할 때 10% 확률로 적을 1.5초 동안 얼려 이동 속도를 50% 낮춘다' },
+    giant_glove: { id: 'giant_glove', name: '거인의 장갑', effects: { bigDamage: 0.25 }, desc: '2칸 이상을 차지하는 큰 몬스터의 피해가 25% 증가한다' },
+    small_giant: { id: 'small_giant', name: '작은 거인', effects: { smallSpeed: 0.15 }, desc: '1칸 몬스터의 공격 속도가 15% 증가한다' },
+    firecracker: { id: 'firecracker', name: '폭죽 상자', effects: { killBlast: 0.1 }, desc: '일반 용사를 처치하면 10% 확률로 그 자리가 폭발한다' },
+    hellfire_seal: { id: 'hellfire_seal', name: '지옥불 인장', effects: { demonOdds: 1, demonBurn: 0.2 }, desc: '소환 시 악마가 나올 확률이 100% 증가하고, 악마의 공격이 3초 동안 적을 불태운다' },
+    hunter_horn: { id: 'hunter_horn', name: '사냥꾼의 뿔', effects: { beastOdds: 1, beastFrenzy: 0.5 }, desc: '소환 시 야수가 나올 확률이 100% 증가하고, 야수가 적을 처치하면 3초 동안 공격 속도가 50% 증가한다' },
+    storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.8 }, desc: '번개의 재사용 시간이 20% 감소한다' },
+    smith_hammer: { id: 'smith_hammer', name: '대장장이의 망치', effects: { equipUp: 0.1 }, desc: '장비 등급이 오를 확률이 10% 증가한다' },
+    hunt_mark: { id: 'hunt_mark', name: '사냥 표식', effects: { eliteCrit: 0.25 }, desc: '정예와 보스에게 치명타 확률이 25% 증가한다' },
+    march_drum: { id: 'march_drum', name: '진군의 북', effects: { perMonsterDamage: 0.03 }, desc: '내 맵의 몬스터 한 마리당 피해가 3% 증가한다(최대 45%)' },
+    mana_crystal: { id: 'mana_crystal', name: '마나 결정', effects: { manaGain: 0.5 }, desc: '마력을 얻는 양이 50% 증가한다' },
+    thief_sand: { id: 'thief_sand', name: '시간 도둑의 모래', effects: { bossTime: 15 }, desc: '보스 라운드 시간이 15초 늘어난다' },
+    seventh_star: { id: 'seventh_star', name: '일곱 번째 별', effects: { seventhStar: 1 }, desc: '7번째 소환마다 영웅 등급 이상의 몬스터가 나온다' },
+    spirit_orb: { id: 'spirit_orb', name: '정령의 구슬', effects: { spiritOdds: 1, spiritSplash: 0.3 }, desc: '소환 시 정령이 나올 확률이 100% 증가하고, 정령의 공격이 주변 적에게 30%의 피해로 튄다' },
+    equip_eater: { id: 'equip_eater', name: '장비 먹는 괴물', effects: { equipSlots: 1 }, desc: '몬스터 한 마리에 장비를 2개까지 장착할 수 있다' },
+    mirror_twin: { id: 'mirror_twin', name: '거울 쌍둥이', effects: { twinSummon: 0.05 }, desc: '소환 시 5% 확률로 한 마리를 더 소환한다' },
+    lone_crown: { id: 'lone_crown', name: '고독한 왕관', effects: { fewDamage: 0.35 }, desc: '내 맵의 몬스터가 6마리 이하일 때 피해가 35% 증가한다' },
+    pure_crown: { id: 'pure_crown', name: '순혈의 왕관', effects: { pureDamage: 0.4 }, desc: '내 맵의 몬스터가 모두 같은 종족이면 피해가 40% 증가한다' },
+    balance_scale: { id: 'balance_scale', name: '균형의 저울', effects: { allFamilies: 0.25 }, desc: '5종족이 모두 맵에 있으면 피해가 25% 증가한다' },
+    gambler_coin: { id: 'gambler_coin', name: '도박꾼의 동전', effects: { gamble: 1 }, desc: '소환 시 15% 확률로 비용이 0이 되고, 10% 확률로 비용이 2배가 된다' },
+    swift_boots: { id: 'swift_boots', name: '신속의 장화', effects: { freshSpeed: 0.5 }, desc: '새로 소환하거나 합성한 몬스터는 10초 동안 공격 속도가 50% 증가한다' },
+    mythic_shard: { id: 'mythic_shard', name: '신화의 파편', effects: { mythicGold: 500 }, desc: '합성으로 신화 몬스터가 나오면 골드를 500G 받는다' },
+    blood_contract: { id: 'blood_contract', name: '피의 계약서', effects: { hpSummon: 3 }, desc: '골드가 부족할 때 체력 1을 소모해 소환할 수 있다(판당 3회)' },
+    shaky_bridge: { id: 'shaky_bridge', name: '흔들리는 다리', effects: { mergedSlow: 0.7 }, desc: '합류 지점을 지나 마왕에게 가까워진 용사들의 이동 속도가 30% 감소한다' },
+    slaughter_bell: { id: 'slaughter_bell', name: '학살의 종', effects: { slaughterBell: 1 }, desc: '적이 죽을 때마다 게이지가 1씩 쌓인다(정예 10, 보스 100). 게이지가 1000이 되면 유물을 눌러 모든 적에게 최대 체력의 50%만큼 피해를 입힌다(보스는 10%)' },
+    soul_scythe: { id: 'soul_scythe', name: '영혼 수확 낫', effects: { soulScythe: 1 }, desc: '정예를 처치할 때마다 영혼을 하나 얻는다. 영혼이 5개가 되면 유물을 눌러 모든 몬스터의 공격 속도를 10초 동안 50% 올린다' },
+    undying_crown: { id: 'undying_crown', name: '불사의 왕관', effects: { undying: 1 }, desc: '마왕이 쓰러지면 1회에 한해 부활해 해당 라운드를 다시 진행한다' },
+    cursed_crown: { id: 'cursed_crown', name: '저주받은 왕관', effects: { maxHpHalf: 1, damage: 0.4 }, desc: '마왕의 최대 체력이 절반이 되는 대신 모든 몬스터의 피해가 40% 증가한다' },
+    glutton_stomach: { id: 'glutton_stomach', name: '탐식의 위장', effects: { feast: 0.05 }, desc: '합성할 때마다 결과 몬스터의 피해가 5%씩 쌓여 판이 끝날 때까지 유지된다' },
+    cruel_blade: { id: 'cruel_blade', name: '잔혹한 칼날', effects: { critSplash: 0.5 }, desc: '치명타로 적을 처치하면 주변 적에게 그 피해의 50%를 입힌다' }
 };
 
 // 표에 있는 id인지('toString' 같은 Object 속성 이름은 아니다)

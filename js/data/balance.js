@@ -157,7 +157,8 @@ const BOSSES = {
 const COMBAT_RULES = {
     startGold: 130,
     maxHp: 20,
-    bossArrival: 0.5,   // 보스가 왕좌에 닿으면 최대 체력의 이만큼 피해
+    bossArrival: 0.5,
+    crit: { chance: 0.05, damage: 2 }, // 몬스터 공격 치명타: 기본 확률과 피해 배율(유물이 더한다)   // 보스가 왕좌에 닿으면 최대 체력의 이만큼 피해
     waveBaseReward: 15,
     waveStepReward: 1,
     spawnGap: 0.34,

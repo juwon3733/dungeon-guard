@@ -13,6 +13,14 @@ const KILL_POWER = [
 
 function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.dead) return 0;
+    // 유물과 치명타(몬스터의 직접 공격만). 지속 피해와 튀김은 치명타가 없다
+    const base0 = amount;
+    let crit = false;
+    if (!dot && attacker && attacker.kind === 'monster') {
+        const r = relicHitDamage(hero, amount, attacker);
+        amount = r.amount;
+        crit = r.crit;
+    }
     // 계약 조항 방패 든 용사: 첫 공격(지속 피해 제외)을 막고 방패가 깨진다
     if (hero.shield > 0 && !dot) {
         hero.shield = 0;
@@ -24,13 +32,14 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     }
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
-    const big = hero.boss || hero.elite ? 1 + equipEffect(attacker && attacker.equip, 'bossDmg') : 1; // 장비: 정예와 보스 피해
+    const big = hero.boss || hero.elite ? 1 + monsterEquip(attacker, 'bossDmg') : 1; // 장비: 정예와 보스 피해
     const sick = hero.poison > 0;
     const armor = sick && Game.power('venomPierce') ? 0 : (hero.armor || 0); // 권능 살을 파는 독
     const base = dot ? amount : Math.max(1, amount * big - armor);
     const rot = sick ? 1 + (Game.power('rotCurse') ? 0.15 : 0) + (Game.power('rotDeep') ? 0.3 : 0) : 1; // 권능 썩은 살, 깊은 부패
     const held = hero.bound > 0 ? 1 + (Game.power('execBound') ? 0.2 : 0) + (Game.power('execDeep') ? 0.4 : 0) : 1; // 권능 형틀, 고문
-    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot * held;
+    const ring = Game.power('slowAura') && clockSlowMul(hero) < 1 ? 1.15 : 1; // 권능 시계 소리: 감속 중인 용사
+    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot * held * ring;
     hero.hp -= dealt;
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);
@@ -44,7 +53,11 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
         hero.kickX = kx / len;
         hero.kickY = ky / len;
     }
-    if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
+    if (crit) {
+        // 치명타: 큰 노란 숫자와 섬광(떼로 오는 일반 용사도 치명타 숫자는 띄운다)
+        Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), `${Math.round(dealt)}!`, '#ffd23d', true);
+        Fx.anim('fx_hit_crit', p.x, p.y - (hero.boss ? 140 : 46), hero.boss ? 260 : 170, 0.26);
+    } else if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
     if (!dot && small) {
         hero.flash = 0.09;
         Fx.burst(p.x, p.y - 22, color || '#ffd26a', 2, 200, 0.25, 4);
@@ -56,6 +69,14 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     // 권능 참수: 체력이 바닥인 묶인 일반 용사는 바로 쓰러진다
     if (hero.hp > 0 && hero.bound > 0 && small && Game.power('execLow') && hero.hp <= hero.maxHp * COMBAT_RULES.chain.lowBelow) hero.hp = 0;
     if (hero.hp <= 0) killHero(hero, p, attacker);
+    // 잔혹한 칼날: 치명타로 쓰러뜨리면 둘레에 그 피해의 절반
+    if (crit && hero.dead && Game.mods.critSplash) relicSplash(p.x, p.y, TILE, dealt * Game.mods.critSplash, '#ffd23d', attacker, hero);
+    // 쌍날 검: 확률로 한 번 더(두 번째 공격은 다시 굴리지 않는다)
+    if (!dot && attacker && attacker.kind === 'monster' && Game.mods.doubleHit && !hero.dead && !Game.doubleHitting && rng('battle') < Game.mods.doubleHit) {
+        Game.doubleHitting = true;
+        damageHero(hero, base0, fromX, fromY, color, attacker);
+        Game.doubleHitting = false;
+    }
     return dealt;
 }
 
@@ -78,6 +99,7 @@ function killHero(hero, pos, attacker) {
     if (byPoison) plagueKill(hero, pos);
     if (hero.bound > 0) chainKill(hero, pos);
     clockKill(hero);
+    relicOnKill(hero, pos, attacker);
     // 계약 조항: 되살아나는 용사는 체력 절반으로 다시 일어나고, 분열하는 정예는 일반 용사 여럿으로 갈라진다
     if (hero.revive) {
         heroRises(hero, hero.type, 0.5);
@@ -92,7 +114,7 @@ function killHero(hero, pos, attacker) {
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + monsterEquip(attacker, 'gold'));
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -237,7 +259,7 @@ function damageThrone(amount, heroName) {
     Fx.anim('fx_hit_fire', tx, ty - 120, 400, 0.4);
     Fx.say(tx, ty - LORD_SAY_Y, lordLine('throneHit'), 1.8);
     clockThroneHit(amount);
-    if (G.hp <= 0 && !clockSavesThrone()) G.finish(false); // 시계탑: 마지막 1초
+    if (G.hp <= 0 && !clockSavesThrone() && !relicUndying()) G.finish(false); // 시계탑: 마지막 1초, 유물 불사의 왕관
     else mirrorThroneHit(); // 거울 마녀: 반사 갈래
 }
 
@@ -706,7 +728,6 @@ function clockSlowMul(h) {
         mul *= 1 - (h.boss && !G.power('slowBoss') ? cut / 2 : cut);
     }
     if (G.clockSlowT > 0) mul *= rule.eliteSlow;
-    if (G.power('slowAura') && remainingDistance(h) < rule.auraTiles * TILE) mul *= rule.auraSlow;
     return mul;
 }
 

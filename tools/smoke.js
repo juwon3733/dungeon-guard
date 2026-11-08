@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js', 'js/ui/menu.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/relics.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js', 'js/ui/menu.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -36,6 +36,23 @@ vm.runInContext(`{
     }
     move('s1', 's3', 'bone_queen', 0);
     move('s2', 's5', 'gold_king', 1);
+    // 옛 시험은 유물 19종 표다: 옛 유물과 옛 해금, 옛 상한, 치명타 없음으로 돌린다(새 유물은 맨 끝에서 따로)
+    const OLD = { greedy_vault: ['탐욕의 금주머니', { goldDamage: 0.01 }], legion_banner: ['군단의 깃발', { fieldMax: 3 }], glass_heart: ['유리 심장', { fullHpDamage: 0.1 }],
+        usury_ledger: ['고리대금 장부', { interest: 0.03 }], mad_dice: ['미치광이의 주사위', { mergeJump: 0.05 }], dead_horn: ['망자의 뿔피리', { meleeDamage: 0.15 }], sniper_mark: ['저격수의 표식', { range: 0.1 }],
+        iron_oath: ['철벽 서약', { meleeRange: 0.5 }], blood_altar: ['피의 제단', { altarDamage: 0.005 }], broken_hourglass: ['깨진 모래시계', { earlyAttackSpeed: 0.1 }],
+        storm_bottle: ['폭풍의 병', { lightningCooldown: 0.75 }], mad_drum: ['광기의 북', { roarAnytime: 1 }], smith_hammer: ['대장장이의 망치', { equipUp: 0.1 }],
+        equip_eater: ['장비 먹는 괴물', { equipPower: 0.2 }], mirror_twin: ['거울 쌍둥이', { twinSummon: 0.05 }], lone_crown: ['고독한 왕관', { fewDamage: 0.25 }],
+        pauper_helm: ['빈민의 투구', { commonDamage: 0.2 }], blood_contract: ['피의 계약서', { hpSummon: 3 }], shaky_bridge: ['흔들리는 다리', { mergedSlow: 0.92 }] };
+    for (const id of Object.keys(RELICS)) delete RELICS[id];
+    for (const [id, [name, effects]] of Object.entries(OLD)) RELICS[id] = { id, name, effects, desc: name };
+    Object.assign(RELIC_LIMITS, { goldStep: 200, goldDamageMax: 0.15 });
+    COMBAT_RULES.crit.chance = 0;
+    const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
+        s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
+    for (const st of STAGES) {
+        const rest = st.unlocks.filter(u => u.kind !== 'relic');
+        st.unlocks = rest.filter(u => u.kind !== 'ending').concat(OLD_UNLOCK[st.id].map(id => ({ kind: 'relic', id })), rest.filter(u => u.kind === 'ending'));
+    }
 }`, ctx);
 
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
@@ -75,7 +92,7 @@ vm.runInContext(`{
         }
     }
     const relicIds = vm.runInContext('Object.keys(RELICS)', actx);
-    assert.strictEqual(relicIds.length, 19, 'nineteen relics');
+    assert.strictEqual(relicIds.length, 47, 'forty-seven relics');
     for (const id of relicIds) {
         assert.deepStrictEqual(pngSize(`relic_${id}`), [48, 48], `relic_${id}.png is 48px`);
         assert(names.includes(`relic_${id}`), `relic_${id} in Assets.names()`);
@@ -6511,7 +6528,7 @@ console.log('smoke ok: equipment crafting');
         Game.heroes.length = 0;
         let eb = 0;
         for (let i = 0; i < 400; i++) { const h = hero(300, 'elite'); chainOnHit(h); if (h.bound > 0) eb++; h.dead = true; }
-        assert(eb < bound, 'elites half: ' + eb);
+        assert(eb < 400 * DEMON_LORDS.chain.passive.chance * 0.85, 'elites about half: ' + eb + ' vs ' + bound);
         Game.heroes.length = 0;
         // 묶임: 정지와 같이 걸리고, 시간이 지나면 풀린다
         const a = hero(400);
@@ -6715,11 +6732,16 @@ console.log('smoke ok: equipment crafting');
         const h2 = hero(), b2 = hero(300, 'boss');
         age(DEMON_LORDS.clock.passive.duration + 1.5);
         assert(Math.abs(clockSlowMul(h2) - 0.45) < 1e-9 && Math.abs(clockSlowMul(b2) - 0.45) < 1e-9, '+2 s, -55%, bosses too');
-        // 시계탑 그림자: 왕좌 3칸 안
+        // 시계 소리: 감속 중인 용사가 받는 피해 +15%
         start(['slowAura']);
+        age(1);
+        const slowed = hero();
+        slowed.armor = 0;
+        assert(Math.abs(damageHero(slowed, 100, 0, 0) - 115) < 1e-6, 'clock ring while slowed');
         age(20);
-        const near = hero(ROUTES.north.length - 2 * TILE), far = hero(100);
-        assert(Math.abs(clockSlowMul(near) - 0.75) < 1e-9 && clockSlowMul(far) === 1, 'shadow near the throne');
+        const calm = hero();
+        calm.armor = 0;
+        assert(Math.abs(damageHero(calm, 100, 0, 0) - 100) < 1e-6, 'no bonus after the slow');
         // 가속: 첫 종소리 + 폭주 시계
         start(['hasteStart', 'hasteMax']);
         age(2);
@@ -6771,6 +6793,150 @@ console.log('smoke ok: equipment crafting');
         assert(boss.dead && Game.inPlay() && Game.hp === Game.maxHp() - Math.ceil(Game.maxHp() * COMBAT_RULES.bossArrival), 'boss arrival: half hp, not defeat');
         console.log('smoke ok: clock lord');
     }).toString() + ')()', kctx);
+}
+// 유물 2판(47종)과 치명타: 표, 설명, 해금, 효과(새 실행 환경)
+{
+    const rctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), rctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', rctx);
+    vm.runInContext('(' + (() => {
+        // 표: 47종, 모두 설명이 있고 효과 키를 안다. 스토리마다 7, 7, 7, 9, 9, 8개
+        const ids = Object.keys(RELICS);
+        assert.strictEqual(ids.length, 47, '47 relics');
+        for (const id of ids) {
+            assert(RELICS[id].desc && RELICS[id].desc.length > 8, id + ' desc');
+            for (const k of Object.keys(RELICS[id].effects)) assert(LORD_EFFECTS[k], id + ' key ' + k);
+        }
+        assert.deepStrictEqual(STAGES.map(st => st.unlocks.filter(u => u.kind === 'relic').length), [7, 7, 7, 9, 9, 8], 'relics per stage');
+        assert(!['pauper_helm', 'iron_oath', 'blood_altar', 'mad_drum'].some(id => RELICS[id]), 'four relics removed');
+        Meta.data.cleared = STAGES.map(s => s.id);
+        const start = (relics, state) => {
+            Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
+            Game.relics = relics.slice();
+            Game.mods = buildMods('rift', relics);
+            Game.state = state || 'wave';
+            Game.gold = 100000;
+            Game.heroes.length = 0;
+        };
+        const hero = (d, kind) => {
+            const h = createHero('warrior', 5, 0, false, 'north');
+            h.waiting = false; h.delay = 0; h.d = d || 300; h.maxHp = h.hp = 100000; h.armor = 0;
+            if (kind) h[kind] = true;
+            Game.heroes.push(h);
+            return h;
+        };
+        const put = type => {
+            const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace(type, a, r); }).split(',').map(Number);
+            return Game.place(type, k[0], k[1]);
+        };
+        const ofFamily = fam => Object.keys(MONSTERS).find(id => MONSTERS[id].family === fam && MONSTERS[id].grade === 'common' && monsterCells(id).join() === '1,1');
+        // 치명타: 확률 1이면 2배(피의 잔이면 2.5배), 0이면 그대로
+        start([]);
+        const imp = put(ofFamily('demon'));
+        COMBAT_RULES.crit.chance = 1;
+        let h = hero();
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp) - 200) < 1e-6, 'crit x2');
+        start(['blood_cup']);
+        h = hero();
+        const imp2 = put(ofFamily('demon'));
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp2) - 250) < 1e-6, 'blood cup crit x2.5');
+        COMBAT_RULES.crit.chance = 0;
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp2) - 100) < 1e-6, 'no crit');
+        assert(Math.abs(damageHero(h, 100, 0, 0) - 100) < 1e-6, 'no attacker, no crit');
+        // 고문 도구: 상태 이상이면 +20%
+        start(['torture_kit']);
+        const imp3 = put(ofFamily('demon'));
+        h = hero();
+        h.slow = 2; h.slowMul = 0.9;
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp3) - 120) < 1e-6, 'torture kit');
+        // 종족 확률: 망자의 성배면 같은 등급에서 언데드가 더 자주
+        const count = relics => {
+            start(relics, 'prep');
+            let undead = 0;
+            for (let i = 0; i < 300; i++) if (MONSTERS[Game.rollSummon()].family === 'undead') undead++;
+            return undead;
+        };
+        const plain = count([]), grail = count(['undead_grail']);
+        assert(grail > plain * 1.4, 'undead odds up: ' + plain + ' -> ' + grail);
+        // 일곱 번째 별: 7번째 소환은 영웅 이상
+        start(['seventh_star'], 'prep');
+        Game.summonCount = 6;
+        assert(GRADE_ORDER.indexOf(MONSTERS[Game.rollSummon()].grade) >= GRADE_ORDER.indexOf('epic'), 'seventh star');
+        // 유리 심장, 군단의 깃발, 상인의 보증서, 마왕의 갑옷, 저주받은 왕관
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
+        const base = Game.maxHp();
+        start(['lord_armor']);
+        assert.strictEqual(Game.maxHp(), base + 10, 'lord armor');
+        start(['cursed_crown']);
+        assert.strictEqual(Game.maxHp(), Math.floor(base / 2), 'cursed crown halves hp');
+        assert(Math.abs(Game.mods.damage - 0.4) < 1e-9, 'cursed crown damage');
+        // 진군의 북, 순혈의 왕관, 균형의 저울, 거인의 장갑
+        start(['march_drum', 'pure_crown']);
+        const o1 = put(ofFamily('orc'));
+        put(ofFamily('orc'));
+        assert(Math.abs(Game.relicDamage(o1) - (0.06 + 0.4)) < 1e-9, 'drum and pure crown');
+        start(['balance_scale']);
+        const fams = Object.keys(MONSTER_FAMILIES).map(f => put(ofFamily(f)));
+        assert(Math.abs(Game.relicDamage(fams[0]) - 0.25) < 1e-9, 'balance scale');
+        // 마나 결정: 1을 받으면 1.5(소수는 모아 둔다)
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
+        Game.mods = buildMods('rift', ['mana_crystal']);
+        Game.addMana(1);
+        Game.addMana(1);
+        assert.strictEqual(Game.mana, 3, 'mana crystal');
+        // 학살의 종: 처치 게이지, 1000이면 눌러서 큰 피해
+        start(['slaughter_bell']);
+        assert.strictEqual(relicCharge('slaughter_bell'), 0, 'gauge empty');
+        assert(!Game.act({ kind: 'relicFire', id: 'slaughter_bell' }).ok, 'not ready');
+        const e = hero(300, 'elite');
+        damageHero(e, 1e9, 0, 0);
+        assert.strictEqual(Game.relicGauge, 10, 'elite +10');
+        Game.relicGauge = 1000;
+        const big = hero(), bossy = hero(400, 'boss');
+        assert(Game.act({ kind: 'relicFire', id: 'slaughter_bell' }).ok && Game.relicGauge === 0, 'fired');
+        assert(Math.abs(big.hp - 50000) < 1e-6 && Math.abs(bossy.hp - 90000) < 1e-6, '50% and boss 10%');
+        // 영혼 수확 낫: 정예 5마리면 공격 속도
+        start(['soul_scythe']);
+        const mm = put(ofFamily('beast'));
+        for (let i = 0; i < 5; i++) damageHero(hero(300, 'elite'), 1e9, 0, 0);
+        assert(Game.act({ kind: 'relicFire', id: 'soul_scythe' }).ok && mm.buffT === 10, 'scythe');
+        // 불사의 왕관: 한 번은 라운드를 다시
+        start(['undying_crown']);
+        hero();
+        damageThrone(Game.hp);
+        assert(Game.state === 'prep' && Game.hp === Game.maxHp() && Game.heroes.length === 0, 'undying restarts the round');
+        Game.state = 'wave';
+        damageThrone(Game.hp);
+        assert.strictEqual(Game.state, 'defeat', 'only once');
+        // 시간 도둑의 모래, 깨진 모래시계
+        start(['thief_sand'], 'prep');
+        Game.waveIndex = Game.waves.findIndex(w => w.boss);
+        Game.startWave();
+        assert(Math.abs(Game.roundTimer - (COMBAT_RULES.bossRoundTime + 15)) < 1e-6, 'boss time +15');
+        // 장비 먹는 괴물: 두 칸
+        start(['equip_eater'], 'prep');
+        const knight = put(ofFamily('orc'));
+        Game.equipBag = Object.keys(EQUIPMENT).filter(id => !EQUIP_BASES.includes(id)).slice(0, 2); // 완성 장비 둘(재료끼리는 조합된다)
+        Game.equipMonster(knight, 0);
+        Game.equipMonster(knight, 0);
+        assert(knight.equip && knight.equip2 && Game.equipBag.length === 0, 'two equips');
+        assert(Game.unequipMonster(knight).ok && !knight.equip2 && knight.equip, 'second comes off first');
+        // 탐식의 위장, 신화의 파편 없이도 합치면 쌓인다
+        start(['glutton_stomach'], 'prep');
+        const t1 = put('orc_guard'), t2 = put('orc_guard');
+        put('orc_guard');
+        const res = Game.act({ kind: 'merge', src: t1, dst: t2 });
+        assert(res.ok && Math.abs(res.monster.feast - 0.05) < 1e-9, 'feast stacks');
+        // 쌍날 검: 확률 1이면 두 번
+        start(['twin_blade']);
+        Game.mods.doubleHit = 1;
+        const o2 = put(ofFamily('orc'));
+        h = hero();
+        damageHero(h, 100, 0, 0, null, o2);
+        assert(Math.abs(h.maxHp - h.hp - 200) < 1e-6, 'twin blade hits twice');
+        console.log('smoke ok: relics v2');
+    }).toString() + ')()', rctx);
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

@@ -52,9 +52,9 @@ const LORD_CARD_H = 296;
 const LORD_CARD_GAP = 12;
 const LORD_CARD_Y = 104;
 const LORD_DETAIL = { x: 56, y: 414, w: 1808, h: 180 }; // 카드 아래: 고른(또는 마우스를 올린) 마왕의 효과와 패시브
-const RELIC_CELL = 64;
+const RELIC_CELL = 56;
 const RELIC_GAP = 6;
-const RELIC_COLS = 10;
+const RELIC_COLS = 11;
 const RELIC_GRID_X = 150;
 const RELIC_GRID_Y = 676;
 const PICKED_X = 860; // 고른 유물 칸
@@ -224,7 +224,8 @@ const UI = {
             if (third) this.button(third.key, BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: third.key, third, onClick: () => this.useThirdSkill() });
             for (let i = 0; i < Meta.relicSlots(); i++) {
                 const r = this.barRelicRect(i);
-                this.button(`barRelic${i}`, r.x, r.y, r.w, r.h, { barRelic: i });
+                const rid = G.relics[i];
+                this.button(`barRelic${i}`, r.x, r.y, r.w, r.h, { barRelic: i, onClick: rid && relicCharge(rid) !== null ? () => { if (!G.act({ kind: 'relicFire', id: rid }).ok) this.showToast('아직 준비 중'); } : undefined });
             }
         }
         // 보관함 칸: 누르고 끌면 장비 끌기(onDown). 그림은 drawBag이 하단 바와 함께 그린다
@@ -1957,14 +1958,14 @@ const UI = {
             if (b.locked) {
                 ctx.save();
                 ctx.globalAlpha = 0.25;
-                this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
+                this.drawRelicIcon(ctx, b.relicId, b.x + 4, b.y + 4);
                 ctx.restore();
-                UIKit.icon(ctx, 'lock', b.x + 8, b.y + 2);
+                UIKit.icon(ctx, 'lock', b.x + 4, b.y + 2);
                 const st = unlockStage('relic', b.relicId);
                 if (st) this.drawStageBadge(ctx, st.no, b.x + b.w - 14, b.y + b.h - 14);
                 continue;
             }
-            this.drawRelicIcon(ctx, b.relicId, b.x + 8, b.y + 8);
+            this.drawRelicIcon(ctx, b.relicId, b.x + 4, b.y + 4);
         }
         UIKit.text(ctx, '', RELIC_GRID_X, 862, 19, T.creamSoft);
         UIKit.text(ctx, '', RELIC_GRID_X, 892, 19, T.creamSoft);
@@ -1984,17 +1985,19 @@ const UI = {
         for (const b of this.buttons.filter(x => x.pickedSlot !== undefined)) {
             const id = L.relics[b.pickedSlot];
             UIKit.slot(ctx, b.x, b.y, b.w, b.h, id ? 'gold' : 'iron', id && this.hoverButton === b ? 'hover' : null);
-            if (id) this.drawRelicIcon(ctx, id, b.x + 8, b.y + 8);
+            if (id) this.drawRelicIcon(ctx, id, b.x + 4, b.y + 4);
             else UIKit.text(ctx, '빈 칸', b.x + b.w / 2, b.y + b.h / 2, 16, T.creamSoft, 'center');
         }
         let ly = RELIC_GRID_Y + RELIC_CELL + 30;
         if (!Meta.relicSlots()) UIKit.text(ctx, `유물 칸: ${this.unlockText('slot', 1)}`, PICKED_X, ly, 19, T.creamSoft);
         else if (!L.relics.length) UIKit.text(ctx, '', PICKED_X, ly, 19, T.creamSoft);
         for (const id of L.relics) {
-            // 이름과 효과 두 줄(효과 글이 길어 한 줄에 함께 두면 오른쪽 창에 가린다)
+            // 이름, 그 아래 효과(오른쪽 창에 닿지 않게 접는다, 두 줄까지)
             UIKit.text(ctx, RELICS[id].name, PICKED_X, ly, 20, T.cream);
-            UIKit.text(ctx, effectLines(RELICS[id].effects).join(', '), PICKED_X, ly + 24, 18, T.good);
-            ly += 52;
+            ctx.font = `17px ${UI_FONT}`;
+            const lines = this.wrapLines(ctx, RELICS[id].desc, 1310 - PICKED_X).slice(0, 2);
+            lines.forEach((t, j) => UIKit.text(ctx, t, PICKED_X, ly + 24 + j * 21, 17, T.good));
+            ly += 30 + lines.length * 21;
         }
 
         // 이번 판 효과: 마왕과 유물을 합친 값(같은 키는 합쳐 한 줄). 금테 상세 창
@@ -2016,9 +2019,9 @@ const UI = {
         const id = b.relicId || (b.pickedSlot !== undefined ? this.loadout.relics[b.pickedSlot] : null);
         if (!id) return;
         // 유물 격자와 고른 칸을 가리지 않게 격자 아래(안내 문구 자리)에 띄운다. 잠긴 유물은 이름 뒤에 풀리는 스테이지
-        const y = RELIC_GRID_Y + 2 * (RELIC_CELL + RELIC_GAP) + 4;
+        const y = RELIC_GRID_Y - 104; // 격자 위(유물 47개라 격자 아래에는 자리가 없다)
         const title = RELICS[id].name + (Meta.hasRelic(id) ? '' : `  (${this.unlockText('relic', id)})`);
-        this.drawTooltip(ctx, clamp(b.x - 183, 12, 1330 - 442), y, title, effectLines(RELICS[id].effects).join(', '));
+        this.drawTooltip(ctx, clamp(b.x - 183, 12, 1330 - 442), y, title, RELICS[id].desc);
     },
 
     // 잠긴 마왕 카드: 가라앉힌 창, 흐린 그림 위에 자물쇠와 풀리는 스테이지 번호
@@ -2106,6 +2109,15 @@ const UI = {
             const id = Game.relics[b.barRelic];
             UIKit.slot(ctx, b.x, b.y, b.w, b.h, id ? 'gold' : 'iron', id && this.hoverButton === b ? 'hover' : null);
             if (id) this.drawRelicIcon(ctx, id, b.x + 2, b.y + 2);
+            // 발동형 유물: 아래 게이지, 다 차면 금빛 테가 깜빡인다
+            const charge = id ? relicCharge(id) : null;
+            if (charge !== null) {
+                ctx.fillStyle = '#120a18';
+                ctx.fillRect(b.x + 3, b.y + b.h - 9, b.w - 6, 6);
+                ctx.fillStyle = charge >= 1 ? '#ffe08a' : '#c9a6ff';
+                ctx.fillRect(b.x + 4, b.y + b.h - 8, Math.round((b.w - 8) * Math.min(1, charge)), 4);
+                if (charge >= 1 && Math.floor(Game.time * 4) % 2) UIKit.gradeFrame(ctx, b.x - 2, b.y - 2, b.w + 4, b.h + 4, UI_THEME.goldLight, 2);
+            }
         }
     },
 
@@ -2296,7 +2308,7 @@ const UI = {
         // 마왕 탭의 유물 칸
         const relic = b && b.barRelic !== undefined ? Game.relics[b.barRelic] : null;
         if (relic) {
-            this.drawTooltip(ctx, clamp(b.x - 190, 12, GAME_WIDTH - 442), GAME_HEIGHT - BAR_H - 92, `유물 · ${RELICS[relic].name}`, effectLines(RELICS[relic].effects).join(', '));
+            this.drawTooltip(ctx, clamp(b.x - 190, 12, GAME_WIDTH - 442), GAME_HEIGHT - BAR_H - 92, `유물 · ${RELICS[relic].name}`, RELICS[relic].desc);
         }
         const r = this.popupEquipRect;
         const f = this.selectedMonster;
@@ -3116,9 +3128,12 @@ const UI = {
 
     // 설명 창(남색, 금테): 제목과 설명 한 줄. titleColor는 제목 색
     drawTooltip(ctx, x, y, title, desc, titleColor) {
-        UIKit.note(ctx, x, y, 430, 82);
+        // 긴 설명은 접어서 상자를 늘린다(유물 설명은 두세 줄)
+        ctx.font = `18px ${UI_FONT}`;
+        const lines = this.wrapLines(ctx, desc || '', 390);
+        UIKit.note(ctx, x, y, 430, 58 + lines.length * 24);
         UIKit.ink(ctx, title, x + 20, y + 26, 22, titleColor || UI_THEME.gold, 'left', 'bold');
-        UIKit.ink(ctx, desc, x + 20, y + 56, 18, UI_THEME.ink);
+        lines.forEach((t, j) => UIKit.ink(ctx, t, x + 20, y + 56 + j * 24, 18, UI_THEME.ink));
     },
 
     // 탭: 켜진 탭은 밝은 은청색에 금테와 흰 굵은 글자, 꺼진 탭은 어두운 남색에 흐린 글자. 아이콘이 있으면 왼쪽에
@@ -3692,14 +3707,15 @@ const UI = {
         y += 70;
         if (u.kind === 'lord' || u.kind === 'relic') {
             const def = u.kind === 'lord' ? DEMON_LORDS[u.id] : RELICS[u.id];
-            y = this.drawEffectLines(ctx, def.effects, cx, y, 26, 36, 'center');
             if (u.kind === 'lord') { // 마왕은 수치 효과 대신 패시브
                 UIKit.ink(ctx, `패시브 · ${def.passive.name}`, cx, y + 4, 24, T.inkWax, 'center', 'bold');
                 y += 36;
-            }
-            if (def.desc) {
                 ctx.font = `21px ${UI_FONT}`;
                 this.wrapLines(ctx, def.desc, U.w - 100).slice(0, 1).forEach(t => UIKit.ink(ctx, t, cx, y + 10, 21, T.inkSoft, 'center'));
+            } else {
+                // 유물: 설명 글을 몇 줄로
+                ctx.font = `22px ${UI_FONT}`;
+                this.wrapLines(ctx, def.desc, U.w - 100).slice(0, 4).forEach((t, j) => UIKit.ink(ctx, t, cx, y + 4 + j * 30, 22, T.inkGood, 'center'));
             }
             UIKit.ink(ctx, u.kind === 'lord' ? '' : '', cx, U.y + U.h - 34, 19, T.inkFaint, 'center');
         } else if (u.kind === 'slot') {

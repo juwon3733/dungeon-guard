@@ -51,7 +51,7 @@ const STAGES = [
             ['bone_queen', '용사 잡는 거면 나도 끼워 줘. 백 년 만의 손님이거든.'],
             ['rift', '월세는 뼈로 받지. 고블린, 유물 칸도 하나 짜 둬.']
         ],
-        unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'slot' }, { kind: 'relic', id: 'greedy_vault' }, { kind: 'relic', id: 'legion_banner' }, { kind: 'relic', id: 'glass_heart' }]
+        unlocks: [{ kind: 'lord', id: 'bone_queen' }, { kind: 'slot' }, { kind: 'relic', id: 'greedy_vault' }, { kind: 'relic', id: 'legion_banner' }, { kind: 'relic', id: 'glass_heart' }, { kind: 'relic', id: 'merchant_bond' }, { kind: 'relic', id: 'lord_armor' }, { kind: 'relic', id: 'tome_xp' }, { kind: 'relic', id: 'pierce_tip' }]
     },
     {
         id: 's2', mapId: 'parallel', no: 2, name: '도굴꾼 소동', zone: 'coast', waves: firstRounds(20), hpMul: 0.6, goldBonus: 10, map: [560, 380],
@@ -65,7 +65,7 @@ const STAGES = [
             ['gold_king', '실례합니다. 이 던전 분양 대금이 아직 안 들어왔는데요?'],
             ['gold_king', '채무자가 망하면 곤란하지. 다 받을 때까지 여기 묵으마.']
         ],
-        unlocks: [{ kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'usury_ledger' }, { kind: 'relic', id: 'mad_dice' }, { kind: 'relic', id: 'dead_horn' }, { kind: 'relic', id: 'sniper_mark' }]
+        unlocks: [{ kind: 'lord', id: 'gold_king' }, { kind: 'relic', id: 'usury_ledger' }, { kind: 'relic', id: 'mad_dice' }, { kind: 'relic', id: 'dead_horn' }, { kind: 'relic', id: 'sniper_mark' }, { kind: 'relic', id: 'blood_cup' }, { kind: 'relic', id: 'twin_blade' }, { kind: 'relic', id: 'broken_hourglass' }]
     },
     {
         id: 's3', mapId: 'coil', no: 3, name: '건너편 세입자', zone: 'frost', waves: firstRounds(30), hpMul: 0.7, goldBonus: 20, map: [840, 610],
@@ -81,7 +81,7 @@ const STAGES = [
             ['plague', '콜록. 아랫집 하수도에 살던 자다. 시끄러워서 올라왔지.'],
             ['plague', '용사들 기침 소리가 듣기 좋군. 나도 끼워 줘.']
         ],
-        unlocks: [{ kind: 'lord', id: 'plague' }, { kind: 'relic', id: 'iron_oath' }, { kind: 'relic', id: 'blood_altar' }, { kind: 'relic', id: 'broken_hourglass' }]
+        unlocks: [{ kind: 'lord', id: 'plague' }, { kind: 'relic', id: 'undead_grail' }, { kind: 'relic', id: 'war_cry' }, { kind: 'relic', id: 'torture_kit' }, { kind: 'relic', id: 'ice_fang' }, { kind: 'relic', id: 'giant_glove' }, { kind: 'relic', id: 'small_giant' }, { kind: 'relic', id: 'firecracker' }]
     },
     {
         id: 's4', mapId: 'merge', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
@@ -95,7 +95,7 @@ const STAGES = [
             ['chain', '정찰대가 남긴 포로는 내가 맡지. 감옥이 비어서 심심했다.'],
             ['chain', '오늘부터 여기 간수다. 줄 서.']
         ],
-        unlocks: [{ kind: 'lord', id: 'chain' }, { kind: 'slot' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'mad_drum' }, { kind: 'relic', id: 'smith_hammer' }]
+        unlocks: [{ kind: 'lord', id: 'chain' }, { kind: 'slot' }, { kind: 'relic', id: 'hellfire_seal' }, { kind: 'relic', id: 'hunter_horn' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'smith_hammer' }, { kind: 'relic', id: 'hunt_mark' }, { kind: 'relic', id: 'march_drum' }, { kind: 'relic', id: 'mana_crystal' }, { kind: 'relic', id: 'thief_sand' }, { kind: 'relic', id: 'seventh_star' }]
     },
     {
         id: 's5', mapId: 'parallel', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
@@ -110,7 +110,7 @@ const STAGES = [
             ['mirror', '철거반 마법사의 거울에 갇혀 있었어. 깨 줘서 고마워.'],
             ['mirror', '보답으로 너희 몬스터를 둘로 비춰 줄게. 가끔은.']
         ],
-        unlocks: [{ kind: 'lord', id: 'mirror' }, { kind: 'slot' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }]
+        unlocks: [{ kind: 'lord', id: 'mirror' }, { kind: 'slot' }, { kind: 'relic', id: 'spirit_orb' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }, { kind: 'relic', id: 'pure_crown' }, { kind: 'relic', id: 'balance_scale' }, { kind: 'relic', id: 'gambler_coin' }, { kind: 'relic', id: 'swift_boots' }, { kind: 'relic', id: 'mythic_shard' }]
     },
     {
         id: 's6', mapId: 'coil', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],
@@ -127,7 +127,7 @@ const STAGES = [
             ['clock', '시끄러워서 시계탑에서 내려왔다. 너희 덕에 내 시계가 다시 가는군.'],
             ['clock', '남은 시간은 여기서 보내지.']
         ],
-        unlocks: [{ kind: 'lord', id: 'clock' }, { kind: 'slot' }, { kind: 'relic', id: 'pauper_helm' }, { kind: 'relic', id: 'blood_contract' }, { kind: 'relic', id: 'shaky_bridge' }, { kind: 'ending' }]
+        unlocks: [{ kind: 'lord', id: 'clock' }, { kind: 'slot' }, { kind: 'relic', id: 'blood_contract' }, { kind: 'relic', id: 'shaky_bridge' }, { kind: 'relic', id: 'slaughter_bell' }, { kind: 'relic', id: 'soul_scythe' }, { kind: 'relic', id: 'undying_crown' }, { kind: 'relic', id: 'cursed_crown' }, { kind: 'relic', id: 'glutton_stomach' }, { kind: 'relic', id: 'cruel_blade' }, { kind: 'ending' }]
     }
 ];
 

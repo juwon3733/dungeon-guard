@@ -33,12 +33,12 @@ function monsterStats(m) {
         if (b.heavy) stats.heavy = true;
     }
     // 장비: 랭크와 갈래까지 정한 수치에 곱한다(갈래의 interval, range는 값을 바꾸므로 그 뒤에)
-    if (m.equip) {
+    if (m.equip || m.equip2) {
         const power = 1 + Game.mods.equipPower; // 유물: 장비 효과
-        stats.hp *= 1 + equipEffect(m.equip, 'hp') * power;
-        stats.damage *= 1 + equipEffect(m.equip, 'damage') * power;
-        stats.range *= 1 + equipEffect(m.equip, 'range') * power;
-        stats.interval /= 1 + equipEffect(m.equip, 'speed') * power;
+        stats.hp *= 1 + monsterEquip(m, 'hp') * power;
+        stats.damage *= 1 + monsterEquip(m, 'damage') * power;
+        stats.range *= 1 + monsterEquip(m, 'range') * power;
+        stats.interval /= 1 + monsterEquip(m, 'speed') * power;
     }
     // 마왕과 유물: 장비와 같은 방식으로 그 뒤에 곱한다. 값이 없으면(0, 1) 그대로다
     const mods = Game.mods;
@@ -68,7 +68,11 @@ function monsterStats(m) {
     if (MONSTER_ROLES[def.role].melee) {
         stats.damage *= 1 + mods.meleeDamage;
         stats.range += mods.meleeRange;
+        stats.interval /= 1 + mods.meleeSpeed; // 망자의 뿔피리
     }
+    // 유물: 오크 공격 속도(전쟁 함성), 1칸 몬스터 공격 속도(작은 거인)
+    if (def.family === 'orc') stats.interval /= 1 + mods.orcSpeed;
+    if (mods.smallSpeed && monsterCells(m.type).join() === '1,1') stats.interval /= 1 + mods.smallSpeed;
     // 스킬 buff(전쟁의 함성 등). 최대 체력은 건드리지 않는다
     if (m.buffT > 0 && m.buff) {
         stats.damage *= 1 + (m.buff.damage || 0);
@@ -218,12 +222,14 @@ function monsterHitSfx(type, fallback) {
 function monsterHitHero(type, hero, owner) {
     if (hero.dead) return;
     // 장비의 적중 효과
-    const eq = owner && owner.equip && EQUIPMENT[owner.equip].onHit;
-    if (eq) {
+    for (const id of owner ? [owner.equip, owner.equip2] : []) {
+        const eq = id && EQUIPMENT[id].onHit;
+        if (!eq) continue;
         if (eq.curse) curseHero(hero, eq.curse[0], eq.curse[1]);
         if (eq.burn) burnHero(hero, eq.burn[0], eq.burn[1], owner);
         if (eq.slow) slowHero(hero, eq.slow[0], eq.slow[1]);
     }
+    relicOnHit(hero, owner); // 유물: 얼음 송곳니, 지옥불 인장, 정령의 구슬
     const curse = monsterAbility(type, 'curseShot');
     if (curse) curseHero(hero, curse.duration, curse.takenMul);
     const burn = monsterAbility(type, 'burnShot');
@@ -452,6 +458,12 @@ function setMonsterEquip(m, id) {
     applyMonsterStats(m);
 }
 
+// 둘째 장비 칸(유물 장비 먹는 괴물)
+function setMonsterEquip2(m, id) {
+    m.equip2 = id || null;
+    applyMonsterStats(m);
+}
+
 // 다음 랭크까지 남은 경험치(처치 수). 최고 랭크면 0. 장비로 경험치가 소수가 되면 올려서 센다
 function monsterXpToNext(m) {
     const next = MONSTER_RANKS[(m.rank || 0) + 1];
@@ -476,7 +488,7 @@ function monsterKilledHero(m, hero) {
         Fx.number(hero, p.x, p.y - 165, `+${loot.gold}G`, '#ffd76a', false);
     }
     const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
-    m.xp += gain * (1 + equipEffect(m.equip, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
+    m.xp += gain * (1 + monsterEquip(m, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
     const before = m.rank;
     while (MONSTER_RANKS[m.rank + 1] && m.xp >= MONSTER_RANKS[m.rank + 1].xp) m.rank++;
     if (m.rank === before) return;
@@ -710,6 +722,11 @@ function updateProjectile(p, dt) {
         p.angle = Math.atan2(ty - p.y, tx - p.x);
         if (len <= step + 8) {
             monsterDealt(p.owner, damageHero(t, p.damage, p.x, p.y, p.big ? '#ff9d6b' : (p.curse ? '#d9a8ff' : '#ffe36b'), p.owner));
+            // 꿰뚫는 화살촉: 맞은 용사 뒤(1.5칸 안) 가장 가까운 용사도 맞는다
+            if (Game.mods.pierce && p.owner && !p.owner.removed) {
+                const next = Game.heroes.filter(h => h !== t && !h.dead && !h.waiting).map(h => ({ h, d: distance(w.x, w.y, heroWorld(h).x, heroWorld(h).y) })).filter(o => o.d <= TILE * 1.5).sort((a, b) => a.d - b.d)[0];
+                if (next) damageHero(next.h, p.damage, w.x, w.y, '#ffe36b', p.owner);
+            }
             // 타락 유닛의 화살에는 src와 owner가 없다
             if (p.src) monsterHitHero(p.src, t, p.owner);
             if (p.owner && !p.owner.removed) monsterChain(p.owner, t, p.damage);
