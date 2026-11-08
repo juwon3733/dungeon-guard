@@ -62,7 +62,7 @@ vm.runInContext(`{
         return [png.readUInt32BE(16), png.readUInt32BE(20)];
     };
     const lords = vm.runInContext('Object.values(DEMON_LORDS)', actx);
-    assert.strictEqual(lords.length, 6, 'six lords'); // 기본 1 + 스토리 1~5 클리어마다 1
+    assert.strictEqual(lords.length, 7, 'seven lords'); // 기본 1 + 스토리 1~6 클리어마다 1
     for (const lord of lords) {
         for (const name of [lord.sprite, lord.cast].filter(Boolean)) {
             assert.deepStrictEqual(pngSize(name), [128, 128], name + ' is 128px');
@@ -6063,7 +6063,7 @@ console.log('smoke ok: equipment crafting');
     assert(Meta.hasLord('gold_king'), 'stage 2 opens the gold king');
     // 스토리 3~6: 한 명씩
     const order = STAGES.map(st => (st.unlocks.find(u => u.kind === 'lord') || {}).id || null);
-    assert.strictEqual(JSON.stringify(order.slice(0, 5)), JSON.stringify(['bone_queen', 'gold_king', 'plague', 'chain', 'mirror']), 'stages 3, 4, 5 open the plague, chain and mirror lords');
+    assert.strictEqual(JSON.stringify(order), JSON.stringify(['bone_queen', 'gold_king', 'plague', 'chain', 'mirror', 'clock']), 'one lord per story stage');
     for (const id of Object.keys(DEMON_LORDS)) if (id !== DEFAULT_LORD) assert(order.includes(id), id + ' opens at a stage');
     assert.strictEqual(LORD_POWERS.plague.length, 3, 'plague: three branches');
     for (const br of LORD_POWERS.plague) assert(br.tiers.length === 4 && br.tiers.every(t => t.length === 2), br.id + ': 4 tiers of 2');
@@ -6675,6 +6675,93 @@ console.log('smoke ok: equipment crafting');
         assert(Game.summonCost() > 0, 'then paid');
         console.log('smoke ok: mirror lord');
     }).toString() + ')()', mctx);
+}
+// 시계탑의 마왕: 라운드 시작 4초 감속(보스 절반), 권능(느린·무거운 초침, 그림자, 가속, 시간 정지, 되감기, 마지막 1초, 수리공)
+{
+    const kctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), kctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', kctx);
+    vm.runInContext('(' + (() => {
+        Meta.data.cleared = STAGES.map(s => s.id); // 스토리 6을 깨야 열린다
+        const start = powers => {
+            Game.reset({ lord: 'clock', relics: [] }, STAGES[5].id);
+            Game.state = 'prep';
+            Game.prepTimer = 999;
+            for (const id of powers || []) Game.powers[id] = true;
+            Game.startWave();
+            Game.heroes.length = 0;
+        };
+        const hero = (d, kind) => {
+            const h = createHero('warrior', 5, 0, false, 'north');
+            h.waiting = false; h.delay = 0; h.d = d || 300; h.maxHp = h.hp = 1000;
+            if (kind) h[kind] = true;
+            Game.heroes.push(h);
+            return h;
+        };
+        const age = s => { Game.roundTimer = Game.roundFull - s; };
+        start();
+        assert(Game.lordPassive('stopwatch'), 'stopwatch passive');
+        const h = hero(), b = hero(300, 'boss');
+        age(1);
+        assert(Math.abs(clockSlowMul(h) - 0.6) < 1e-9 && Math.abs(clockSlowMul(b) - 0.8) < 1e-9, 'first 4 s: -40%, bosses half');
+        age(4.5);
+        assert.strictEqual(clockSlowMul(h), 1, 'after 4 s: normal');
+        // 다른 마왕은 감속하지 않는다
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
+        assert.strictEqual(clockSlowMul(h), 1, 'only the clock lord');
+        // 느린·무거운 초침, 태엽 감기
+        start(['slowLong', 'slowDeep', 'slowBoss']);
+        const h2 = hero(), b2 = hero(300, 'boss');
+        age(5.5);
+        assert(Math.abs(clockSlowMul(h2) - 0.45) < 1e-9 && Math.abs(clockSlowMul(b2) - 0.45) < 1e-9, '6 s, -55%, bosses too');
+        // 시계탑 그림자: 왕좌 3칸 안
+        start(['slowAura']);
+        age(10);
+        const near = hero(ROUTES.north.length - 2 * TILE), far = hero(100);
+        assert(Math.abs(clockSlowMul(near) - 0.75) < 1e-9 && clockSlowMul(far) === 1, 'shadow near the throne');
+        // 가속: 첫 종소리 + 폭주 시계
+        start(['hasteStart', 'hasteMax']);
+        age(2);
+        assert(Math.abs(clockHaste() - 0.6) < 1e-9, 'first bell doubled');
+        age(7);
+        assert.strictEqual(clockHaste(), 0, 'bell ends');
+        // 몰아치기, 늦춰진 시간: 정예 처치
+        start(['hasteKill', 'slowElite']);
+        age(10);
+        const e = hero(300, 'elite');
+        e.bounty = 0;
+        damageHero(e, 5000, 0, 0);
+        assert(Game.clockHasteT > 0 && Game.clockSlowT > 0, 'elite kill starts both');
+        assert(Math.abs(clockHaste() - 0.3) < 1e-9 && Math.abs(clockSlowMul(hero()) - 0.7) < 1e-9, 'haste and slow');
+        // 시간 정지(E)
+        start(['timeStop', 'stopLong', 'timeStopHaste']);
+        const s1 = hero(), sb = hero(400, 'boss');
+        assert.strictEqual(Game.thirdSkill().key, 'timeStop', 'third skill');
+        assert(Game.act({ kind: 'timeStop' }).ok && Game.skills.timeStop > 0, 'cast');
+        assert(s1.stun >= 4.5 && sb.stun >= 1 && sb.stun < 2, 'heroes stopped, boss briefly');
+        assert(Math.abs(clockHaste() - 0.5) < 1e-9, 'monsters faster while time stops');
+        assert(!Game.act({ kind: 'timeStop' }).ok, 'cooldown');
+        // 되감기: 피해 2마다 3초 뒤 체력 1
+        start(['rewindThrone']);
+        const hp = Game.hp;
+        damageThrone(2);
+        assert.strictEqual(Game.hp, hp - 2, 'hit');
+        for (let i = 0; i < 100; i++) Game.update(1 / 30);
+        assert.strictEqual(Game.hp, hp - 1, 'one back after 3 s');
+        // 마지막 1초: 판당 한 번
+        start(['rewindDeath']);
+        damageThrone(Game.hp);
+        assert(Game.hp === COMBAT_RULES.clock.rewindDeathHp && Game.inPlay(), 'saved once');
+        damageThrone(Game.hp);
+        assert.strictEqual(Game.state, 'defeat', 'not twice');
+        // 수리공: 라운드 종료 체력 +1
+        start(['rewindHeal']);
+        Game.hp = 10;
+        Game.endWave();
+        assert.strictEqual(Game.hp, 11, 'repairman');
+        console.log('smoke ok: clock lord');
+    }).toString() + ')()', kctx);
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

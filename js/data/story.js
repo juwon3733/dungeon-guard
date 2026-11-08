@@ -27,6 +27,7 @@ const STORY_CAST = {
     plague: { name: '역병의 군주', lord: 'plague' },
     chain: { name: '사슬의 군주', lord: 'chain' },
     mirror: { name: '거울 마녀', lord: 'mirror' },
+    clock: { name: '시계탑의 마왕', lord: 'clock' },
     goblin: { name: '고블린 창병 꼬챙이', portrait: { sprite: 'pl_mon_goblin_spearman/rotations/south', crop: [12, 4, 24] } },
     warrior: { name: '견습 용사 덕수', portrait: { sprite: 'pl_hero_warrior/rotations/south', crop: [13, 3, 22] } },
     archmage: { name: '대마도사 몽글', portrait: { sprite: 'pl_boss_grand_wizard/rotations/south', crop: [31, 18, 28] } },
@@ -122,9 +123,11 @@ const STAGES = [
             ['captain', '훌륭하다... 사실 나는 던전 후기를 쓰러 왔다. 별 다섯 개.'],
             ['gold_king', '후기 광고비는 따로 청구하겠다. 거울은 서비스, 유물 칸도 하나 더.'],
             ['bone_queen', '후기 마지막 줄이 뭐야? "도전의 문 너머가 진짜 맛집"?'],
-            ['goblin', '사장님, 이제 본부의 도전의 문이 진짜 장사예요!']
+            ['goblin', '사장님, 이제 본부의 도전의 문이 진짜 장사예요!'],
+            ['clock', '시끄러워서 시계탑에서 내려왔다. 너희 덕에 내 시계가 다시 가는군.'],
+            ['clock', '남은 시간은 여기서 보내지.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'pauper_helm' }, { kind: 'relic', id: 'blood_contract' }, { kind: 'relic', id: 'shaky_bridge' }, { kind: 'ending' }]
+        unlocks: [{ kind: 'lord', id: 'clock' }, { kind: 'slot' }, { kind: 'relic', id: 'pauper_helm' }, { kind: 'relic', id: 'blood_contract' }, { kind: 'relic', id: 'shaky_bridge' }, { kind: 'ending' }]
     }
 ];
 

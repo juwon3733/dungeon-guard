@@ -179,6 +179,9 @@ const COMBAT_RULES = {
     bribeRoar: { cost: 300, cooldown: 5 }, // 권능 입막음
     miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 권능 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
     mirrorClone: { cooldown: 35, duration: 15 }, // 권능 거울 분신
+    timeStop: { cooldown: 40, duration: 3, bossDuration: 1, longUp: 1.5 }, // 권능 시간 정지
+    clock: { slowLong: 2, deepCut: 0.55, eliteSlow: 0.7, eliteSlowTime: 2, auraTiles: 3, auraSlow: 0.75, slowHitChance: 0.1, haste: 0.3, hasteStartTime: 6, hasteKillTime: 5,
+        overclock: 0.5, overclockEvery: 10, overclockTime: 3, rewindPer: 2, rewindDelay: 3, rewindDeathHp: 5 }, // 시계탑의 마왕 권능 수치
     mirror: { reflectUp: 0.1, reflectCount: 3, transGold: { common: 5, rare: 15, epic: 40, legendary: 90, mythic: 200 } }, // 거울 마녀 권능 수치
     jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 권능 사슬 감옥
     chain: { chanceUp: 0.06, longUp: 0.4, breakDamage: 0.05, pitEvery: 5, lowBelow: 0.15, turnEvery: 8 }, // 사슬의 군주 권능 수치
