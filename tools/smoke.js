@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -3266,7 +3266,8 @@ const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
 const hasBtn = id => { UI.update(0); return UI.buttons.some(b => b.id === id); };
 const btnOf = id => { UI.update(0); return UI.buttons.find(b => b.id === id); };
 const btn = id => { const b = btnOf(id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
-const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
+const noTime = (k, v) => (k === 'savedAt' ? undefined : v); // 저장 시각은 저장할 때마다 바뀌므로 비교에서 뺀다
+const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a, noTime), JSON.stringify(b, noTime), msg);
 const withRandom = (v, fn) => {
     const old = Math.random;
     const list = Array.isArray(v) ? v.slice() : null;
@@ -3303,7 +3304,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false } }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false }, savedAt: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -4068,7 +4069,9 @@ assert(UI.collection && Game.state === 'title', 'title: the book opens over the 
 UI.onKey('Escape');
 assert(!UI.collection && Game.state === 'title' && hasBtn('start'), 'closing the book goes back to the title');
 btn('title_account');
-assert(UI.toast && Game.state === 'title', 'account: not ready yet');
+assert(UI.accountView === 'signIn' && ['acc_tab_in', 'acc_tab_up', 'acc_submit', 'acc_google', 'acc_guest'].every(hasBtn) && !hasBtn('start'), 'account: the sign-in panel');
+UI.onKey('Escape');
+assert(!UI.accountView && hasBtn('start'), 'Esc closes the account panel');
 btn('start');
 assert(Game.state === 'hq' && !UI.hqView, 'title to the hq');
 UI.update(0);
@@ -6221,6 +6224,90 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, false, 'locked again for the new round');
         console.log('smoke ok: tutorial');
     }).toString() + ')()', tctx);
+}
+// 계정(테스트 서버): 가입 → 손님 기록 옮기기 → 저장이 서버로 → 로그아웃은 손님 기록 → 다시 로그인하면 고르기 → 다시 켜면 이어받기
+{
+    const store = {};
+    const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+    const actx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON, localStorage, store,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', actx);
+    vm.runInContext('(' + (async () => {
+        assert(Account.testServer(), 'no server config: test server');
+        // 손님 기록 하나
+        store[META_KEY] = JSON.stringify(Object.assign(Meta.fresh(), { cleared: [STAGES[0].id], runs: 4, seen: ['zombie'], savedAt: 1000 }));
+        Meta.load();
+        await Account.init();
+        assert.strictEqual(Account.status, 'guest', 'starts as a guest');
+        assert.strictEqual(Account.label(), '계정: 손님', 'title label');
+        // 입력 확인
+        assert(!(await Account.signUp('ab', 'secret1')) && Account.error === ACCOUNT_ERRORS.invalidId, 'short id');
+        assert(!(await Account.signUp('demon_lord', '123')) && Account.error === ACCOUNT_ERRORS.weakPassword, 'short password');
+        assert(!(await Account.signIn('nobody_here', 'secret1')) && Account.error === ACCOUNT_ERRORS.noUser, 'unknown id');
+        // 가입: 서버 기록이 없고 손님 기록이 있으면 옮길지 묻는다
+        assert(await Account.signUp('demon_lord', 'secret1'), 'sign up');
+        assert(Account.status === 'user' && Account.choice && Account.choice.kind === 'migrate', 'asks to move the guest record');
+        UI.update(0);
+        assert(UI.buttons.some(b => b.id === 'acc_local') && !UI.buttons.some(b => b.id === 'start'), 'the choice panel on the title');
+        Account.pick('local');
+        await Promise.resolve();
+        assert.strictEqual(Meta.key, META_KEY + '@demon_lord', 'account slot');
+        assert.strictEqual(Meta.data.runs, 4, 'moved the guest record');
+        assert.strictEqual(store[META_KEY], undefined, 'the guest slot is emptied');
+        assert.strictEqual(MockServer.read().users.demon_lord.save.runs, 4, 'uploaded on the move');
+        assert(!(await Account.signUp('Demon_Lord', 'secret1')) && Account.error === ACCOUNT_ERRORS.idTaken, 'ids are case blind');
+        // 저장은 잠시 뒤 한 번에 올라간다
+        Meta.data.runs = 7;
+        Meta.save();
+        assert.strictEqual(Account.sync, 'waiting', 'upload waits');
+        Account.tick(ACCOUNT_UPLOAD_DELAY + 0.1);
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(MockServer.read().users.demon_lord.save.runs, 7, 'uploaded after the delay');
+        // 닉네임
+        assert(!(await Account.setNickname('a')) && Account.error === ACCOUNT_ERRORS.invalidNick, 'short nickname');
+        assert(await Account.setNickname('마왕님'), 'nickname');
+        assert.strictEqual(Account.label(), '계정: 마왕님', 'label shows the nickname');
+        // 로그아웃: 손님 칸(옮겨서 빈 기록)
+        assert(await Account.signOut(), 'sign out');
+        assert(Account.status === 'guest' && Meta.key === META_KEY && Meta.data.runs === 0, 'back to the guest slot');
+        // 손님으로 다른 기록 → 로그인하면 고른다
+        Meta.data.runs = 1;
+        Meta.data.seen = ['fire_imp'];
+        Meta.save();
+        assert(!(await Account.signIn('demon_lord', 'wrong12')) && Account.error === ACCOUNT_ERRORS.wrongPassword, 'wrong password');
+        assert(await Account.signIn('DEMON_LORD', 'secret1'), 'sign in, any case');
+        assert(Account.choice && Account.choice.kind === 'conflict', 'different records: choose');
+        assert.strictEqual(Account.choice.server.runs, 7, 'server side');
+        assert.strictEqual(Account.choice.local.runs, 1, 'device side');
+        Account.pick('server');
+        assert.strictEqual(Meta.data.runs, 7, 'server record in use');
+        assert.strictEqual(JSON.parse(store[META_KEY]).runs, 1, 'the guest record stays when not moved');
+        // 다시 켠다: 남은 로그인을 이어받고, 이 기기 칸이 더 새로우면 그것을 쓰고 올린다
+        Meta.data.runs = 9;
+        const onSave = Meta.onSave;
+        Meta.onSave = null;
+        Meta.save();
+        Meta.onSave = onSave;
+        Meta.key = META_KEY;
+        Meta.load();
+        await Account.init();
+        assert(Account.status === 'user' && !Account.choice, 'resumed without asking');
+        assert.strictEqual(Meta.data.runs, 9, 'the newer device copy');
+        await Promise.resolve();
+        assert.strictEqual(MockServer.read().users.demon_lord.save.runs, 9, 'and uploads it');
+        // 같은 기록이면 묻지 않는다
+        await Account.signOut();
+        assert(await Account.signIn('demon_lord', 'secret1'), 'sign in again');
+        assert(Account.choice && Account.choice.kind === 'conflict', 'guest record still differs');
+        Account.pick('local');
+        await Account.signOut();
+        store[META_KEY] = store[META_KEY + '@demon_lord'];
+        Meta.load();
+        assert(await Account.signIn('demon_lord', 'secret1') && !Account.choice, 'same record: no question');
+        assert.deepStrictEqual(Account.summary(Meta.fresh()).slice(0, 2), ['스토리 0 / ' + STAGES.length, '판 0 · 도감 0'], 'summary lines');
+        console.log('smoke ok: account');
+    }).toString() + ')()', actx).catch(e => { console.error(e); process.exit(1); });
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

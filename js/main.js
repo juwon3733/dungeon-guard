@@ -51,6 +51,7 @@ function frame(now) {
     }
 
     UI.update(dt);
+    Account.tick(dt);
     if (!Game.inPlay()) { // 타이틀, 스토리 지도, 선택 화면, 결과: 연출 시간만 흐른다
         Game.update(dt);
     } else if (Fx.stop > 0) {
@@ -86,6 +87,7 @@ canvas.addEventListener('pointermove', e => {
 canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
     if (!ready) return;
+    if (AccountInputs.focused()) document.activeElement.blur(); // 캔버스를 누르면 입력 칸에서 나온다
     if (activePointer !== null) return;
     const p = toVirtual(e);
     if (e.button === 2) { UI.onMove(p.x, p.y); UI.cancel(); return; } // 우클릭은 끌기와 조준을 취소한다
@@ -107,6 +109,14 @@ canvas.addEventListener('contextmenu', e => {
     UI.cancel();
 });
 window.addEventListener('keydown', e => {
+    // 계정 창의 글 입력 칸: 글자는 칸이 받고, Enter(보내기)와 Esc(닫기)만 게임으로
+    if (AccountInputs.focused()) {
+        if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Escape') {
+            e.preventDefault();
+            UI.onKey(e.code === 'NumpadEnter' ? 'Enter' : e.code);
+        }
+        return;
+    }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
     if (e.repeat || !ready) return;
     Sfx.unlock();
@@ -116,6 +126,7 @@ window.addEventListener('keydown', e => {
 fitCanvas();
 loadSettings();
 Meta.load(); // 영구 수집 기록(못 읽으면 초기값)
+Account.init(); // 남은 로그인이 있으면 그 계정 기록으로(js/core/account.js)
 Assets.loadAll(() => {
     Render.buildMap(Render.zoneNow());
     ready = true;
