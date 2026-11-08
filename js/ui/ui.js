@@ -130,6 +130,11 @@ const UI = {
     // 매 프레임 지금 눌릴 수 있는 버튼 목록을 다시 만든다
     layout() {
         this.buttons = [];
+        this.layoutBase();
+        this.layoutTutorial(); // js/ui/tutorial.js
+    },
+
+    layoutBase() {
         const G = Game;
         if (this.dialogue) {
             this.button('dlg_skip', GAME_WIDTH - 260, 22, 220, 64, { label: '건너뛰기', icon: 'fast', size: 24, onClick: () => this.endDialogue() });
@@ -246,7 +251,7 @@ const UI = {
         } else if (G.state === 'wave' && G.waveIndex + 1 < G.waves.length) {
             // 라운드 중에도 다음 라운드를 불러 남은 시간만큼 골드를 받는다
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
-                label: '다음 라운드', icon: 'wave', size: 30,
+                label: '다음 라운드', icon: 'wave', size: 30, disabled: G.nextRoundLocked(),
                 sub: `+${Math.floor(G.roundTimer * COMBAT_RULES.earlyGoldPerSecond)}G · ${Math.ceil(G.roundTimer)}초 뒤 자동`,
                 onClick: () => { G.act({ kind: 'nextRound' }); }
             });
@@ -1043,6 +1048,7 @@ const UI = {
         this.press = null;
         this.cancelEquipDrag();
         const b = this.buttonAt(x, y);
+        if (this.tutorialBlocks(b)) return; // js/ui/tutorial.js: 이번 단계가 아닌 곳
         const inGame = Game.inPlay() && !this.powerOpen && !Game.bossReward && !this.dialogue && !this.unlockCards; // 보상을 고르는 동안 맵의 몬스터를 누르거나 끌지 않는다
         if (b && b.bagSlot !== undefined) {
             // 보관함 칸: 장비가 있으면 끌 준비(떼는 순간 끌기인지 누르기인지 나눈다)
@@ -1317,6 +1323,8 @@ const UI = {
     onKey(code) {
         const G = Game;
         if (code === 'KeyM') { Sfx.setMuted(!Sfx.muted); saveSettings(); return; }
+        this.layout();
+        if (this.tutorialBlocksKey(code)) return; // js/ui/tutorial.js
         if (this.dialogue) {
             // 대화: Space·Enter 다음(글자가 다 안 나왔으면 끝까지), Esc 건너뛰기
             if (code === 'Space' || code === 'Enter') this.advanceDialogue();
@@ -1402,6 +1410,7 @@ const UI = {
         if (this.drag && this.drag.src.monster && this.drag.src.monster.removed) this.cancelDrag();
         if (this.selectedMonster && this.selectedMonster.removed) this.clearSelection();
         this.wipeArmed = Math.max(0, this.wipeArmed - dt);
+        if (this.tut) this.tut.age += dt;
         if (this.dialogue) {
             const D = this.dialogue;
             D.chars = Math.min(D.lines[D.index][1].length, D.chars + dt * DIALOGUE_CPS);
@@ -1605,6 +1614,11 @@ const UI = {
     },
 
     draw(ctx) {
+        this.drawBase(ctx);
+        this.drawTutorial(ctx); // js/ui/tutorial.js
+    },
+
+    drawBase(ctx) {
         const G = Game;
         if (this.dialogue && !G.inPlay() && G.state !== 'victory') {
             // 시작 전 대화: 비운 맵 위에 대화만
@@ -3111,6 +3125,7 @@ const UI = {
     // 지금 보여 줄 안내: { key, text } 또는 null. 문장은 한 줄로 짧게
     currentHint() {
         const G = Game;
+        if (this.tut) return null; // 튜토리얼이 대신 안내한다
         if (G.bossReward) return null;
         if (this.targeting) return { key: 'target', text: '번개 위치 선택 · Esc 취소' };
         if (this.drag) return { key: 'drag', text: '빈 칸 이동 · 몬스터 합치기 · 왕좌 제물' };

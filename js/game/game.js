@@ -42,6 +42,9 @@ const Game = {
     // challenge가 있으면 그 도전의 시드와 조건으로 시작하고 입력을 기록한다
     reset(loadout, stageId, challenge) {
         this.challenge = challenge || null;
+        this.holdPrep = false;
+        this.tutorialCommons = 0;
+        this.roundFull = 0;
         this.challengeResult = null;
         this.challengeBest = null;
         this.tick = 0;
@@ -453,6 +456,11 @@ const Game = {
         for (const g of grades) {
             if (r < odds[g]) { grade = g; break; }
             r -= odds[g];
+        }
+        // 튜토리얼 첫 판: 처음 몇 번은 가장 낮은 등급이라 합치기를 바로 해 볼 수 있다(스토리 판만)
+        if (this.tutorialCommons > 0 && !this.challenge) {
+            this.tutorialCommons--;
+            grade = grades[0];
         }
         return rngItem('summon', summonPool(grade));
     },
@@ -1210,6 +1218,7 @@ const Game = {
         }
         this.state = 'wave';
         this.roundTimer = (wave.boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime) * this.mods.roundTime;
+        this.roundFull = this.roundTimer; // 다음 라운드 잠금(nextRoundLocked)이 시작 시각으로 쓴다
         this.roundSummons = 0;
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, lordLine('waveStart'), 2);
         Sfx.play('waveStart');
@@ -1251,7 +1260,7 @@ const Game = {
         if (this.streakTimer === 0) this.streak = 0;
 
         if (this.state === 'prep' && !this.bossReward) {
-            this.prepTimer -= dt;
+            if (!this.holdPrep) this.prepTimer -= dt; // 튜토리얼이 첫 라운드 전에 붙잡는다(스토리 판만)
             if (this.prepTimer <= 0) this.startWave();
         }
 
@@ -1351,8 +1360,14 @@ const Game = {
 
     // 라운드 시간이 다 됐거나 플레이어가 불렀다: 남은 용사를 그대로 두고 다음 라운드를 시작한다.
     // 일찍 부르면 남은 시간만큼 골드를 받는다. 마지막 라운드는 다 잡아야 끝난다
+    // 라운드가 막 시작했다: 다음 라운드를 부르지 못한다
+    nextRoundLocked() {
+        return this.state === 'wave' && this.roundFull > 0 && this.roundFull - this.roundTimer < COMBAT_RULES.nextRoundLock; // 이어하기로 불러온 판은 roundFull이 없어 잠기지 않는다
+    },
+
     nextRound() {
         if (this.state !== 'wave' || this.waveIndex + 1 >= this.waves.length) return false;
+        if (this.nextRoundLocked()) return false;
         const n = this.waveIndex + 1;
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
         const calledEarly = this.roundTimer > 0;

@@ -40,7 +40,7 @@ const Meta = {
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 };
+        return { version: META_VERSION, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false } };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -71,6 +71,9 @@ const Meta = {
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
         d.runs = metaCount(raw.runs);
+        // 튜토리얼: 본 기록이 없으면 판을 해 본 사람은 본 것으로 친다(이 기능 전부터 하던 사람)
+        const tut = raw.tutorial && typeof raw.tutorial === 'object' ? raw.tutorial : null;
+        d.tutorial = tut ? { hq: !!tut.hq, battle: !!tut.battle } : { hq: d.runs > 0, battle: d.runs > 0 };
         const old = raw.version === 2;
         if (raw.version !== META_VERSION && !old) return d;
         const cleared = old ? (Array.isArray(raw.cleared) ? raw.cleared : []).map(metaOldStageId) : raw.cleared;

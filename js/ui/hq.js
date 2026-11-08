@@ -207,8 +207,9 @@ Object.assign(UI, {
         const by = HQ_SETTINGS_Y + 370;
         this.button('set_sound', x + 40, by, 440, 72, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
         this.button('set_fx', x + 40, by + 86, 440, 72, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
-        if (Game.state !== 'title') this.button('set_title', x + 40, by + 172, 440, 72, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
-        this.button('set_close', x + 40, by + (Game.state === 'title' ? 186 : 270), 440, 72, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
+        this.button('set_tutorial', x + 40, by + 172, 440, 72, { label: '튜토리얼 다시 보기', icon: 'book', size: 28, onClick: () => this.replayTutorial() }); // js/ui/tutorial.js
+        if (Game.state !== 'title') this.button('set_title', x + 40, by + 258, 440, 72, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
+        this.button('set_close', x + 40, by + (Game.state === 'title' ? 272 : 356), 440, 72, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
     },
 
     layoutHQ() {
@@ -508,7 +509,7 @@ Object.assign(UI, {
         const T = UI_THEME;
         ctx.fillStyle = T.dim;
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, HQ_SETTINGS_Y, 520, Game.state === 'title' ? 656 : 740); // 타이틀에는 "타이틀로" 줄이 없다
+        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, HQ_SETTINGS_Y, 520, Game.state === 'title' ? 740 : 826); // 타이틀에는 "타이틀로" 줄이 없다
         UIKit.text(ctx, '설정', GAME_WIDTH / 2, HQ_SETTINGS_Y + 66, 44, T.gold, 'center', 'bold');
         const x = GAME_WIDTH / 2 - 260;
         HQ_VOLUME_ROWS.forEach(([kind, label], i) => {

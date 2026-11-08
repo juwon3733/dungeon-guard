@@ -166,6 +166,7 @@ const COMBAT_RULES = {
     bossRoundTime: 45,
     spawnWindow: 14,    // 한 라운드의 용사가 이 시간 안에 다 나온다
     earlyGoldPerSecond: 1,
+    nextRoundLock: 2,   // 라운드가 시작되고 이 시간(판 시간, 초) 동안은 다음 라운드를 부를 수 없다(연타로 여러 라운드가 넘어가지 않게)
     hpPerWave: 0.2,
     corpseTime: 5,
     corruptCostMul: 8,
