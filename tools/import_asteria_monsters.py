@@ -106,6 +106,25 @@ def clip_of(sprite, folder, frames_by_dir, k):
 def flip(im):
     return im.transpose(Image.FLIP_LEFT_RIGHT)
 
+# PixelLab으로 대기 그림에서 만든 공격 프레임(tools/attack_frames/<id>/frame_1..8.png, 캔버스 안 자리와 배율은 meta.json).
+# 있으면 그 8장을 공격 동작으로 쓴다. 256px을 넘는 큰 그림은 줄여서 만들었으므로 원래 배율로 되돌린다
+ATTACK_SRC = os.path.join(ROOT, 'tools', 'attack_frames')
+ATTACK_META = json.load(open(os.path.join(ATTACK_SRC, 'meta.json'), encoding='utf8')) if os.path.exists(os.path.join(ATTACK_SRC, 'meta.json')) else {}
+
+def attack_clip(mid, sprite):
+    am = ATTACK_META[mid]
+    inv = 1 / am['k']
+    n = 0
+    for i in range(1, 9):
+        path = os.path.join(ATTACK_SRC, mid, f'frame_{i}.png')
+        if not os.path.exists(path): break
+        im = Image.open(path).convert('RGBA')
+        if am['k'] < 1: im = im.resize((round(im.width * inv), round(im.height * inv)), Image.NEAREST)
+        save(im, sprite, 'attack', am['facing'], n)
+        n += 1
+    foot = round((am['y0'] + am['h']) * inv)  # 캔버스 안 발끝(대기 그림을 놓은 자리의 아래)
+    return {'folder': 'attack', 'frames': n, 'dirs': [am['facing']], 'footPx': {am['facing']: foot}}
+
 art = {}
 for mid, (src, w, h) in ART.items():
     current = mid
@@ -142,6 +161,9 @@ for mid, (src, w, h) in ART.items():
         anim['attack'] = anim['idle']
     if walk:
         anim['walk'] = clip_of(sprite, 'walking', {'east': [flip(p) for p in walk]}, k)
+    if mid in ATTACK_META:
+        anim['attack'] = attack_clip(mid, sprite)
+        still = False
     rot = os.path.join(OUT, sprite, 'rotations'); os.makedirs(rot, exist_ok=True)
     first = scaled(trimmed(front), k)
     first.save(os.path.join(rot, 'south.png'))

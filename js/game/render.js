@@ -1015,17 +1015,19 @@ const Render = {
             const melee = MONSTER_ROLES[def.role].melee;
             const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[m.dir] || [0, 1];
             const big = clamp(((def.art.barY || 90) - 14) / ART_SCALE / 76, 1, 2); // 큰 몬스터는 그림 키(barY에서 거꾸로)만큼 크게 움직인다
+            // 공격 프레임(그림 동작)이 있으면 코드 동작은 거들기만 한다
+            const k = s * (def.art.anim.attack.frames > 1 ? 0.35 : 1);
             if (melee) {
-                pose.dx = 22 * dir[0] * s * big * ART_SCALE;
-                pose.dy = 12 * dir[1] * s * big * ART_SCALE;
-                pose.tilt = 0.3 * dir[0] * s;
-                pose.sx = 1 + 0.16 * s;
-                pose.sy = 1 - 0.1 * s;
+                pose.dx = 22 * dir[0] * k * big * ART_SCALE;
+                pose.dy = 12 * dir[1] * k * big * ART_SCALE;
+                pose.tilt = 0.3 * dir[0] * k;
+                pose.sx = 1 + 0.16 * k;
+                pose.sy = 1 - 0.1 * k;
             } else {
-                pose.dx = -10 * dir[0] * s * big * ART_SCALE;
-                pose.dy = -6 * dir[1] * s * big * ART_SCALE;
-                pose.sy = 1 + 0.1 * s;
-                pose.sx = 1 - 0.06 * s;
+                pose.dx = -10 * dir[0] * k * big * ART_SCALE;
+                pose.dy = -6 * dir[1] * k * big * ART_SCALE;
+                pose.sy = 1 + 0.1 * k;
+                pose.sx = 1 - 0.06 * k;
             }
             return pose;
         }

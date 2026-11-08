@@ -1,0 +1,470 @@
+{
+ "zombie": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 100,
+  "x0": 13,
+  "y0": 22,
+  "w": 74,
+  "h": 75
+ },
+ "grave_keeper": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 104,
+  "x0": 12,
+  "y0": 42,
+  "w": 79,
+  "h": 59
+ },
+ "curse_shooter": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 104,
+  "x0": 13,
+  "y0": 31,
+  "w": 78,
+  "h": 70
+ },
+ "wraith_swordsman": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 136,
+  "x0": 16,
+  "y0": 40,
+  "w": 103,
+  "h": 92
+ },
+ "plague_ghoul": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 84,
+  "x0": 13,
+  "y0": 19,
+  "w": 57,
+  "h": 63
+ },
+ "bone_knight": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 40,
+  "w": 140,
+  "h": 139
+ },
+ "vampire": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 51,
+  "w": 140,
+  "h": 128
+ },
+ "bone_priest": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 164,
+  "x0": 32,
+  "y0": 33,
+  "w": 100,
+  "h": 126
+ },
+ "death_lord": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 40,
+  "w": 200,
+  "h": 208
+ },
+ "archlich": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 52,
+  "y0": 16,
+  "w": 151,
+  "h": 232
+ },
+ "orc_charger": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 92,
+  "x0": 10,
+  "y0": 22,
+  "w": 71,
+  "h": 68
+ },
+ "orc_high_chief": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 17,
+  "y0": 38,
+  "w": 222,
+  "h": 210
+ },
+ "giant_king": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 30,
+  "y0": 16,
+  "w": 196,
+  "h": 232
+ },
+ "fire_imp": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 72,
+  "x0": 9,
+  "y0": 16,
+  "w": 54,
+  "h": 54
+ },
+ "hellhound_warrior": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 100,
+  "x0": 12,
+  "y0": 39,
+  "w": 76,
+  "h": 58
+ },
+ "flame_archer": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 96,
+  "x0": 12,
+  "y0": 25,
+  "w": 72,
+  "h": 68
+ },
+ "flame_demon": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 52,
+  "w": 140,
+  "h": 127
+ },
+ "executioner": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 39,
+  "w": 139,
+  "h": 140
+ },
+ "chaos_mage": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 196,
+  "x0": 48,
+  "y0": 40,
+  "w": 100,
+  "h": 150
+ },
+ "hell_general": {
+  "facing": "south",
+  "k": 0.8498168498168498,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 20,
+  "w": 232,
+  "h": 228
+ },
+ "fallen_angel": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 50,
+  "y0": 16,
+  "w": 156,
+  "h": 232
+ },
+ "boar_warrior": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 88,
+  "x0": 10,
+  "y0": 33,
+  "w": 68,
+  "h": 53
+ },
+ "spider_archer": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 132,
+  "x0": 16,
+  "y0": 62,
+  "w": 100,
+  "h": 66
+ },
+ "bear_warrior": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 96,
+  "x0": 11,
+  "y0": 20,
+  "w": 73,
+  "h": 73
+ },
+ "eagle_hunter": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 84,
+  "x0": 10,
+  "y0": 21,
+  "w": 64,
+  "h": 61
+ },
+ "saber_warrior": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 104,
+  "x0": 12,
+  "y0": 31,
+  "w": 79,
+  "h": 70
+ },
+ "hydra_warrior": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 44,
+  "w": 140,
+  "h": 135
+ },
+ "earth_behemoth": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 248,
+  "x0": 35,
+  "y0": 52,
+  "w": 177,
+  "h": 189
+ },
+ "phoenix_lord": {
+  "facing": "south",
+  "k": 0.9098039215686274,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 57,
+  "w": 232,
+  "h": 191
+ },
+ "wisp_acolyte": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 64,
+  "x0": 10,
+  "y0": 15,
+  "w": 43,
+  "h": 47
+ },
+ "rock_spirit": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 92,
+  "x0": 18,
+  "y0": 21,
+  "w": 56,
+  "h": 69
+ },
+ "wind_sylph": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 72,
+  "x0": 9,
+  "y0": 19,
+  "w": 53,
+  "h": 51
+ },
+ "frost_witch": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 76,
+  "x0": 9,
+  "y0": 16,
+  "w": 57,
+  "h": 58
+ },
+ "water_spirit": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 80,
+  "x0": 9,
+  "y0": 25,
+  "w": 61,
+  "h": 53
+ },
+ "lightning_spirit": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 120,
+  "x0": 14,
+  "y0": 29,
+  "w": 91,
+  "h": 88
+ },
+ "ancient_treant": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 41,
+  "w": 140,
+  "h": 138
+ },
+ "moon_priestess": {
+  "facing": "east",
+  "k": 1.0,
+  "canvas": 84,
+  "x0": 10,
+  "y0": 30,
+  "w": 63,
+  "h": 52
+ },
+ "storm_archer": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 184,
+  "x0": 22,
+  "y0": 47,
+  "w": 140,
+  "h": 132
+ },
+ "element_sage": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 41,
+  "w": 200,
+  "h": 207
+ },
+ "crystal_giant": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 29,
+  "w": 232,
+  "h": 219
+ },
+ "abyss_dragon_king": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 17,
+  "y0": 16,
+  "w": 221,
+  "h": 232
+ },
+ "time_witch": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 58,
+  "y0": 16,
+  "w": 140,
+  "h": 232
+ },
+ "soul_devourer": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 94,
+  "w": 232,
+  "h": 154
+ },
+ "bone_dragon": {
+  "facing": "south",
+  "k": 0.8529411764705882,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "kraken": {
+  "facing": "south",
+  "k": 0.8345323741007195,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 45,
+  "w": 232,
+  "h": 203
+ },
+ "frost_queen": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 16,
+  "w": 200,
+  "h": 232
+ },
+ "star_whale": {
+  "facing": "south",
+  "k": 0.8592592592592593,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 68,
+  "w": 232,
+  "h": 180
+ },
+ "frost_drake": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 90,
+  "w": 232,
+  "h": 158
+ },
+ "sun_god": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 51,
+  "y0": 16,
+  "w": 154,
+  "h": 232
+ },
+ "moon_god": {
+  "facing": "south",
+  "k": 0.7811447811447811,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "death_god": {
+  "facing": "south",
+  "k": 0.9872340425531915,
+  "canvas": 256,
+  "x0": 29,
+  "y0": 16,
+  "w": 197,
+  "h": 232
+ },
+ "god_king": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 18,
+  "y0": 16,
+  "w": 219,
+  "h": 232
+ }
+}
