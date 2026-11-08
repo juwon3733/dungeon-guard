@@ -485,6 +485,7 @@ const Render = {
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
         if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1); // 묶인 용사는 별 대신 사슬
+        if (clockSlowMul(h) < 1) this.pixelRing(ctx, p.x, p.y + 10, 18, 6, '#ffcf6b', { k: 2 }); // 시계탑: 감속 받는 용사 발밑 호박색 고리
         if (h.bound > 0) this.chainShackle(ctx, p.x, p.y + 10, h.boss ? 2 : 1, h.bound, h.elite || h.boss);
         if (h.poison > 0) this.poisonBubbles(ctx, p.x, headY - 10, h.boss ? 2 : 1, h.lane, Math.min(1, h.poison * 2));
         if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 195 : 105, h.lane * 0.07, Math.min(1, h.burn * 2));
@@ -1959,6 +1960,14 @@ const Render = {
         }
 
         this.drawHazards(ctx);
+        // 시계탑의 마왕 시간 정지: 바닥을 호박색으로 얇게 덮는다(끝나기 0.5초 전부터 흐려진다)
+        if (Game.timeStopT > 0) {
+            ctx.save();
+            ctx.globalAlpha = 0.16 * Math.min(1, Game.timeStopT / 0.5);
+            ctx.fillStyle = '#ffcf6b';
+            ctx.fillRect(0, 0, GAME_WIDTH / WORLD_ZOOM, GAME_HEIGHT / WORLD_ZOOM);
+            ctx.restore();
+        }
         for (const c of Game.corpses) this.drawCorpse(ctx, c);
 
         // y 순서대로 그려 아래쪽이 앞에 보이게 한다

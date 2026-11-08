@@ -46,7 +46,7 @@ function monsterStats(m) {
     stats.damage *= (1 + mods.damage) * (1 + Game.relicDamage(m));
     stats.damage *= 1 + FAMILY_UPGRADE.damagePer * Game.familyLevel(def.family); // 종족 강화
     stats.range *= 1 + mods.range;
-    stats.interval /= (1 + mods.attackSpeed) * (Game.earlyBoost ? 1 + mods.earlyAttackSpeed : 1);
+    stats.interval /= (1 + mods.attackSpeed) * (Game.earlyBoost ? 1 + mods.earlyAttackSpeed : 1) * (1 + clockHaste()); // clockHaste: 시계탑의 마왕 가속
     stats.armor = 1 - (1 - stats.armor) * (1 - mods.monsterArmor);
     stats.respawn *= mods.respawn;
     // 오라(지원 몬스터): updateAuras가 매 프레임 정해 둔 값. 피해와 공격 속도만 바꾸고 최대 체력은 건드리지 않아
@@ -234,6 +234,7 @@ function monsterHitHero(type, hero, owner) {
     const plague = Game.lordPassive('plague');
     if (plague && owner && owner.kind === 'monster' && !owner.removed) poisonHero(hero, plague.duration, monsterStats(owner).damage * plague.ratio, owner);
     chainOnHit(hero); // 사슬의 군주: 확률로 묶음(combat.js)
+    if (Game.power('slowHit') && !hero.dead && rng('battle') < COMBAT_RULES.clock.slowHitChance) slowHero(hero, 1.5, 0.7); // 시계탑: 모래 바람
     const stun = monsterAbility(type, 'stunShot');
     // 보스는 걸리지 않는다(난수도 쓰지 않는다)
     if (stun && !hero.boss && rng('battle') < stun.chance) {

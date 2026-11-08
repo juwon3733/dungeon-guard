@@ -77,6 +77,7 @@ function killHero(hero, pos, attacker) {
     if (hero.poison > 0 || byPoison) plagueSpread(hero, pos);
     if (byPoison) plagueKill(hero, pos);
     if (hero.bound > 0) chainKill(hero, pos);
+    clockKill(hero);
     // 계약 조항: 되살아나는 용사는 체력 절반으로 다시 일어나고, 분열하는 정예는 일반 용사 여럿으로 갈라진다
     if (hero.revive) {
         heroRises(hero, hero.type, 0.5);
@@ -235,7 +236,8 @@ function damageThrone(amount, heroName) {
     Fx.burst(tx, ty - 120, '#ff5e73', 22, 420, 0.5, 7);
     Fx.anim('fx_hit_fire', tx, ty - 120, 400, 0.4);
     Fx.say(tx, ty - LORD_SAY_Y, lordLine('throneHit'), 1.8);
-    if (G.hp <= 0) G.finish(false);
+    clockThroneHit(amount);
+    if (G.hp <= 0 && !clockSavesThrone()) G.finish(false); // 시계탑: 마지막 1초
     else mirrorThroneHit(); // 거울 마녀: 반사 갈래
 }
 
@@ -686,6 +688,94 @@ function mirrorShieldBlocks() {
     Fx.ring(tx, ty - 120, 160, '#bff6ff', 0.35);
     Fx.number('throne', tx, ty - 330, '막음', '#bff6ff', true);
     Sfx.play('shieldBreak');
+    return true;
+}
+
+// ----- 시계탑의 마왕 -----
+
+// 용사 이동 배율(멈춘 초침, 늦춰진 시간, 시계탑 그림자). 다른 마왕이면 1
+function clockSlowMul(h) {
+    const G = Game;
+    const p = G.lordPassive('stopwatch');
+    if (!p) return 1;
+    const rule = COMBAT_RULES.clock;
+    let mul = 1;
+    if (G.state === 'wave' && G.roundAge() < p.duration + (G.power('slowLong') ? rule.slowLong : 0)) {
+        const cut = G.power('slowDeep') ? rule.deepCut : p.cut;
+        mul *= 1 - (h.boss && !G.power('slowBoss') ? cut / 2 : cut);
+    }
+    if (G.clockSlowT > 0) mul *= rule.eliteSlow;
+    if (G.power('slowAura') && remainingDistance(h) < rule.auraTiles * TILE) mul *= rule.auraSlow;
+    return mul;
+}
+
+// 몬스터 공격 속도 보너스(가속 갈래). 더할 값
+function clockHaste() {
+    const G = Game;
+    if (!G.lordPassive('stopwatch')) return 0;
+    const rule = COMBAT_RULES.clock;
+    const age = G.roundAge();
+    let add = 0;
+    if (G.state === 'wave' && G.power('hasteStart') && age < rule.hasteStartTime) add += rule.haste;
+    if (G.clockHasteT > 0) add += rule.haste;
+    if (G.state === 'wave' && G.power('overclock') && age % rule.overclockEvery < rule.overclockTime) add += rule.overclock;
+    if (G.timeStopT > 0 && G.power('timeStopHaste')) add += rule.overclock;
+    return add * (G.power('hasteMax') ? 2 : 1);
+}
+
+// 정예 처치: 늦춰진 시간(모든 용사 2초 감속), 몰아치기(5초 공격 속도), 보스 처치: 되감기(스킬 즉시 충전)
+function clockKill(hero) {
+    const G = Game;
+    if (!G.lordPassive('stopwatch')) return;
+    const rule = COMBAT_RULES.clock;
+    if (hero.elite && G.power('slowElite')) G.clockSlowT = rule.eliteSlowTime;
+    if (hero.elite && G.power('hasteKill')) G.clockHasteT = rule.hasteKillTime;
+    if (hero.boss && G.power('rewindSkill')) for (const k of Object.keys(G.skills)) G.skills[k] = 0;
+}
+
+// 권능 시간 정지(E): 모든 용사를 멈춘다(보스는 짧게)
+function castTimeStop() {
+    const G = Game;
+    const rule = COMBAT_RULES.timeStop;
+    if (!G.power('timeStop') || G.skills.timeStop > 0) return false;
+    const live = G.heroes.filter(h => !h.dead && !h.waiting);
+    if (!live.length) return false;
+    G.skills.timeStop = G.skillCooldown('timeStop');
+    const t = rule.duration + (G.power('stopLong') ? rule.longUp : 0);
+    for (const h of live) applyStun(h, h.boss ? rule.bossDuration : t);
+    G.timeStopT = t;
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row);
+    Fx.ring(tx, ty - 60, 900, '#ffcf6b', 0.6);
+    Fx.addShake(10);
+    Fx.say(tx, ty - LORD_SAY_Y, '멈춰라.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// 왕좌가 맞음: 되감기(2 피해마다 3초 뒤 체력 1), 마지막 1초(판당 한 번 체력 0에서 5로)
+function clockThroneHit(amount) {
+    const G = Game;
+    if (!G.lordPassive('stopwatch')) return;
+    const rule = COMBAT_RULES.clock;
+    if (G.power('rewindThrone')) {
+        G.rewindDebt = (G.rewindDebt || 0) + amount;
+        while (G.rewindDebt >= rule.rewindPer) {
+            G.rewindDebt -= rule.rewindPer;
+            G.rewinds.push(rule.rewindDelay);
+        }
+    }
+}
+
+function clockSavesThrone() {
+    const G = Game;
+    if (G.hp > 0 || !G.power('rewindDeath') || G.rewindUsed) return false;
+    G.rewindUsed = true;
+    G.hp = COMBAT_RULES.clock.rewindDeathHp;
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row);
+    Fx.ring(tx, ty - 120, 300, '#ffcf6b', 0.6);
+    Fx.say(tx, ty - LORD_SAY_Y, '아직 내 시간이다.', 2.5);
     return true;
 }
 

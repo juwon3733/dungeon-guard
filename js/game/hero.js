@@ -176,7 +176,7 @@ function updateHero(h, dt) {
     if (h.windup > 0) return; // 뇌술사가 범위 감전 경고를 막 시작했다
 
     const bridge = Game.mods.mergedSlow !== 1 && h.d >= mergeDistance(h.route) ? Game.mods.mergedSlow : 1; // 유물: 합류점을 지난 용사
-    const sick = h.poison > 0 && Game.power('venomSlow') ? 0.85 : 1; // 권능 마비 독
+    const sick = (h.poison > 0 && Game.power('venomSlow') ? 0.85 : 1) * clockSlowMul(h); // 권능 마비 독, 시계탑의 마왕 감속
     const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * bridge * sick * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
     h.d += speed * dt;
     const p = pathAt(h.d, h.route);
@@ -201,7 +201,7 @@ function updateHero(h, dt) {
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
             const weak = h.elite && h.poison > 0 && G.power('rotWeaken') ? 0.7 : 1; // 권능 쇠약
-            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') || G.power('dragWard') || G.power('reflectWard') ? 0.8 : 1);
+            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') || G.power('dragWard') || G.power('reflectWard') || G.power('rewindWard') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;

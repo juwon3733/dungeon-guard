@@ -187,6 +187,26 @@ const LORD_POWERS = {
             [{ id: 'transRecipe', name: '조합 거울', desc: '조합식 보존 확률 2배' }, { id: 'transGold', name: '은 세공', desc: '합치기마다 골드(일반 5 ~ 신화 200)' }],
             [{ id: 'transUp', name: '금빛 거울', desc: '보존 재료 한 등급 상승(전설까지)' }, { id: 'transFree', name: '공짜 거울', desc: '라운드 첫 소환 무료' }]
         ] }
+    ],
+    clock: [
+        { id: 'slow', name: '감속', desc: '용사 감속', tiers: [
+            [{ id: 'slowLong', name: '느린 초침', desc: '멈춘 초침 +2초' }, { id: 'slowDeep', name: '무거운 초침', desc: '멈춘 초침 감속 -55%' }],
+            [{ id: 'slowElite', name: '늦춰진 시간', desc: '정예 처치 시 모든 용사 2초간 이동 -30%' }, { id: 'slowHit', name: '모래 바람', desc: '적중 시 10% 확률로 1.5초간 이동 -30%' }],
+            [{ id: 'timeStop', name: '시간 정지', desc: '새 스킬(E): 모든 용사 3초 정지(보스 1초)' }, { id: 'slowAura', name: '시계탑 그림자', desc: '왕좌 3칸 안 용사 이동 -25%' }],
+            [{ id: 'stopLong', name: '긴 정지', desc: '시간 정지 +1.5초' }, { id: 'slowBoss', name: '태엽 감기', desc: '보스도 멈춘 초침 감속 그대로' }]
+        ] },
+        { id: 'haste', name: '가속', desc: '몬스터 가속', tiers: [
+            [{ id: 'hasteStart', name: '첫 종소리', desc: '라운드 시작 6초간 몬스터 공격 속도 +30%' }, { id: 'hasteEdge', name: '태엽 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
+            [{ id: 'hasteKill', name: '몰아치기', desc: '정예 처치 시 5초간 몬스터 공격 속도 +30%' }, { id: 'hasteRange', name: '긴 바늘', desc: '몬스터 사거리 +10%', mods: { range: 0.1 } }],
+            [{ id: 'overclock', name: '과회전', desc: '10초마다 3초간 몬스터 공격 속도 +50%' }, { id: 'hasteSkill', name: '빠른 태엽', desc: '스킬 재사용 -15%', mods: { skillCooldown: 0.85 } }],
+            [{ id: 'timeStopHaste', name: '멈춘 세계', desc: '시간 정지 중 몬스터 공격 속도 +50%' }, { id: 'hasteMax', name: '폭주 시계', desc: '가속 효과 2배' }]
+        ] },
+        { id: 'rewind', name: '되감기', desc: '왕좌 회복', tiers: [
+            [{ id: 'rewindHeal', name: '수리공', desc: '라운드 종료 시 체력 +1' }, { id: 'rewindWard', name: '시계 문', desc: '일반 용사의 왕좌 피해 -20%' }],
+            [{ id: 'rewindGold', name: '이른 종', desc: '다음 라운드 앞당김 골드 +50%' }, { id: 'rewindRound', name: '느린 하루', desc: '라운드 간격 +5초', mods: { roundTime: 35 / 30 } }],
+            [{ id: 'rewindThrone', name: '되감기', desc: '왕좌 피해 2마다 3초 뒤 체력 1 회복' }, { id: 'rewindSkill', name: '태엽 재장전', desc: '보스 처치 시 모든 스킬 즉시 충전' }],
+            [{ id: 'rewindDeath', name: '마지막 1초', desc: '판당 1회 체력 0에서 5로 회복' }, { id: 'rewindMana', name: '정시 퇴근', desc: '무피해 라운드 마력 +1' }]
+        ] }
     ]
 };
 
@@ -197,7 +217,8 @@ const POWER_SKILLS = {
     goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' },
     miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' },
     jail: { key: 'jail', name: '감옥', title: '사슬 감옥', icon: 'lock' },
-    mirrorClone: { key: 'mirrorClone', name: '분신', title: '거울 분신', icon: 'summon' }
+    mirrorClone: { key: 'mirrorClone', name: '분신', title: '거울 분신', icon: 'summon' },
+    timeStop: { key: 'timeStop', name: '정지', title: '시간 정지', icon: 'pause' }
 };
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
@@ -325,6 +346,18 @@ const DEMON_LORDS = {
             waveStart: ['어서 와. 너도 둘이 되고 싶니?'],
             throneHit: ['내 거울에 금이 갔잖아.'],
             sacrifice: ['비친 모습은 남겨 둘게.']
+        }
+    },
+    clock: {
+        id: 'clock', name: '시계탑의 마왕', desc: '감속·시간 특화',
+        sprite: 'lord_clock', footPx: 119,
+        portrait: { sprite: 'lord_clock', crop: [40, 4, 44] },
+        effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
+        passive: { kind: 'stopwatch', name: '멈춘 초침', desc: '라운드 시작 4초간 용사 이동 -40%(보스 절반)', duration: 4, cut: 0.4 },
+        speech: {
+            waveStart: ['시간 맞춰 왔군.'],
+            throneHit: ['초침이 어긋났잖아.'],
+            sacrifice: ['네 시간은 여기까지.']
         }
     }
 };
