@@ -682,5 +682,95 @@
   "y0": 16,
   "w": 140,
   "h": 232
+ },
+ "death_lord#skill0": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 40,
+  "w": 200,
+  "h": 208
+ },
+ "hell_general#skill0": {
+  "facing": "south",
+  "k": 0.8498168498168498,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 20,
+  "w": 232,
+  "h": 228
+ },
+ "archlich#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 52,
+  "y0": 16,
+  "w": 151,
+  "h": 232
+ },
+ "orc_high_chief#skill0": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 17,
+  "y0": 38,
+  "w": 222,
+  "h": 210
+ },
+ "giant_king#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 30,
+  "y0": 16,
+  "w": 196,
+  "h": 232
+ },
+ "fallen_angel#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 50,
+  "y0": 16,
+  "w": 156,
+  "h": 232
+ },
+ "earth_behemoth#skill0": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 248,
+  "x0": 35,
+  "y0": 52,
+  "w": 177,
+  "h": 189
+ },
+ "phoenix_lord#skill0": {
+  "facing": "south",
+  "k": 0.9098039215686274,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 57,
+  "w": 232,
+  "h": 191
+ },
+ "element_sage#skill0": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 41,
+  "w": 200,
+  "h": 207
+ },
+ "crystal_giant#skill0": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 29,
+  "w": 232,
+  "h": 219
  }
 }
