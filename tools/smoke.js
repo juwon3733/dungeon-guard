@@ -6179,7 +6179,7 @@ console.log('smoke ok: equipment crafting');
         Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of [...files.filter(f => f !== 'js/ui/ui.js' && f !== 'js/ui/hq.js'), 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sctx, { filename: f });
     vm.runInContext('(' + (() => {
-        const mythic = Object.keys(MONSTERS).filter(k => MONSTERS[k].grade === 'mythic');
+        const mythic = Object.keys(MONSTERS).filter(k => ['mythic', 'legendary'].includes(MONSTERS[k].grade) && (MONSTERS[k].skills || []).length && ASTERIA_ART[k]);
         for (const k of mythic) MONSTERS[k].skills.forEach((s, i) => assert(MONSTERS[k].art.anim['skill' + i] && MONSTERS[k].art.anim['skill' + i].frames === 8, k + ' skill motion ' + i));
         const m = { type: 'time_witch', atkPose: 0.5, atkPoseMax: 0.75, dir: 'down', skillPose: 1 };
         assert.strictEqual(Render.monsterFrame(MONSTERS.time_witch, m).clip.folder, 'skill1', 'skill motion picked');
