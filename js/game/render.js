@@ -194,14 +194,14 @@ const Render = {
         for (const [sx, sy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.deckPost(g, zone, x - 6 + sx * (w + 12), y - 6 + sy * (h + 12));
     },
 
-    // 용사 입구: 룬이 빛나는 돌 아치(PixelLab 그림, 그림 1px = 화면 1px) 안에서 pixelfx 소용돌이가 돈다. 뒤에 지역 색 빛
+    // 용사 입구: 뿔 해골 기둥의 돌 아치(PixelLab Pro, 그림 1px = 화면 1px). 문 안 소용돌이는 tools/make_gate.py가 돌려 둔 16프레임. 뒤에 지역 색 빛
     drawGate(ctx, gate, zone) {
         const img = Assets.get('gate_arch');
         const [, , glow] = zone.gate;
         const k = 1 / WORLD_ZOOM;
         const cx = gate.x + 44; // 왼쪽 화면 끝에 잘리지 않게 길 입구 쪽으로
         const floor = gate.y + 34; // 문턱
-        const GATE_OPEN = { x: 80, floor: 172, portalY: 152 }; // 그림 안 문 가운데, 문턱, 소용돌이 기준점(그림 px). 문 안쪽은 투명이라 소용돌이를 뒤에 그린다
+        const GATE_OPEN = { x: 81, floor: 188, frames: 16, fps: 8 }; // 그림 안 문 가운데와 문턱(그림 px), 소용돌이 프레임
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const halo = ctx.createRadialGradient(cx, floor - 60, 10, cx, floor - 60, 150);
@@ -210,12 +210,16 @@ const Render = {
         ctx.fillStyle = halo;
         ctx.fillRect(cx - 150, floor - 210, 300, 300);
         ctx.restore();
-        const top = floor - GATE_OPEN.floor * k;
-        this.drawLoopSheet(ctx, 'fx_portal', cx, top + GATE_OPEN.portalY * k, 150, gate.y * 0.01, 1); // 아치 테가 가장자리를 덮는다
-        if (img) {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, snapWorld(cx - GATE_OPEN.x * k), snapWorld(top), img.width * k, img.height * k);
+        const top = snapWorld(floor - GATE_OPEN.floor * k);
+        const left = snapWorld(cx - GATE_OPEN.x * k);
+        const vortex = Assets.get('gate_vortex');
+        ctx.imageSmoothingEnabled = false;
+        if (vortex && img) {
+            // 소용돌이(문 안쪽만 그려진 프레임)를 먼저, 그 위에 문 안쪽이 빈 돌 테
+            const f = Math.floor((Game.time + gate.y * 0.01) * GATE_OPEN.fps) % GATE_OPEN.frames;
+            ctx.drawImage(vortex, f * img.width, 0, img.width, img.height, left, top, img.width * k, img.height * k);
         }
+        if (img) ctx.drawImage(img, left, top, img.width * k, img.height * k);
     },
 
     // 그림 한 장: 발끝(footPx, 캔버스 안 높이)을 footY에 맞춘다. 왼쪽 위 모서리를 화면 정수 픽셀에 맞춰 도트가 고르게 보인다
