@@ -1670,7 +1670,7 @@ const Render = {
         const img = sheet && Assets.get(sheet.image);
         if (!img) return;
         const f = clamp(frame, 0, sheet.frames - 1);
-        const s = Math.max(1, Math.round(size * WORLD_ZOOM / sheet.fit)) / WORLD_ZOOM;
+        const s = Math.max(sheet.px || FX_PIXEL, Math.round(size * WORLD_ZOOM / sheet.fit)) / WORLD_ZOOM;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         if (alpha !== undefined) ctx.globalAlpha *= alpha;
@@ -1724,7 +1724,7 @@ const Render = {
             const img = sheet && Assets.get(sheet.image);
             if (!img) continue;
             const frame = Math.min(sheet.frames - 1, Math.floor(a.age / a.life * sheet.frames));
-            const k = Math.max(1, Math.round(a.size * WORLD_ZOOM / sheet.fit));
+            const k = Math.max(sheet.px || FX_PIXEL, Math.round(a.size * WORLD_ZOOM / sheet.fit));
             const s = k / WORLD_ZOOM;
             const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
             const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;

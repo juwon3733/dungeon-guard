@@ -61,6 +61,9 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 
 ## 전투 효과 (pixelfx)
 
+2026-11-08: pixelfx 효과는 작은 캐릭터 기준이라 몬스터(키 76px 안팎) 옆에서 1배로 쓰면 가늘고 흐려 보였다. 그래서 효과 픽셀 하나를 화면 2px 이상으로 그린다(`FX_PIXEL`, 시트마다 `px`로 바꿈. 룬, 장판, 회복 원, Asteria 동전 폭발은 1).
+시트를 뽑을 때 빛 세기를 0.45로 낮춘다(`tools/pfx_sheets.mjs`의 `GLOW`. 번개 셋은 1). 처치 연기는 흰색 없는 어두운 회보라 팔레트(`PAL.dust`)다.
+
 전투 효과는 모두 PixelLab이 아니라 pixelfx(https://github.com/patch-gg/pixelfx, MIT, 커밋 `a841596`)로 만든 시트를 쓴다. 표기는 `NOTICE.md`.
 
 | 옛 이름 | pixelfx id | 옵션 | 쓴 프레임 (30fps) | 재생 | 시트 |

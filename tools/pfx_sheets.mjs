@@ -22,19 +22,25 @@ const PAL = {
     blood: ['#0a0206', '#2a0410', '#5a0818', '#8a1020', '#c01830', '#ff3048', '#ff8090', '#ffd0d8', '#ffffff'],
     steel: ['#14100c', '#3a2c20', '#6a5440', '#9a8a78', '#c8c0b4', '#ece8e0', '#ffffff'],
     jester: ['#1a0620', '#4a1060', '#8a20a8', '#d040e0', '#ff7af0', '#ffc8fa', '#ffffff'],
-    orange: ['#2a0c10', '#7a1a10', '#c9401a', '#ff8a2a', '#ffc23d', '#fff0a0', '#ffffff']
+    orange: ['#2a0c10', '#7a1a10', '#c9401a', '#ff8a2a', '#ffc23d', '#fff0a0', '#ffffff'],
+    dust: ['#120e16', '#241c2a', '#3a3042', '#544a5c', '#71667a', '#90869a'] // 처치 연기: 흰색 없이 어두운 회보라(2배로 그려도 하얀 덩어리가 되지 않게)
 };
 
 // image: 시트 파일 이름, id: pixelfx 효과, options: 효과 옵션, from/to/step: 고를 프레임(30fps, to 포함), up: 기준점(origin 위 px)
 export const SHEETS = [
+    // 가장 자주 보이는 타격, 치명타, 처치 연기, 광역 폭발(docs/PIXELLAB_ASSETS.md의 첫 표)
+    { image: 'pfx_hit_spark', id: 'impacts/hit-spark', options: {}, from: 0, to: 14, step: 1, up: 0 },
+    { image: 'pfx_crit_hit', id: 'impacts/crit-hit', options: {}, from: 0, to: 17, step: 1, up: 0 },
+    { image: 'pfx_poof', id: 'spawn/poof', options: { palette: PAL.dust }, from: 0, to: 34, step: 2, up: 0 },
+    { image: 'pfx_mana_burst', id: 'arcane/mana-burst', options: { palette: PAL.violet }, from: 6, to: 36, step: 2, up: 28 },
     // 이전 효과 그림을 바꾼 것
-    { image: 'pfx_zap_hit', id: 'lightning/zap-hit', options: {}, from: 0, to: 26, step: 2, up: 0 },
+    { image: 'pfx_zap_hit', id: 'lightning/zap-hit', options: { light: 1 }, from: 0, to: 26, step: 2, up: 0 },
     { image: 'pfx_fire_blast', id: 'explosions/plasma-explosion', options: { palette: ['#200806', '#5c1410', '#a8281a', '#f05a1d', '#ffa030', '#ffe080', '#ffffff'], accent: ['#2a0c06', '#7a2010', '#e0481c', '#ffb060', '#fff0c0'] }, from: 0, to: 38, step: 2, up: 0 },
     { image: 'pfx_gold_burst', id: 'arcane/mana-burst', options: { palette: PAL.gold }, from: 6, to: 36, step: 2, up: 28 },
     { image: 'pfx_cyan_burst', id: 'arcane/mana-burst', options: { palette: PAL.cyan }, from: 6, to: 36, step: 2, up: 28 },
     { image: 'pfx_roar', id: 'scifi/emp-blast', options: { palette: PAL.pink, fringe: '#ffd0ec' }, from: 0, to: 57, step: 3, up: 20 },
-    { image: 'pfx_lightning_strike', id: 'lightning/lightning-strike', options: {}, from: 12, to: 66, step: 3, up: 0 },
-    { image: 'pfx_thunderclap', id: 'lightning/thunderclap', options: {}, from: 0, to: 44, step: 2, up: 10 },
+    { image: 'pfx_lightning_strike', id: 'lightning/lightning-strike', options: { light: 1 }, from: 12, to: 66, step: 3, up: 0 },
+    { image: 'pfx_thunderclap', id: 'lightning/thunderclap', options: { light: 1 }, from: 0, to: 44, step: 2, up: 10 },
     { image: 'pfx_soul_rise', id: 'spawn/soul-rise', options: { palette: PAL.violet.slice(1) }, from: 0, to: 57, step: 3, up: 0 },
     { image: 'pfx_arrow', id: 'projectiles/arrow', options: {}, from: 0, to: 16, step: 2, up: 0 },
     { image: 'pfx_arrow_curse', id: 'projectiles/arrow', options: { palette: ['#4a1a7a', '#8a3ce0', '#e6ccff', '#ffffff'] }, from: 0, to: 16, step: 2, up: 0 },
@@ -61,6 +67,7 @@ export const SHEETS = [
 ];
 
 const COLS = 8;
+const GLOW = 0.45; // 기본 빛 세기(pixelfx 기본은 1)
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [pfxDir, ...only] = process.argv.slice(2);
 if (!pfxDir) {
@@ -74,7 +81,9 @@ let total = 0;
 for (const s of SHEETS) {
     if (only.length && !only.includes(s.image)) continue;
     const fx = await lib.loadEffect(s.id);
-    const r = lib.renderFrames(fx, { bg: 'none', actor: false, options: s.options });
+    // 빛(light)은 시트에 반투명 색으로 구워져 흐릿한 빛 덩어리가 된다. 몬스터 옆에서 또렷하게 보이도록 낮춘다(번개처럼 빛이 핵심인 것은 그대로)
+    const options = Object.assign({ light: GLOW }, s.options);
+    const r = lib.renderFrames(fx, { bg: 'none', actor: false, options });
     const picks = [];
     for (let i = s.from; i <= Math.min(s.to, r.n - 1); i += s.step) picks.push(i);
     // 고른 모든 프레임을 덮는 상자
