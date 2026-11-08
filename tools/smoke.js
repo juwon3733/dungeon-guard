@@ -24,8 +24,6 @@ vm.runInContext(`{
         a.unlocks = a.unlocks.filter(u => !(u.kind === 'lord' && u.id === id));
         b.unlocks.splice(at, 0, { kind: 'lord', id });
     };
-    move('s1', 's3', 'bone_queen', 0);
-    move('s2', 's5', 'gold_king', 1);
     // 옛 시험은 마왕 셋의 표다: 스토리 3~6의 새 마왕은 빼고 본다(새 마왕은 맨 끝에서 따로)
     const later = Object.keys(DEMON_LORDS).filter(id => !['rift', 'bone_queen', 'gold_king'].includes(id));
     for (const id of later) {
@@ -36,6 +34,8 @@ vm.runInContext(`{
         st.unlocks = st.unlocks.filter(u => !(u.kind === 'lord' && later.includes(u.id)));
         st.outro = st.outro.filter(l => !later.includes(l[0]));
     }
+    move('s1', 's3', 'bone_queen', 0);
+    move('s2', 's5', 'gold_king', 1);
 }`, ctx);
 
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
@@ -62,7 +62,7 @@ vm.runInContext(`{
         return [png.readUInt32BE(16), png.readUInt32BE(20)];
     };
     const lords = vm.runInContext('Object.values(DEMON_LORDS)', actx);
-    assert.strictEqual(lords.length, 5, 'five lords'); // 기본 1 + 스토리 1~4 클리어마다 1
+    assert.strictEqual(lords.length, 6, 'six lords'); // 기본 1 + 스토리 1~5 클리어마다 1
     for (const lord of lords) {
         for (const name of [lord.sprite, lord.cast].filter(Boolean)) {
             assert.deepStrictEqual(pngSize(name), [128, 128], name + ' is 128px');
@@ -4945,8 +4945,8 @@ Game.payInterest();
 assert.strictEqual(Game.gold, 100, 'no relic no interest');
 // 폭풍의 병: 번개만
 seed('storm_bottle');
-near(Game.skillCooldown('lightning'), COMBAT_RULES.lightning.cooldown * 0.9 * 0.75, 'lightning');
-near(Game.skillCooldown('roar'), COMBAT_RULES.roar.cooldown * 0.9, 'roar same');
+near(Game.skillCooldown('lightning'), COMBAT_RULES.lightning.cooldown * 0.75, 'lightning');
+near(Game.skillCooldown('roar'), COMBAT_RULES.roar.cooldown, 'roar same');
 // 광기의 북
 seed(null);
 assert(Game.roarLocked(), 'roar locked at full hp');
@@ -6063,7 +6063,7 @@ console.log('smoke ok: equipment crafting');
     assert(Meta.hasLord('gold_king'), 'stage 2 opens the gold king');
     // 스토리 3~6: 한 명씩
     const order = STAGES.map(st => (st.unlocks.find(u => u.kind === 'lord') || {}).id || null);
-    assert.strictEqual(JSON.stringify(order.slice(0, 4)), JSON.stringify(['bone_queen', 'gold_king', 'plague', 'chain']), 'stages 3 and 4 open the plague and chain lords');
+    assert.strictEqual(JSON.stringify(order.slice(0, 5)), JSON.stringify(['bone_queen', 'gold_king', 'plague', 'chain', 'mirror']), 'stages 3, 4, 5 open the plague, chain and mirror lords');
     for (const id of Object.keys(DEMON_LORDS)) if (id !== DEFAULT_LORD) assert(order.includes(id), id + ' opens at a stage');
     assert.strictEqual(LORD_POWERS.plague.length, 3, 'plague: three branches');
     for (const br of LORD_POWERS.plague) assert(br.tiers.length === 4 && br.tiers.every(t => t.length === 2), br.id + ': 4 tiers of 2');
@@ -6155,6 +6155,14 @@ console.log('smoke ok: equipment crafting');
     };
     const sh = shields();
     assert(sh === shields() && sh.includes('1'), 'shields are seeded');
+    // 난이도 기본 배율: 베이직 체력·이동 50%, 노말 100%, 헬 1000%·300%
+    assert.deepStrictEqual(ABYSS_LEVELS.map(L => [L.hp, L.speed]).filter((_, i) => [0, 3, 9].includes(i)), [[0.5, 0.5], [1, 1], [10, 3]], 'base multipliers');
+    for (let i = 1; i < ABYSS_LEVELS.length; i++) assert(ABYSS_LEVELS[i].hp > ABYSS_LEVELS[i - 1].hp && ABYSS_LEVELS[i].speed > ABYSS_LEVELS[i - 1].speed, 'base rises every level');
+    assert(!ABYSS_LEVELS[9].cards.includes('pact_iron'), 'hell hp lives in the base, not in a clause');
+    Game.reset(null, null, abyssChallenge('base-w', 'rift', [], 9));
+    assert(Math.abs(Game.mods.heroHp - 10) < 1e-9 && Math.abs(Game.mods.heroSpeed - 3) < 1e-9, 'hell: hero hp x10, speed x3');
+    Game.reset(null, null, abyssChallenge('base-w', 'rift', [], 0));
+    assert(Math.abs(Game.mods.heroHp - 0.5) < 1e-9 && Math.abs(Game.mods.heroSpeed - 0.5) < 1e-9, 'basic: hero hp and speed halved');
     }).toString() + ')()', pctx);
     console.log('smoke ok: forbidden pact');
 }
@@ -6392,7 +6400,6 @@ console.log('smoke ok: equipment crafting');
         const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); }; // 보스 표시는 옮음 시험용(보스 패턴은 돌리지 않는다)
         start();
         assert(Game.lordPassive('plague'), 'plague passive');
-        assert.strictEqual(Game.mods.damage, -0.1, 'monster damage -10%');
         const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace('fire_imp', a, r); }).split(',').map(Number);
         const imp = Game.place('fire_imp', k[0], k[1]) || Game.monsters[Game.monsters.length - 1];
         const a = hero();
@@ -6497,7 +6504,6 @@ console.log('smoke ok: equipment crafting');
         const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); };
         start();
         assert(Game.lordPassive('shackle'), 'shackle passive');
-        assert(Math.abs(Game.mods.range - 0.1) < 1e-9 && Game.mods.startGold === -30, 'range +10%, start gold -30');
         // 확률: 많이 맞히면 약 8%가 묶인다(고정 난수)
         let bound = 0;
         for (let i = 0; i < 400; i++) { const h = hero(); chainOnHit(h); if (h.bound > 0) bound++; h.dead = true; }
@@ -6568,6 +6574,107 @@ console.log('smoke ok: equipment crafting');
         assert(!Game.act({ kind: 'jail' }).ok, 'cooldown');
         console.log('smoke ok: chain lord');
     }).toString() + ')()', cctx);
+}
+// 거울 마녀: 합치면 확률로 재료가 돌아옴, 분신(E)은 합치기·판매·제물이 안 되고 시간이 지나면 사라짐, 거울 방패, 되비침, 은 세공
+{
+    const mctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), mctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', mctx);
+    vm.runInContext('(' + (() => {
+        Meta.data.cleared = STAGES.slice(0, 5).map(s => s.id); // 스토리 5를 깨야 열린다
+        const start = powers => {
+            Game.reset({ lord: 'mirror', relics: [] }, STAGES[4].id);
+            Game.state = 'prep';
+            Game.gold = 100000;
+            for (const id of powers || []) Game.powers[id] = true;
+        };
+        const put = type => {
+            const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace(type, a, r); }).split(',').map(Number);
+            return Game.place(type, k[0], k[1]);
+        };
+        const trio = () => [put('orc_guard'), put('orc_guard'), put('orc_guard')];
+        start();
+        assert(Game.lordPassive('reflection'), 'reflection passive');
+        // 확률 1로: 합치면 끌어온 재료가 돌아온다
+        Game.lordPassive('reflection').chance = 1;
+        let [a, b] = trio();
+        const before = Game.monsters.length;
+        assert(Game.act({ kind: 'merge', src: a, dst: b }).ok, 'merge');
+        assert.strictEqual(Game.monsters.length, before - 2 + 1, 'three in, one out, one mirrored back');
+        assert(Game.monsters.some(m => m.type === 'orc_guard' && !m.removed), 'the material came back');
+        // 확률 0이면 돌아오지 않는다
+        start();
+        Game.lordPassive('reflection').chance = 0;
+        [a, b] = trio();
+        const n0 = Game.monsters.length;
+        Game.act({ kind: 'merge', src: a, dst: b });
+        assert.strictEqual(Game.monsters.length, n0 - 2, 'no mirror');
+        Game.lordPassive('reflection').chance = 0.15;
+        // 거울 값(골드), 닮은 꼴(랭크)
+        start(['copyGold', 'copyRank']);
+        Game.lordPassive('reflection').chance = 1;
+        [a, b] = trio();
+        setMonsterRank(a, 2);
+        setMonsterRank(b, 2);
+        for (const m of Game.monsters) setMonsterRank(m, 2);
+        const g0 = Game.gold;
+        Game.act({ kind: 'merge', src: a, dst: b });
+        const back = Game.monsters.find(m => m.type === 'orc_guard');
+        assert(back && back.rank === 2, 'rank kept');
+        assert(Game.gold > g0, 'mirror gold');
+        Game.lordPassive('reflection').chance = 0.15;
+        // 은 세공: 결과 등급만큼 골드
+        start(['transGold']);
+        [a, b] = trio();
+        const g1 = Game.gold;
+        const res = Game.act({ kind: 'merge', src: a, dst: b });
+        assert.strictEqual(Game.gold - g1, COMBAT_RULES.mirror.transGold[MONSTERS[res.type].grade], 'silverwork gold');
+        // 거울 분신(E)
+        start(['mirrorClone', 'cloneTwo']);
+        assert.strictEqual(Game.thirdSkill().key, 'mirrorClone', 'third skill');
+        const top = put('hell_general') || put('orc_guard');
+        const count = Game.monsters.length;
+        assert(Game.act({ kind: 'mirrorClone' }).ok, 'cast');
+        const clones = Game.monsters.filter(m => m.clone > 0);
+        assert(clones.length === 2 && clones[0].type === clones[1].type && GRADE_ORDER.indexOf(MONSTERS[clones[0].type].grade) >= GRADE_ORDER.indexOf(MONSTERS[top.type].grade) - 4, 'two clones of the best that fits');
+        assert(!Game.fieldFull() || count >= Game.maxField(), 'clones do not fill the field');
+        assert(!Game.act({ kind: 'merge', src: clones[0], dst: clones[1] }).ok, 'clones cannot merge');
+        assert(!Game.act({ kind: 'sacrifice', monster: clones[0] }).ok, 'clones cannot be sacrificed');
+        const g2 = Game.gold;
+        Game.sell(clones[0]);
+        assert(Game.gold === g2 && Game.monsters.includes(clones[0]), 'clones cannot be sold');
+        Game.state = 'wave';
+        for (let i = 0; i < Math.round((COMBAT_RULES.mirrorClone.duration + 0.5) * 30); i++) Game.update(1 / 30);
+        assert(!Game.monsters.some(m => m.clone), 'clones fade');
+        // 거울 방패: 라운드마다 왕좌 피해 1번 막음(큰 방패 2번), 라운드가 바뀌면 다시
+        start(['mirrorShield']);
+        Game.state = 'wave';
+        const hp = Game.hp;
+        damageThrone(1);
+        assert.strictEqual(Game.hp, hp, 'first hit blocked');
+        damageThrone(1);
+        assert.strictEqual(Game.hp, hp - 1, 'second hit lands');
+        Game.state = 'prep';
+        Game.startWave();
+        damageThrone(1);
+        assert.strictEqual(Game.hp, hp - 1, 'blocked again next round');
+        // 되비침: 왕좌가 맞으면 맨 앞 용사 3명에게 번개 피해 50%
+        start(['reflectThrone']);
+        Game.state = 'wave';
+        Game.heroes.length = 0;
+        const hs = [1, 2, 3, 4].map(i => { const h = createHero('warrior', 5, 0, false, 'north'); h.waiting = false; h.d = 500 + i * 40; h.maxHp = h.hp = 1000; h.armor = 0; Game.heroes.push(h); return h; });
+        damageThrone(1);
+        const hurt = hs.filter(h => h.hp < 1000).length;
+        assert.strictEqual(hurt, 3, 'three reflected');
+        assert(Math.abs(hs[3].hp - (1000 - Game.lightningDamage() * 0.5)) < 1e-6, 'half lightning');
+        // 공짜 거울: 라운드 첫 소환 0
+        start(['transFree']);
+        assert.strictEqual(Game.summonCost(), 0, 'first summon free');
+        Game.act({ kind: 'summon' });
+        assert(Game.summonCost() > 0, 'then paid');
+        console.log('smoke ok: mirror lord');
+    }).toString() + ')()', mctx);
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

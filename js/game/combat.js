@@ -223,6 +223,7 @@ function splashDamage(x, y, radiusPx, damage, color, onHit, attacker, onDealt) {
 
 function damageThrone(amount, heroName) {
     const G = Game;
+    if (mirrorShieldBlocks()) return; // 권능 거울 방패
     G.roundHit = true;
     G.hp = Math.max(0, G.hp - amount);
     G.throneFlash = 0.4;
@@ -235,6 +236,7 @@ function damageThrone(amount, heroName) {
     Fx.anim('fx_hit_fire', tx, ty - 120, 400, 0.4);
     Fx.say(tx, ty - LORD_SAY_Y, lordLine('throneHit'), 1.8);
     if (G.hp <= 0) G.finish(false);
+    else mirrorThroneHit(); // 거울 마녀: 반사 갈래
 }
 
 function corruptCorpse(corpse) {
@@ -592,6 +594,98 @@ function castJail() {
     Fx.addShake(8);
     Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '면회는 금지다.', 2);
     Sfx.play('charge');
+    return true;
+}
+
+// ----- 거울 마녀 -----
+
+// 거울상: 합친 뒤 확률로 재료 하나(끌어온 몬스터)가 제자리에 다시 선다. 권능으로 확률·랭크·골드·등급이 바뀐다
+function mirrorAfterMerge(src, plan, resultGrade) {
+    const G = Game;
+    const p = G.lordPassive('reflection');
+    if (!p || !src || G.fieldFull()) return null;
+    const rule = COMBAT_RULES.mirror;
+    let chance = p.chance + (G.power('reflectUp') ? rule.reflectUp : 0);
+    if (G.power('copyHigh') && GRADE_ORDER.indexOf(MONSTERS[src.type].grade) >= GRADE_ORDER.indexOf('epic')) chance *= 2;
+    if (G.power('transRecipe') && plan.kind === 'recipe') chance *= 2;
+    if (rng('merge') >= chance) return null;
+    let type = src.type;
+    // 권능 금빛 거울: 돌아오는 재료가 한 등급 위(신화 제외)
+    if (G.power('transUp')) {
+        const up = nextGrade(MONSTERS[type].grade);
+        if (up && up !== 'mythic') {
+            const pool = summonPool(up);
+            if (pool.length) type = rngItem('merge', pool);
+        }
+    }
+    const spot = G.canPlace(type, src.col, src.row) ? { col: src.col, row: src.row } : G.pickSummonCell(type);
+    if (!spot) return null;
+    const m = createMonster(type, spot.col, spot.row);
+    if (G.power('copyRank') && type === src.type) setMonsterRank(m, src.rank || 0);
+    G.monsters.push(m);
+    m.reveal = MERGE_REVEAL;
+    if (G.power('copyGold')) G.gold += G.summonCost();
+    Fx.anim('fx_blastCyan', m.x, m.y - 50, 300, 0.45);
+    Fx.burst(m.x, m.y - 40, '#bff6ff', 14, 260, 0.4, 5);
+    return m;
+}
+
+// 권능 거울 분신(E): 가장 높은 등급 몬스터의 분신이 잠깐 빈 칸에 선다. 분신은 합치기·판매·제물이 안 된다
+function castMirrorClone() {
+    const G = Game;
+    const rule = COMBAT_RULES.mirrorClone;
+    if (!G.power('mirrorClone') || G.skills.mirrorClone > 0) return false;
+    // 등급이 높은 몬스터부터, 분신이 설 빈자리가 있는 첫 몬스터(큰 몬스터는 자리가 없을 수 있다)
+    const best = G.monsters.filter(m => !m.removed && !m.clone).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade)).find(m => G.pickSummonCell(m.type, true));
+    if (!best) return false;
+    const n = G.power('cloneTwo') ? 2 : 1;
+    let made = 0;
+    for (let i = 0; i < n; i++) {
+        const cell = G.pickSummonCell(best.type);
+        if (!cell) break;
+        const m = createMonster(best.type, cell.col, cell.row);
+        setMonsterRank(m, best.rank || 0);
+        m.clone = rule.duration * (G.power('cloneLong') ? 2 : 1);
+        G.monsters.push(m);
+        Fx.anim('fx_blastCyan', m.x, m.y - 50, 360, 0.45);
+        made++;
+    }
+    if (!made) return false;
+    G.skills.mirrorClone = G.skillCooldown('mirrorClone');
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '거울아, 하나 더.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// 왕좌가 맞음: 반사 갈래(맨 앞 용사들에게 번개, 모든 용사 피해 증가, 호통 단축)
+function mirrorThroneHit() {
+    const G = Game;
+    if (!G.lordPassive('reflection')) return;
+    const rule = COMBAT_RULES.mirror;
+    if (G.power('reflectThrone') || G.power('reflectAll')) {
+        const mul = G.power('reflectAll') ? 1 : 0.5;
+        const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b)).slice(0, rule.reflectCount);
+        for (const h of front) {
+            const w = heroWorld(h);
+            Fx.anim('fx_hit_lightning', w.x, w.y - 40, 160, 0.3);
+            damageHero(h, G.lightningDamage() * mul, w.x, w.y, '#bff6ff');
+        }
+    }
+    if (G.power('reflectCurse')) for (const h of G.heroes) if (!h.dead && !h.waiting) curseHero(h, 2, 1.2);
+    if (G.power('reflectRoar')) G.skills.roar = Math.max(0, G.skills.roar - 10);
+}
+
+// 권능 거울 방패: 라운드마다 왕좌 피해를 1(큰 방패 2)번 막는다. 막았으면 true
+function mirrorShieldBlocks() {
+    const G = Game;
+    const n = G.power('shieldBig') ? 2 : (G.power('mirrorShield') ? 1 : 0);
+    if (!n || (G.mirrorBlocks || 0) >= n) return false;
+    G.mirrorBlocks = (G.mirrorBlocks || 0) + 1;
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row);
+    Fx.ring(tx, ty - 120, 160, '#bff6ff', 0.35);
+    Fx.number('throne', tx, ty - 330, '막음', '#bff6ff', true);
+    Sfx.play('shieldBreak');
     return true;
 }
 

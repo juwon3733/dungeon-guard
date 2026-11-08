@@ -26,6 +26,7 @@ const STORY_CAST = {
     gold_king: { name: '황금 마왕', lord: 'gold_king' },
     plague: { name: '역병의 군주', lord: 'plague' },
     chain: { name: '사슬의 군주', lord: 'chain' },
+    mirror: { name: '거울 마녀', lord: 'mirror' },
     goblin: { name: '고블린 창병 꼬챙이', portrait: { sprite: 'pl_mon_goblin_spearman/rotations/south', crop: [12, 4, 24] } },
     warrior: { name: '견습 용사 덕수', portrait: { sprite: 'pl_hero_warrior/rotations/south', crop: [13, 3, 22] } },
     archmage: { name: '대마도사 몽글', portrait: { sprite: 'pl_boss_grand_wizard/rotations/south', crop: [31, 18, 28] } },
@@ -104,9 +105,11 @@ const STAGES = [
         ],
         outro: [
             ['gold_king', '대금은 분할 상환해 주지. 대신 여기 살면서 수금하겠다.'],
-            ['goblin', '깃발이랑 번개 병도 두고 가셨어요. ...이자는 붙는대요.']
+            ['goblin', '깃발이랑 번개 병도 두고 가셨어요. ...이자는 붙는대요.'],
+            ['mirror', '철거반 마법사의 거울에 갇혀 있었어. 깨 줘서 고마워.'],
+            ['mirror', '보답으로 너희 몬스터를 둘로 비춰 줄게. 가끔은.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }]
+        unlocks: [{ kind: 'lord', id: 'mirror' }, { kind: 'slot' }, { kind: 'relic', id: 'equip_eater' }, { kind: 'relic', id: 'mirror_twin' }, { kind: 'relic', id: 'lone_crown' }]
     },
     {
         id: 's6', mapId: 'coil', no: 6, name: '부대장의 최후', zone: 'warTemple', waves: firstRounds(60), hpMul: 1, goldBonus: 60, map: [1640, 380],

@@ -51,7 +51,7 @@ const LORD_CARD_W = 248; // 마왕 7명이 한 줄에 든다(그림 2배, 이름
 const LORD_CARD_H = 296;
 const LORD_CARD_GAP = 12;
 const LORD_CARD_Y = 104;
-const LORD_DETAIL = { x: 56, y: 416, w: 1808, h: 158 }; // 카드 아래: 고른(또는 마우스를 올린) 마왕의 효과와 패시브
+const LORD_DETAIL = { x: 56, y: 414, w: 1808, h: 180 }; // 카드 아래: 고른(또는 마우스를 올린) 마왕의 효과와 패시브
 const RELIC_CELL = 64;
 const RELIC_GAP = 6;
 const RELIC_COLS = 10;
@@ -2056,15 +2056,15 @@ const UI = {
         if (!lord) return;
         const open = Meta.hasLord(id);
         this.drawDetailFrame(ctx, D.x, D.y, D.w, D.h);
-        UIKit.ink(ctx, lord.name, D.x + 40, D.y + 46, 32, open ? T.inkWax : T.inkSoft, 'left', 'bold');
-        UIKit.ink(ctx, open ? lord.desc : this.unlockText('lord', id), D.x + 40, D.y + 84, 19, T.inkSoft, 'left');
+        // 테 안쪽 여백: 왼쪽 56, 위 52, 아래 40
+        UIKit.ink(ctx, lord.name, D.x + 56, D.y + 52, 32, open ? T.inkWax : T.inkSoft, 'left', 'bold');
+        UIKit.ink(ctx, open ? lord.desc : this.unlockText('lord', id), D.x + 56, D.y + 94, 20, T.inkSoft, 'left');
         // 효과(가운데 왼쪽 열), 패시브(오른쪽 넓은 열), 권능 갈래(맨 아래 줄)
-        this.drawEffectLines(ctx, lord.effects, D.x + 420, D.y + 44, 21, 27, 'left');
-        UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 720, D.y + 44, 22, T.inkWax, 'left', 'bold');
-        ctx.font = `19px ${UI_FONT}`;
-        this.wrapLines(ctx, lord.passive.desc, D.w - 760).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 720, D.y + 76 + i * 26, 19, T.ink, 'left'));
+        UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 440, D.y + 52, 22, T.inkWax, 'left', 'bold');
+        ctx.font = `20px ${UI_FONT}`;
+        this.wrapLines(ctx, lord.passive.desc, D.w - 500).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 440, D.y + 92 + i * 28, 20, T.ink, 'left'));
         const branches = (LORD_POWERS[id] || []).map(br => br.name).join(' · ');
-        if (branches) UIKit.ink(ctx, `권능 · ${branches}`, D.x + 40, D.y + 128, 19, T.inkSoft, 'left');
+        if (branches) UIKit.ink(ctx, `권능 · ${branches}`, D.x + 56, D.y + 136, 20, T.inkSoft, 'left');
     },
 
     // 메달에 스테이지 번호(가운데 cx, cy, 반지름 r)
@@ -3693,6 +3693,10 @@ const UI = {
         if (u.kind === 'lord' || u.kind === 'relic') {
             const def = u.kind === 'lord' ? DEMON_LORDS[u.id] : RELICS[u.id];
             y = this.drawEffectLines(ctx, def.effects, cx, y, 26, 36, 'center');
+            if (u.kind === 'lord') { // 마왕은 수치 효과 대신 패시브
+                UIKit.ink(ctx, `패시브 · ${def.passive.name}`, cx, y + 4, 24, T.inkWax, 'center', 'bold');
+                y += 36;
+            }
             if (def.desc) {
                 ctx.font = `21px ${UI_FONT}`;
                 this.wrapLines(ctx, def.desc, U.w - 100).slice(0, 1).forEach(t => UIKit.ink(ctx, t, cx, y + 10, 21, T.inkSoft, 'center'));

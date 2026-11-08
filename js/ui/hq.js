@@ -639,9 +639,10 @@ Object.assign(UI, {
             if (owned) this.drawLordPortrait(ctx, lord, x + 8, y + 92, 152);
             y += 290;
             if (owned) {
-                y = this.drawEffectLines(ctx, lord.effects, x, y, 24, 34);
+                UIKit.ink(ctx, lord.desc, x, y, 22, T.inkSoft, 'left', 'bold');
+                UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, x, y + 40, 22, T.inkWax, 'left', 'bold');
                 ctx.font = `20px ${UI_FONT}`;
-                this.wrapLines(ctx, lord.desc, D.w - 64).slice(0, 5).forEach((t, j) => UIKit.ink(ctx, t, x, y + 14 + j * 28, 20, T.inkSoft));
+                this.wrapLines(ctx, lord.passive.desc, D.w - 64).slice(0, 4).forEach((t, j) => UIKit.ink(ctx, t, x, y + 74 + j * 28, 20, T.ink));
             } else {
                 const st = unlockStage('lord', pick.id);
                 UIKit.text(ctx, st ? `스테이지 ${st.no}에서 해금` : '처음부터', x, y, 26, T.creamSoft, 'left', 'bold');
@@ -828,10 +829,14 @@ Object.assign(UI, {
         const best = Meta.abyssBest(week, level.id);
         UIKit.ink(ctx, best.floor ? `이번 주 최고 ${best.floor}층` : '이번 주 기록 없음', P.x + P.w - 36, P.y + 50, 24, best.floor ? T.ink : T.inkSoft, 'right', 'bold');
         UIKit.ink(ctx, `이번 주 심연 · ${map} · ${ABYSS_RULES.mutateEvery}층마다 변이`, x, P.y + 92, 20, T.inkSoft);
-        if (!level.cards.length) UIKit.ink(ctx, '조항 없음', x, P.y + 150, 26, T.ink, 'left', 'bold');
+        // 기본 배율: 용사 체력과 이동 속도(노말 100%)
+        const pct = v => `${Math.round(v * 100)}%`;
+        UIKit.ink(ctx, '기본', x, P.y + 132, 18, T.inkSoft, 'left', 'bold');
+        UIKit.ink(ctx, `용사 체력 ${pct(level.hp)} · 이동 속도 ${pct(level.speed)}`, x + 70, P.y + 132, 21, level.hp > 1 ? T.inkBad : (level.hp < 1 ? T.inkGood : T.ink), 'left', 'bold');
+        if (!level.cards.length) UIKit.ink(ctx, '조항 없음', x, P.y + 172, 22, T.inkSoft, 'left', 'bold');
         level.cards.forEach((id, i) => {
             const card = RULE_CARDS[id];
-            const y = P.y + 140 + i * 30;
+            const y = P.y + 166 + i * 30;
             const boon = card.kind === 'boon';
             UIKit.ink(ctx, `${boon ? '혜택' : `제${i + 1}조`}`, x, y, 18, T.inkSoft, 'left', 'bold');
             UIKit.ink(ctx, card.name, x + 70, y, 21, T.ink, 'left', 'bold');
@@ -852,14 +857,6 @@ Object.assign(UI, {
         const lord = DEMON_LORDS[c.lord];
         UIKit.ink(ctx, '마왕', x + 40, y + 110, 22, T.inkSoft, 'left', 'bold');
         UIKit.ink(ctx, lord.name, x + 120, y + 110, 26, T.ink, 'left', 'bold');
-        // 마왕 효과는 좋은 것과 나쁜 것이 섞여 있어 하나씩 색을 나눈다
-        let ex = x + 340;
-        for (const [key, value] of Object.entries(lord.effects)) {
-            const text = effectText(key, value);
-            UIKit.ink(ctx, text, ex, y + 110, 20, effectGood(key, value) ? T.inkGood : T.inkBad);
-            ctx.font = `20px ${UI_FONT}`;
-            ex += ctx.measureText(text).width + 24;
-        }
         UIKit.ink(ctx, `패시브 · ${lord.passive.name}: ${lord.passive.desc}`, x + 40, y + 500, 19, T.inkWax);
         c.relics.forEach((id, i) => {
             const ry = y + 148 + i * 72;
