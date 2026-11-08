@@ -233,6 +233,7 @@ function monsterHitHero(type, hero, owner) {
     // 역병의 군주: 몬스터에게 맞으면 독(공격력의 일부를 초마다)
     const plague = Game.lordPassive('plague');
     if (plague && owner && owner.kind === 'monster' && !owner.removed) poisonHero(hero, plague.duration, monsterStats(owner).damage * plague.ratio, owner);
+    chainOnHit(hero); // 사슬의 군주: 확률로 묶음(combat.js)
     const stun = monsterAbility(type, 'stunShot');
     // 보스는 걸리지 않는다(난수도 쓰지 않는다)
     if (stun && !hero.boss && rng('battle') < stun.chance) {

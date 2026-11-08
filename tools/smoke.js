@@ -62,7 +62,7 @@ vm.runInContext(`{
         return [png.readUInt32BE(16), png.readUInt32BE(20)];
     };
     const lords = vm.runInContext('Object.values(DEMON_LORDS)', actx);
-    assert.strictEqual(lords.length, 4, 'four lords'); // 기본 1 + 스토리 1·2·3 클리어마다 1
+    assert.strictEqual(lords.length, 5, 'five lords'); // 기본 1 + 스토리 1~4 클리어마다 1
     for (const lord of lords) {
         for (const name of [lord.sprite, lord.cast].filter(Boolean)) {
             assert.deepStrictEqual(pngSize(name), [128, 128], name + ' is 128px');
@@ -6063,7 +6063,7 @@ console.log('smoke ok: equipment crafting');
     assert(Meta.hasLord('gold_king'), 'stage 2 opens the gold king');
     // 스토리 3~6: 한 명씩
     const order = STAGES.map(st => (st.unlocks.find(u => u.kind === 'lord') || {}).id || null);
-    assert.strictEqual(JSON.stringify(order.slice(0, 3)), JSON.stringify(['bone_queen', 'gold_king', 'plague']), 'stage 3 opens the plague lord');
+    assert.strictEqual(JSON.stringify(order.slice(0, 4)), JSON.stringify(['bone_queen', 'gold_king', 'plague', 'chain']), 'stages 3 and 4 open the plague and chain lords');
     for (const id of Object.keys(DEMON_LORDS)) if (id !== DEFAULT_LORD) assert(order.includes(id), id + ' opens at a stage');
     assert.strictEqual(LORD_POWERS.plague.length, 3, 'plague: three branches');
     for (const br of LORD_POWERS.plague) assert(br.tiers.length === 4 && br.tiers.every(t => t.length === 2), br.id + ': 4 tiers of 2');
@@ -6472,6 +6472,102 @@ console.log('smoke ok: equipment crafting');
         assert(Math.abs(dealt - 145) < 1e-6, 'rot +45%');
         console.log('smoke ok: plague lord');
     }).toString() + ')()', qctx);
+}
+// 사슬의 군주: 맞으면 확률로 묶임(정지), 정예·보스는 절반, 권능(사슬 엮기, 갈고리, 형틀·고문, 참수, 몸값, 구덩이, 사슬 감옥)
+{
+    const cctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), cctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', cctx);
+    vm.runInContext('(' + (() => {
+        Meta.data.cleared = STAGES.slice(0, 4).map(s => s.id); // 스토리 4를 깨야 열린다
+        const start = powers => {
+            Game.reset({ lord: 'chain', relics: [] }, STAGES[3].id);
+            Game.state = 'wave';
+            Game.heroes.length = 0;
+            for (const id of powers || []) Game.powers[id] = true;
+        };
+        const hero = (d, kind) => {
+            const h = createHero('warrior', 5, 0, false, 'north');
+            h.waiting = false; h.delay = 0; h.d = d || 300; h.maxHp = h.hp = 1000; h.armor = 0;
+            if (kind) h[kind] = true;
+            Game.heroes.push(h);
+            return h;
+        };
+        const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); };
+        start();
+        assert(Game.lordPassive('shackle'), 'shackle passive');
+        assert(Math.abs(Game.mods.range - 0.1) < 1e-9 && Game.mods.startGold === -30, 'range +10%, start gold -30');
+        // 확률: 많이 맞히면 약 8%가 묶인다(고정 난수)
+        let bound = 0;
+        for (let i = 0; i < 400; i++) { const h = hero(); chainOnHit(h); if (h.bound > 0) bound++; h.dead = true; }
+        assert(bound > 15 && bound < 50, 'about 8% bound: ' + bound);
+        Game.heroes.length = 0;
+        let eb = 0;
+        for (let i = 0; i < 400; i++) { const h = hero(300, 'elite'); chainOnHit(h); if (h.bound > 0) eb++; h.dead = true; }
+        assert(eb < bound, 'elites half: ' + eb);
+        Game.heroes.length = 0;
+        // 묶임: 정지와 같이 걸리고, 시간이 지나면 풀린다
+        const a = hero(400);
+        bindHero(a, 0.6);
+        assert(a.bound === 0.6 && a.stun >= 0.6, 'bound and stunned');
+        tick(0.7);
+        assert(a.bound === 0, 'released');
+        // 다른 마왕은 묶지 않는다
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[3].id);
+        const r = hero();
+        for (let i = 0; i < 50; i++) chainOnHit(r);
+        assert(!(r.bound > 0), 'only the chain lord binds');
+        // 갈고리, 큰 갈고리, 긴 사슬: 뒤로 끈다
+        start(['dragBack', 'dragHook', 'dragFar']);
+        const e = hero(1000, 'elite');
+        bindHero(e, 0.6);
+        assert(Math.abs(e.d - (1000 - (0.5 + 2) * TILE * 2)) < 1e-6, 'elite dragged 5 tiles');
+        // 형틀 + 고문: 묶인 용사 받는 피해 +60%
+        start(['execBound', 'execDeep']);
+        const f = hero();
+        bindHero(f, 1);
+        assert(Math.abs(damageHero(f, 100, 0, 0) - 160) < 1e-6, 'bound takes +60%');
+        // 참수: 15% 이하면 즉사(일반만)
+        start(['execLow']);
+        const g = hero();
+        bindHero(g, 1);
+        damageHero(g, 860, 0, 0);
+        assert(g.dead, 'executed');
+        const ge = hero(300, 'elite');
+        bindHero(ge, 1);
+        damageHero(ge, 860, 0, 0);
+        assert(!ge.dead, 'elites are not executed');
+        // 몸값: 묶인 채 쓰러지면 골드 +50%
+        start(['execGold']);
+        const m = hero();
+        m.bounty = 10;
+        bindHero(m, 1);
+        const gold0 = Game.gold;
+        damageHero(m, 5000, 0, 0);
+        assert.strictEqual(Game.gold - gold0, 15, 'ransom');
+        // 구덩이: 묶인 일반 용사 5명째마다 입구로
+        start(['dragPit']);
+        const pit = [1, 2, 3, 4, 5].map(i => hero(500 + i));
+        for (const h of pit) bindHero(h, 0.5);
+        assert(pit[4].d === 0 && pit[3].d > 0, 'fifth goes back to the gate');
+        // 사슬 엮기: 1칸 안 한 명 더
+        start(['shackleChain', 'shackleChance']);
+        const c1 = hero(600), c2 = hero(610);
+        Game.lordPassive('shackle').chance = 1;
+        chainOnHit(c1);
+        Game.lordPassive('shackle').chance = 0.08;
+        assert(c1.bound > 0 && c2.bound > 0, 'a second one is bound');
+        // 사슬 감옥(E)
+        start(['jail', 'dragAll']);
+        assert.strictEqual(Game.thirdSkill().key, 'jail', 'third skill');
+        const j1 = hero(900), j2 = hero(920), far = hero(100);
+        assert(Game.act({ kind: 'jail' }).ok && Game.skills.jail > 0, 'cast');
+        assert(j1.bound === 3 && j2.bound === 3 && !(far.bound > 0), 'jail binds around the front');
+        assert(j1.d < 900, 'pulled back');
+        assert(!Game.act({ kind: 'jail' }).ok, 'cooldown');
+        console.log('smoke ok: chain lord');
+    }).toString() + ')()', cctx);
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

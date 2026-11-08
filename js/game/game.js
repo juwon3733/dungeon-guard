@@ -24,7 +24,7 @@ const Game = {
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     hazards: [], // 땅에 남는 장판(불 장판 burnGround): { kind, x, y, radius(px), dps, life, age, tick, owner }
-    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0 },
+    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0 },
     mana: 0, // 마력(권능을 찍는다). 판이 끝나면 사라진다
     powers: {}, // 찍은 권능: { 항목 id: true }
     powerSeed: '', // 권능 지도의 시드
@@ -99,11 +99,12 @@ const Game = {
         this.equipBag = [];
         this.runResult = null;
         this.clearField();
-        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0 };
+        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0 };
         this.graves = [];
         this.corpseCount = 0;
         this.poisonKills = 0; // 역병의 군주: 독으로 쓰러뜨린 수(대유행)
         this.poisonKill = false; // 지금 주는 피해가 독인지(처치 보너스를 고른다)
+        this.bindCount = 0; // 사슬의 군주: 묶인 일반 용사 수(구덩이)
         this.mana = 0;
         this.powers = {};
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
@@ -1014,6 +1015,7 @@ const Game = {
             case 'raise': return { ok: !!castRaise() };
             case 'goldBomb': return { ok: !!castGoldBomb() };
             case 'miasma': return { ok: !!castMiasma() };
+            case 'jail': return { ok: !!castJail() };
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
@@ -1352,7 +1354,7 @@ const Game = {
             for (const f of Object.keys(MONSTER_FAMILIES)) if (d.familyLevels && Number.isInteger(d.familyLevels[f]) && d.familyLevels[f] > 0) this.familyLevels[f] = d.familyLevels[f];
             this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
             this.bossReward = d.bossReward || null;
-            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0 }, d.skills);
+            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0 }, d.skills);
             this.mana = d.mana || 0;
             this.powers = d.powers || {};
             this.applyPowerMods();

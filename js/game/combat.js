@@ -29,7 +29,8 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     const armor = sick && Game.power('venomPierce') ? 0 : (hero.armor || 0); // 권능 살을 파는 독
     const base = dot ? amount : Math.max(1, amount * big - armor);
     const rot = sick ? 1 + (Game.power('rotCurse') ? 0.15 : 0) + (Game.power('rotDeep') ? 0.3 : 0) : 1; // 권능 썩은 살, 깊은 부패
-    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot;
+    const held = hero.bound > 0 ? 1 + (Game.power('execBound') ? 0.2 : 0) + (Game.power('execDeep') ? 0.4 : 0) : 1; // 권능 형틀, 고문
+    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot * held;
     hero.hp -= dealt;
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);
@@ -52,6 +53,8 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
         Fx.burst(p.x, p.y - (hero.boss ? 140 : 45), color || '#ffd26a', 4, 260, 0.3, 6);
         Fx.anim(dealt >= 20 ? 'fx_hit_crit' : 'fx_hit_physical', p.x + randRange(-21, 21), p.y - (hero.boss ? 140 : 48) + randRange(-18, 18), dealt >= 20 ? 225 : 135, 0.26);
     }
+    // 권능 참수: 체력이 바닥인 묶인 일반 용사는 바로 쓰러진다
+    if (hero.hp > 0 && hero.bound > 0 && small && Game.power('execLow') && hero.hp <= hero.maxHp * COMBAT_RULES.chain.lowBelow) hero.hp = 0;
     if (hero.hp <= 0) killHero(hero, p, attacker);
     return dealt;
 }
@@ -73,6 +76,7 @@ function killHero(hero, pos, attacker) {
     const byPoison = Game.poisonKill;
     if (hero.poison > 0 || byPoison) plagueSpread(hero, pos);
     if (byPoison) plagueKill(hero, pos);
+    if (hero.bound > 0) chainKill(hero, pos);
     // 계약 조항: 되살아나는 용사는 체력 절반으로 다시 일어나고, 분열하는 정예는 일반 용사 여럿으로 갈라진다
     if (hero.revive) {
         heroRises(hero, hero.type, 0.5);
@@ -87,7 +91,7 @@ function killHero(hero, pos, attacker) {
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -503,6 +507,90 @@ function castMiasma() {
     const big = G.power('cloudBig');
     G.hazards.push({ kind: 'poison', x: p.x, y: p.y, radius: rule.radius * (big ? 2 : 1) * TILE, dps: rule.dps + rule.dpsPerRound * G.waveIndex, life: rule.duration + (big ? rule.bigDuration : 0), age: 0, tick: 0, owner: null });
     Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '숨 깊이 들이마셔.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// ----- 사슬의 군주 -----
+
+// 묶기: seconds초 동안 멈춘다(정지). 묶인 동안 처형 갈래의 보너스가 붙고, 끌기 갈래는 뒤로 당긴다
+function bindHero(h, seconds) {
+    const G = Game;
+    if (h.dead) return;
+    const t = seconds * (G.power('shackleLock') && h.boundOnce ? 1.5 : 1); // 권능 단단한 자물쇠: 두 번째부터 1.5배
+    h.boundOnce = true;
+    h.bound = Math.max(h.bound || 0, t);
+    applyStun(h, t);
+    if (h.boss) return;
+    const far = G.power('dragFar') ? 2 : 1;
+    const back = (G.power('dragBack') ? 0.5 : 0) + (h.elite && G.power('dragHook') ? 2 : 0);
+    if (back) h.d = Math.max(0, h.d - back * TILE * far);
+    // 권능 구덩이: 묶인 일반 용사 5명째마다 입구로
+    if (!h.elite && G.power('dragPit') && ++G.bindCount % COMBAT_RULES.chain.pitEvery === 0) h.d = 0;
+}
+
+// 몬스터에게 맞음: 확률로 묶는다(보스와 정예는 절반, 권능 무거운 족쇄면 정예도 그대로)
+function chainOnHit(hero) {
+    const G = Game;
+    const p = G.lordPassive('shackle');
+    if (!p || hero.dead || hero.bound > 0) return;
+    let chance = p.chance + (G.power('shackleChance') ? COMBAT_RULES.chain.chanceUp : 0);
+    if (hero.boss || (hero.elite && !G.power('shackleElite'))) chance *= 0.5;
+    if (rng('battle') >= chance) return;
+    const time = p.duration + (G.power('shackleLong') ? COMBAT_RULES.chain.longUp : 0);
+    bindHero(hero, time);
+    const w = heroWorld(hero);
+    Fx.ring(w.x, w.y - 10, 60, '#c9c2b8', 0.25);
+    // 권능 사슬 엮기: 1칸 안의 다른 용사 1명도 묶인다
+    if (G.power('shackleChain')) {
+        const other = G.heroes.find(h => h !== hero && !h.dead && !h.waiting && !h.boss && !(h.bound > 0) && distance(w.x, w.y, heroWorld(h).x, heroWorld(h).y) <= TILE);
+        if (other) bindHero(other, time);
+    }
+}
+
+// 묶임이 풀림: 권능 찢기는 사슬(최대 체력 5% 피해), 저린 다리(2초간 이동 -25%)
+function chainReleased(h) {
+    const G = Game;
+    if (G.power('shackleBreak')) {
+        const w = heroWorld(h);
+        damageHero(h, h.maxHp * COMBAT_RULES.chain.breakDamage, w.x, w.y, '#c9c2b8', null, true);
+    }
+    if (!h.dead && G.power('dragSlow')) slowHero(h, 2, 0.75);
+}
+
+// 묶인 채 쓰러짐: 권능 몸값(골드는 killHero), 형틀(정예 마력), 연쇄 형벌(1칸 안 1명 묶음)
+function chainKill(hero, pos) {
+    const G = Game;
+    if (hero.elite && G.power('execMana')) G.addMana(1, pos.x, pos.y - 140);
+    if (G.power('execChainKill')) {
+        const p = G.lordPassive('shackle');
+        const other = G.heroes.find(h => h !== hero && !h.dead && !h.waiting && !h.boss && distance(pos.x, pos.y, heroWorld(h).x, heroWorld(h).y) <= TILE);
+        if (other) bindHero(other, p ? p.duration : 0.6);
+    }
+}
+
+// 권능 사슬 감옥(E): 맨 앞 용사 둘레의 용사를 묶는다(보스는 짧게). 권능 쇠사슬 회수면 2칸 뒤로
+function castJail() {
+    const G = Game;
+    const rule = COMBAT_RULES.jail;
+    if (!G.power('jail') || G.skills.jail > 0) return false;
+    const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+    if (!front) return false;
+    G.skills.jail = G.skillCooldown('jail');
+    const c = heroWorld(front);
+    const big = G.power('jailBig');
+    const r = (rule.radius + (big ? 1 : 0)) * TILE;
+    const time = rule.duration + (big ? 1 : 0);
+    for (const h of G.heroes) {
+        if (h.dead || h.waiting) continue;
+        const w = heroWorld(h);
+        if (distance(c.x, c.y, w.x, w.y) > r) continue;
+        bindHero(h, h.boss ? rule.bossDuration : time);
+        if (!h.boss && G.power('dragAll')) h.d = Math.max(0, h.d - 2 * TILE * (G.power('dragFar') ? 2 : 1));
+    }
+    Fx.ring(c.x, c.y, r, '#c9c2b8', 0.45);
+    Fx.addShake(8);
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '면회는 금지다.', 2);
     Sfx.play('charge');
     return true;
 }

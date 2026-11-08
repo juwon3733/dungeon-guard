@@ -25,6 +25,7 @@ const STORY_CAST = {
     bone_queen: { name: '뼈의 여왕', lord: 'bone_queen' },
     gold_king: { name: '황금 마왕', lord: 'gold_king' },
     plague: { name: '역병의 군주', lord: 'plague' },
+    chain: { name: '사슬의 군주', lord: 'chain' },
     goblin: { name: '고블린 창병 꼬챙이', portrait: { sprite: 'pl_mon_goblin_spearman/rotations/south', crop: [12, 4, 24] } },
     warrior: { name: '견습 용사 덕수', portrait: { sprite: 'pl_hero_warrior/rotations/south', crop: [13, 3, 22] } },
     archmage: { name: '대마도사 몽글', portrait: { sprite: 'pl_boss_grand_wizard/rotations/south', crop: [31, 18, 28] } },
@@ -88,9 +89,11 @@ const STAGES = [
         ],
         outro: [
             ['gold_king', '잘했다. 유물 칸 하나 더 짜 주지. 이 해골 손, 모래시계, 열쇠는 담보로 맡겨 두마.'],
-            ['rift', '그거 내 전리품인데.']
+            ['rift', '그거 내 전리품인데.'],
+            ['chain', '정찰대가 남긴 포로는 내가 맡지. 감옥이 비어서 심심했다.'],
+            ['chain', '오늘부터 여기 간수다. 줄 서.']
         ],
-        unlocks: [{ kind: 'slot' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'mad_drum' }, { kind: 'relic', id: 'smith_hammer' }]
+        unlocks: [{ kind: 'lord', id: 'chain' }, { kind: 'slot' }, { kind: 'relic', id: 'storm_bottle' }, { kind: 'relic', id: 'mad_drum' }, { kind: 'relic', id: 'smith_hammer' }]
     },
     {
         id: 's5', mapId: 'parallel', no: 5, name: '수금하러 왔다', zone: 'sunForge', waves: firstRounds(50), hpMul: 0.9, goldBonus: 40, map: [1390, 610],
