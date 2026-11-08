@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -4055,6 +4055,19 @@ assert(Array.isArray(HQ_CONTENTS) && HQ_CONTENTS.map(c => c.id).join() === 'dail
 freshWindow();
 UI.update(0);
 assert(!hasBtn('collection') && hasBtn('start'), 'title: start only');
+assert(['title_account', 'title_full', 'title_settings', 'title_book'].every(hasBtn), 'title: account, full screen, settings, book');
+btn('title_settings');
+assert(UI.hqSettings && hasBtn('set_close') && !hasBtn('set_title') && !hasBtn('start'), 'title settings: no "to the title"');
+UI.onKey('Enter');
+assert(Game.state === 'title', 'title keys wait while settings are open');
+UI.onKey('Escape');
+assert(!UI.hqSettings && hasBtn('start'), 'Esc closes the title settings');
+btn('title_book');
+assert(UI.collection && Game.state === 'title', 'title: the book opens over the title');
+UI.onKey('Escape');
+assert(!UI.collection && Game.state === 'title' && hasBtn('start'), 'closing the book goes back to the title');
+btn('title_account');
+assert(UI.toast && Game.state === 'title', 'account: not ready yet');
 btn('start');
 assert(Game.state === 'hq' && !UI.hqView, 'title to the hq');
 UI.update(0);
@@ -6177,7 +6190,7 @@ console.log('smoke ok: equipment crafting');
 {
     const sctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
         Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
-    for (const f of [...files.filter(f => f !== 'js/ui/ui.js' && f !== 'js/ui/hq.js'), 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sctx, { filename: f });
+    for (const f of [...files.filter(f => !f.startsWith('js/ui/')), 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sctx, { filename: f });
     vm.runInContext('(' + (() => {
         const mythic = Object.keys(MONSTERS).filter(k => ['mythic', 'legendary'].includes(MONSTERS[k].grade) && (MONSTERS[k].skills || []).length && ASTERIA_ART[k]);
         for (const k of mythic) MONSTERS[k].skills.forEach((s, i) => assert(MONSTERS[k].art.anim['skill' + i] && MONSTERS[k].art.anim['skill' + i].frames === 8, k + ' skill motion ' + i));

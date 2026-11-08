@@ -129,6 +129,7 @@ Object.assign(UI, {
         this.afterRun = null;
         this.hqView = null;
         this.hqSettings = false;
+        this.titleSince = null; // 다음에 타이틀로 오면 다시 밝아진다
         this.wipeArmed = 0;
         this.cancel();
         this.returning = [];
@@ -193,21 +194,26 @@ Object.assign(UI, {
         this.wipeArmed = 0;
     },
 
+    // 설정 창(본부와 타이틀이 함께 쓴다). 타이틀에서는 "타이틀로"가 없다
+    layoutSettings() {
+        const x = GAME_WIDTH / 2 - 260;
+        // 음량 세 줄: − 와 + 로 10씩
+        HQ_VOLUME_ROWS.forEach(([kind], i) => {
+            const y = HQ_SETTINGS_Y + 110 + i * 84;
+            const step = d => () => { Sfx.setVolume(kind, Sfx.volume[kind] + d); saveSettings(); Sfx.play('click'); };
+            this.button(`vol_${kind}_down`, x + 250, y, 76, 64, { label: '−', size: 34, disabled: Sfx.volume[kind] <= 0, onClick: step(-10) });
+            this.button(`vol_${kind}_up`, x + 404, y, 76, 64, { label: '+', size: 34, disabled: Sfx.volume[kind] >= 100, onClick: step(10) });
+        });
+        const by = HQ_SETTINGS_Y + 370;
+        this.button('set_sound', x + 40, by, 440, 72, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
+        this.button('set_fx', x + 40, by + 86, 440, 72, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
+        if (Game.state !== 'title') this.button('set_title', x + 40, by + 172, 440, 72, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
+        this.button('set_close', x + 40, by + (Game.state === 'title' ? 186 : 270), 440, 72, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
+    },
+
     layoutHQ() {
         if (this.hqSettings) {
-            const x = GAME_WIDTH / 2 - 260;
-            // 음량 세 줄: − 와 + 로 10씩
-            HQ_VOLUME_ROWS.forEach(([kind], i) => {
-                const y = HQ_SETTINGS_Y + 110 + i * 84;
-                const step = d => () => { Sfx.setVolume(kind, Sfx.volume[kind] + d); saveSettings(); Sfx.play('click'); };
-                this.button(`vol_${kind}_down`, x + 250, y, 76, 64, { label: '−', size: 34, disabled: Sfx.volume[kind] <= 0, onClick: step(-10) });
-                this.button(`vol_${kind}_up`, x + 404, y, 76, 64, { label: '+', size: 34, disabled: Sfx.volume[kind] >= 100, onClick: step(10) });
-            });
-            const by = HQ_SETTINGS_Y + 370;
-            this.button('set_sound', x + 40, by, 440, 72, { label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', size: 28, onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } });
-            this.button('set_fx', x + 40, by + 86, 440, 72, { label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', size: 28, onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } });
-            this.button('set_title', x + 40, by + 172, 440, 72, { label: '타이틀로', icon: 'retry', size: 28, onClick: () => { this.hqSettings = false; Game.state = 'title'; } });
-            this.button('set_close', x + 40, by + 270, 440, 72, { label: '닫기', icon: 'close', size: 28, onClick: () => { this.hqSettings = false; } });
+            this.layoutSettings();
             return;
         }
         if (this.hqView) {
@@ -502,7 +508,7 @@ Object.assign(UI, {
         const T = UI_THEME;
         ctx.fillStyle = T.dim;
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, HQ_SETTINGS_Y, 520, 740);
+        UIKit.panel(ctx, GAME_WIDTH / 2 - 260, HQ_SETTINGS_Y, 520, Game.state === 'title' ? 656 : 740); // 타이틀에는 "타이틀로" 줄이 없다
         UIKit.text(ctx, '설정', GAME_WIDTH / 2, HQ_SETTINGS_Y + 66, 44, T.gold, 'center', 'bold');
         const x = GAME_WIDTH / 2 - 260;
         HQ_VOLUME_ROWS.forEach(([kind, label], i) => {

@@ -147,8 +147,7 @@ const UI = {
             return;
         }
         if (G.state === 'title') {
-            const label = Meta.data.cleared.length || Meta.data.runs ? '이어하기' : '시작하기';
-            this.button('start', 110, 540, 420, 100, { label, icon: 'lord', theme: 'gold', size: 38, onClick: () => this.openHQ() });
+            this.layoutTitle(); // js/ui/title.js
             return;
         }
         if (G.state === 'hq') {
@@ -1341,7 +1340,7 @@ const UI = {
             return;
         }
         if (G.state === 'title') {
-            if (code === 'Space' || code === 'Enter') this.openHQ();
+            this.onTitleKey(code); // js/ui/title.js
             return;
         }
         if (G.state === 'hq') {
@@ -1626,8 +1625,10 @@ const UI = {
             return;
         }
         if (G.state === 'title') {
-            this.drawTitle(ctx);
+            this.drawTitle(ctx); // js/ui/title.js
             this.drawButtons(ctx);
+            this.drawToast(ctx);
+            this.drawTitleFade(ctx);
             return;
         }
         if (G.state === 'hq') {
@@ -3392,32 +3393,6 @@ const UI = {
             UIKit.bigText(ctx, b.name, 660 + slide, 530, 88, '#ffffff', 'left', '#ffe0d8');
         }
         ctx.restore();
-    },
-
-    drawTitle(ctx) {
-        const T = UI_THEME;
-        this.drawIllust(ctx, 'ill_title', 0.12);
-        // 왼쪽 위에 어둠을 깔아 제목이 그림 위에서 읽히게 한다(도트 계단)
-        for (let i = 0; i < 12; i++) {
-            ctx.fillStyle = `rgba(6,4,12,${0.06 * (12 - i) / 2})`;
-            ctx.fillRect(0, 0, 900 - i * 40, GAME_HEIGHT);
-        }
-        ctx.save();
-        ctx.font = `bold 118px ${UI_FONT}`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.lineJoin = 'miter';
-        ctx.lineWidth = 16;
-        ctx.strokeStyle = '#0c0814';
-        ctx.strokeText('던전', 110, 250);
-        ctx.strokeText('수호대', 110, 380);
-        ctx.fillStyle = '#e8dcc0';
-        ctx.fillText('던전', 110, 250);
-        ctx.fillStyle = '#ff9a4d';
-        ctx.fillText('수호대', 110, 380);
-        ctx.restore();
-        UIKit.text(ctx, '', 118, 480, 28, T.cream, 'left');
-        UIKit.text(ctx, `스토리 ${Meta.data.cleared.length} / ${STAGES.length}`, 118, 690, 22, T.creamSoft, 'left');
     },
 
     drawResult(ctx) {
