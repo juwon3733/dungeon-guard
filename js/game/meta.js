@@ -36,11 +36,13 @@ function metaOldStageId(id) {
 }
 
 const Meta = {
+    key: META_KEY, // 로그인하면 계정 칸(META_KEY@계정 id)을 쓴다(js/core/account.js)
+    onSave: null, // 저장할 때마다 부른다(계정이면 서버로 올린다)
     data: null, // 아래에서 fresh()로 채운다
 
     // 처음 상태: 깬 스테이지 없음, 기록 없음
     fresh() {
-        return { version: META_VERSION, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false } };
+        return { version: META_VERSION, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false }, savedAt: 0 };
     },
 
     // 저장된 값을 쓸 수 있는 값으로 고친다. 모르는 id, 겹친 id, 숫자가 아닌 값은 버린다.
@@ -71,6 +73,7 @@ const Meta = {
         d.seen = metaIds(raw.seen, id => hasEntry(MONSTERS, id));
         d.recipes = metaIds(raw.recipes, k => typeof k === 'string' && keys.has(k));
         d.runs = metaCount(raw.runs);
+        d.savedAt = metaCount(raw.savedAt); // 마지막 저장 시각(ms). 서버와 이 기기 기록 중 새 것을 고를 때 쓴다
         // 튜토리얼: 본 기록이 없으면 판을 해 본 사람은 본 것으로 친다(이 기능 전부터 하던 사람)
         const tut = raw.tutorial && typeof raw.tutorial === 'object' ? raw.tutorial : null;
         d.tutorial = tut ? { hq: !!tut.hq, battle: !!tut.battle } : { hq: d.runs > 0, battle: d.runs > 0 };
@@ -90,16 +93,31 @@ const Meta = {
     load() {
         let raw = null;
         try {
-            raw = JSON.parse(localStorage.getItem(META_KEY) || 'null');
+            raw = JSON.parse(localStorage.getItem(this.key) || 'null');
         } catch (e) { /* 초기값 사용 */ }
         this.data = this.sanitize(raw);
         return this.data;
     },
 
+    // 다른 칸의 기록을 읽기만 한다(없으면 null)
+    peek(key) {
+        try {
+            const raw = JSON.parse(localStorage.getItem(key) || 'null');
+            return raw ? this.sanitize(raw) : null;
+        } catch (e) { return null; }
+    },
+
+    // 진행한 것이 있는 기록인지(빈 기록은 옮기거나 고를 필요가 없다)
+    hasProgress(d) {
+        return !!d && (d.runs > 0 || d.cleared.length > 0 || d.seen.length > 0);
+    },
+
     save() {
         try {
-            localStorage.setItem(META_KEY, JSON.stringify(this.data));
+            this.data.savedAt = Date.now();
+            localStorage.setItem(this.key, JSON.stringify(this.data));
         } catch (e) { /* 저장을 못 해도 이번 창에서는 기록이 남는다 */ }
+        if (this.onSave) this.onSave();
     },
 
     // 기록 지우기: 초기 상태로 되돌리고 저장한다

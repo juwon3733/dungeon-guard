@@ -29,6 +29,10 @@ Object.assign(UI, {
     titleLogoCache: null,
 
     layoutTitle() {
+        if (this.accountOpen()) {
+            this.layoutAccount(); // js/ui/account_ui.js
+            return;
+        }
         if (this.hqSettings) {
             this.layoutSettings(); // js/ui/hq.js
             return;
@@ -36,7 +40,7 @@ Object.assign(UI, {
         const label = Meta.data.cleared.length || Meta.data.runs ? '이어하기' : '시작하기';
         const S = TITLE_START;
         this.button('start', S.x, S.y, S.w, S.h, { label, icon: 'lord', theme: 'gold', size: 40, onClick: () => this.openHQ() });
-        this.button('title_account', GAME_WIDTH - 392, 28, 360, 68, { label: '계정: 손님', size: 26, onClick: () => this.showToast('로그인 · 준비 중') });
+        this.button('title_account', GAME_WIDTH - 392, 28, 360, 68, { label: Account.label(), size: 26, disabled: Account.status === 'checking', onClick: () => this.openAccount() });
         const y = GAME_HEIGHT - 118;
         const row = [
             ['title_full', '전체 화면', 'fast', () => this.toggleFullscreen()],
@@ -49,6 +53,10 @@ Object.assign(UI, {
     },
 
     onTitleKey(code) {
+        if (this.accountOpen()) {
+            this.onAccountKey(code);
+            return;
+        }
         if (this.hqSettings) {
             if (code === 'Escape') this.hqSettings = false;
             return;
@@ -93,6 +101,7 @@ Object.assign(UI, {
         UIKit.text(ctx, '© 2026 던전 수호대', 28, GAME_HEIGHT - 26, 18, 'rgba(195,204,230,0.6)', 'left');
         UIKit.text(ctx, `빌드 V${GAME_VERSION}`, GAME_WIDTH - 32, GAME_HEIGHT - 26, 18, 'rgba(195,204,230,0.6)', 'right');
         if (this.hqSettings) this.drawHqSettings(ctx);
+        if (this.accountOpen()) this.drawAccount(ctx);
     },
 
     // 들어올 때 검은 화면에서 밝아진다(0.8초, 6단계). 버튼까지 덮도록 버튼 다음에 그린다
