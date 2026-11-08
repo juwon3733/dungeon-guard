@@ -3,6 +3,9 @@
 // pivot은 Fx.anim에 넘긴 좌표가 닿는 그림 속 점, life는 재생 길이(초), fit은 화면 1배로 그리는 기준 size(화면 px)다.
 // loop가 true면 상태 표시처럼 Game.time에 맞춰 반복해 그린다(Render.drawLoopSheet). shot이 true면 투사체 그림이다(날아가는 방향으로 돌린다)
 const FX_SHEETS = {
+    // add: 검은 바탕 그림이라 빛을 더해(lighter) 그린다
+    // 정예와 보스 처치: Asteria 해적 선장의 동전 폭발(tools/import_asteria_gold.py)
+    fx_coin_blast: { image: 'pfx_coin_blast', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.6, fit: 128, add: true },
     // 정예 용사 오라: Asteria 모험가 오라 그대로(tools/import_asteria_heroes.py). 몸 뒤에서 돈다
     fx_aura_elite_swordsman: { image: 'pfx_aura_nightExecutioner', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
     fx_aura_elite_tamer: { image: 'pfx_aura_mistBlade', w: 128, h: 128, cols: 8, frames: 8, pivotX: 64, pivotY: 64, life: 0.8, fit: 128, loop: true },
