@@ -383,6 +383,9 @@ function castMonsterSkill(m, s, stats) {
     return true;
 }
 
+// 기술 동작을 재생하는 시간(일반 공격 ATTACK_POSE_TIME보다 길다)
+const SKILL_POSE_TIME = 0.75;
+
 // 쓰러졌거나 정지 중에는 부르지 않는다
 function updateMonsterSkills(m, dt) {
     const skills = MONSTERS[m.type].skills;
@@ -392,8 +395,12 @@ function updateMonsterSkills(m, dt) {
     skills.forEach((s, i) => {
         m.skillCd[i] -= dt;
         if (m.skillCd[i] <= 0) {
-            if (castMonsterSkill(m, s, stats)) m.skillCd[i] = s.cooldown;
-            else m.skillCd[i] = 0;
+            if (castMonsterSkill(m, s, stats)) {
+                m.skillCd[i] = s.cooldown;
+                // 기술마다 동작(art.anim.skill0, skill1)이 있으면 그것을 일반 공격보다 길게 재생한다
+                m.skillPose = i;
+                if (MONSTERS[m.type].art.anim['skill' + i]) m.atkPose = m.atkPoseMax = SKILL_POSE_TIME;
+            } else m.skillCd[i] = 0;
         }
     });
 }
@@ -551,6 +558,7 @@ function updateBlockMonster(m, dt) {
     if (m.atk > 0) return;
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
+    m.skillPose = -1;
     monsterDealt(m, damageHero(target, stats.damage, m.x, m.y, '#ffb76b', m));
     monsterHitHero(m.type, target, m);
     monsterCleave(m, target, stats.damage);
@@ -578,6 +586,7 @@ function updateSideMonster(m, dt) {
     faceTarget(m, tp.x, tp.y);
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
+    m.skillPose = -1;
     m.shot = { target, t: m.atkPoseMax * MONSTER_RELEASE };
 }
 

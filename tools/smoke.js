@@ -6173,4 +6173,19 @@ console.log('smoke ok: equipment crafting');
     }).toString() + ')()', fctx);
     console.log('smoke ok: family upgrade');
 }
+// 신화 몬스터는 기술마다 동작(skill0, skill1)이 있고, 기술을 쓰면 그 동작을 고른다. 일반 공격은 공격 동작
+{
+    const sctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of [...files.filter(f => f !== 'js/ui/ui.js' && f !== 'js/ui/hq.js'), 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sctx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const mythic = Object.keys(MONSTERS).filter(k => MONSTERS[k].grade === 'mythic');
+        for (const k of mythic) MONSTERS[k].skills.forEach((s, i) => assert(MONSTERS[k].art.anim['skill' + i] && MONSTERS[k].art.anim['skill' + i].frames === 8, k + ' skill motion ' + i));
+        const m = { type: 'time_witch', atkPose: 0.5, atkPoseMax: 0.75, dir: 'down', skillPose: 1 };
+        assert.strictEqual(Render.monsterFrame(MONSTERS.time_witch, m).clip.folder, 'skill1', 'skill motion picked');
+        m.skillPose = -1;
+        assert.strictEqual(Render.monsterFrame(MONSTERS.time_witch, m).clip.folder, 'attack', 'plain attack');
+    }).toString() + ')()', sctx);
+    console.log('smoke ok: mythic skill motions');
+}
 require('./smoke_maps.js');

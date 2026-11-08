@@ -466,5 +466,221 @@
   "y0": 16,
   "w": 219,
   "h": 232
+ },
+ "abyss_dragon_king#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 17,
+  "y0": 16,
+  "w": 221,
+  "h": 232
+ },
+ "abyss_dragon_king#skill1": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 17,
+  "y0": 16,
+  "w": 221,
+  "h": 232
+ },
+ "bone_dragon#skill0": {
+  "facing": "south",
+  "k": 0.8529411764705882,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "bone_dragon#skill1": {
+  "facing": "south",
+  "k": 0.8529411764705882,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "death_god#skill0": {
+  "facing": "south",
+  "k": 0.9872340425531915,
+  "canvas": 256,
+  "x0": 29,
+  "y0": 16,
+  "w": 197,
+  "h": 232
+ },
+ "death_god#skill1": {
+  "facing": "south",
+  "k": 0.9872340425531915,
+  "canvas": 256,
+  "x0": 29,
+  "y0": 16,
+  "w": 197,
+  "h": 232
+ },
+ "frost_drake#skill0": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 90,
+  "w": 232,
+  "h": 158
+ },
+ "frost_drake#skill1": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 90,
+  "w": 232,
+  "h": 158
+ },
+ "frost_queen#skill0": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 16,
+  "w": 200,
+  "h": 232
+ },
+ "frost_queen#skill1": {
+  "facing": "south",
+  "k": 1.0,
+  "canvas": 256,
+  "x0": 28,
+  "y0": 16,
+  "w": 200,
+  "h": 232
+ },
+ "god_king#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 18,
+  "y0": 16,
+  "w": 219,
+  "h": 232
+ },
+ "god_king#skill1": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 18,
+  "y0": 16,
+  "w": 219,
+  "h": 232
+ },
+ "kraken#skill0": {
+  "facing": "south",
+  "k": 0.8345323741007195,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 45,
+  "w": 232,
+  "h": 203
+ },
+ "kraken#skill1": {
+  "facing": "south",
+  "k": 0.8345323741007195,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 45,
+  "w": 232,
+  "h": 203
+ },
+ "moon_god#skill0": {
+  "facing": "south",
+  "k": 0.7811447811447811,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "moon_god#skill1": {
+  "facing": "south",
+  "k": 0.7811447811447811,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 21,
+  "w": 232,
+  "h": 227
+ },
+ "soul_devourer#skill0": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 94,
+  "w": 232,
+  "h": 154
+ },
+ "soul_devourer#skill1": {
+  "facing": "south",
+  "k": 0.7733333333333333,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 94,
+  "w": 232,
+  "h": 154
+ },
+ "star_whale#skill0": {
+  "facing": "south",
+  "k": 0.8592592592592593,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 68,
+  "w": 232,
+  "h": 180
+ },
+ "star_whale#skill1": {
+  "facing": "south",
+  "k": 0.8592592592592593,
+  "canvas": 256,
+  "x0": 12,
+  "y0": 68,
+  "w": 232,
+  "h": 180
+ },
+ "sun_god#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 51,
+  "y0": 16,
+  "w": 154,
+  "h": 232
+ },
+ "sun_god#skill1": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 51,
+  "y0": 16,
+  "w": 154,
+  "h": 232
+ },
+ "time_witch#skill0": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 58,
+  "y0": 16,
+  "w": 140,
+  "h": 232
+ },
+ "time_witch#skill1": {
+  "facing": "south",
+  "k": 0.8,
+  "canvas": 256,
+  "x0": 58,
+  "y0": 16,
+  "w": 140,
+  "h": 232
  }
 }
