@@ -383,13 +383,15 @@ const Render = {
     pactMarks(ctx, h, x, footY) {
         const u = 2 * ART_SCALE;
         if (h.shield) {
-            const sx = x + (h.dir === 'left' ? -16 : 16);
-            const sy = footY - 46;
-            const rows = ['.###.', '#@@@#', '#@@@#', '#@@@#', '.#@#.', '..#..'];
+            // 방패(계약 조항): 몸 옆에 9x10칸 연청 방패. 테, 밝은 면, 그늘, 반짝임
+            const sx = x + (h.dir === 'left' ? -22 : 22);
+            const sy = footY - 62;
+            const rows = ['.#######.', '#@@@@@@@#', '#@WW@@@%#', '#@W@@@@%#', '#@@@@@@%#', '#@@@@@%%#', '.#@@@@%#.', '..#@@%#..', '...#%#...', '....#....'];
+            const color = { '#': '#14203a', '@': '#8fd0ff', W: '#eaf7ff', '%': '#4f8fc4' };
             rows.forEach((row, r) => [...row].forEach((ch, k) => {
                 if (ch === '.') return;
-                ctx.fillStyle = ch === '#' ? '#1c2a44' : '#8fd0ff';
-                ctx.fillRect(snapWorld(sx + (k - 2.5) * u), snapWorld(sy + r * u), u, u);
+                ctx.fillStyle = color[ch];
+                ctx.fillRect(snapWorld(sx + (k - 4.5) * u), snapWorld(sy + r * u), u, u);
             }));
         }
         if (h.revive) {

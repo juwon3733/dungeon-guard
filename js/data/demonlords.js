@@ -170,10 +170,10 @@ const LORD_POWERS = {
     ],
     plague: [
         { id: 'venom', name: '맹독', desc: '독 강화', tiers: [
-            [{ id: 'venomStrong', name: '진한 독', desc: '독 피해 +40%' }, { id: 'venomLong', name: '오래가는 독', desc: '중독 시간 +2초' }],
+            [{ id: 'venomStrong', name: '진한 독', desc: '독 피해 +20%' }, { id: 'venomLong', name: '오래가는 독', desc: '중독 시간 +2초' }],
             [{ id: 'venomStack', name: '겹치는 독', desc: '독 3중첩' }, { id: 'venomSlow', name: '마비 독', desc: '중독된 용사 이동 -15%' }],
             [{ id: 'venomBurst', name: '독 폭발', desc: '중독 종료 시 2초치 피해 폭발' }, { id: 'venomPierce', name: '살을 파는 독', desc: '중독된 용사 방어력 무시' }],
-            [{ id: 'venomBoss', name: '거인 사냥', desc: '정예·보스에게 독 피해 2배' }, { id: 'venomDeath', name: '숨통', desc: '중독된 일반 용사 체력 10% 이하 즉사' }]
+            [{ id: 'venomBoss', name: '거인 사냥', desc: '정예·보스에게 독 피해 1.3배' }, { id: 'venomDeath', name: '숨통', desc: '중독된 일반 용사 체력 10% 이하 즉사' }]
         ] },
         { id: 'contagion', name: '전염', desc: '전염 강화', tiers: [
             [{ id: 'spreadWide', name: '넓은 전염', desc: '전염 범위 +1칸' }, { id: 'spreadStrong', name: '변이', desc: '전염된 독 피해 +50%' }],
@@ -223,8 +223,8 @@ const LORD_POWERS = {
         ] },
         { id: 'transmute', name: '변환', desc: '합치기 강화', tiers: [
             [{ id: 'transEdge', name: '은 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }, { id: 'transXp', name: '비친 경험', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
-            [{ id: 'transJump', name: '뒤틀린 상', desc: '합치기 2단계 상승 확률 +5%', mods: { mergeJump: 0.05 } }, { id: 'transRefund', name: '깨진 조각값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
-            [{ id: 'transRecipe', name: '조합 거울', desc: '조합식 보존 확률 2배' }, { id: 'transGold', name: '은 세공', desc: '합치기마다 골드(일반 5 ~ 신화 200)' }],
+            [{ id: 'transJump', name: '뒤틀린 상', desc: '합치기 2단계 상승 확률 +3%', mods: { mergeJump: 0.03 } }, { id: 'transRefund', name: '깨진 조각값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
+            [{ id: 'transRecipe', name: '조합 거울', desc: '조합식 보존 확률 2배' }, { id: 'transGold', name: '은 세공', desc: '합치기마다 골드(일반 3 ~ 신화 100)' }],
             [{ id: 'transUp', name: '금빛 거울', desc: '보존 재료 한 등급 상승(전설까지)' }, { id: 'transFree', name: '공짜 거울', desc: '라운드 첫 소환 무료' }]
         ] }
     ],
@@ -321,7 +321,7 @@ const DEMON_LORDS = {
         sprite: 'lord_rift', footPx: 120,
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개 맞은 용사 5초간 받는 피해 +40%', duration: 5, takenMul: 1.4 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
@@ -369,7 +369,7 @@ const DEMON_LORDS = {
         sprite: 'lord_chain', footPx: 120,
         portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 12% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.12, duration: 0.6 },
+        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 14% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.14, duration: 0.6 },
         speech: {
             waveStart: ['줄 맞춰 들어와라.'],
             throneHit: ['감히 간수를 쳐?'],
@@ -381,7 +381,7 @@ const DEMON_LORDS = {
         sprite: 'lord_mirror', footPx: 119,
         portrait: { sprite: 'lord_mirror', crop: [42, 8, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 15% 확률로 재료 1마리 보존', chance: 0.15 },
+        passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 12% 확률로 재료 1마리 보존', chance: 0.12 },
         speech: {
             waveStart: ['어서 와. 너도 둘이 되고 싶니?'],
             throneHit: ['내 거울에 금이 갔잖아.'],

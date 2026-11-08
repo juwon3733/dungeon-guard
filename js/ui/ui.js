@@ -2079,27 +2079,29 @@ const UI = {
 
     // 둥근 메달(스테이지 번호 표지, 깬 도장): 진한 테, 금 고리, 진한 빨강 보석, 위쪽 밝은 띠
     drawWaxSeal(ctx, cx, cy, r) {
+        // 도트 원: 2px 줄 단위로 쌓는다(부드러운 원 가장자리 대신 계단)
         const T = UI_THEME;
-        const disc = (rad, color) => {
+        const P = 2;
+        const x0 = Math.round(cx);
+        const y0 = Math.round(cy);
+        const disc = (rad, color, dy0) => {
             ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(Math.round(cx), Math.round(cy), rad, 0, Math.PI * 2);
-            ctx.fill();
+            for (let dy = -rad; dy < rad; dy += P) {
+                const mid = dy + P / 2;
+                const w = Math.round(Math.sqrt(Math.max(0, rad * rad - mid * mid)) / P) * P;
+                if (w > 0) ctx.fillRect(x0 - w, y0 + (dy0 || 0) + dy, w * 2, P);
+            }
         };
         disc(r + 3, T.outline);
         disc(r + 1, T.goldLine);
         disc(r - Math.max(2, Math.round(r / 7)), T.waxDark);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(Math.round(cx), Math.round(cy) - 2, r - Math.max(3, Math.round(r / 6)), 0, Math.PI * 2);
-        ctx.clip();
-        disc(r, T.wax);
-        ctx.restore();
-        ctx.strokeStyle = 'rgba(255,220,200,0.7)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(Math.round(cx), Math.round(cy), r * 0.66, Math.PI * 1.1, Math.PI * 1.6);
-        ctx.stroke();
+        disc(r - Math.max(3, Math.round(r / 6)), T.wax, -2);
+        // 왼쪽 위 반짝임: 작은 네모 세 개
+        const s = Math.max(P, Math.round(r / 6 / P) * P);
+        ctx.fillStyle = 'rgba(255,220,200,0.75)';
+        ctx.fillRect(x0 - Math.round(r * 0.5), y0 - Math.round(r * 0.45), s, s);
+        ctx.fillRect(x0 - Math.round(r * 0.5) + s, y0 - Math.round(r * 0.55), s, s);
+        ctx.fillRect(x0 - Math.round(r * 0.6), y0 - Math.round(r * 0.3), s, s);
     },
 
     // 마왕 탭의 유물 칸(고른 유물은 금 칸, 빈 칸은 쇠 칸)
@@ -3373,11 +3375,10 @@ const UI = {
             ctx.closePath();
             ctx.fill();
         }
-        const glow = ctx.createRadialGradient(rx, ry, 10, rx, ry, myth ? 320 : (legend ? 260 : 180));
-        glow.addColorStop(0, `rgba(${color},0.55)`);
-        glow.addColorStop(1, `rgba(${color},0)`);
-        ctx.fillStyle = glow;
-        ctx.fillRect(rx - 300, ry - 300, 600, 600);
+        // 빛무리: 겹친 도트 원 네 겹(바깥일수록 옅다)
+        const glowR = myth ? 320 : (legend ? 260 : 180);
+        ctx.fillStyle = `rgba(${color},0.12)`;
+        for (const k of [1, 0.75, 0.5, 0.28]) UIKit.pixelEllipse(ctx, rx, ry, glowR * k, glowR * k, 8);
         // 쏟아지는 반짝이(도트)
         for (let i = 0; i < (myth ? 110 : (legend ? 60 : 30)); i++) {
             const k = (d.age * 0.6 + i * 0.137) % 1;

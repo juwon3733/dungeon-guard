@@ -408,6 +408,19 @@ const UIKit = {
         return grad;
     },
 
+    // 도트 타원: p px 줄 단위로 계단지게 채운다(부드러운 가장자리 없음). 색과 투명도는 미리 정한다
+    pixelEllipse(ctx, cx, cy, rx, ry, p) {
+        const P = p || 4;
+        const x0 = Math.round(cx);
+        const y0 = Math.round(cy);
+        for (let dy = -Math.round(ry / P) * P; dy < ry; dy += P) {
+            const mid = (dy + P / 2) / ry;
+            if (Math.abs(mid) >= 1) continue;
+            const w = Math.round(rx * Math.sqrt(1 - mid * mid) / P) * P;
+            if (w > 0) ctx.fillRect(x0 - w, y0 + dy, w * 2, P);
+        }
+    },
+
     // 48px 아이콘(uiicon_<name>)을 정수 배율로
     icon(ctx, name, x, y, scale) {
         const img = this.img(`uiicon_${name}`);

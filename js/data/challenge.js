@@ -113,7 +113,7 @@ function dailyChallenge(date) {
 //   mutateEvery: 이 층수마다 변이(어렵게 만드는 규칙 카드)가 하나씩 쌓이고 지역이 바뀐다
 //   hpFrom, hpGrowth: 이 층부터 용사 체력이 층마다 몇 배로 늘어나는가. 일일 도전보다 가파르다
 //   scorePerMutation: 쌓인 변이 하나당 점수 배율
-const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.07, scorePerMutation: 0.25 };
+const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.06, scorePerMutation: 0.25 };
 
 // 주간 토벌전: 일주일 동안 모두 같은 시드, 같은 보스, 같은 조건으로 몇 단계까지 잡는지 겨룬다.
 //   tierEvery: 보스가 나오는 라운드 간격, tierHpGrowth: 보스를 잡을 때마다 다음 보스 체력 배율(곱해진다)
