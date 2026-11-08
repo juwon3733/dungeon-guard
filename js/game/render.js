@@ -707,7 +707,7 @@ const Render = {
     monsterFrame(def, m) {
         const art = def.art;
         if (m.atkPose > 0) {
-            const clip = art.anim.attack;
+            const clip = (m.skillPose >= 0 && art.anim['skill' + m.skillPose]) || art.anim.attack; // 기술 동작이 있으면 그것
             return { clip, name: this.plFrame(def, clip, m.dir, this.attackFrame(m.atkPose, m.atkPoseMax, clip.frames)) };
         }
         if (m.moving && art.anim.walk) {

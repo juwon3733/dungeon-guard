@@ -111,19 +111,22 @@ def flip(im):
 ATTACK_SRC = os.path.join(ROOT, 'tools', 'attack_frames')
 ATTACK_META = json.load(open(os.path.join(ATTACK_SRC, 'meta.json'), encoding='utf8')) if os.path.exists(os.path.join(ATTACK_SRC, 'meta.json')) else {}
 
-def attack_clip(mid, sprite):
-    am = ATTACK_META[mid]
+def attack_clip(mid, sprite, key=None, folder='attack'):
+    # key: 메타 열쇠(기술 동작은 '<id>#skill<i>'이고 프레임은 tools/attack_frames/<id>_skill<i>/)
+    key = key or mid
+    am = ATTACK_META[key]
+    src = key.replace('#', '_')
     inv = 1 / am['k']
     n = 0
     for i in range(1, 9):
-        path = os.path.join(ATTACK_SRC, mid, f'frame_{i}.png')
+        path = os.path.join(ATTACK_SRC, src, f'frame_{i}.png')
         if not os.path.exists(path): break
         im = Image.open(path).convert('RGBA')
         if am['k'] < 1: im = im.resize((round(im.width * inv), round(im.height * inv)), Image.NEAREST)
-        save(im, sprite, 'attack', am['facing'], n)
+        save(im, sprite, folder, am['facing'], n)
         n += 1
     foot = round((am['y0'] + am['h']) * inv)  # 캔버스 안 발끝(대기 그림을 놓은 자리의 아래)
-    return {'folder': 'attack', 'frames': n, 'dirs': [am['facing']], 'footPx': {am['facing']: foot}}
+    return {'folder': folder, 'frames': n, 'dirs': [am['facing']], 'footPx': {am['facing']: foot}}
 
 art = {}
 for mid, (src, w, h) in ART.items():
@@ -164,6 +167,9 @@ for mid, (src, w, h) in ART.items():
     if mid in ATTACK_META:
         anim['attack'] = attack_clip(mid, sprite)
         still = False
+    for i in range(4):  # 신화 몬스터의 기술별 동작(Render.monsterFrame이 기술을 쓸 때 고른다)
+        if f'{mid}#skill{i}' in ATTACK_META:
+            anim[f'skill{i}'] = attack_clip(mid, sprite, f'{mid}#skill{i}', f'skill{i}')
     rot = os.path.join(OUT, sprite, 'rotations'); os.makedirs(rot, exist_ok=True)
     first = scaled(trimmed(front), k)
     first.save(os.path.join(rot, 'south.png'))
