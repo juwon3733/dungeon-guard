@@ -111,7 +111,8 @@ if (process.argv[4] === 'abyss') {
 if (process.argv[4] === 'lords') {
     vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
     const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
-    const lords = vm.runInContext('Object.keys(DEMON_LORDS)', context);
+    // 6번째 값으로 마왕 하나만(쉼표로 여럿) 잴 수 있다: 여러 창에서 나눠 돌릴 때
+    const lords = vm.runInContext('Object.keys(DEMON_LORDS)', context).filter(id => !process.argv[6] || process.argv[6].split(',').includes(id));
     for (const lord of lords) {
         for (let b = 0; b < 3; b++) {
             const rs = [];

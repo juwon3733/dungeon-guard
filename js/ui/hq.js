@@ -430,16 +430,12 @@ Object.assign(UI, {
         const foot = f.y + size;
         ctx.save();
         ctx.fillStyle = 'rgba(10,6,4,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(cx, foot - 8, size * 0.4, 14, 0, 0, Math.PI * 2);
-        ctx.fill();
+        UIKit.pixelEllipse(ctx, cx, foot - 8, size * 0.4, 14, 4);
         if (f.main) {
             // 도전의 문: 문 안쪽에서 새는 붉은 빛(숨쉬듯)
             const a = 0.22 + Math.sin(Game.time * 2.2) * 0.08;
             ctx.fillStyle = `rgba(255,120,60,${a})`;
-            ctx.beginPath();
-            ctx.ellipse(cx, foot - 10, size * 0.5, 30, 0, 0, Math.PI * 2);
-            ctx.fill();
+            UIKit.pixelEllipse(ctx, cx, foot - 10, size * 0.5, 30, 4);
         }
         ctx.restore();
         if (!img) return;

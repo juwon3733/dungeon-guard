@@ -2776,7 +2776,7 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
         const p = heroWorld(h);
         const before = h.hp = 1000;
         resolveStrike({ x: p.x, y: p.y });
-        assert.strictEqual(before - h.hp, 60, 'lightning damage x1.5');
+        assert.strictEqual(before - h.hp, COMBAT_RULES.lightning.damage * 1.5, 'lightning damage x1.5');
     }
 
     // heroSpeed
@@ -6440,12 +6440,12 @@ console.log('smoke ok: equipment crafting');
         const r = hero();
         monsterHitHero(imp.type, r, imp);
         assert(!(r.poison > 0), 'only the plague lord poisons');
-        // 겹치는 독 3번, 진한 독 1.4배
+        // 겹치는 독 3번, 진한 독 1.2배
         start(['venomStack', 'venomStrong']);
         const s = hero();
         for (let i = 0; i < 5; i++) poisonHero(s, 3, 10, null);
         assert.strictEqual(s.poisonStacks, 3, 'three stacks at most');
-        assert(Math.abs(poisonDps(s) - 10 * 3 * 1.4) < 1e-9, 'stacked and strong');
+        assert(Math.abs(poisonDps(s) - 10 * 3 * 1.2) < 1e-9, 'stacked and strong');
         // 오래가는 독, 숨통(일반 용사 체력 10% 이하 즉사)
         start(['venomLong', 'venomDeath']);
         const t = hero();

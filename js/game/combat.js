@@ -457,9 +457,9 @@ function poisonHero(hero, seconds, dps, owner, spread) {
 function poisonDps(h) {
     const G = Game;
     let d = h.poisonDps * Math.max(1, h.poisonStacks);
-    if (G.power('venomStrong')) d *= 1.4;
+    if (G.power('venomStrong')) d *= 1.2;
     if (h.poisonSpread && G.power('spreadStrong')) d *= 1.5;
-    if ((h.boss || h.elite) && G.power('venomBoss')) d *= 2;
+    if ((h.boss || h.elite) && G.power('venomBoss')) d *= 1.3;
     return d;
 }
 
