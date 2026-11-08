@@ -52,6 +52,8 @@ export const SHEETS = [
     { image: 'pfx_jester_disc', id: 'projectiles/energy-disc', options: { palette: PAL.jester, teeth: 4 }, from: 0, to: 14, step: 1, up: 0 },
     // 능력 효과
     { image: 'pfx_burning', id: 'fire/spirit-flame', options: { palette: PAL.fire }, from: 0, to: 84, step: 6, up: 0 },
+    // 입구 문 안쪽 소용돌이(arcane/portal, 반복)
+    { image: 'pfx_portal', id: 'arcane/portal', options: { width: 16, height: 41 }, from: 0, to: 58, step: 2, up: 0 },
     // 역병의 군주: 독 구름(스킬), 산 튀김(독이 옮을 때). 독 걸림 표시는 Render.poisonBubbles(status/poisoned는 몸 그림까지 그려 쓰지 않는다)
     { image: 'pfx_poison_cloud', id: 'nature/poison-cloud', options: {}, from: 0, to: 112, step: 8, up: 0 },
     { image: 'pfx_acid_splash', id: 'nature/acid-splash', options: {}, from: 12, to: 48, step: 3, up: 0 },
