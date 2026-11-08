@@ -77,12 +77,14 @@ def trimmed(im):
     box = im.getchannel('A').point(lambda v: 255 if v > 16 else 0).getbbox()
     return im.crop(box)
 
-def fit(im, w_cells, h_cells):
+def fit_k(im, w_cells, h_cells):
     # 가로는 칸 너비의 1.25배, 세로는 칸 높이에 머리 위 여유를 둔다
     box_w = w_cells * CELL * 1.25
     box_h = h_cells * CELL + 50
     if current in EPIC_BOX: box_w = box_h = EPIC_BOX[current]  # 1칸 영웅: 일반보다 조금 크게
-    k = min(1.5 if w_cells * h_cells >= 4 else 1, box_w / im.width, box_h / im.height)
+    return min(1.5 if w_cells * h_cells >= 4 else 1, box_w / im.width, box_h / im.height)
+
+def scaled(im, k):
     if k == 1: return im
     return im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS if k < 1 else Image.NEAREST)
 
@@ -91,18 +93,37 @@ def save(im, sprite, folder, facing, i):
     os.makedirs(d, exist_ok=True)
     im.save(os.path.join(d, f'frame_{i:03d}.png'))
 
-def clip_of(sprite, folder, frames_by_dir, w, h):
-    # frames_by_dir: { facing: [그림...] }. 같은 동작은 첫 프레임으로 크기를 정해 발끝을 맞춘다
+def clip_of(sprite, folder, frames_by_dir, k):
+    # frames_by_dir: { facing: [그림...] }. 한 몬스터의 모든 그림은 같은 배율 k로 줄인다(자세가 바뀔 때 몸 크기가 튀지 않게)
     foot = {}
     for facing, frames in frames_by_dir.items():
         for n, im in enumerate(frames):
-            out = fit(trimmed(im), w, h)
+            out = scaled(trimmed(im), k)
             save(out, sprite, folder, facing, n)
             if n == 0: foot[facing] = out.height
     return {'folder': folder, 'frames': len(next(iter(frames_by_dir.values()))), 'dirs': list(frames_by_dir), 'footPx': foot}
 
 def flip(im):
     return im.transpose(Image.FLIP_LEFT_RIGHT)
+
+# PixelLab으로 대기 그림에서 만든 공격 프레임(tools/attack_frames/<id>/frame_1..8.png, 캔버스 안 자리와 배율은 meta.json).
+# 있으면 그 8장을 공격 동작으로 쓴다. 256px을 넘는 큰 그림은 줄여서 만들었으므로 원래 배율로 되돌린다
+ATTACK_SRC = os.path.join(ROOT, 'tools', 'attack_frames')
+ATTACK_META = json.load(open(os.path.join(ATTACK_SRC, 'meta.json'), encoding='utf8')) if os.path.exists(os.path.join(ATTACK_SRC, 'meta.json')) else {}
+
+def attack_clip(mid, sprite):
+    am = ATTACK_META[mid]
+    inv = 1 / am['k']
+    n = 0
+    for i in range(1, 9):
+        path = os.path.join(ATTACK_SRC, mid, f'frame_{i}.png')
+        if not os.path.exists(path): break
+        im = Image.open(path).convert('RGBA')
+        if am['k'] < 1: im = im.resize((round(im.width * inv), round(im.height * inv)), Image.NEAREST)
+        save(im, sprite, 'attack', am['facing'], n)
+        n += 1
+    foot = round((am['y0'] + am['h']) * inv)  # 캔버스 안 발끝(대기 그림을 놓은 자리의 아래)
+    return {'folder': 'attack', 'frames': n, 'dirs': [am['facing']], 'footPx': {am['facing']: foot}}
 
 art = {}
 for mid, (src, w, h) in ART.items():
@@ -111,34 +132,40 @@ for mid, (src, w, h) in ART.items():
     sprite = f'ast_mon_{mid}'
     shutil.rmtree(os.path.join(OUT, sprite), ignore_errors=True)
     if kind == 'b':
+        # 보스 그림은 정면만 해상도가 높고 옆모습과 기술 자세(windup, slam)는 절반 남짓한 다른 그림이다.
+        # 섞으면 자세가 바뀔 때 몸 크기가 절반으로 튀므로 정면 한 장만 쓰고 공격은 코드 동작으로 한다
         front = load(f'boss_{name}_down')
-        side = load(f'boss_{name}_left')
-        poses = [load(f'boss_{name}_{p}') for p in (('windup', 'cast') if mid in RANGED else ('windup', 'slam'))]
+        side = None
+        poses = []
         walk = None
     else:
         pre = 'enemy' if kind == 'e' else 'pet'
         pname = name if kind == 'e' else name + '_evo'
         front = load(f'{pre}_{pname}_down')
         side = load(f'{pre}_{pname}_left')
-        at = load(f'anim_{name}_attack')
-        poses = [at] if at else [None]
-        w0, w1 = load(f'anim_{name}_walk0'), load(f'anim_{name}_walk1')
-        walk = [w0, w1] if w0 and w1 else None
+        # 일반 적의 공격·걷기 그림(anim_)은 해상도가 낮은 작은 그림이라 대기 그림과 크기가 맞지 않는다(키 45px 대 75px).
+        # 쓰지 않고, 큰 옆모습 한 장에 코드가 돌진·반동 동작을 준다(Render.monsterPose)
+        poses = []
+        walk = None
     assert front is not None, mid
     idle = {'south': [front]}
     if side is not None: idle['east'] = [flip(side)]
-    anim = {'idle': clip_of(sprite, 'idle', idle, w, h)}
+    k = fit_k(trimmed(front), w, h)  # 정면 그림으로 정한 배율 하나를 옆모습과 공격 그림에도 쓴다
+    anim = {'idle': clip_of(sprite, 'idle', idle, k)}
     poses = [p for p in poses if p is not None]
     # 앞모습 그림은 머리 쪽 여유가 달라 공격 그림이 없으면 한 장을 쓰고 코드가 앞으로 내지른다
     still = not poses
     if poses:
-        anim['attack'] = clip_of(sprite, 'attack', {'east': [flip(p) for p in poses]}, w, h)
+        anim['attack'] = clip_of(sprite, 'attack', {'east': [flip(p) for p in poses]}, k)
     else:
         anim['attack'] = anim['idle']
     if walk:
-        anim['walk'] = clip_of(sprite, 'walking', {'east': [flip(p) for p in walk]}, w, h)
+        anim['walk'] = clip_of(sprite, 'walking', {'east': [flip(p) for p in walk]}, k)
+    if mid in ATTACK_META:
+        anim['attack'] = attack_clip(mid, sprite)
+        still = False
     rot = os.path.join(OUT, sprite, 'rotations'); os.makedirs(rot, exist_ok=True)
-    first = fit(trimmed(front), w, h)
+    first = scaled(trimmed(front), k)
     first.save(os.path.join(rot, 'south.png'))
     art[mid] = {'sprite': sprite, 'cells': [w, h], 'height': first.height, 'width': first.width, 'still': still, 'anim': anim}
     print(mid, src, f'{w}x{h}', first.size, 'poses', len(poses), 'walk', bool(walk))

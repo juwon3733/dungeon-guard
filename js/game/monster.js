@@ -198,6 +198,12 @@ function monsterEnrage(m) {
 // 몬스터의 공격이 용사에게 맞음: 맞은 뒤 걸리는 능력(저주, 화상, 빙결, 악몽)을 적용한다. 피해를 준 다음에 부른다.
 // owner는 쏜 몬스터(화상 피해로 쓰러뜨리면 처치 경험치를 받는다. 없어도 된다)
 // 몬스터 능력에 맞는 명중 소리: 불, 얼음, 번개, 저주, 기절. 없으면 기본 소리(fallback)
+// 공격할 대상 쪽으로 돈다. 공격 그림이 옆모습뿐이면 위아래 대상도 왼쪽이나 오른쪽을 보고 친다(그림이 정면과 옆을 오가며 튀지 않게)
+function faceTarget(m, x, y) {
+    const dirs = MONSTERS[m.type].art.anim.attack.dirs || [];
+    m.dir = dirs.includes('south') || dirs.includes('north') ? dirFromVector(x - m.x, y - m.y) : (x >= m.x ? 'right' : 'left');
+}
+
 function monsterHitSfx(type, fallback) {
     const kinds = (MONSTERS[type] && MONSTERS[type].abilities || []).map(a => a.kind);
     if (kinds.includes('burnShot') || kinds.includes('burnGround')) return 'hitFire';
@@ -540,7 +546,7 @@ function updateBlockMonster(m, dt) {
     const target = holdHeroes(m, stats.block, stats.range);
     if (!target) return;
     const tp = heroWorld(target);
-    m.dir = dirFromVector(tp.x - m.x, tp.y - m.y);
+    faceTarget(m, tp.x, tp.y);
     m.atk -= dt;
     if (m.atk > 0) return;
     m.atk = stats.interval;
@@ -569,7 +575,7 @@ function updateSideMonster(m, dt) {
     const target = foremostHero(m.x, m.y, stats.range * TILE);
     if (!target) { m.atk = 0.08; return; }
     const tp = heroWorld(target);
-    m.dir = dirFromVector(tp.x - m.x, tp.y - m.y);
+    faceTarget(m, tp.x, tp.y);
     m.atk = stats.interval;
     m.atkPose = m.atkPoseMax = Math.min(ATTACK_POSE_TIME, stats.interval);
     m.shot = { target, t: m.atkPoseMax * MONSTER_RELEASE };

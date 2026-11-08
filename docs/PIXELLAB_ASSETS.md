@@ -160,6 +160,12 @@ cute fantasy game unit, chunky readable silhouette, bright saturated colors, cle
 1. 용사 3종, 오크, 몬스터 23종, 정예 4종, 보스 2종, 마왕 3명, 맵 타일, 소품, 장비, 유물, UI 아이콘을 만들어 연결했다.
 2. UI는 Asteria 구성(남색 창, 금선, 은청색 버튼, 금테 칸)으로 바꿨다(`ui_window` 등 48px 틀, `uiicon_*`, 규칙은 `docs/ART_BIBLE.md`).
 
+### Asteria 몬스터 공격 프레임 (2026-11-08)
+
+Asteria 몬스터 52종의 공격 동작은 PixelLab `animate_image_pixminimax`(8프레임, 마리당 1회)로 만들었다. 첫 프레임과 마지막 프레임을 그 몬스터의 대기 그림(옆모습이 있으면 옆, 없으면 정면)으로 고정해 대기에서 공격으로 갔다가 대기로 돌아온다.
+256px을 넘는 큰 그림은 줄여서 만들고(`k`) 가져올 때 원래 배율로 되돌린다. 원본은 `tools/attack_frames/<id>/frame_1..8.png`와 `meta.json`(방향, 배율, 캔버스 안 자리)이고, `tools/import_asteria_monsters.py`가 공격 동작으로 넣는다.
+Asteria의 원래 공격·걷기 그림(일반 적 `anim_*`, 보스 옆모습과 기술 자세)은 해상도가 대기 그림과 달라 몸 크기가 튀어 쓰지 않는다. 지시문은 역할(근접, 원거리, 광역, 지원)과 방향으로 정했고, 효과 없이 몸만 움직이라고 해도 휘두르는 궤적이 일부 그려진다.
+
 ### Asteria 몬스터 그림 (2026-11-07)
 
 `assets/sprites/ast_mon_<id>/`는 사용자 게임 Asteria 빌드의 몹·보스 그림이다. PixelLab과 같은 폴더 구조이고 `tools/import_asteria_monsters.py`로 다시 만든다. 어떤 몬스터에 어떤 원본을 쓰는지는 그 스크립트의 `ART` 표에 있다.
