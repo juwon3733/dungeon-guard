@@ -999,31 +999,32 @@ const Render = {
         this.posedSprite(ctx, img, def.art, clip, m.dir, m.x, footY, pose);
     },
 
-    // 프레임이 적은 Asteria 그림(art.breathe)의 자세. 배율을 바꾸지 않고 위치와 가로줄 밀기만 쓴다(도트가 일그러지지 않는다)
-    //   dx, dy: 몸 전체 이동(세계 px), shear: 발에서 머리로 갈수록 그림 px당 밀리는 양(공격 때만)
+    // 프레임이 적은 Asteria 그림(art.breathe)의 자세. 공격은 Asteria 적과 같은 돌진·반동(기울이기와 늘이기), 대기는 위아래 움직임
+    //   dx, dy: 몸 전체 이동(세계 px), tilt: 발끝을 축으로 기울기(라디안), sx, sy: 가로·세로 늘이기(공격 때만)
     //   대기 때는 그림 한 장을 통째로 위아래로 움직인다(그림을 자르지 않아 이음선이 생기지 않는다). 나는 몬스터는 크게 떠오른다
     monsterPose(def, m) {
-        const pose = { dx: 0, dy: 0, shear: 0 };
+        const pose = { dx: 0, dy: 0, tilt: 0, sx: 1, sy: 1 };
         if (!def.art.breathe) return pose;
         if (m.atkPose > 0) {
-            const t = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
+            // Asteria 적 공격 동작: 근접은 앞으로 튀어 나가며 기울고 가로로 늘었다 돌아오고(돌진),
+            // 원거리는 뒤로 밀리며 세로로 늘어난다(반동). 처음 25%에 끝까지 갔다가 나머지 75%에 돌아온다
+            const a = 1 - m.atkPose / (m.atkPoseMax || m.atkPose);
+            const s = a < 0.25 ? a / 0.25 : 1 - (a - 0.25) / 0.75;
             const melee = MONSTER_ROLES[def.role].melee;
             const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[m.dir] || [0, 1];
-            let k;
+            const big = clamp(((def.art.barY || 90) - 14) / ART_SCALE / 76, 1, 2); // 큰 몬스터는 그림 키(barY에서 거꾸로)만큼 크게 움직인다
             if (melee) {
-                // 뒤로 젖혔다가(준비) 빠르게 내지르고, 잠깐 멈췄다가 돌아온다
-                if (t < 0.25) k = -Math.sin(t / 0.25 * Math.PI / 2) * 0.5;
-                else if (t < 0.4) k = -0.5 + (t - 0.25) / 0.15 * 1.5;
-                else if (t < 0.6) k = 1;
-                else k = 1 - (t - 0.6) / 0.4;
+                pose.dx = 22 * dir[0] * s * big * ART_SCALE;
+                pose.dy = 12 * dir[1] * s * big * ART_SCALE;
+                pose.tilt = 0.3 * dir[0] * s;
+                pose.sx = 1 + 0.16 * s;
+                pose.sy = 1 - 0.1 * s;
             } else {
-                // 원거리: 쏘는 순간 뒤로 조금 밀린다
-                k = t < 0.15 ? t / 0.15 * 0.2 : -Math.sin((t - 0.15) / 0.85 * Math.PI) * 0.5;
+                pose.dx = -10 * dir[0] * s * big * ART_SCALE;
+                pose.dy = -6 * dir[1] * s * big * ART_SCALE;
+                pose.sy = 1 + 0.1 * s;
+                pose.sx = 1 - 0.06 * s;
             }
-            const size = (melee ? 1 : 0.6) * (def.art.anim.attack.frames > 2 ? 0.4 : 1);
-            pose.dx = dir[0] * k * 40 * size;
-            pose.dy = dir[1] * k * 20 * size;
-            pose.shear = dir[0] * k * 0.3 * size;
             return pose;
         }
         const phase = (m.homeX || m.x || 0) * 0.013 + (m.homeY || m.y || 0) * 0.007;
@@ -1035,34 +1036,22 @@ const Render = {
         return pose;
     },
 
-    // 자세대로 그린다. 그림을 4px 가로줄로 나눠 밀기 때문에 기울여도 도트 크기가 그대로다
+    // 자세대로 그린다: 그림 한 장을 발끝을 축으로 옮기고, 기울이고, 늘이고 누른다(Asteria와 같은 방식, 그림을 자르지 않는다)
     posedSprite(ctx, img, art, clip, dir, x, footY, pose) {
         if (!img) return;
         const pick = this.plPick(clip, dir);
         const footPx = typeof clip.footPx === 'number' ? clip.footPx : clip.footPx[pick.facing];
-        if (!pose.shear) {
+        if (!pose.tilt && (pose.sx || 1) === 1 && (pose.sy || 1) === 1) {
             this.sprite(ctx, img, x + pose.dx, footY + pose.dy, art.scale, footPx, pick.flip);
             return;
         }
         const s = art.scale;
-        const iw = img.width;
-        const ih = img.height;
-        const left = snapWorld(x + pose.dx - iw * s / 2);
-        const top = snapWorld(footY + pose.dy - footPx * s);
-        ctx.imageSmoothingEnabled = false;
         ctx.save();
-        if (pick.flip) {
-            ctx.translate(left + iw * s, top);
-            ctx.scale(-1, 1);
-        } else {
-            ctx.translate(left, top);
-        }
-        const band = 4;
-        for (let sy = 0; sy < ih; sy += band) {
-            const bh = Math.min(band, ih - sy);
-            const shift = Math.round(pose.shear * Math.max(0, footPx - sy)) * (pick.flip ? -1 : 1);
-            ctx.drawImage(img, 0, sy, iw, bh, shift * s, sy * s, iw * s, bh * s);
-        }
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(snapWorld(x + pose.dx), snapWorld(footY + pose.dy));
+        ctx.rotate(pose.tilt || 0);
+        ctx.scale((pose.sx || 1) * (pick.flip ? -1 : 1), pose.sy || 1);
+        ctx.drawImage(img, -img.width * s / 2, -footPx * s, img.width * s, img.height * s);
         ctx.restore();
     },
 
