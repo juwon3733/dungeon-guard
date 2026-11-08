@@ -461,7 +461,9 @@ const Render = {
                 // 정예 표시: 몸 뒤에서 도는 Asteria 오라(그림 1px = 화면 1px). 검은 바탕 그림이라 빛을 더해 그린다
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
-                this.drawLoopSheet(ctx, `fx_aura_${h.type}`, p.x, p.y + 10 - def.barY * 0.45, 128 * ART_SCALE, h.lane * 0.13, 0.9);
+                // 여럿이 모이면 화면을 덮으므로 옅게: 기본 0.45, 정예가 셋을 넘으면 그만큼 더 옅게
+                const elites = Game.heroes.reduce((n, o) => n + (o.elite && !o.dead && !o.waiting ? 1 : 0), 0);
+                this.drawLoopSheet(ctx, `fx_aura_${h.type}`, p.x, p.y + 10 - def.barY * 0.45, 128 * ART_SCALE, h.lane * 0.13, 0.45 * Math.min(1, 3 / Math.max(1, elites)));
                 ctx.restore();
             } else {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);
@@ -1670,7 +1672,7 @@ const Render = {
         const img = sheet && Assets.get(sheet.image);
         if (!img) return;
         const f = clamp(frame, 0, sheet.frames - 1);
-        const s = Math.max(1, Math.round(size * WORLD_ZOOM / sheet.fit)) / WORLD_ZOOM;
+        const s = Math.max(sheet.px || FX_PIXEL, Math.round(size * WORLD_ZOOM / sheet.fit)) / WORLD_ZOOM;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         if (alpha !== undefined) ctx.globalAlpha *= alpha;
@@ -1724,7 +1726,7 @@ const Render = {
             const img = sheet && Assets.get(sheet.image);
             if (!img) continue;
             const frame = Math.min(sheet.frames - 1, Math.floor(a.age / a.life * sheet.frames));
-            const k = Math.max(1, Math.round(a.size * WORLD_ZOOM / sheet.fit));
+            const k = Math.max(sheet.px || FX_PIXEL, Math.round(a.size * WORLD_ZOOM / sheet.fit));
             const s = k / WORLD_ZOOM;
             const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
             const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
