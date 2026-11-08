@@ -52,6 +52,9 @@ export const SHEETS = [
     { image: 'pfx_jester_disc', id: 'projectiles/energy-disc', options: { palette: PAL.jester, teeth: 4 }, from: 0, to: 14, step: 1, up: 0 },
     // 능력 효과
     { image: 'pfx_burning', id: 'fire/spirit-flame', options: { palette: PAL.fire }, from: 0, to: 84, step: 6, up: 0 },
+    // 역병의 군주: 독 구름(스킬), 산 튀김(독이 옮을 때). 독 걸림 표시는 Render.poisonBubbles(status/poisoned는 몸 그림까지 그려 쓰지 않는다)
+    { image: 'pfx_poison_cloud', id: 'nature/poison-cloud', options: {}, from: 0, to: 112, step: 8, up: 0 },
+    { image: 'pfx_acid_splash', id: 'nature/acid-splash', options: {}, from: 12, to: 48, step: 3, up: 0 },
     { image: 'pfx_fire_ground', id: 'fire/fire-ring', options: { reach: 60 }, from: 15, to: 36, step: 3, up: 0 },
     { image: 'pfx_snowflake', id: 'ice/snowflake-burst', options: {}, from: 0, to: 57, step: 3, up: 30 },
     { image: 'pfx_stunned', id: 'status/stunned', options: {}, from: 0, to: 56, step: 4, up: 0 },

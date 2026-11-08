@@ -25,8 +25,11 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     // Why: 고정 방어력은 약한 연타에 불리하고 한 방이 큰 공격에 유리해, 궁수만 놓는 배치를 스스로 깎는다.
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
     const big = hero.boss || hero.elite ? 1 + equipEffect(attacker && attacker.equip, 'bossDmg') : 1; // 장비: 정예와 보스 피해
-    const base = dot ? amount : Math.max(1, amount * big - (hero.armor || 0));
-    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1);
+    const sick = hero.poison > 0;
+    const armor = sick && Game.power('venomPierce') ? 0 : (hero.armor || 0); // 권능 살을 파는 독
+    const base = dot ? amount : Math.max(1, amount * big - armor);
+    const rot = sick ? 1 + (Game.power('rotCurse') ? 0.15 : 0) + (Game.power('rotDeep') ? 0.3 : 0) : 1; // 권능 썩은 살, 깊은 부패
+    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot;
     hero.hp -= dealt;
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);
@@ -67,6 +70,9 @@ function heroRises(src, type, hpFrac, lane) {
 
 function killHero(hero, pos, attacker) {
     hero.dead = true;
+    const byPoison = Game.poisonKill;
+    if (hero.poison > 0 || byPoison) plagueSpread(hero, pos);
+    if (byPoison) plagueKill(hero, pos);
     // 계약 조항: 되살아나는 용사는 체력 절반으로 다시 일어나고, 분열하는 정예는 일반 용사 여럿으로 갈라진다
     if (hero.revive) {
         heroRises(hero, hero.type, 0.5);
@@ -81,7 +87,7 @@ function killHero(hero, pos, attacker) {
     const G = Game;
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + equipEffect(attacker && attacker.equip, 'gold'));
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -391,6 +397,112 @@ function castGoldBomb() {
     Fx.addShake(14);
     splashDamage(p.x, p.y, r, spend * rule.damagePerGold * (rich ? 2 : 1), '#ffd34d');
     Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '영수증은 안 줘.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// ----- 역병의 군주 -----
+
+// 독: seconds초 동안 초당 dps(배율 전). 이미 걸려 있으면 시간을 다시 채우고, 겹치는 독(권능)이면 3번까지 겹친다
+function poisonHero(hero, seconds, dps, owner, spread) {
+    if (hero.dead || !(dps > 0)) return;
+    const G = Game;
+    const time = seconds + (G.power('venomLong') ? 2 : 0);
+    if (hero.poison > 0) {
+        hero.poisonStacks = G.power('venomStack') ? Math.min(3, hero.poisonStacks + 1) : 1;
+        hero.poisonDps = Math.max(hero.poisonDps, dps);
+        if (!spread) hero.poisonSpread = false;
+    } else {
+        hero.poisonStacks = 1;
+        hero.poisonDps = dps;
+        hero.poisonTick = 0.5;
+        hero.poisonSpread = !!spread;
+    }
+    hero.poison = Math.max(hero.poison, time);
+    if (owner) hero.poisonOwner = owner;
+}
+
+// 독의 초당 피해(권능 배율 포함)
+function poisonDps(h) {
+    const G = Game;
+    let d = h.poisonDps * Math.max(1, h.poisonStacks);
+    if (G.power('venomStrong')) d *= 1.4;
+    if (h.poisonSpread && G.power('spreadStrong')) d *= 1.5;
+    if ((h.boss || h.elite) && G.power('venomBoss')) d *= 2;
+    return d;
+}
+
+function poisonDamage(h, amount) {
+    const w = heroWorld(h);
+    const owner = h.poisonOwner && !h.poisonOwner.removed ? h.poisonOwner : null;
+    Game.poisonKill = true;
+    damageHero(h, amount, w.x, w.y, '#8eea3f', owner, true);
+    Game.poisonKill = false;
+}
+
+function poisonTickDamage(h) {
+    poisonDamage(h, poisonDps(h) * 0.5);
+    // 권능 숨통: 체력이 바닥인 독 걸린 일반 용사는 바로 쓰러진다
+    if (!h.dead && !h.boss && !h.elite && Game.power('venomDeath') && h.hp <= h.maxHp * COMBAT_RULES.plague.deathBelow) poisonDamage(h, h.hp + 1);
+}
+
+// 독이 끝남: 권능 독 폭발은 남은 2초치를 한 번에
+function poisonEnds(h) {
+    if (Game.power('venomBurst')) {
+        const w = heroWorld(h);
+        Fx.anim('fx_acid_splash', w.x, w.y - 10, 90, 0.5);
+        poisonDamage(h, poisonDps(h) * COMBAT_RULES.plague.burstSeconds);
+    }
+    h.poisonStacks = 0;
+}
+
+// 독 걸린 채 쓰러짐: 둘레의 용사에게 옮는다(보스 제외, 정예는 권능 고열)
+function plagueSpread(hero, pos) {
+    const G = Game;
+    const p = G.lordPassive('plague');
+    if (!p || !(hero.poisonDps > 0)) return;
+    const r = (p.radius + (G.power('spreadWide') ? 1 : 0)) * TILE;
+    Fx.anim('fx_acid_splash', pos.x, pos.y - 6, r * 1.3, 0.5);
+    for (const h of G.heroes) {
+        if (h === hero || h.dead || h.waiting || h.boss || (h.elite && !G.power('spreadElite'))) continue;
+        const w = heroWorld(h);
+        if (distance(pos.x, pos.y, w.x, w.y) > r) continue;
+        poisonHero(h, p.duration, hero.poisonDps, hero.poisonOwner, true);
+        if (G.power('spreadChain')) slowHero(h, 2, 0.7);
+    }
+}
+
+// 독으로 쓰러뜨림: 정수 추출(정예 마력), 시체 가스(자리 폭발), 대유행(모든 독을 처음부터)
+function plagueKill(hero, pos) {
+    const G = Game;
+    const rule = COMBAT_RULES.plague;
+    G.poisonKill = false; // 아래의 폭발 피해는 독이 아니다(연쇄 폭발을 막는다)
+    if (hero.elite && G.power('rotMana')) G.addMana(1, pos.x, pos.y - 140);
+    if (!hero.elite && !hero.boss && G.power('rotBlast')) {
+        Fx.anim('fx_acid_splash', pos.x, pos.y - 6, rule.blastRadius * TILE * 1.6, 0.5);
+        splashDamage(pos.x, pos.y, rule.blastRadius * TILE, hero.maxHp * rule.blastMul, '#8eea3f');
+    }
+    G.poisonKills++;
+    if (G.power('pandemic') && G.poisonKills % rule.pandemicEvery === 0) {
+        const p = G.lordPassive('plague');
+        for (const h of G.heroes) if (!h.dead && h.poison > 0) h.poison = Math.max(h.poison, (p ? p.duration : 3) + (G.power('venomLong') ? 2 : 0));
+        Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '모두 다시 앓아라.', 2);
+    }
+    G.poisonKill = true;
+}
+
+// 권능 역병 구름(E): 맨 앞 용사 자리에 독 구름(장판). 안의 용사는 0.5초마다 독이 다시 걸린다
+function castMiasma() {
+    const G = Game;
+    const rule = COMBAT_RULES.miasma;
+    if (!G.power('miasma') || G.skills.miasma > 0) return false;
+    const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+    if (!front) return false;
+    G.skills.miasma = G.skillCooldown('miasma');
+    const p = heroWorld(front);
+    const big = G.power('cloudBig');
+    G.hazards.push({ kind: 'poison', x: p.x, y: p.y, radius: rule.radius * (big ? 2 : 1) * TILE, dps: rule.dps + rule.dpsPerRound * G.waveIndex, life: rule.duration + (big ? rule.bigDuration : 0), age: 0, tick: 0, owner: null });
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '숨 깊이 들이마셔.', 2);
     Sfx.play('charge');
     return true;
 }

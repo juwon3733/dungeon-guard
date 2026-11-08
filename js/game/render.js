@@ -485,6 +485,7 @@ const Render = {
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
         if (h.stun > 0) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1);
+        if (h.poison > 0) this.poisonBubbles(ctx, p.x, headY - 10, h.boss ? 2 : 1, h.lane, Math.min(1, h.poison * 2));
         if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 195 : 105, h.lane * 0.07, Math.min(1, h.burn * 2));
         if (h.slow > 0) this.frostAura(ctx, p.x, p.y + 9, headY, Math.min(1, h.slow * 2));
         if (h.curse > 0) this.curseMark(ctx, p.x, headY - 45, h.curse);
@@ -1699,16 +1700,36 @@ const Render = {
         this.drawSheetFrame(ctx, key, Math.floor(k * sheet.frames), x, y, size, 0, alpha);
     },
 
+    // 역병의 독: 머리 위로 초록 거품 세 개가 떠올랐다 꺼진다(도트 칸, k배 크기)
+    poisonBubbles(ctx, x, y, k, seed, alpha) {
+        const t = Game.time;
+        const P = 3 * k;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        for (let i = 0; i < 3; i++) {
+            const ph = (t * 1.3 + i / 3 + seed * 0.37) % 1;
+            const bx = Math.round((x + (i - 1) * 9 * k + Math.sin(ph * 6 + i) * 3 * k) / P) * P;
+            const by = Math.round((y - ph * 30 * k) / P) * P;
+            const s = ph > 0.75 ? P : P * 2;
+            ctx.fillStyle = '#16301a';
+            ctx.fillRect(bx - 1, by - 1, s + 2, s + 2);
+            ctx.fillStyle = ph > 0.75 ? '#cfff63' : '#6fd23a';
+            ctx.fillRect(bx, by, s, s);
+        }
+        ctx.restore();
+    },
+
     // 땅에 남은 장판(불 장판): 바닥 빛과 불꽃 고리. 사라지기 0.5초 전부터 흐려진다
     drawHazards(ctx) {
         for (const z of Game.hazards) {
             const a = clamp((z.life - z.age) / 0.5, 0, 1) * clamp(z.age / 0.15, 0, 1);
+            const poison = z.kind === 'poison'; // 역병 구름
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = 0.3 * a;
-            this.pixelDisc(ctx, z.x, z.y, z.radius, z.radius * 0.55, '#ff6e1e', { k: 4 });
+            ctx.globalAlpha = (poison ? 0.22 : 0.3) * a;
+            this.pixelDisc(ctx, z.x, z.y, z.radius, z.radius * 0.55, poison ? '#3a9a2a' : '#ff6e1e', { k: 4 });
             ctx.restore();
-            this.drawLoopSheet(ctx, 'fx_fire_ground', z.x, z.y, z.radius * 2, z.x * 0.01, a);
+            this.drawLoopSheet(ctx, poison ? 'fx_poison_cloud' : 'fx_fire_ground', z.x, z.y, z.radius * (poison ? 2.2 : 2), z.x * 0.01, a);
         }
     },
 

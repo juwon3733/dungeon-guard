@@ -39,6 +39,8 @@ const FX_SHEETS = {
     fx_shot_axe: { image: 'pfx_axe', w: 96, h: 48, cols: 8, frames: 15, pivotX: 72, pivotY: 24, life: 0.5, fit: 90, shot: true }, // projectiles/energy-disc(강철)
     fx_shot_jester: { image: 'pfx_jester_disc', w: 96, h: 48, cols: 8, frames: 15, pivotX: 72, pivotY: 24, life: 0.5, fit: 90, shot: true }, // projectiles/energy-disc(분홍)
     // 몬스터 능력
+    fx_poison_cloud: { image: 'pfx_poison_cloud', w: 213, h: 74, cols: 8, frames: 15, pivotX: 107, pivotY: 61, life: 4, fit: 220, loop: true, px: 1 }, // nature/poison-cloud(역병 구름)
+    fx_acid_splash: { image: 'pfx_acid_splash', w: 112, h: 68, cols: 8, frames: 13, pivotX: 55, pivotY: 53, life: 0.8, fit: 120, px: 1 }, // nature/acid-splash(독이 옮음)
     fx_burning: { image: 'pfx_burning', w: 76, h: 98, cols: 8, frames: 15, pivotX: 38, pivotY: 70, life: 1.5, fit: 100, loop: true }, // fire/spirit-flame(불)
     fx_fire_ground: { image: 'pfx_fire_ground', w: 152, h: 117, cols: 8, frames: 8, pivotX: 76, pivotY: 82, life: 0.8, fit: 160, loop: true, px: 1 }, // fire/fire-ring
     fx_snowflake: { image: 'pfx_snowflake', w: 120, h: 113, cols: 8, frames: 20, pivotX: 60, pivotY: 73, life: 0.8, fit: 130 }, // ice/snowflake-burst

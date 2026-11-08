@@ -26,6 +26,16 @@ vm.runInContext(`{
     };
     move('s1', 's3', 'bone_queen', 0);
     move('s2', 's5', 'gold_king', 1);
+    // 옛 시험은 마왕 셋의 표다: 스토리 3~6의 새 마왕은 빼고 본다(새 마왕은 맨 끝에서 따로)
+    const later = Object.keys(DEMON_LORDS).filter(id => !['rift', 'bone_queen', 'gold_king'].includes(id));
+    for (const id of later) {
+        for (const br of LORD_POWERS[id] || []) for (const t of br.tiers) for (const n of t) delete POWER_SKILLS[n.id];
+        delete DEMON_LORDS[id]; delete LORD_POWERS[id]; delete STORY_CAST[id];
+    }
+    for (const st of STAGES) {
+        st.unlocks = st.unlocks.filter(u => !(u.kind === 'lord' && later.includes(u.id)));
+        st.outro = st.outro.filter(l => !later.includes(l[0]));
+    }
 }`, ctx);
 
 // 장비 그림 16종: 파일(48px PNG)이 있고 불러오기 목록(Assets.names)에 들어 있다
@@ -52,7 +62,7 @@ vm.runInContext(`{
         return [png.readUInt32BE(16), png.readUInt32BE(20)];
     };
     const lords = vm.runInContext('Object.values(DEMON_LORDS)', actx);
-    assert.strictEqual(lords.length, 3, 'three lords');
+    assert.strictEqual(lords.length, 4, 'four lords'); // 기본 1 + 스토리 1·2·3 클리어마다 1
     for (const lord of lords) {
         for (const name of [lord.sprite, lord.cast].filter(Boolean)) {
             assert.deepStrictEqual(pngSize(name), [128, 128], name + ' is 128px');
@@ -6051,6 +6061,13 @@ console.log('smoke ok: equipment crafting');
     assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king'), 'stage 1 opens the bone queen');
     Meta.data.cleared = ['s1', 's2'];
     assert(Meta.hasLord('gold_king'), 'stage 2 opens the gold king');
+    // 스토리 3~6: 한 명씩
+    const order = STAGES.map(st => (st.unlocks.find(u => u.kind === 'lord') || {}).id || null);
+    assert.strictEqual(JSON.stringify(order.slice(0, 3)), JSON.stringify(['bone_queen', 'gold_king', 'plague']), 'stage 3 opens the plague lord');
+    for (const id of Object.keys(DEMON_LORDS)) if (id !== DEFAULT_LORD) assert(order.includes(id), id + ' opens at a stage');
+    assert.strictEqual(LORD_POWERS.plague.length, 3, 'plague: three branches');
+    for (const br of LORD_POWERS.plague) assert(br.tiers.length === 4 && br.tiers.every(t => t.length === 2), br.id + ': 4 tiers of 2');
+    assert(STORY_CAST.plague && castPortrait('plague'), 'plague speaks in the story');
     `, real);
     console.log('smoke ok: lord unlock order');
 }
@@ -6351,6 +6368,110 @@ console.log('smoke ok: equipment crafting');
         assert.deepStrictEqual(Account.summary(Meta.fresh()).slice(0, 2), ['스토리 0 / ' + STAGES.length, '판 0 · 도감 0'], 'summary lines');
         console.log('smoke ok: account');
     }).toString() + ')()', actx).catch(e => { console.error(e); process.exit(1); });
+}
+// 역병의 군주: 맞으면 독, 독은 0.5초마다 피해, 쓰러지면 옮음(보스 제외), 권능(겹치기, 구름, 제물, 장례비, 대유행, 숨통)
+{
+    const qctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), qctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', qctx);
+    vm.runInContext('(' + (() => {
+        Meta.data.cleared = STAGES.slice(0, 3).map(s => s.id); // 스토리 3을 깨야 열린다
+        const start = powers => {
+            Game.reset({ lord: 'plague', relics: [] }, STAGES[2].id);
+            Game.state = 'wave';
+            Game.heroes.length = 0;
+            for (const id of powers || []) Game.powers[id] = true;
+        };
+        const hero = (type, d) => {
+            const h = createHero(type || 'warrior', 5, 0, false, 'north');
+            h.waiting = false; h.delay = 0; h.d = d || 300; h.maxHp = h.hp = 1000;
+            Game.heroes.push(h);
+            return h;
+        };
+        const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); }; // 보스 표시는 옮음 시험용(보스 패턴은 돌리지 않는다)
+        start();
+        assert(Game.lordPassive('plague'), 'plague passive');
+        assert.strictEqual(Game.mods.damage, -0.1, 'monster damage -10%');
+        const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace('fire_imp', a, r); }).split(',').map(Number);
+        const imp = Game.place('fire_imp', k[0], k[1]) || Game.monsters[Game.monsters.length - 1];
+        const a = hero();
+        monsterHitHero(imp.type, a, imp);
+        a.burn = 0; // 불 도깨비의 화상은 빼고 독만 잰다
+        const dps = monsterStats(imp).damage * DEMON_LORDS.plague.passive.ratio;
+        assert(a.poison === 3 && Math.abs(a.poisonDps - dps) < 1e-9, 'a hit poisons for 3 s');
+        const hp0 = a.hp;
+        tick(3.05);
+        assert(Math.abs((hp0 - a.hp) - dps * 3) < 1e-6 && a.poison === 0, 'six ticks of half a second');
+        // 옮음: 일반은 옮고, 보스는 안 옮는다
+        const b = hero('warrior', 300), c = hero('warrior', 310), boss = hero('warrior', 305);
+        boss.boss = true;
+        poisonHero(b, 3, 10, imp);
+        b.hp = 1;
+        tick(0.55);
+        assert(b.dead && c.poison > 0 && c.poisonSpread && !(boss.poison > 0), 'spreads to the crowd, not the boss');
+        assert.strictEqual(Game.poisonKills, 1, 'poison kill counted');
+        // 다른 마왕은 독을 걸지 않는다
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[2].id);
+        const r = hero();
+        monsterHitHero(imp.type, r, imp);
+        assert(!(r.poison > 0), 'only the plague lord poisons');
+        // 겹치는 독 3번, 진한 독 1.4배
+        start(['venomStack', 'venomStrong']);
+        const s = hero();
+        for (let i = 0; i < 5; i++) poisonHero(s, 3, 10, null);
+        assert.strictEqual(s.poisonStacks, 3, 'three stacks at most');
+        assert(Math.abs(poisonDps(s) - 10 * 3 * 1.4) < 1e-9, 'stacked and strong');
+        // 오래가는 독, 숨통(일반 용사 체력 10% 이하 즉사)
+        start(['venomLong', 'venomDeath']);
+        const t = hero();
+        poisonHero(t, 3, 1, null);
+        assert.strictEqual(t.poison, 5, 'long poison +2 s');
+        t.hp = 90;
+        tick(0.55);
+        assert(t.dead, 'below 10%: dies');
+        // 장례비: 독으로 쓰러지면 골드 +50%
+        start(['spreadGold']);
+        const g = hero();
+        g.bounty = 10;
+        const gold0 = Game.gold;
+        poisonHero(g, 3, 1, null);
+        g.hp = 0.1;
+        tick(0.55);
+        assert.strictEqual(Game.gold - gold0, 15, 'funeral fee');
+        // 역병 구름(E): 새 스킬, 맨 앞 용사 자리에 장판, 안의 용사에게 독
+        start(['miasma']);
+        assert.strictEqual(Game.thirdSkill().key, 'miasma', 'third skill');
+        const m = hero('warrior', 500);
+        assert(Game.act({ kind: 'miasma' }).ok && Game.skills.miasma > 0, 'cast');
+        assert(!Game.act({ kind: 'miasma' }).ok, 'cooldown');
+        const z = Game.hazards[Game.hazards.length - 1];
+        assert(z.kind === 'poison' && z.dps > 0, 'poison cloud');
+        updateHazard(z, 0.01);
+        assert(m.poison > 0, 'the cloud poisons');
+        // 역병 제물: 맵의 모든 용사에게 독
+        start(['rotSac']);
+        Game.state = 'prep';
+        const e = hero('warrior', 200);
+        const sac = Game.place('fire_imp', k[0], k[1]) || Game.monsters[Game.monsters.length - 1];
+        assert(Game.sacrifice(sac).ok && e.poison > 0, 'sacrifice poisons everyone');
+        // 대유행: 10명째마다 모든 독을 처음부터
+        start(['pandemic']);
+        const keep = hero('warrior', 100);
+        poisonHero(keep, 3, 1, null);
+        keep.poison = 0.8;
+        for (let i = 0; i < 10; i++) { const v = hero('warrior', 400 + i); poisonHero(v, 3, 1, null); v.hp = 0.1; }
+        tick(0.55);
+        assert(keep.poison > 2, 'pandemic refills');
+        // 썩은 살 + 깊은 부패: 독 걸린 용사 받는 피해 +45%
+        start(['rotCurse', 'rotDeep']);
+        const w = hero();
+        w.armor = 0;
+        poisonHero(w, 3, 0.0001, null);
+        const dealt = damageHero(w, 100, 0, 0);
+        assert(Math.abs(dealt - 145) < 1e-6, 'rot +45%');
+        console.log('smoke ok: plague lord');
+    }).toString() + ')()', qctx);
 }
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {

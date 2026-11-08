@@ -184,7 +184,8 @@ function updateHazard(z, dt) {
         if (h.dead || h.waiting) continue;
         const p = heroWorld(h);
         if (distance(z.x, z.y, p.x, p.y) > z.radius) continue;
-        damageHero(h, z.dps * HAZARD_TICK, z.x, z.y, '#ff9d4d', z.owner, true);
+        if (z.kind === 'poison') poisonHero(h, 1.5, z.dps, null); // 역병 구름: 피해는 독으로
+        else damageHero(h, z.dps * HAZARD_TICK, z.x, z.y, '#ff9d4d', z.owner, true);
     }
 }
 
@@ -229,6 +230,9 @@ function monsterHitHero(type, hero, owner) {
     if (burn) burnHero(hero, burn.duration, burn.dps, owner);
     const slow = monsterAbility(type, 'slowShot');
     if (slow) slowHero(hero, slow.duration, slow.speedMul);
+    // 역병의 군주: 몬스터에게 맞으면 독(공격력의 일부를 초마다)
+    const plague = Game.lordPassive('plague');
+    if (plague && owner && owner.kind === 'monster' && !owner.removed) poisonHero(hero, plague.duration, monsterStats(owner).damage * plague.ratio, owner);
     const stun = monsterAbility(type, 'stunShot');
     // 보스는 걸리지 않는다(난수도 쓰지 않는다)
     if (stun && !hero.boss && rng('battle') < stun.chance) {

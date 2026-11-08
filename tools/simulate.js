@@ -25,7 +25,7 @@ function mergePair(G) {
     return best;
 }
 function play(bot, stageId, daily) {
-    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, 'rift', []) : dailyChallenge(daily)); Game.state = 'prep'; }
+    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
@@ -51,6 +51,14 @@ function play(bot, stageId, daily) {
             const m = G.monsters.filter(x => !x.equip && !x.removed).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
             if (m) G.equipMonster(m, 0);
         }
+        // 권능: 정한 갈래(bot.branch)에서 찍을 수 있는 가장 낮은 겹부터. 3번째 스킬은 준비되면 바로
+        if (bot.powers && G.mana > 0) {
+            const br = G.lordPowers()[bot.branch || 0];
+            const node = br && br.tiers.flat().find(n => G.powerCheck(n.id).ok);
+            if (node) G.act({ kind: 'power', id: node.id });
+        }
+        const third = G.thirdSkill();
+        if (bot.skill && third && G.state === 'wave' && G.skills[third.key] <= 0) G.act({ kind: third.key });
         if (bot.skill && G.skills.lightning === 0 && G.state === 'wave') {
             const h = G.heroes.filter(x => !x.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
             if (h && remainingDistance(h) < ROUTES.north.length * 0.6) { const p = heroWorld(h); castLightning(p.x, p.y); }
@@ -97,6 +105,20 @@ if (process.argv[4] === 'abyss') {
     for (const d of ['abyss1', 'abyss2', 'abyss3']) {
         const r = JSON.parse(vm.runInContext(`JSON.stringify(play(${BOTS['합치기+강화+장비+번개']}, null, '${d}'))`, context));
         console.log(`심연 ${d} | ${r.wave}층 | ${R(r.time / 60)}분 | 점수 ${r.score.toLocaleString()} | 소환 ${r.summons} 합치기 ${r.merges} | 최고 ${GRADES[r.top]}`);
+    }
+}
+// 마왕 비교: 마왕 x 갈래마다 심연을 같은 시드로(난이도는 5번째 값, 기본 노말)
+if (process.argv[4] === 'lords') {
+    vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
+    const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
+    const lords = vm.runInContext('Object.keys(DEMON_LORDS)', context);
+    for (const lord of lords) {
+        for (let b = 0; b < 3; b++) {
+            const rs = [];
+            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
+            const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
+            console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
+        }
     }
 }
 if (process.argv[4] === 'raid') {

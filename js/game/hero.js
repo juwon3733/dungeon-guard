@@ -46,6 +46,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         curse: 0, curseMul: 1, // 저주(curseShot): 남은 초와 받는 피해 배율
         burn: 0, burnDps: 0, burnTick: 0, burnOwner: null, // 화상(burnShot): 남은 초, 초당 피해, 다음 피해까지 초, 건 몬스터
         slow: 0, slowMul: 1, // 빙결(slowShot): 남은 초와 이동 속도 배율
+        poison: 0, poisonDps: 0, poisonTick: 0, poisonStacks: 0, poisonSpread: false, poisonOwner: null, // 역병의 독: 남은 초, 초당 피해(배율 전), 다음 피해까지, 겹친 수, 옮은 독인지, 건 몬스터
         cast: !bossDef && def.stunEvery ? rngRange('spawn', 1.5, def.stunEvery) : 0,
         song: !bossDef && def.song ? rngRange('spawn', 1, def.song.every) : 0,
         haste: 0, hasteMul: 1, // 음유시인 노래로 받은 가속: 남은 초와 배율
@@ -113,6 +114,21 @@ function updateHero(h, dt) {
         }
         if (h.burn <= 0) h.burn = 0;
     }
+    if (h.poison > 0) {
+        // 역병의 독: 0.5초마다 피해(방어력 무시). 끝나면 독 폭발(권능)
+        h.poison -= dt;
+        h.poisonTick -= dt;
+        if (h.poisonTick <= 1e-6) {
+            h.poisonTick += 0.5;
+            poisonTickDamage(h);
+            if (h.dead) return;
+        }
+        if (h.poison <= 0) {
+            h.poison = 0;
+            poisonEnds(h);
+            if (h.dead) return;
+        }
+    }
     h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1) * (h.animRate || 1);
 
     if (h.boss) updateBossPatterns(h, dt);
@@ -151,7 +167,8 @@ function updateHero(h, dt) {
     if (h.windup > 0) return; // 뇌술사가 범위 감전 경고를 막 시작했다
 
     const bridge = Game.mods.mergedSlow !== 1 && h.d >= mergeDistance(h.route) ? Game.mods.mergedSlow : 1; // 유물: 합류점을 지난 용사
-    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * bridge * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
+    const sick = h.poison > 0 && Game.power('venomSlow') ? 0.85 : 1; // 권능 마비 독
+    const speed = h.chargeTime > 0 ? h.chargeSpeed : h.speed * bridge * sick * (h.haste > 0 ? h.hasteMul : 1) * (h.slow > 0 ? h.slowMul : 1);
     h.d += speed * dt;
     const p = pathAt(h.d, h.route);
     h.dir = dirFromVector(p.dx, p.dy);
@@ -173,7 +190,8 @@ function updateHero(h, dt) {
         if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
-            G.leak = (G.leak || 0) + h.throneDamage * (G.power('ward') || G.power('goldWard') ? 0.8 : 1);
+            const weak = h.elite && h.poison > 0 && G.power('rotWeaken') ? 0.7 : 1; // 권능 쇠약
+            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;
