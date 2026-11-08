@@ -281,7 +281,7 @@ const DEMON_LORDS = {
         sprite: 'lord_rift', footPx: 120,
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개 맞은 용사 4초간 받는 피해 +30%', duration: 4, takenMul: 1.3 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개 맞은 용사 5초간 받는 피해 +40%', duration: 5, takenMul: 1.4 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
@@ -329,7 +329,7 @@ const DEMON_LORDS = {
         sprite: 'lord_chain', footPx: 120,
         portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 8% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.08, duration: 0.6 },
+        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 12% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.12, duration: 0.6 },
         speech: {
             waveStart: ['줄 맞춰 들어와라.'],
             throneHit: ['감히 간수를 쳐?'],
@@ -353,7 +353,7 @@ const DEMON_LORDS = {
         sprite: 'lord_clock', footPx: 119,
         portrait: { sprite: 'lord_clock', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'stopwatch', name: '멈춘 초침', desc: '라운드 시작 4초간 용사 이동 -40%(보스 절반)', duration: 4, cut: 0.4 },
+        passive: { kind: 'stopwatch', name: '멈춘 초침', desc: '라운드 시작 6초간 용사 이동 -40%(보스 절반)', duration: 6, cut: 0.4 },
         speech: {
             waveStart: ['시간 맞춰 왔군.'],
             throneHit: ['초침이 어긋났잖아.'],

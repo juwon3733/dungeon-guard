@@ -369,7 +369,8 @@ function corpseExplode(x, y, radius, damageMul) {
     G.blasting = true;
     const r = radius * (G.power('corpseBig') ? 2 : 1) * TILE;
     Fx.anim('fx_blastViolet', x, y - 20, r * 1.4, 0.4);
-    splashDamage(x, y, r, G.lightningDamage() * damageMul, '#c9a6ff', h => { if (!h.dead && G.power('corpseFrost')) slowHero(h, 2, 0.7); });
+    const grow = 1 + COMBAT_RULES.corpseBlast.perRound * G.waveIndex; // 뒤 라운드에서도 쓸모 있게
+    splashDamage(x, y, r, G.lightningDamage() * damageMul * grow, '#c9a6ff', h => { if (!h.dead && G.power('corpseFrost')) slowHero(h, 2, 0.7); });
     G.blasting = false;
 }
 

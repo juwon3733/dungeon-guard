@@ -157,6 +157,7 @@ const BOSSES = {
 const COMBAT_RULES = {
     startGold: 130,
     maxHp: 20,
+    bossArrival: 0.5,   // 보스가 왕좌에 닿으면 최대 체력의 이만큼 피해
     waveBaseReward: 15,
     waveStepReward: 1,
     spawnGap: 0.34,
@@ -186,7 +187,7 @@ const COMBAT_RULES = {
     jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 권능 사슬 감옥
     chain: { chanceUp: 0.06, longUp: 0.4, breakDamage: 0.05, pitEvery: 5, lowBelow: 0.15, turnEvery: 8 }, // 사슬의 군주 권능 수치
     plague: { sacDps: 5, sacDpsPerRound: 1.2, burstSeconds: 2, deathBelow: 0.1, pandemicEvery: 10, blastRadius: 1, blastMul: 0.4 }, // 역병의 군주 권능 수치
-    corpseBlast: { every: 5, quickEvery: 3, radius: 1.5, damageMul: 0.3 }, // 권능 시체 폭발
+    corpseBlast: { every: 5, quickEvery: 3, radius: 1.5, damageMul: 0.3, perRound: 0.1 }, // 권능 시체 폭발(피해는 라운드마다 +10%, 시체 일으키기도 같다)
     chainStrike: { count: 3, radius: 0.75, damageMul: 0.4 } // 권능 연쇄 낙뢰
 };
 
