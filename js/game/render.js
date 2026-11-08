@@ -194,72 +194,32 @@ const Render = {
         for (const [sx, sy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.deckPost(g, zone, x - 6 + sx * (w + 12), y - 6 + sy * (h + 12));
     },
 
-    // 입구 소용돌이 문(지역 색): 돌 테두리 타원 안에서 도트 나선이 돌고, 바닥에 룬 고리(pixelfx)가 돈다
+    // 용사 입구: 뿔 해골 기둥의 돌 아치(PixelLab Pro, 그림 1px = 화면 1px). 문 안 소용돌이는 tools/make_gate.py가 돌려 둔 16프레임. 뒤에 지역 색 빛
     drawGate(ctx, gate, zone) {
-        const t = Game.time;
-        const [outer, inner, glow] = zone.gate;
-        const [rim, body, gem] = zone.post;
-        const cx = gate.x + 8;
-        const cy = gate.y - 34;
-        const rx = 54;
-        const ry = 88;
-        this.drawLoopSheet(ctx, 'fx_rune_attackSpeed', cx + 6, gate.y + 34, 210, gate.y, 0.55);
+        const img = Assets.get('gate_arch');
+        const [, , glow] = zone.gate;
+        const k = 1 / WORLD_ZOOM;
+        const cx = gate.x + 44; // 왼쪽 화면 끝에 잘리지 않게 길 입구 쪽으로
+        const floor = gate.y + 34; // 문턱
+        const GATE_OPEN = { x: 81, floor: 188, frames: 16, fps: 8 }; // 그림 안 문 가운데와 문턱(그림 px), 소용돌이 프레임
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, ry * 1.7);
-        halo.addColorStop(0, `rgba(${glow},0.5)`);
+        const halo = ctx.createRadialGradient(cx, floor - 60, 10, cx, floor - 60, 150);
+        halo.addColorStop(0, `rgba(${glow},0.35)`);
         halo.addColorStop(1, `rgba(${glow},0)`);
         ctx.fillStyle = halo;
-        ctx.fillRect(cx - ry * 1.7, cy - ry * 1.7, ry * 3.4, ry * 3.4);
+        ctx.fillRect(cx - 150, floor - 210, 300, 300);
         ctx.restore();
-        // 테두리: 진한 테, 돌, 안쪽 테
-        const ring = (r1, r2, color) => this.pixelDisc(ctx, cx, cy, r1, r2, color, { k: 2, hard: true });
-        ring(rx + 20, ry + 20, rim);
-        ring(rx + 14, ry + 14, body);
-        ring(rx + 4, ry + 4, rim);
-        ring(rx, ry, outer);
-        // 나선: 세 갈래 팔을 작은 네모로 찍어 도트처럼 보이게 한다
-        ctx.save();
-        const dot = 2 * ART_SCALE;
-        for (let arm = 0; arm < 3; arm++) {
-            for (let i = 0; i < 46; i++) {
-                const k = i / 46;
-                const ang = t * 2.4 + arm * (Math.PI * 2 / 3) + k * 5.2;
-                const px = cx + Math.cos(ang) * rx * (1 - k) * 0.98;
-                const py = cy + Math.sin(ang) * ry * (1 - k) * 0.98;
-                ctx.fillStyle = k > 0.55 ? '#ffffff' : (i % 3 ? inner : `rgb(${glow})`);
-                ctx.fillRect(snapWorld(px), snapWorld(py), dot * (k > 0.7 ? 2 : 1), dot);
-            }
+        const top = snapWorld(floor - GATE_OPEN.floor * k);
+        const left = snapWorld(cx - GATE_OPEN.x * k);
+        const vortex = Assets.get('gate_vortex');
+        ctx.imageSmoothingEnabled = false;
+        if (vortex && img) {
+            // 소용돌이(문 안쪽만 그려진 프레임)를 먼저, 그 위에 문 안쪽이 빈 돌 테
+            const f = Math.floor((Game.time + gate.y * 0.01) * GATE_OPEN.fps) % GATE_OPEN.frames;
+            ctx.drawImage(vortex, f * img.width, 0, img.width, img.height, left, top, img.width * k, img.height * k);
         }
-        ctx.globalCompositeOperation = 'lighter';
-        const core = ctx.createRadialGradient(cx, cy, 2, cx, cy, rx * 0.8);
-        core.addColorStop(0, 'rgba(255,255,255,0.85)');
-        core.addColorStop(0.4, `rgba(${glow},0.35)`);
-        core.addColorStop(1, `rgba(${glow},0)`);
-        ctx.fillStyle = core;
-        ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
-        ctx.restore();
-        // 테두리의 보석 넷
-        for (const [gx, gy] of [[cx, cy - ry - 16], [cx - rx - 14, cy], [cx + rx + 14, cy], [cx, cy + ry + 16]]) {
-            const x = Math.round(gx);
-            const y = Math.round(gy);
-            ctx.fillStyle = rim;
-            ctx.fillRect(x - 12, y - 12, 24, 24);
-            ctx.fillStyle = gem;
-            ctx.fillRect(x - 8, y - 8, 16, 16);
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(x - 8, y - 8, 6, 4);
-        }
-        // 빨려 드는 반짝이
-        for (let i = 0; i < 10; i++) {
-            const k = (t * 0.8 + i / 10) % 1;
-            const ang = i * 2.4 + t;
-            const r = (1 - k) * ry * 1.5;
-            ctx.globalAlpha = k;
-            ctx.fillStyle = i % 2 ? inner : '#ffffff';
-            ctx.fillRect(Math.round(cx + Math.cos(ang) * r * 0.8), Math.round(cy + Math.sin(ang) * r), 6, 6);
-        }
-        ctx.globalAlpha = 1;
+        if (img) ctx.drawImage(img, left, top, img.width * k, img.height * k);
     },
 
     // 그림 한 장: 발끝(footPx, 캔버스 안 높이)을 footY에 맞춘다. 왼쪽 위 모서리를 화면 정수 픽셀에 맞춰 도트가 고르게 보인다
