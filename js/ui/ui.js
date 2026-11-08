@@ -176,14 +176,18 @@ const UI = {
             this.layoutPowers();
             return;
         }
-        // 오른쪽 위 아이콘 버튼: 소리, 효과 줄이기, 일시정지, 배속. 켜진 쪽(소리 끔, 효과 줄임, 멈춤, 2배)은 밝은 은청색에 금테
+        if (this.battleMenu) {
+            this.layoutBattleMenu(); // js/ui/menu.js
+            return;
+        }
+        // 오른쪽 위 아이콘 버튼: 소리, 메뉴, 일시정지, 배속. 켜진 쪽(소리 끔, 효과 줄임, 멈춤, 2배)은 밝은 은청색에 금테
         let bx = GAME_WIDTH - TOP_BTN - 12;
         const small = (id, icon, on, onClick, opts) => {
             this.button(id, bx, 12, TOP_BTN, TOP_BTN, Object.assign({ icon, iconOnly: true, on, onClick }, opts));
             bx -= TOP_BTN + 6;
         };
         small('mute', 'sound', Sfx.muted, () => { Sfx.setMuted(!Sfx.muted); saveSettings(); }, { slash: Sfx.muted, tip: Sfx.muted ? '소리 켜기 (M)' : '소리 끄기 (M)' });
-        small('fx', 'gear', Fx.reduce, () => { Fx.reduce = !Fx.reduce; saveSettings(); }, { tip: Fx.reduce ? '효과 줄임 켜짐' : '효과 줄이기' });
+        small('menu', 'gear', false, () => this.openBattleMenu(), { tip: '메뉴 (Esc)' }); // 효과 줄이기는 메뉴의 설정에
         small('pause', 'pause', G.paused, () => { G.paused = !G.paused; }, { tip: G.paused ? '계속 (P)' : '일시정지 (P)' });
         small('speed', 'fast', G.speed > 1, () => { G.speed = G.speed % 3 + 1; }, { corner: `${G.speed}x`, tip: `배속 ${G.speed}x (F)` });
 
@@ -1386,6 +1390,7 @@ const UI = {
             else if (code === 'KeyP') G.paused = !G.paused;
             return;
         }
+        if (this.battleMenu && this.onBattleMenuKey(code)) return; // js/ui/menu.js
         if (this.powerOpen) {
             if (code === 'KeyR' || code === 'Escape') this.togglePowers();
             return;
@@ -1403,7 +1408,11 @@ const UI = {
         else if (code === 'Tab') this.setTab(this.tab === 'monster' ? 'demon' : 'monster');
         else if (code === 'KeyF') G.speed = G.speed % 3 + 1;
         else if (code === 'KeyP') G.paused = !G.paused;
-        else if (code === 'Escape') this.cancel();
+        else if (code === 'Escape') {
+            // 고른 것이 있으면 취소, 없으면 메뉴
+            if (this.selectedMonster || this.drag || this.targeting || this.equipDrag) this.cancel();
+            else this.openBattleMenu();
+        }
     },
 
     update(dt) {
@@ -1411,6 +1420,8 @@ const UI = {
         if (this.selectedMonster && this.selectedMonster.removed) this.clearSelection();
         this.wipeArmed = Math.max(0, this.wipeArmed - dt);
         if (this.tut) this.tut.age += dt;
+        this.surrenderArmed = Math.max(0, (this.surrenderArmed || 0) - dt);
+        if (this.battleMenu && !Game.inPlay()) { this.battleMenu = false; this.hqSettings = false; }
         if (this.dialogue) {
             const D = this.dialogue;
             D.chars = Math.min(D.lines[D.index][1].length, D.chars + dt * DIALOGUE_CPS);
@@ -1700,6 +1711,9 @@ const UI = {
             this.drawButtons(ctx);
         } else if (G.state === 'victory' || G.state === 'defeat') {
             this.drawResult(ctx);
+            this.drawButtons(ctx);
+        } else if (this.battleMenu) {
+            this.drawBattleMenu(ctx); // js/ui/menu.js
             this.drawButtons(ctx);
         } else if (this.powerOpen) {
             this.drawPowers(ctx);
