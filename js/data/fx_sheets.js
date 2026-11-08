@@ -21,6 +21,7 @@ const FX_SHEETS = {
     fx_blastViolet: { image: 'pfx_mana_burst', w: 167, h: 145, cols: 8, frames: 16, pivotX: 85, pivotY: 92, life: 0.533, fit: 180 }, // arcane/mana-burst
     // 이전 효과 그림을 바꾼 것
     fx_hit_lightning: { image: 'pfx_zap_hit', w: 129, h: 104, cols: 8, frames: 14, pivotX: 75, pivotY: 52, life: 0.45, fit: 130 }, // lightning/zap-hit
+    fx_shock_small: { image: 'pfx_zap_hit', w: 129, h: 104, cols: 8, frames: 14, pivotX: 75, pivotY: 52, life: 0.45, fit: 130, px: 1 }, // 용사(정예 뇌술사)의 범위 감전: 같은 그림을 1배로
     fx_hit_fire: { image: 'pfx_fire_blast', w: 200, h: 190, cols: 8, frames: 20, pivotX: 102, pivotY: 95, life: 0.7, fit: 200 }, // explosions/plasma-explosion(불 팔레트)
     fx_blastGold: { image: 'pfx_gold_burst', w: 167, h: 145, cols: 8, frames: 16, pivotX: 85, pivotY: 92, life: 0.6, fit: 180 }, // arcane/mana-burst(금색)
     fx_blastCyan: { image: 'pfx_cyan_burst', w: 167, h: 145, cols: 8, frames: 16, pivotX: 85, pivotY: 92, life: 0.5, fit: 180 }, // arcane/mana-burst(청록)
@@ -41,7 +42,7 @@ const FX_SHEETS = {
     fx_burning: { image: 'pfx_burning', w: 76, h: 98, cols: 8, frames: 15, pivotX: 38, pivotY: 70, life: 1.5, fit: 100, loop: true }, // fire/spirit-flame(불)
     fx_fire_ground: { image: 'pfx_fire_ground', w: 152, h: 117, cols: 8, frames: 8, pivotX: 76, pivotY: 82, life: 0.8, fit: 160, loop: true, px: 1 }, // fire/fire-ring
     fx_snowflake: { image: 'pfx_snowflake', w: 120, h: 113, cols: 8, frames: 20, pivotX: 60, pivotY: 73, life: 0.8, fit: 130 }, // ice/snowflake-burst
-    fx_stunned: { image: 'pfx_stunned', w: 50, h: 37, cols: 8, frames: 15, pivotX: 24, pivotY: 55, life: 1, fit: 50, loop: true }, // status/stunned
+    fx_stunned: { image: 'pfx_stunned', w: 50, h: 37, cols: 8, frames: 15, pivotX: 24, pivotY: 55, life: 1, fit: 50, loop: true, px: 1 }, // status/stunned
     fx_heal: { image: 'pfx_heal', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.7, fit: 80 }, // pickups/collect-burst(초록)
     fx_lifesteal: { image: 'pfx_lifesteal', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.6, fit: 80 }, // pickups/collect-burst(붉은)
     fx_gold: { image: 'pfx_gold', w: 77, h: 87, cols: 8, frames: 19, pivotX: 36, pivotY: 51, life: 0.8, fit: 80 }, // pickups/collect-burst(금색)

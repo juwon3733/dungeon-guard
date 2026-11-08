@@ -461,7 +461,9 @@ const Render = {
                 // 정예 표시: 몸 뒤에서 도는 Asteria 오라(그림 1px = 화면 1px). 검은 바탕 그림이라 빛을 더해 그린다
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
-                this.drawLoopSheet(ctx, `fx_aura_${h.type}`, p.x, p.y + 10 - def.barY * 0.45, 128 * ART_SCALE, h.lane * 0.13, 0.9);
+                // 여럿이 모이면 화면을 덮으므로 옅게: 기본 0.45, 정예가 셋을 넘으면 그만큼 더 옅게
+                const elites = Game.heroes.reduce((n, o) => n + (o.elite && !o.dead && !o.waiting ? 1 : 0), 0);
+                this.drawLoopSheet(ctx, `fx_aura_${h.type}`, p.x, p.y + 10 - def.barY * 0.45, 128 * ART_SCALE, h.lane * 0.13, 0.45 * Math.min(1, 3 / Math.max(1, elites)));
                 ctx.restore();
             } else {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);

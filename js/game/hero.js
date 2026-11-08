@@ -207,8 +207,8 @@ function updateMageCast(h, dt) {
     h.cast = def.stunEvery;
     h.atkPose = h.atkPoseMax = def.atkTime || ATTACK_POSE_TIME; // 정예 그림에는 atkTime이 없다
     applyStun(target, def.stunTime);
-    Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 8, 0.3);
-    Fx.ring(target.x, target.y - 30, 100, '#7fd8ff', 0.4);
+    Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 4, 0.22); // 용사 쪽 효과는 몬스터 효과보다 작고 짧게
+    Fx.ring(target.x, target.y - 30, 60, '#7fd8ff', 0.3);
     if (Math.random() < 0.3) Fx.say(w.x, w.y - 150, '멈춰라!', 0.9);
     Sfx.play('stun');
 }
@@ -231,8 +231,8 @@ function updateSong(h, dt) {
         o.haste = Math.max(o.haste, rule.duration);
         o.hasteMul = rule.speedMul;
     }
-    Fx.ring(w.x, w.y, rule.radius * TILE, '#8dffb4', 0.5);
-    Fx.rise(w.x, w.y - 90, '#b8ffcf', 14, 40, 0.8);
+    Fx.ring(w.x, w.y, rule.radius * TILE, '#8dffb4', 0.35);
+    Fx.rise(w.x, w.y - 90, '#b8ffcf', 8, 40, 0.6);
     if (Math.random() < 0.3) Fx.say(w.x, w.y - 250, '달려라, 친구들!', 0.9);
     Sfx.play('spawn');
 }
@@ -282,12 +282,13 @@ function updateWindup(h, dt) {
     for (const t of targets) applyStun(t, b.stun);
     if (b.kind === 'shock') {
         const big = h.boss;
-        for (const t of targets) {
+        // 용사 쪽 감전: 번개 그림은 앞의 4마리까지만, 정예는 1배 크기(몬스터 번개보다 작게)
+        targets.forEach((t, i) => {
             Fx.bolt(t.x, t.y - 30, '#bfe9ff');
-            Fx.anim('fx_hit_lightning', t.x, t.y - 60, big ? 390 : 300, 0.4);
-        }
-        Fx.ring(b.x, b.y, b.range * TILE, '#7fd8ff', 0.5);
-        Fx.burst(b.x, b.y, '#bfe9ff', big ? 44 : 22, big ? 680 : 420, 0.5, 7);
+            if (i < 4) Fx.anim(big ? 'fx_hit_lightning' : 'fx_shock_small', t.x, t.y - 60, big ? 390 : 150, 0.4);
+        });
+        Fx.ring(b.x, b.y, b.range * TILE, '#7fd8ff', big ? 0.5 : 0.35);
+        Fx.burst(b.x, b.y, '#bfe9ff', big ? 44 : 10, big ? 680 : 300, 0.5, 7);
         Fx.glow(b.x, b.y, b.range * TILE, 'rgba(120,200,255,1)', 0.25);
         Fx.addShake(big ? 22 : 8);
     } else {
