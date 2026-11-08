@@ -112,8 +112,8 @@ function equipSources(grade) {
 
 // 본부 안 화면의 칸 격자(진열장 유물, 무기고 장비): 8열 2줄, 등급 색 테두리 칸. 오른쪽은 금테 상세 창(HQ_DETAIL)
 const HQ_GRID = { cols: 8, w: 132, h: 150, gapX: 18, gapY: 18, x: 70, y: 560 };
-const HQ_RELIC_GRID = { cols: 10, w: 116, h: 150, gapX: 6, gapY: 18, x: 70, y: 560 }; // 유물은 한 줄에 10칸
-const HQ_LORD_CARD = { w: 380, h: 300, gap: 22, x: 70, y: 150 };
+const HQ_RELIC_GRID = { cols: 15, w: 74, h: 74, gapX: 6, gapY: 6, x: 70, y: 450 }; // 유물 47개: 한 줄에 15칸, 그림만(이름은 상세 창)
+const HQ_LORD_CARD = { w: 164, h: 230, gap: 10, x: 70, y: 150 }; // 마왕 7명이 한 줄에
 const HQ_DETAIL = { x: 1300, y: 150, w: 560, h: 740 };
 
 Object.assign(UI, {
@@ -580,7 +580,7 @@ Object.assign(UI, {
         UIKit.text(ctx, name, r.x + r.w / 2, r.y + r.h - 22, fs, opts.owned ? opts.light : T.inkFaint, 'center', 'bold');
     },
 
-    // 보물 진열장: 위쪽 마왕 3명(금테 칸), 아래 유물 19종(칸), 오른쪽 금테 상세 창(마우스를 올린 것). 잠긴 것은 그림자와 해금 스테이지
+    // 보물 진열장: 위쪽 마왕 7명(1배 그림), 아래 유물 47개(그림 칸), 오른쪽 금테 상세 창(마우스를 올린 것). 잠긴 것은 그림자와 해금 스테이지
     drawHqRelics(ctx) {
         const T = UI_THEME;
         const relicIds = Object.keys(RELICS);
@@ -599,29 +599,31 @@ Object.assign(UI, {
             if (img) {
                 ctx.save();
                 ctx.imageSmoothingEnabled = false;
-                const dx = Math.round(r.x + r.w / 2 - img.width);
-                const dy = Math.round(r.y + 236 - lord.footPx * 2);
-                if (owned) ctx.drawImage(img, dx, dy, img.width * 2, img.height * 2);
-                else ctx.drawImage(this.silhouette(img), dx, dy, img.width * 2, img.height * 2);
+                const dx = Math.round(r.x + r.w / 2 - img.width / 2);
+                const dy = Math.round(r.y + 172 - lord.footPx);
+                if (owned) ctx.drawImage(img, dx, dy, img.width, img.height);
+                else ctx.drawImage(this.silhouette(img), dx, dy, img.width, img.height);
                 ctx.restore();
             }
             if (on) UIKit.gradeFrame(ctx, r.x + 2, r.y + 2, r.w - 4, r.h - 4, T.goldLight, 4);
-            UIKit.text(ctx, owned ? lord.name : '???', r.x + r.w / 2, r.y + r.h - 34, 28, owned ? T.gold : T.inkFaint, 'center', 'bold');
+            UIKit.text(ctx, owned ? lord.name : '???', r.x + r.w / 2, r.y + r.h - 28, 20, owned ? T.gold : T.inkFaint, 'center', 'bold');
             if (!owned) {
                 const st = unlockStage('lord', r.id);
                 if (st) this.drawStageBadge(ctx, st.no, r.x + r.w - 28, r.y + 28, 18);
             }
         }
-        UIKit.text(ctx, '유물', HQ_GRID.x, HQ_GRID.y - 30, 30, T.cream, 'left', 'bold');
-        UIKit.text(ctx, '', HQ_GRID.x + 80, HQ_GRID.y - 28, 19, T.creamSoft);
+        UIKit.text(ctx, '유물', HQ_RELIC_GRID.x, HQ_RELIC_GRID.y - 28, 30, T.cream, 'left', 'bold');
         for (const r of relicRects) {
+            // 칸에는 그림만(이름과 효과는 상세 창). 잠긴 것은 그림자와 해금 스테이지
             const owned = Meta.hasRelic(r.id);
             const st = unlockStage('relic', r.id);
-            this.drawHqCell(ctx, r, {
-                owned, hot: hot === r, name: RELICS[r.id].name, color: T.goldLine, light: T.cream, stage: st && st.no,
-                draw: (x, y) => this.drawRelicIcon2x(ctx, r.id, x, y),
-                shadow: (x, y) => this.drawShadowIcon(ctx, `relic_${r.id}`, x, y, 96)
-            });
+            UIKit.slot(ctx, r.x, r.y, r.w, r.h, owned ? 'gold' : 'iron', hot === r ? 'hover' : null);
+            if (owned) this.drawRelicIcon(ctx, r.id, r.x + (r.w - 48) / 2, r.y + (r.h - 48) / 2);
+            else {
+                this.drawShadowIcon(ctx, `relic_${r.id}`, r.x + (r.w - 48) / 2, r.y + (r.h - 48) / 2, 48);
+                if (st) this.drawStageBadge(ctx, st.no, r.x + r.w - 14, r.y + r.h - 14, 12);
+            }
+            if (hot === r) UIKit.gradeFrame(ctx, r.x + 2, r.y + 2, r.w - 4, r.h - 4, T.goldLight, 3);
         }
         // 상세 창: 마우스를 올린 것, 없으면 첫 마왕
         const D = HQ_DETAIL;
@@ -657,11 +659,9 @@ Object.assign(UI, {
             else this.drawShadowIcon(ctx, `relic_${pick.id}`, x + 36, y + 120, 96);
             y += 290;
             if (owned) {
-                y = this.drawEffectLines(ctx, relic.effects, x, y, 24, 34);
-                if (relic.desc) {
-                    ctx.font = `20px ${UI_FONT}`;
-                    this.wrapLines(ctx, relic.desc, D.w - 64).slice(0, 5).forEach((t, j) => UIKit.ink(ctx, t, x, y + 14 + j * 28, 20, T.inkSoft));
-                }
+                // 유물 효과는 설명 글(desc) 그대로
+                ctx.font = `22px ${UI_FONT}`;
+                this.wrapLines(ctx, relic.desc, D.w - 64).slice(0, 6).forEach((t, j) => UIKit.ink(ctx, t, x, y + j * 32, 22, T.inkGood));
             } else {
                 const st = unlockStage('relic', pick.id);
                 UIKit.text(ctx, st ? `스테이지 ${st.no}에서 해금` : '처음부터', x, y, 26, T.creamSoft, 'left', 'bold');
@@ -792,7 +792,7 @@ Object.assign(UI, {
             UIKit.slot(ctx, lx + 76, ry, 64, 64, 'iron');
             this.drawRelicIcon(ctx, id, lx + 84, ry + 8);
             UIKit.ink(ctx, RELICS[id].name, lx + 150, ry + 22, 22, T.ink, 'left', 'bold');
-            UIKit.ink(ctx, effectLines(RELICS[id].effects).join(', '), lx + 150, ry + 48, 18, T.inkGood);
+            UIKit.ink(ctx, RELICS[id].desc, lx + 150, ry + 48, 18, T.inkGood);
         });
         c.cards.forEach((id, i) => {
             const card = RULE_CARDS[id];
@@ -864,7 +864,7 @@ Object.assign(UI, {
             UIKit.slot(ctx, x + 120, ry, 64, 64, 'iron');
             this.drawRelicIcon(ctx, id, x + 128, ry + 8);
             UIKit.ink(ctx, RELICS[id].name, x + 200, ry + 34, 24, T.ink, 'left', 'bold');
-            UIKit.ink(ctx, effectLines(RELICS[id].effects).join(', '), x + 460, ry + 34, 20, T.inkGood);
+            UIKit.ink(ctx, RELICS[id].desc, x + 460, ry + 34, 20, T.inkGood);
         });
         c.cards.forEach((id, i) => {
             const card = RULE_CARDS[id];

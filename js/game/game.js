@@ -117,6 +117,11 @@ const Game = {
         this.rewinds = [];
         this.rewindDebt = 0;
         this.rewindUsed = false;
+        // 유물: 학살의 종 게이지, 영혼 수확 낫 영혼, 불사의 왕관을 썼는지, 마나 결정의 남은 소수
+        this.relicGauge = 0;
+        this.relicSouls = 0;
+        this.undyingUsed = false;
+        this.manaLeft = 0;
         this.mana = 0;
         this.powers = {};
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
@@ -150,7 +155,7 @@ const Game = {
     lordDef() { return DEMON_LORDS[this.lord] || DEMON_LORDS[DEFAULT_LORD]; },
 
     // 마왕 최대 체력: 기본값에 마왕과 유물의 maxHp를 더한다(1 아래로는 내려가지 않는다)
-    maxHp() { return Math.max(1, COMBAT_RULES.maxHp + this.mods.maxHp); },
+    maxHp() { return Math.max(1, Math.floor((COMBAT_RULES.maxHp + this.mods.maxHp) * (this.mods.maxHpHalf ? 0.5 : 1))); }, // 저주받은 왕관: 절반
 
     // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
     skillCooldown(key) {
@@ -271,8 +276,12 @@ const Game = {
     // 마력 얻기. 권능이 없는 마왕은 모으지 않는다
     addMana(n, x, y) {
         if (!this.lordPowers().length || this.mods.powerSeal) return; // 계약 조항 권능 봉인
-        this.mana += n;
-        if (x !== undefined) Fx.number({}, x, y, `+${n} 마력`, '#c9a6ff', false);
+        // 마나 결정: 얻는 양 +50%(소수는 모아 둔다)
+        this.manaLeft = (this.manaLeft || 0) + n * (1 + this.mods.manaGain);
+        const whole = Math.floor(this.manaLeft + 1e-9);
+        this.manaLeft -= whole;
+        this.mana += whole;
+        if (x !== undefined && whole > 0) Fx.number({}, x, y, `+${whole} 마력`, '#c9a6ff', false);
     },
     lightningRadius() { return COMBAT_RULES.lightning.radius + (this.power('wide') || this.power('coinWide') ? 0.5 : 0); },
 
@@ -286,6 +295,14 @@ const Game = {
         if (mods.fewDamage && this.monsters.length <= L.fewCount) bonus += mods.fewDamage;
         if (mods.commonDamage && MONSTERS[m.type].grade === 'common') bonus += mods.commonDamage;
         if (mods.fullHpDamage && this.hp >= this.maxHp()) bonus += mods.fullHpDamage;
+        if (mods.perMonsterDamage) bonus += Math.min(L.perMonsterMax, this.monsters.filter(o => !o.removed && !o.clone).length * mods.perMonsterDamage); // 진군의 북
+        if (mods.bigDamage && monsterCells(m.type).join() !== '1,1') bonus += mods.bigDamage; // 거인의 장갑
+        if (mods.pureDamage || mods.allFamilies) {
+            const fams = new Set(this.monsters.filter(o => !o.removed && !o.clone).map(o => MONSTERS[o.type].family));
+            if (mods.pureDamage && fams.size === 1) bonus += mods.pureDamage; // 순혈의 왕관
+            if (mods.allFamilies && fams.size >= Object.keys(MONSTER_FAMILIES).length) bonus += mods.allFamilies; // 균형의 저울
+        }
+        if (m.feast) bonus += m.feast; // 탐식의 위장
         return bonus;
     },
 
@@ -478,7 +495,19 @@ const Game = {
             this.tutorialCommons--;
             grade = grades[0];
         }
-        return rngItem('summon', summonPool(grade));
+        // 일곱 번째 별: 7번째 소환마다 영웅 이상
+        if (this.mods.seventhStar && (this.summonCount + 1) % 7 === 0 && GRADE_ORDER.indexOf(grade) < GRADE_ORDER.indexOf('epic') && summonPool('epic').length) grade = 'epic';
+        // 종족 유물: 그 종족이 나올 확률 +100%(같은 등급 안에서 가중치)
+        const pool = summonPool(grade);
+        const weight = id => 1 + (this.mods[MONSTERS[id].family + 'Odds'] || 0);
+        let total = 0;
+        for (const id of pool) total += weight(id);
+        let pick = rng('summon') * total;
+        for (const id of pool) {
+            pick -= weight(id);
+            if (pick < 0) return id;
+        }
+        return pool[pool.length - 1];
     },
 
     // 소환한 몬스터를 세울 칸. 없으면 null
@@ -531,8 +560,15 @@ const Game = {
             cell = this.pickSummonCell(type);
         }
         if (!cell) return { ok: false, reason: 'full' };
-        if (this.gold >= cost) {
-            this.gold -= cost;
+        // 도박꾼의 동전: 15% 공짜, 10% 두 배(두 배를 못 내면 원래 값)
+        let pay = cost;
+        if (this.mods.gamble) {
+            const r = rng('relic');
+            if (r < 0.15) pay = 0;
+            else if (r < 0.25 && this.gold >= cost * 2) pay = cost * 2;
+        }
+        if (this.gold >= pay) {
+            this.gold -= pay;
         } else {
             this.hp -= 1; // 유물 피의 계약서
             this.bloodSummons++;
@@ -543,6 +579,7 @@ const Game = {
         const m = createMonster(type, cell.col, cell.row);
         this.monsters.push(m);
         this.stats.summoned++;
+        if (this.mods.freshSpeed) { m.buffT = 10; m.buff = { speed: this.mods.freshSpeed }; } // 신속의 장화
         // 유물 거울 쌍둥이: 같은 몬스터가 공짜로 1마리 더
         if (this.mods.twinSummon && rng('relic') < this.mods.twinSummon && !this.fieldFull()) {
             const spot = this.pickSummonCell(type);
@@ -636,6 +673,13 @@ const Game = {
             Sfx.play('upgrade');
             return { ok: true, id: crafted, crafted: true, swapped: null };
         }
+        // 장비 먹는 괴물: 첫 칸이 차 있으면 둘째 칸에
+        if (old && this.mods.equipSlots && !m.equip2) {
+            this.equipBag.splice(index, 1);
+            setMonsterEquip2(m, id);
+            Sfx.play('upgrade');
+            return { ok: true, id, swapped: null, second: true };
+        }
         if (old) this.equipBag[index] = old;
         else this.equipBag.splice(index, 1);
         setMonsterEquip(m, id);
@@ -667,15 +711,22 @@ const Game = {
         if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
         if (!m || !m.equip) return { ok: false, reason: 'none' };
         if (this.bagFull()) return { ok: false, reason: 'full' };
-        const id = m.equip;
+        // 둘째 칸부터 뺀다
+        const id = m.equip2 || m.equip;
         this.equipBag.push(id);
-        setMonsterEquip(m, null);
+        if (m.equip2) setMonsterEquip2(m, null);
+        else setMonsterEquip(m, null);
         Sfx.play('click');
         return { ok: true, id };
     },
 
     // 맵에서 사라지는 몬스터(제물, 판매)의 장비를 보관함으로 돌려보낸다(자리가 없으면 골드)
     returnEquip(m) {
+        if (m.equip2) {
+            const id2 = m.equip2;
+            m.equip2 = null;
+            this.gainEquip(this.returnedEquipId(id2), m.x, m.y - 40);
+        }
         if (!m.equip) return null;
         const id = m.equip;
         m.equip = null;
@@ -687,10 +738,12 @@ const Game = {
 
     // 재료 여럿의 장비: 가장 좋은 것 1개(같으면 앞쪽 재료)가 이어지고 나머지는 돌아간다
     mergeEquipAll(materials) {
-        const back = materials.map(m => m.equip).filter(Boolean);
+        const back = materials.flatMap(m => [m.equip, m.equip2]).filter(Boolean);
         const keep = bestEquip(back);
         if (keep) back.splice(back.indexOf(keep), 1);
-        return { keep, back };
+        const keep2 = this.mods.equipSlots ? bestEquip(back) : null;
+        if (keep2) back.splice(back.indexOf(keep2), 1);
+        return { keep, keep2, back };
     },
 
     // 정예 용사를 처치하면 EQUIP_RULES.eliteDrop(마왕과 유물의 eliteDrop을 더한다) 확률로 재료를 떨어뜨린다
@@ -1031,6 +1084,7 @@ const Game = {
             case 'jail': return { ok: !!castJail() };
             case 'mirrorClone': return { ok: !!castMirrorClone() };
             case 'timeStop': return { ok: !!castTimeStop() };
+            case 'relicFire': return { ok: !!fireRelic(cmd.id) };
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
@@ -1101,7 +1155,12 @@ const Game = {
         // 장비는 가장 좋은 것 1개를 이어받고, 나머지는 보관함으로(자리가 없으면 골드)
         const equip = this.mergeEquipAll(materials);
         if (equip.keep) setMonsterEquip(monster, equip.keep);
-        for (const m of materials) m.equip = null;
+        if (equip.keep2) setMonsterEquip2(monster, equip.keep2); // 장비 먹는 괴물: 둘째 칸도 이어진다
+        for (const m of materials) { m.equip = null; m.equip2 = null; }
+        // 유물: 신속의 장화, 탐식의 위장(재료 중 가장 큰 값 + 5%), 신화의 파편
+        if (this.mods.freshSpeed) { monster.buffT = 10; monster.buff = { speed: this.mods.freshSpeed }; }
+        if (this.mods.feast) monster.feast = Math.max(0, ...materials.map(o => o.feast || 0)) + this.mods.feast;
+        if (this.mods.mythicGold && MONSTERS[type].grade === 'mythic') this.gold += this.mods.mythicGold;
         const returned = equip.back.map(id => this.gainEquip(this.returnedEquipId(id), monster.x, monster.y - 40));
         monster.reveal = MERGE_REVEAL; // 빨려 들어가는 연출이 끝난 뒤 나타난다
         this.monsters[this.monsters.indexOf(old)] = monster;
@@ -1257,7 +1316,7 @@ const Game = {
             Sfx.play('bossIntro');
         }
         this.state = 'wave';
-        this.roundTimer = (wave.boss ? COMBAT_RULES.bossRoundTime : COMBAT_RULES.roundTime) * this.mods.roundTime;
+        this.roundTimer = (wave.boss ? COMBAT_RULES.bossRoundTime + this.mods.bossTime : COMBAT_RULES.roundTime) * this.mods.roundTime; // 시간 도둑의 모래
         this.roundFull = this.roundTimer; // 다음 라운드 잠금(nextRoundLocked)이 시작 시각으로 쓴다
         this.roundSummons = 0;
         Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, lordLine('waveStart'), 2);
@@ -1366,7 +1425,7 @@ const Game = {
         const data = { v: 1, lord: this.lord, relics: this.relics, stage: this.stage, gold: this.gold, hp: this.hp, waveIndex: this.waveIndex,
             prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, familyLevels: this.familyLevels, equipBag: this.equipBag, bossReward: this.bossReward,
             skills: this.skills, stats: this.stats, mana: this.mana, powers: this.powers, powerSeed: this.powerSeed, arrivals: this.arrivals,
-            monsters: this.monsters.filter(m => !m.removed && !m.clone).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, xp: m.xp || 0, equip: m.equip || null })) };
+            monsters: this.monsters.filter(m => !m.removed && !m.clone).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, xp: m.xp || 0, equip: m.equip || null, equip2: m.equip2 || null })) };
         try { localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 저장을 못 해도 판은 계속된다 */ }
     },
 
@@ -1409,6 +1468,7 @@ const Game = {
                 setMonsterRank(m, clamp(o.rank || 0, 0, MONSTER_RANKS.length - 1));
                 m.xp = o.xp || 0;
                 if (o.equip && EQUIPMENT[o.equip]) setMonsterEquip(m, o.equip);
+                if (o.equip2 && EQUIPMENT[o.equip2]) setMonsterEquip2(m, o.equip2);
                 this.monsters.push(m);
             }
             return true;
@@ -1435,6 +1495,7 @@ const Game = {
         const early = this.roundTimer * COMBAT_RULES.earlyGoldPerSecond * (this.power('rewindGold') ? 1.5 : 1); // 권능 이른 종
         const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(early);
         const calledEarly = this.roundTimer > 0;
+        if (calledEarly && this.mods.earlyGold) this.gold += this.mods.earlyGold; // 깨진 모래시계
         this.addScore(SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
