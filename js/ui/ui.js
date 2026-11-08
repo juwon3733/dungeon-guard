@@ -2408,7 +2408,7 @@ const UI = {
         }
     },
 
-    // 보스 체력: 이름판 아래의 전용 틀(hud_bossbar 2배). 맞으면 깎인 부분이 뼈색 잔상으로 남았다가 늦게 줄어든다. 눈금은 1/4마다
+    // 보스 체력: 이름판 아래의 전용 틀(hud_bossbar 2배). 맞으면 깎인 부분이 뼈색 잔상으로 남았다가 늦게 줄어든다. 눈금은 1/4마다, 숫자는 남은/최대
     drawBossBar(ctx) {
         const boss = Game.heroes.find(h => h.boss && !h.waiting);
         if (!boss) return;
@@ -2436,7 +2436,9 @@ const UI = {
         ctx.fillRect(bx, by + bh - 6, fill, 6);
         ctx.fillStyle = '#12080c';
         for (let i = 1; i < 4; i++) ctx.fillRect(bx + Math.round(bw * i / 4) - 1, by, 2, bh);
-        UIKit.text(ctx, boss.name, bx + bw / 2, by + bh / 2 + 1, 18, UI_THEME.cream, 'center', 'bold');
+        // 이름은 왼쪽, 남은 체력 숫자는 오른쪽(막대 안)
+        UIKit.text(ctx, boss.name, bx + 10, by + bh / 2 + 1, 18, UI_THEME.cream, 'left', 'bold');
+        UIKit.text(ctx, `${Math.ceil(Math.max(0, boss.hp)).toLocaleString()} / ${Math.ceil(boss.maxHp).toLocaleString()}`, bx + bw - 10, by + bh / 2 + 1, 18, UI_THEME.cream, 'right', 'bold');
     },
 
     // 연속 처치: 체력 그릇 오른쪽 위에 큰 숫자. 많이 이을수록 크고 뜨거운 색
