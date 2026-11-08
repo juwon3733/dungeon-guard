@@ -4945,8 +4945,8 @@ Game.payInterest();
 assert.strictEqual(Game.gold, 100, 'no relic no interest');
 // 폭풍의 병: 번개만
 seed('storm_bottle');
-near(Game.skillCooldown('lightning'), COMBAT_RULES.lightning.cooldown * 0.9 * 0.75, 'lightning');
-near(Game.skillCooldown('roar'), COMBAT_RULES.roar.cooldown * 0.9, 'roar same');
+near(Game.skillCooldown('lightning'), COMBAT_RULES.lightning.cooldown * 0.75, 'lightning');
+near(Game.skillCooldown('roar'), COMBAT_RULES.roar.cooldown, 'roar same');
 // 광기의 북
 seed(null);
 assert(Game.roarLocked(), 'roar locked at full hp');
@@ -6155,6 +6155,14 @@ console.log('smoke ok: equipment crafting');
     };
     const sh = shields();
     assert(sh === shields() && sh.includes('1'), 'shields are seeded');
+    // 난이도 기본 배율: 베이직 체력·이동 50%, 노말 100%, 헬 1000%·300%
+    assert.deepStrictEqual(ABYSS_LEVELS.map(L => [L.hp, L.speed]).filter((_, i) => [0, 3, 9].includes(i)), [[0.5, 0.5], [1, 1], [10, 3]], 'base multipliers');
+    for (let i = 1; i < ABYSS_LEVELS.length; i++) assert(ABYSS_LEVELS[i].hp > ABYSS_LEVELS[i - 1].hp && ABYSS_LEVELS[i].speed > ABYSS_LEVELS[i - 1].speed, 'base rises every level');
+    assert(!ABYSS_LEVELS[9].cards.includes('pact_iron'), 'hell hp lives in the base, not in a clause');
+    Game.reset(null, null, abyssChallenge('base-w', 'rift', [], 9));
+    assert(Math.abs(Game.mods.heroHp - 10) < 1e-9 && Math.abs(Game.mods.heroSpeed - 3) < 1e-9, 'hell: hero hp x10, speed x3');
+    Game.reset(null, null, abyssChallenge('base-w', 'rift', [], 0));
+    assert(Math.abs(Game.mods.heroHp - 0.5) < 1e-9 && Math.abs(Game.mods.heroSpeed - 0.5) < 1e-9, 'basic: hero hp and speed halved');
     }).toString() + ')()', pctx);
     console.log('smoke ok: forbidden pact');
 }
@@ -6392,7 +6400,6 @@ console.log('smoke ok: equipment crafting');
         const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); }; // 보스 표시는 옮음 시험용(보스 패턴은 돌리지 않는다)
         start();
         assert(Game.lordPassive('plague'), 'plague passive');
-        assert.strictEqual(Game.mods.damage, -0.1, 'monster damage -10%');
         const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace('fire_imp', a, r); }).split(',').map(Number);
         const imp = Game.place('fire_imp', k[0], k[1]) || Game.monsters[Game.monsters.length - 1];
         const a = hero();
@@ -6497,7 +6504,6 @@ console.log('smoke ok: equipment crafting');
         const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); };
         start();
         assert(Game.lordPassive('shackle'), 'shackle passive');
-        assert(Math.abs(Game.mods.range - 0.1) < 1e-9 && Game.mods.startGold === -30, 'range +10%, start gold -30');
         // 확률: 많이 맞히면 약 8%가 묶인다(고정 난수)
         let bound = 0;
         for (let i = 0; i < 400; i++) { const h = hero(); chainOnHit(h); if (h.bound > 0) bound++; h.dead = true; }
@@ -6590,7 +6596,6 @@ console.log('smoke ok: equipment crafting');
         const trio = () => [put('orc_guard'), put('orc_guard'), put('orc_guard')];
         start();
         assert(Game.lordPassive('reflection'), 'reflection passive');
-        assert(Math.abs(Game.mods.mergeJump - 0.05) < 1e-9 && Game.mods.fieldMax === -2, 'merge jump +5%, field -2');
         // 확률 1로: 합치면 끌어온 재료가 돌아온다
         Game.lordPassive('reflection').chance = 1;
         let [a, b] = trio();

@@ -46,16 +46,19 @@ const ABYSS_LEVELS = (() => {
         ['익스퍼트', ['+pact_revive', '+pact_summon']],
         ['익스트림', ['+pact_priest', '+pact_split', '+pact_throne']],
         ['나이트메어', ['+pact_seal', '+pact_boss5']],
-        ['헬', ['+pact_iron', '+pact_fury', '-pact_throne', '+pact_crumble']]
+        ['헬', ['+pact_fury', '-pact_throne', '+pact_crumble']] // 용사 체력은 기본 배율(10배)에 들어 있어 불사의 갑주는 뺐다
     ];
+    // 난이도마다 기본으로 붙는 용사 체력과 이동 속도 배율(베이직 50%·50% ~ 헬 1000%·300%)
+    const base = [[0.5, 0.5], [0.7, 0.65], [0.85, 0.8], [1, 1], [1.5, 1.2], [2.2, 1.4], [3.2, 1.65], [4.6, 1.95], [6.8, 2.4], [10, 3]];
     let pact = [];
     return steps.map(([name, list], i) => {
+        const [hp, speed] = base[i];
         // 혜택은 그 단계에만, 조항은 '+'로 쌓고 '-'로 바꾼다
         if (list.some(k => k[0] === '+' || k[0] === '-')) {
             for (const k of list) pact = k[0] === '-' ? pact.filter(c => c !== k.slice(1)) : pact.concat([k.slice(1)]);
-            return { id: i, name, cards: pact.slice() };
+            return { id: i, name, cards: pact.slice(), hp, speed };
         }
-        return { id: i, name, cards: list.slice() };
+        return { id: i, name, cards: list.slice(), hp, speed };
     });
 })();
 const DEFAULT_ABYSS_LEVEL = 3; // 노말: 예전 심연(조항 없음)과 같다
@@ -167,6 +170,7 @@ function abyssChallenge(seed, lord, relics, level) {
     const L = abyssLevelOf(level);
     return {
         kind: 'abyss', id: `abyss-${seed}-${L.id}`, name: '끝없는 심연', seed: String(seed), lord, relics: relics.slice(), level: L.id, cards: L.cards.slice(),
+        base: { hp: L.hp, speed: L.speed }, // 난이도 기본 배율: 용사 체력, 이동 속도
         hpFrom: ABYSS_RULES.hpFrom, hpGrowth: ABYSS_RULES.hpGrowth,
         map: seededPick(String(seed), 'map', MAP_IDS, 1)[0],
         zone: seededPick(String(seed), 'zone', ZONE_IDS, 1)[0]

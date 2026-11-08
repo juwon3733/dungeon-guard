@@ -63,6 +63,10 @@ const Game = {
             this.lord = challenge.lord;
             this.relics = challenge.relics.slice();
             this.mods = buildMods(challenge.lord, challenge.relics, challenge.cards);
+            if (challenge.base) { // 심연 난이도의 기본 배율
+                this.mods.heroHp *= challenge.base.hp;
+                this.mods.heroSpeed *= challenge.base.speed;
+            }
         } else if (loadout) {
             const clean = cleanLoadout(loadout);
             this.lord = clean.lord;
