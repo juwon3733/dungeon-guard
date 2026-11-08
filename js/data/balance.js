@@ -178,6 +178,8 @@ const COMBAT_RULES = {
     goldBomb: { cooldown: 25, spend: 0.1, richSpend: 0.2, maxSpend: 500, minGold: 50, radius: 3, bigRadius: 1.5, damagePerGold: 0.5 }, // 권능 금화 폭격
     bribeRoar: { cost: 300, cooldown: 5 }, // 권능 입막음
     miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 권능 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
+    jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 권능 사슬 감옥
+    chain: { chanceUp: 0.06, longUp: 0.4, breakDamage: 0.05, pitEvery: 5, lowBelow: 0.15, turnEvery: 8 }, // 사슬의 군주 권능 수치
     plague: { sacDps: 5, sacDpsPerRound: 1.2, burstSeconds: 2, deathBelow: 0.1, pandemicEvery: 10, blastRadius: 1, blastMul: 0.4 }, // 역병의 군주 권능 수치
     corpseBlast: { every: 5, quickEvery: 3, radius: 1.5, damageMul: 0.3 }, // 권능 시체 폭발
     chainStrike: { count: 3, radius: 0.75, damageMul: 0.4 } // 권능 연쇄 낙뢰

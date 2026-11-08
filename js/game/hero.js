@@ -46,6 +46,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         curse: 0, curseMul: 1, // 저주(curseShot): 남은 초와 받는 피해 배율
         burn: 0, burnDps: 0, burnTick: 0, burnOwner: null, // 화상(burnShot): 남은 초, 초당 피해, 다음 피해까지 초, 건 몬스터
         slow: 0, slowMul: 1, // 빙결(slowShot): 남은 초와 이동 속도 배율
+        bound: 0, boundOnce: false, // 사슬의 군주: 묶인 남은 초(정지와 함께 건다), 한 번이라도 묶였는지
         poison: 0, poisonDps: 0, poisonTick: 0, poisonStacks: 0, poisonSpread: false, poisonOwner: null, // 역병의 독: 남은 초, 초당 피해(배율 전), 다음 피해까지, 겹친 수, 옮은 독인지, 건 몬스터
         cast: !bossDef && def.stunEvery ? rngRange('spawn', 1.5, def.stunEvery) : 0,
         song: !bossDef && def.song ? rngRange('spawn', 1, def.song.every) : 0,
@@ -129,6 +130,14 @@ function updateHero(h, dt) {
             if (h.dead) return;
         }
     }
+    if (h.bound > 0) {
+        h.bound -= dt;
+        if (h.bound <= 0) {
+            h.bound = 0;
+            chainReleased(h);
+            if (h.dead) return;
+        }
+    }
     h.anim += dt * (h.chargeTime > 0 ? 14 : 7) * (h.haste > 0 ? h.hasteMul : 1) * (h.animRate || 1);
 
     if (h.boss) updateBossPatterns(h, dt);
@@ -179,7 +188,8 @@ function updateHero(h, dt) {
     }
     if (h.d >= ROUTES[h.route].length - 56) {
         // 권능 문전박대: 5명째마다 왕좌를 때리지 않고 입구로 돌아간다
-        if (!h.boss && G.power('turnback') && ++G.arrivals % 5 === 0) {
+        const every = G.power('turnback') ? 5 : (G.power('dragTurn') ? COMBAT_RULES.chain.turnEvery : 0); // 권능 문전박대, 재수감
+        if (!h.boss && every && ++G.arrivals % every === 0) {
             h.d = 0;
             return;
         }
@@ -191,7 +201,7 @@ function updateHero(h, dt) {
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
             const weak = h.elite && h.poison > 0 && G.power('rotWeaken') ? 0.7 : 1; // 권능 쇠약
-            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') ? 0.8 : 1);
+            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') || G.power('dragWard') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;

@@ -484,7 +484,8 @@ const Render = {
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
-        if (h.stun > 0) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1);
+        if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY, h.boss ? 150 : 90, h.lane * 0.1); // 묶인 용사는 별 대신 사슬
+        if (h.bound > 0) this.chainShackle(ctx, p.x, p.y + 10, h.boss ? 2 : 1, h.bound, h.elite || h.boss);
         if (h.poison > 0) this.poisonBubbles(ctx, p.x, headY - 10, h.boss ? 2 : 1, h.lane, Math.min(1, h.poison * 2));
         if (h.burn > 0) this.drawLoopSheet(ctx, 'fx_burning', p.x, p.y + 6, h.boss ? 195 : 105, h.lane * 0.07, Math.min(1, h.burn * 2));
         if (h.slow > 0) this.frostAura(ctx, p.x, p.y + 9, headY, Math.min(1, h.slow * 2));
@@ -1698,6 +1699,29 @@ const Render = {
         if (!sheet) return;
         const k = (((Game.time + (seed || 0)) / sheet.life) % 1 + 1) % 1;
         this.drawSheetFrame(ctx, key, Math.floor(k * sheet.frames), x, y, size, 0, alpha);
+    },
+
+    // 사슬의 군주: 묶인 용사 발밑의 쇠고리(정예와 보스는 땅에 박힌 사슬 두 줄도). 도트 칸, k배. 풀리기 0.2초 전부터 흐려진다
+    chainShackle(ctx, x, y, k, left, anchored) {
+        const P = 4 * k;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, left / 0.2);
+        const link = (lx, ly, light) => {
+            ctx.fillStyle = '#1a1614';
+            ctx.fillRect(lx - 1, ly - 1, P + 2, P + 2);
+            ctx.fillStyle = light ? '#f0ece4' : '#a89e94';
+            ctx.fillRect(lx, ly, P, P);
+        };
+        // 발목 고리: 납작한 타원 위 6칸
+        for (let i = 0; i < 6; i++) {
+            const a = i / 6 * Math.PI * 2;
+            link(Math.round((x + Math.cos(a) * 14 * k) / P) * P, Math.round((y + Math.sin(a) * 5 * k) / P) * P, i < 3);
+        }
+        // 정예와 보스: 땅에서 고리로 이어진 사슬 두 줄(좌우). 떼로 오는 일반 용사는 고리만(화면이 지저분해지지 않게)
+        if (anchored) for (const side of [-1, 1]) {
+            for (let j = 1; j <= 4; j++) link(Math.round((x + side * (16 + j * 8) * k) / P) * P, Math.round((y + j * 3 * k) / P) * P, j % 2 === 0);
+        }
+        ctx.restore();
     },
 
     // 역병의 독: 머리 위로 초록 거품 세 개가 떠올랐다 꺼진다(도트 칸, k배 크기)

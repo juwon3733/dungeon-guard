@@ -147,6 +147,26 @@ const LORD_POWERS = {
             [{ id: 'rotWeaken', name: '쇠약', desc: '독 걸린 정예와 보스의 왕좌 피해 -30%' }, { id: 'rotSac', name: '역병 제물', desc: '제물을 바치면 맵의 모든 용사에게 독' }],
             [{ id: 'rotDeep', name: '깊은 부패', desc: '독 걸린 용사 받는 피해 +30%' }, { id: 'rotBlast', name: '시체 가스', desc: '독으로 쓰러진 일반 용사 자리가 터짐' }]
         ] }
+    ],
+    chain: [
+        { id: 'shackle', name: '족쇄', desc: '자주, 오래 묶는다', tiers: [
+            [{ id: 'shackleChance', name: '촘촘한 사슬', desc: '묶을 확률 +6%' }, { id: 'shackleLong', name: '굵은 사슬', desc: '묶는 시간 +0.4초' }],
+            [{ id: 'shackleElite', name: '무거운 족쇄', desc: '정예도 확률이 줄지 않음' }, { id: 'shackleChain', name: '사슬 엮기', desc: '묶일 때 1칸 안 용사 1명도 묶임' }],
+            [{ id: 'jail', name: '사슬 감옥', desc: '새 스킬(E): 맨 앞 용사 둘레 1.5칸을 3초 묶음(보스 1초)' }, { id: 'shackleBreak', name: '찢기는 사슬', desc: '묶임이 풀릴 때 최대 체력 5% 피해' }],
+            [{ id: 'jailBig', name: '큰 감옥', desc: '감옥 범위 +1칸, 시간 +1초' }, { id: 'shackleLock', name: '단단한 자물쇠', desc: '다시 묶인 용사는 1.5배 오래' }]
+        ] },
+        { id: 'drag', name: '끌기', desc: '뒤로 끌어온다', tiers: [
+            [{ id: 'dragBack', name: '갈고리', desc: '묶인 용사 0.5칸 뒤로(보스 제외)' }, { id: 'dragWard', name: '쇠창살', desc: '일반 용사의 왕좌 피해 -20%' }],
+            [{ id: 'dragHook', name: '큰 갈고리', desc: '묶인 정예 2칸 뒤로' }, { id: 'dragSlow', name: '저린 다리', desc: '묶임이 풀린 뒤 2초간 이동 -25%' }],
+            [{ id: 'dragTurn', name: '재수감', desc: '왕좌에 닿는 일반 용사 8명째마다 입구로' }, { id: 'dragFar', name: '긴 사슬', desc: '끄는 거리 2배' }],
+            [{ id: 'dragPit', name: '구덩이', desc: '묶인 일반 용사 5명째마다 입구로' }, { id: 'dragAll', name: '쇠사슬 회수', desc: '사슬 감옥에 걸린 용사 2칸 뒤로' }]
+        ] },
+        { id: 'execute', name: '처형', desc: '묶인 용사를 끝낸다', tiers: [
+            [{ id: 'execBound', name: '형틀', desc: '묶인 용사 받는 피해 +20%' }, { id: 'execRange', name: '긴 창', desc: '몬스터 사거리 +10%', mods: { range: 0.1 } }],
+            [{ id: 'execLow', name: '참수', desc: '체력 15% 이하인 묶인 일반 용사 즉사' }, { id: 'execGold', name: '몸값', desc: '묶인 채 쓰러진 용사 골드 +50%' }],
+            [{ id: 'execMana', name: '본보기', desc: '묶인 정예를 쓰러뜨리면 마력 +1' }, { id: 'execEdge', name: '간수의 칼', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
+            [{ id: 'execDeep', name: '고문', desc: '묶인 용사 받는 피해 +40%' }, { id: 'execChainKill', name: '연쇄 형벌', desc: '묶인 용사가 쓰러지면 1칸 안 용사 1명 묶음' }]
+        ] }
     ]
 };
 
@@ -155,7 +175,8 @@ const POWER_SKILLS = {
     gate: { key: 'portal', name: '균열', title: '균열 열기', icon: 'wave' },
     raise: { key: 'raise', name: '시체', title: '시체 일으키기', icon: 'soul' },
     goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' },
-    miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' }
+    miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' },
+    jail: { key: 'jail', name: '감옥', title: '사슬 감옥', icon: 'lock' }
 };
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
@@ -259,6 +280,18 @@ const DEMON_LORDS = {
             waveStart: ['기침 소리가 들리는군. 어서 와.'],
             throneHit: ['가까이 오지 마, 옮는다.'],
             sacrifice: ['거름이 되어라.']
+        }
+    },
+    chain: {
+        id: 'chain', name: '사슬의 군주', desc: '도망은 없다. 줄 서서 맞아라.',
+        sprite: 'lord_chain', footPx: 120,
+        portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
+        effects: { range: 0.1, startGold: -30 },
+        passive: { kind: 'shackle', name: '족쇄', desc: '몬스터에게 맞은 용사 8% 확률로 0.6초 묶임(정예와 보스는 절반)', chance: 0.08, duration: 0.6 },
+        speech: {
+            waveStart: ['줄 맞춰 들어와라.'],
+            throneHit: ['감히 간수를 쳐?'],
+            sacrifice: ['형기 만료.']
         }
     }
 };
