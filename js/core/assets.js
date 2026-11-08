@@ -47,7 +47,7 @@ const Assets = {
         for (const sheet of Object.values(FX_SHEETS)) list.push(sheet.image);
         list.push(...UI_ICONS.map(id => `uiicon_${id}`), ...UI_SHEETS, ...HUD_SPRITES, ...MENU_ILLUSTS,
             ...Object.keys(MONSTERS).filter(id => gradeInfo(MONSTERS[id].grade, 'fx', 0) >= 2).map(id => `orb_${id}`), // 전설과 신화의 궤도 오브젝트
-            ...HQ_SPRITES);
+            ...HQ_SPRITES, 'ast_coin'); // ast_coin: 처치 골드 금화(tools/import_asteria_gold.py)
         return [...new Set(list)]; // 몬스터끼리 같은 그림을 써도 한 번만 불러온다
     },
 

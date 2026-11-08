@@ -133,7 +133,8 @@ function killHero(hero, pos, attacker) {
     Fx.burst(pos.x, cy, '#ffd34d', hero.boss ? 24 : 8, 220, 0.6, 8);
     Fx.ring(pos.x, pos.y - 36, hero.boss ? 320 : 110, '#ffe9b0', 0.3);
     Fx.anim(hero.boss ? 'fx_adv_arcanist_thunderGod' : 'fx_explosion', pos.x, pos.y - (hero.boss ? 140 : 51), hero.boss ? 700 : 300, hero.boss ? 0.8 : 0.36);
-    if (hero.elite || hero.boss) Fx.anim('fx_blastGold', pos.x, pos.y - 60, hero.boss ? 600 : 360, 0.5);
+    // 동전 폭발(Asteria, 128px 시트): 정예는 2배, 보스는 3배 크기(그림 1px의 정수배)
+    if (hero.elite || hero.boss) Fx.anim('fx_coin_blast', pos.x, pos.y - 60, 128 * (hero.boss ? 3 : 2) / WORLD_ZOOM, 0.6);
     Fx.glow(pos.x, pos.y - 45, hero.boss ? 480 : 170, 'rgba(255,190,110,1)', 0.25);
     Fx.number({}, pos.x, pos.y - (hero.boss ? 360 : 200), `+${bounty}G`, '#ffd34d', hero.boss || hero.elite);
     if (hero.boss) {

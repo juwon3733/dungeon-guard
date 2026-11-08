@@ -1739,8 +1739,10 @@ const Render = {
             const s = k / WORLD_ZOOM;
             const x = Math.round((a.x - sheet.pivotX * s) * WORLD_ZOOM) / WORLD_ZOOM;
             const y = Math.round((a.y - sheet.pivotY * s) * WORLD_ZOOM) / WORLD_ZOOM;
+            if (sheet.add) ctx.globalCompositeOperation = 'lighter';
             ctx.drawImage(img, (frame % sheet.cols) * sheet.w, Math.floor(frame / sheet.cols) * sheet.h, sheet.w, sheet.h,
                 x, y, sheet.w * s, sheet.h * s);
+            if (sheet.add) ctx.globalCompositeOperation = 'source-over';
         }
     },
 
@@ -1824,7 +1826,31 @@ const Render = {
     },
 
     drawCoins(ctx) {
-        // 금화(화면 좌표): 진한 테, 금, 안쪽 무늬와 반짝임. 돌면서 날아가도록 너비가 줄었다 는다
+        // 금화(화면 좌표): Asteria 금화 그림(그림 1px = 화면 1px). 굴러가듯 좌우로 뒤집히고 가끔 반짝인다
+        const img = Assets.get('ast_coin');
+        if (img) {
+            ctx.imageSmoothingEnabled = false;
+            for (const c of Fx.coins) {
+                const x = Math.round(c.x - img.width / 2);
+                const y = Math.round(c.y - img.height / 2);
+                const flip = Math.floor(c.age * 10 + c.vx) % 2 === 0;
+                ctx.save();
+                if (flip) {
+                    ctx.translate(x + img.width, y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(img, 0, 0);
+                } else {
+                    ctx.drawImage(img, x, y);
+                }
+                ctx.restore();
+                if (Math.floor(c.age * 6 + c.vy) % 3 === 0) {
+                    ctx.fillStyle = '#fff8d8';
+                    ctx.fillRect(x + 4, y + 3, 2, 1);
+                    ctx.fillRect(x + 5, y + 2, 1, 3);
+                }
+            }
+            return;
+        }
         for (const c of Fx.coins) {
             const spin = Math.abs(Math.cos(c.age * 9 + c.vx));
             const w = Math.max(4, Math.round(12 * spin)) * 2;
