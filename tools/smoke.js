@@ -5547,6 +5547,15 @@ Game.reset();
     const p = heroWorld(h);
     resolveStrike({ x: p.x, y: p.y });
     assert(h.curse > 0 && h.curseMul === DEMON_LORDS.rift.passive.takenMul, 'lightning curse');
+    {
+        // 균열의 군주 번개는 최대 체력 비례 추가 피해(보스도 같은 비율)
+        const b = createHero('warrior', 0, 0, false);
+        Object.assign(b, { waiting: false, d: 900, lane: 0, boss: true, maxHp: 100000, hp: 100000, armor: 0 });
+        Game.heroes.push(b);
+        const q = heroWorld(b);
+        resolveStrike({ x: q.x, y: q.y });
+        assert(100000 - b.hp >= 100000 * DEMON_LORDS.rift.passive.hpRatio, 'rift max hp damage');
+    }
     start('gold_king');
     h = makeHero();
     resolveStrike({ x: heroWorld(h).x, y: heroWorld(h).y });
@@ -5726,6 +5735,8 @@ assert.strictEqual(Game.lightningRadius(), COMBAT_RULES.lightning.radius + 0.5);
 assert(Math.abs(Game.lightningDamage() - dmg * 1.3) < 1e-9, 'focus');
 assert(Math.abs(Game.skillCooldown('lightning') - cd * 0.85) < 1e-9, 'quick');
 assert(Math.abs(Game.skillCooldown('roar') - roarCd * 0.7) < 1e-9, 'roarDrill');
+// 권능 시험은 번개 기본 피해만 본다(균열의 군주 체력 비례 피해는 마왕 패시브 시험에서)
+DEMON_LORDS.rift.passive.hpRatio = 0;
 // 번개 시험 준비: 용사 하나를 정해진 자리에 세운다
 const arena = () => {
     Game.state = 'prep'; Game.startWave();

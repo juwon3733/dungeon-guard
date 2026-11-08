@@ -316,6 +316,16 @@ function resolveStrike(strike) {
     splashDamage(strike.x, strike.y, radius, Game.lightningDamage() * (strike.mul || 1), '#bfe9ff');
     Game.striking = false;
     if (Game.power('coinRain')) Game.gold += struck.length;
+    // 균열의 군주: 최대 체력에 비례한 추가 피해(깊은 층에서도 번개가 의미 있게)
+    const mark = Game.lordPassive('lightningCurse');
+    if (mark && mark.hpRatio) {
+        Game.striking = true;
+        for (const h of struck) {
+            if (h.dead) continue;
+            damageHero(h, h.maxHp * mark.hpRatio * (strike.mul || 1), strike.x, strike.y, '#bfe9ff', null, true);
+        }
+        Game.striking = false;
+    }
     // 권능: 맞은 용사에게 붙는 효과
     const G = Game;
     const stun = G.power('longTear') ? 2 : (G.power('tear') ? 1 : 0);
@@ -348,7 +358,6 @@ function resolveStrike(strike) {
         }
     }
     // 균열의 군주: 번개에 맞은 용사에게 낙인
-    const mark = Game.lordPassive('lightningCurse');
     if (mark) {
         for (const h of Game.heroes) {
             if (h.dead || h.waiting) continue;
