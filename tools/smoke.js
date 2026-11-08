@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js', 'js/ui/menu.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -6223,6 +6223,49 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, true, 'next round after the lock');
         assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, false, 'locked again for the new round');
         console.log('smoke ok: tutorial');
+        // 전투 메뉴: Esc로 열고 닫는다(판이 멈춘다), 설정은 소리와 효과만, 항복은 두 번
+        Meta.data.tutorial = { hq: true, battle: true };
+        Game.reset(null, STAGES[0].id);
+        Game.state = 'prep';
+        Game.paused = false;
+        UI.tut = null;
+        ids();
+        assert(ids().includes('menu') && !ids().includes('fx'), 'menu button in place of the effects toggle');
+        UI.onKey('Escape');
+        assert(UI.battleMenu && Game.paused, 'Esc opens the menu and pauses');
+        assert(['menu_resume', 'menu_settings', 'menu_surrender'].every(id => ids().includes(id)) && !ids().includes('summon'), 'menu buttons only');
+        UI.onKey('KeyS');
+        assert.strictEqual(Game.monsters.length, 0, 'game keys wait while the menu is open');
+        UI.onKey('Escape');
+        assert(!UI.battleMenu && !Game.paused, 'Esc closes the menu and resumes');
+        btn('menu');
+        btn('menu_settings');
+        assert(UI.hqSettings && ['set_sound', 'set_fx', 'set_close'].every(id => ids().includes(id)), 'settings from the menu');
+        assert(!ids().includes('set_tutorial') && !ids().includes('set_title'), 'no tutorial or title rows in a battle');
+        UI.onKey('Escape');
+        assert(UI.battleMenu && !UI.hqSettings, 'Esc goes back to the menu');
+        btn('menu_resume');
+        assert(!UI.battleMenu && !Game.paused, 'resume');
+        // 고른 몬스터가 있으면 Esc는 취소만
+        Game.act({ kind: 'summon' });
+        UI.selectedMonster = Game.monsters[0];
+        UI.onKey('Escape');
+        assert(!UI.selectedMonster && !UI.battleMenu, 'Esc clears a selection first');
+        // 항복: 두 번 눌러야 한다
+        btn('menu');
+        btn('menu_surrender');
+        assert(Game.inPlay() && UI.surrenderArmed > 0, 'first press arms');
+        btn('menu_surrender');
+        assert(Game.state === 'defeat' && Game.hp === 0 && !UI.battleMenu, 'surrendered');
+        // 도전: 항복도 입력이라 기록되고, 남은 체력은 0
+        Game.reset(null, null, abyssChallenge('menu-w', 'rift', [], 3));
+        Game.state = 'prep';
+        Game.record = { inputs: [] };
+        assert(Game.act({ kind: 'surrender' }).ok, 'surrender act');
+        assert(Game.challengeResult && Game.challengeResult.hp === 0, 'no hp left for the ranking');
+        assert(Game.record.inputs.some(i => i.kind === 'surrender'), 'recorded for replay');
+        assert(!Game.act({ kind: 'surrender' }).ok, 'only once');
+        console.log('smoke ok: battle menu');
     }).toString() + ')()', tctx);
 }
 // 계정(테스트 서버): 가입 → 손님 기록 옮기기 → 저장이 서버로 → 로그아웃은 손님 기록 → 다시 로그인하면 고르기 → 다시 켜면 이어받기

@@ -1014,6 +1014,13 @@ const Game = {
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
+            case 'surrender': {
+                // 항복: 마왕 체력을 0으로(남은 체력이 순위에 득이 되지 않게) 하고 진 판으로 끝낸다
+                if (!this.inPlay()) return { ok: false, reason: 'state' };
+                this.hp = 0;
+                this.finish(false);
+                return { ok: true };
+            }
             case 'nextRound': return { ok: !!this.nextRound() };
             case 'merge': return this.merge({ monster: cmd.src }, { monster: cmd.dst }, cmd.extra);
             case 'quickMerge': {

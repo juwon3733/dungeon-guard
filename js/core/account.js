@@ -271,7 +271,7 @@ const Account = {
         const remote = remoteRaw ? Meta.sanitize(remoteRaw) : null;
         if (resumed) {
             const cache = Meta.peek(this.userKey(user));
-            const pick = !remote || (cache && cache.savedAt > remote.savedAt) ? cache : remote;
+            const pick = !remote || (cache && cache.savedAt >= remote.savedAt) ? cache : remote; // 같은 시각이면 이 기기 사본(올린 것과 같거나 더 나중)
             this.use(pick || Meta.fresh(), !remote || pick === cache);
             return;
         }
