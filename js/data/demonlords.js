@@ -321,7 +321,7 @@ const DEMON_LORDS = {
         sprite: 'lord_rift', footPx: 120,
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개가 최대 체력 15% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.15 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
