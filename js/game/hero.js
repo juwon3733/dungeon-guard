@@ -197,7 +197,7 @@ function updateHero(h, dt) {
         h.arrived = true;
         const w = heroWorld(h);
         if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 150, randItem(SPEECH.arrive), 1.5);
-        if (h.boss) { G.hp = 0; damageThrone(h.throneDamage); }
+        if (h.boss) damageThrone(Math.max(1, Math.ceil(G.maxHp() * COMBAT_RULES.bossArrival))); // 보스가 닿으면 최대 체력의 절반(바로 패배하지 않는다)
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
             const weak = h.elite && h.poison > 0 && G.power('rotWeaken') ? 0.7 : 1; // 권능 쇠약
