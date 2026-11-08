@@ -2059,10 +2059,10 @@ const UI = {
         UIKit.ink(ctx, lord.name, D.x + 40, D.y + 46, 32, open ? T.inkWax : T.inkSoft, 'left', 'bold');
         UIKit.ink(ctx, open ? lord.desc : this.unlockText('lord', id), D.x + 40, D.y + 84, 19, T.inkSoft, 'left');
         // 효과(가운데 왼쪽 열), 패시브(오른쪽 넓은 열), 권능 갈래(맨 아래 줄)
-        this.drawEffectLines(ctx, lord.effects, D.x + 420, D.y + 44, 21, 27, 'left');
-        UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 720, D.y + 44, 22, T.inkWax, 'left', 'bold');
+        this.drawEffectLines(ctx, lord.effects, D.x + 400, D.y + 44, 21, 27, 'left');
+        UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 860, D.y + 44, 22, T.inkWax, 'left', 'bold');
         ctx.font = `19px ${UI_FONT}`;
-        this.wrapLines(ctx, lord.passive.desc, D.w - 760).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 720, D.y + 76 + i * 26, 19, T.ink, 'left'));
+        this.wrapLines(ctx, lord.passive.desc, D.w - 900).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 860, D.y + 76 + i * 26, 19, T.ink, 'left'));
         const branches = (LORD_POWERS[id] || []).map(br => br.name).join(' · ');
         if (branches) UIKit.ink(ctx, `권능 · ${branches}`, D.x + 40, D.y + 128, 19, T.inkSoft, 'left');
     },

@@ -167,6 +167,26 @@ const LORD_POWERS = {
             [{ id: 'execMana', name: '본보기', desc: '묶인 정예를 쓰러뜨리면 마력 +1' }, { id: 'execEdge', name: '간수의 칼', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
             [{ id: 'execDeep', name: '고문', desc: '묶인 용사 받는 피해 +40%' }, { id: 'execChainKill', name: '연쇄 형벌', desc: '묶인 용사가 쓰러지면 1칸 안 용사 1명 묶음' }]
         ] }
+    ],
+    mirror: [
+        { id: 'copy', name: '복제', desc: '몬스터를 늘린다', tiers: [
+            [{ id: 'reflectUp', name: '맑은 거울', desc: '거울상 확률 +10%' }, { id: 'twinUp', name: '쌍둥이', desc: '소환 때 8% 확률로 1마리 더', mods: { twinSummon: 0.08 } }],
+            [{ id: 'copyRank', name: '닮은 꼴', desc: '거울상이 랭크를 이어받음' }, { id: 'copyGold', name: '거울 값', desc: '거울상이 나오면 소환 비용만큼 골드' }],
+            [{ id: 'mirrorClone', name: '거울 분신', desc: '새 스킬(E): 가장 높은 등급 몬스터의 분신이 15초' }, { id: 'copyHigh', name: '큰 거울', desc: '영웅 이상 재료의 거울상 확률 2배' }],
+            [{ id: 'cloneLong', name: '오래가는 분신', desc: '분신 시간 2배' }, { id: 'cloneTwo', name: '분신 둘', desc: '분신이 2마리' }]
+        ] },
+        { id: 'reflect', name: '반사', desc: '맞은 만큼 돌려준다', tiers: [
+            [{ id: 'shardArmor', name: '거울 갑옷', desc: '몬스터 받는 피해 -10%', mods: { monsterArmor: 0.1 } }, { id: 'reflectWard', name: '거울벽', desc: '일반 용사의 왕좌 피해 -20%' }],
+            [{ id: 'reflectThrone', name: '되비침', desc: '왕좌가 맞으면 맨 앞 용사 3명에게 번개 피해 50%' }, { id: 'reflectRoar', name: '날 선 목소리', desc: '왕좌가 맞으면 호통 재사용 -10초' }],
+            [{ id: 'mirrorShield', name: '거울 방패', desc: '라운드마다 왕좌 피해를 1번 막음' }, { id: 'reflectCurse', name: '저주받은 거울', desc: '왕좌가 맞으면 모든 용사 2초간 받는 피해 +20%' }],
+            [{ id: 'shieldBig', name: '큰 방패', desc: '거울 방패가 2번 막음' }, { id: 'reflectAll', name: '전신 거울', desc: '되비침 피해 100%' }]
+        ] },
+        { id: 'transmute', name: '변환', desc: '합치기를 비튼다', tiers: [
+            [{ id: 'transEdge', name: '은 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }, { id: 'transXp', name: '비친 경험', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'transJump', name: '뒤틀린 상', desc: '합치기 두 등급 확률 +5%', mods: { mergeJump: 0.05 } }, { id: 'transRefund', name: '깨진 조각값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
+            [{ id: 'transRecipe', name: '조합 거울', desc: '조합식 합치기의 거울상 확률 2배' }, { id: 'transGold', name: '은 세공', desc: '합칠 때마다 결과 등급만큼 골드(일반 5 ~ 신화 200)' }],
+            [{ id: 'transUp', name: '금빛 거울', desc: '거울상이 한 등급 위 몬스터로(전설까지)' }, { id: 'transFree', name: '공짜 거울', desc: '라운드마다 첫 소환 비용 0' }]
+        ] }
     ]
 };
 
@@ -176,7 +196,8 @@ const POWER_SKILLS = {
     raise: { key: 'raise', name: '시체', title: '시체 일으키기', icon: 'soul' },
     goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' },
     miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' },
-    jail: { key: 'jail', name: '감옥', title: '사슬 감옥', icon: 'lock' }
+    jail: { key: 'jail', name: '감옥', title: '사슬 감옥', icon: 'lock' },
+    mirrorClone: { key: 'mirrorClone', name: '분신', title: '거울 분신', icon: 'summon' }
 };
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
@@ -292,6 +313,18 @@ const DEMON_LORDS = {
             waveStart: ['줄 맞춰 들어와라.'],
             throneHit: ['감히 간수를 쳐?'],
             sacrifice: ['형기 만료.']
+        }
+    },
+    mirror: {
+        id: 'mirror', name: '거울 마녀', desc: '하나를 바치면 둘이 돌아온다. 가끔은.',
+        sprite: 'lord_mirror', footPx: 119,
+        portrait: { sprite: 'lord_mirror', crop: [42, 8, 44] },
+        effects: { mergeJump: 0.05, fieldMax: -2 },
+        passive: { kind: 'reflection', name: '거울상', desc: '합칠 때 15% 확률로 끌어온 재료가 제자리에 다시 섬', chance: 0.15 },
+        speech: {
+            waveStart: ['어서 와. 너도 둘이 되고 싶니?'],
+            throneHit: ['내 거울에 금이 갔잖아.'],
+            sacrifice: ['비친 모습은 남겨 둘게.']
         }
     }
 };

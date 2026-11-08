@@ -201,7 +201,7 @@ function updateHero(h, dt) {
         else {
             // 일반 용사는 왕좌 피해가 1보다 작아 모아서 깎는다
             const weak = h.elite && h.poison > 0 && G.power('rotWeaken') ? 0.7 : 1; // 권능 쇠약
-            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') || G.power('dragWard') ? 0.8 : 1);
+            G.leak = (G.leak || 0) + h.throneDamage * weak * (G.power('ward') || G.power('goldWard') || G.power('dragWard') || G.power('reflectWard') ? 0.8 : 1);
             const whole = Math.floor(G.leak + 1e-9);
             if (whole >= 1) {
                 G.leak -= whole;

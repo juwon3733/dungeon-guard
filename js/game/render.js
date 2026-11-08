@@ -1067,12 +1067,15 @@ const Render = {
         if (m.reveal > 0) return; // 합치기 결과: 빨려 들어가는 연출이 끝나면 나타난다
         // 끄는 중인 몬스터는 제자리에 흐리게 남긴다
         const dragged = UI.drag && UI.drag.src.monster === m;
-        if (dragged) {
+        // 거울 분신: 반투명하게, 사라지기 2초 전부터 깜빡인다
+        const ghost = m.clone > 0;
+        if (dragged || ghost) {
             ctx.save();
-            ctx.globalAlpha = 0.3;
+            ctx.globalAlpha = dragged ? 0.3 : (m.clone < 2 && Math.floor(Game.time * 8) % 2 ? 0.25 : 0.6);
         }
         this.drawMonsterInner(ctx, m, def, footY);
-        if (dragged) ctx.restore();
+        if (dragged || ghost) ctx.restore();
+        if (ghost) this.pixelRing(ctx, m.x, footY, 30, 9, '#bff6ff', { k: 3, alpha: 0.6 });
     },
 
     drawMonsterInner(ctx, m, def, footY) {
