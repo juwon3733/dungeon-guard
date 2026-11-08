@@ -13,6 +13,7 @@ const ART_SCALE = 1 / WORLD_ZOOM; // 그림 1px을 화면 1px로 그리는 세�
 const PIXEL_SCALE = 2 / WORLD_ZOOM; // 그림 1px을 화면 2px로 그리는 세계 배율
 const HERO_SCALE = PIXEL_SCALE; // 용사, 정예, 타락 유닛
 const BOSS_SCALE = PIXEL_SCALE; // 보스와 마왕도 같은 도트 크기다(그림 자체가 크다)
+const GAME_VERSION = '0.9.0'; // 타이틀 오른쪽 아래 빌드 표시
 const UI_FONT = "'Galmuri11', 'Malgun Gothic', sans-serif";
 
 function tileX(col) { return col * TILE + TILE / 2; }

@@ -45,7 +45,7 @@ function frame(now) {
 
     ctx.setTransform(canvas.width / GAME_WIDTH, 0, 0, canvas.height / GAME_HEIGHT, 0, 0);
     if (!ready) {
-        drawLoading();
+        drawLoading(now);
         requestAnimationFrame(frame);
         return;
     }
@@ -70,12 +70,8 @@ function frame(now) {
     requestAnimationFrame(frame);
 }
 
-function drawLoading() {
-    ctx.fillStyle = UI_THEME.navyDark;
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    const ratio = Assets.total ? Assets.loaded / Assets.total : 0;
-    UIKit.text(ctx, '던전 수호대', GAME_WIDTH / 2, 470, 80, UI_THEME.cream, 'center', 'bold');
-    UIKit.bar(ctx, GAME_WIDTH / 2 - 300, 560, 600, 24, ratio, UI_THEME.goldLine);
+function drawLoading(now) {
+    UI.drawLoading(ctx, Assets.total ? Assets.loaded / Assets.total : 0, now / 1000); // js/ui/title.js
 }
 
 window.addEventListener('resize', fitCanvas);
