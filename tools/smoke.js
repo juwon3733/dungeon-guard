@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/meta.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -16,6 +16,7 @@ function legacyLayout(f) {
     return src.replace('const WORLD_ZOOM = 5 / 6;', 'const WORLD_ZOOM = 2 / 3;').replace('const MAP_COLS = 24;', 'const MAP_COLS = 30;').replace('const MAP_ROWS = 12;', 'const MAP_ROWS = 15;');
 }
 for (const f of files) vm.runInContext(legacyLayout(f), ctx, { filename: f });
+vm.runInContext('UI.tutorialOff = true', ctx); // 튜토리얼은 맨 끝에서 따로 본다
 // 옛 시험은 마왕이 스테이지 3, 5에서 풀리던 표를 기준으로 적혀 있다. 지금 해금 순서는 맨 끝에서 따로 본다
 vm.runInContext(`{
     const move = (from, to, id, at) => {
@@ -3302,7 +3303,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false } }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -3352,7 +3353,7 @@ freshWindow();
         seen: ['orc_guard', 'bone_knight', 'nope'], recipes: ['orc_berserker+skeleton_archer', 'bad'], runs: 9, wins: 4, bestWave: 10 });
     storage.data['dungeonGuard.loadout'] = JSON.stringify({ lord: 'gold_king', relics: ['mirror_twin', 'greedy_vault'] });
     freshWindow(storage);
-    same(Meta.data, Object.assign(Meta.fresh(), { seen: ['orc_guard', 'bone_knight'], recipes: ['orc_berserker+skeleton_archer'], runs: 9 }), 'v1 migrated');
+    same(Meta.data, Object.assign(Meta.fresh(), { seen: ['orc_guard', 'bone_knight'], recipes: ['orc_berserker+skeleton_archer'], runs: 9, tutorial: { hq: true, battle: true } }), 'v1 migrated');
     same(Meta.lordsOwned(), ['rift'], 'bought lords dropped');
     assert(Meta.relicsOwned().length === 0 && Meta.relicSlots() === 0, 'bought relics and slots dropped');
     // 직전 선택의 산 마왕과 유물도 기본값으로
@@ -3371,7 +3372,7 @@ freshWindow();
     storage.data['dungeonGuard.meta'] = JSON.stringify({ version: 2, cleared: ['s1', 's2', 's3', 's4', 's5', 's6', 's7'], seen: ['orc_guard'],
         recipes: ['orc_berserker+skeleton_archer'], runs: 11, wins: 7, bestStage: 7 });
     freshWindow(storage);
-    same(Meta.data, Object.assign(Meta.fresh(), { cleared: ['s1', 's2', 's3', 's4'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], runs: 11, wins: 7, bestStage: 4 }), 'v2 migrated');
+    same(Meta.data, Object.assign(Meta.fresh(), { cleared: ['s1', 's2', 's3', 's4'], seen: ['orc_guard'], recipes: ['orc_berserker+skeleton_archer'], runs: 11, wins: 7, bestStage: 4, tutorial: { hq: true, battle: true } }), 'v2 migrated');
     assert(Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king') && Meta.relicSlots() === 2 && Meta.isOpen('s5') && !Meta.isOpen('s6'), 'v2 progress kept');
     // 옛 표에만 있던 id(s7~s12)도 버리지 않고 옮긴다: 12번까지 깼으면 6번까지
     for (const [old, want, best] of [[['s12'], ['s6'], 6], [['s9', 's10', 's11', 's12'], ['s5', 's6'], 6], [['s2'], ['s1'], 1], [['s3', 's13', 's0'], ['s2'], 2]]) {
@@ -3412,7 +3413,7 @@ for (const [raw, want] of [
     const storage = memoryStorage();
     storage.data['dungeonGuard.meta'] = raw;
     freshWindow(storage);
-    same(Meta.data, Object.assign(Meta.fresh(), want), 'clean ' + raw);
+    same(Meta.data, Object.assign(Meta.fresh(), { tutorial: { hq: Meta.data.runs > 0, battle: Meta.data.runs > 0 } }, want), 'clean ' + raw);
     UI.openHQ();
     UI.update(0);
     assert(Game.state === 'hq' && UI.buttons.filter(b => b.facility).length === HQ_FACILITIES.length, 'hq with ' + raw);
@@ -6039,6 +6040,7 @@ console.log('smoke ok: equipment crafting');
     const real = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
         Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), real, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', real);
     vm.runInContext(`
     Meta.data.cleared = [];
     assert(Meta.hasLord('rift') && !Meta.hasLord('bone_queen') && !Meta.hasLord('gold_king'), 'one lord at the start');
@@ -6055,6 +6057,7 @@ console.log('smoke ok: equipment crafting');
     const pctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
         Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), pctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', pctx);
     vm.runInContext('(' + (() => {
     assert.deepStrictEqual(ABYSS_LEVELS.map(L => L.name), ['베이직', '베리 이지', '이지', '노말', '하드', '베리 하드', '익스퍼트', '익스트림', '나이트메어', '헬']);
     assert.strictEqual(ABYSS_LEVELS[DEFAULT_ABYSS_LEVEL].cards.length, 0, 'normal has no clauses');
@@ -6135,11 +6138,96 @@ console.log('smoke ok: equipment crafting');
     }).toString() + ')()', pctx);
     console.log('smoke ok: forbidden pact');
 }
+// 튜토리얼: 본부 첫 안내(아무 데나 누르면 다음), 첫 판 따라 하기(단계 버튼만 눌린다, 준비 시간 멈춤), 본 기록과 다시 보기
+{
+    const tctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), tctx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const click = (x, y) => { UI.onMove(x, y); UI.onDown(x, y); UI.onUp(x, y); };
+        const ids = () => { UI.update(0); return UI.buttons.map(b => b.id); };
+        const btn = id => { UI.update(0); const b = UI.buttons.find(b => b.id === id); assert(b, 'no button ' + id); click(b.x + 5, b.y + 5); };
+        // 저장: 새 기록은 안 봄, 판을 해 본 옛 기록은 본 것으로
+        assert.deepStrictEqual(Meta.fresh().tutorial, { hq: false, battle: false }, 'fresh: not seen');
+        assert.deepStrictEqual(Meta.sanitize({ version: META_VERSION, runs: 3, cleared: [] }).tutorial, { hq: true, battle: true }, 'old players skip it');
+        assert.deepStrictEqual(Meta.sanitize({ version: META_VERSION, runs: 3, tutorial: { hq: true, battle: false } }).tutorial, { hq: true, battle: false }, 'kept as saved');
+        Meta.data = Meta.fresh();
+        // 본부 안내: 시설 버튼은 눌리지 않고 다음으로만 넘어간다
+        UI.openHQ();
+        ids();
+        assert(UI.tut && UI.tut.kind === 'hq' && ids().includes('tut_skip'), 'hq tour starts on the first visit');
+        const table = UI.buttons.find(b => b.id === 'hq_wartable');
+        click(table.x + 5, table.y + 5);
+        assert(Game.state === 'hq' && UI.tut.step === 1, 'a click moves the tour on, not into the facility');
+        for (let i = 0; i < TUTORIAL_HQ_STEPS.length; i++) if (UI.tut) click(10, 500);
+        assert(!UI.tut && Meta.data.tutorial.hq, 'tour seen');
+        ids();
+        assert(!UI.tut, 'the tour does not come back');
+        // 첫 판: 스토리 첫 스테이지
+        UI.openSelect(STAGES[0].id);
+        UI.beginRun();
+        if (UI.dialogue) UI.endDialogue();
+        ids();
+        assert(UI.tut && UI.tutStep() === 'summon' && Game.state === 'prep', 'battle tutorial starts at round 0');
+        btn('next');
+        assert.strictEqual(Game.state, 'prep', 'start round is blocked while summoning');
+        UI.onKey('Space');
+        assert.strictEqual(Game.state, 'prep', 'Space is blocked too');
+        const timer = Game.prepTimer;
+        for (let i = 0; i < 300; i++) { UI.update(1 / 30); Game.update(1 / 30); }
+        assert(Game.state === 'prep' && Game.prepTimer === timer, 'the prep timer waits');
+        let guard = 0;
+        while (UI.tutStep() === 'summon' && guard++ < 8) btn('summon');
+        assert.strictEqual(Game.monsters.length, MERGE_RULES.gradeCount, 'three summons');
+        assert(Game.monsters.every(m => MONSTERS[m.type].grade === GRADE_ORDER[0]), 'the first three are the lowest grade');
+        assert.strictEqual(UI.tutStep(), 'merge', 'then merge');
+        btn('next');
+        assert.strictEqual(Game.state, 'prep', 'start round is blocked while merging');
+        const pair = UI.tutMergeable();
+        Game.act({ kind: 'merge', src: pair.src, dst: pair.m });
+        ids();
+        assert.strictEqual(Game.stats.merged, 1, 'merged');
+        assert.strictEqual(UI.tutStep(), 'start', 'then start the round');
+        btn('next');
+        assert.strictEqual(Game.state, 'wave', 'round started');
+        ids();
+        assert(!Game.holdPrep, 'the timer is free again');
+        btn('tut_skip');
+        assert(!UI.tut && Meta.data.tutorial.battle, 'skip counts as seen');
+        // 다시 보기: 설정 버튼이 둘 다 지운다
+        UI.openHQ();
+        UI.tut = null;
+        Meta.data.tutorial.hq = true;
+        UI.hqSettings = true;
+        btn('set_tutorial');
+        assert.deepStrictEqual(Meta.data.tutorial, { hq: false, battle: false }, 'replay resets both');
+        ids();
+        assert(UI.tut && UI.tut.kind === 'hq', 'the tour starts again');
+        UI.onKey('Escape');
+        assert(!UI.tut && Meta.data.tutorial.hq, 'Esc skips the tour');
+        // 도전 판에서는 나오지 않는다
+        Game.reset(null, null, abyssChallenge('tut-w', 'rift', [], 3));
+        Game.state = 'prep';
+        ids();
+        assert(!UI.tut, 'no tutorial in challenges');
+        // 연타: 라운드가 막 시작하면 다음 라운드를 부르지 못한다(2초)
+        Game.reset(null, STAGES[0].id);
+        Game.state = 'prep';
+        Game.act({ kind: 'startWave' });
+        assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, false, 'no next round right after the start');
+        assert.strictEqual(Game.waveIndex, 0, 'still round 1');
+        for (let i = 0; i < 70; i++) Game.update(1 / 30);
+        assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, true, 'next round after the lock');
+        assert.strictEqual(Game.act({ kind: 'nextRound' }).ok, false, 'locked again for the new round');
+        console.log('smoke ok: tutorial');
+    }).toString() + ')()', tctx);
+}
 // 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
 {
     const fctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
         Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), fctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', fctx);
     vm.runInContext('(' + (() => {
         assert.deepStrictEqual([0, 1, 2, 3, 4, 9, 30].map(familyUpgradeCost), [50, 100, 150, 200, 250, 500, 1550], 'cost rises without a cap');
         assert.deepStrictEqual([0, 2, 3, 4, 8, 9, 20].map(familyUpgradeChance), [1, 1, 0.9, 0.8, 0.4, 0.3, 0.3], 'chance falls to a floor');
