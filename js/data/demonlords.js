@@ -127,6 +127,26 @@ const LORD_POWERS = {
             [{ id: 'goldBomb', name: '금화 폭격', desc: '새 스킬(E): 골드 10%를 써서 맨 앞을 넓게 폭격' }, { id: 'coinRain', name: '금화 비', desc: '번개에 맞은 용사 1명당 +1G' }],
             [{ id: 'bombBig', name: '대규모 폭격', desc: '폭격 범위 +1.5칸' }, { id: 'bombRich', name: '재벌의 분노', desc: '폭격에 골드 20%를 쓰고 피해 2배' }]
         ] }
+    ],
+    plague: [
+        { id: 'venom', name: '맹독', desc: '독을 세게 오래', tiers: [
+            [{ id: 'venomStrong', name: '진한 독', desc: '독 피해 +40%' }, { id: 'venomLong', name: '오래가는 독', desc: '독 시간 +2초' }],
+            [{ id: 'venomStack', name: '겹치는 독', desc: '독이 3번까지 겹침' }, { id: 'venomSlow', name: '마비 독', desc: '독 걸린 용사 이동 -15%' }],
+            [{ id: 'venomBurst', name: '독 폭발', desc: '독이 끝날 때 남은 2초치 피해를 한 번에' }, { id: 'venomPierce', name: '살을 파는 독', desc: '독 걸린 용사의 방어력 무시' }],
+            [{ id: 'venomBoss', name: '거인 사냥', desc: '정예와 보스에게 독 피해 2배' }, { id: 'venomDeath', name: '숨통', desc: '체력 10% 이하인 독 걸린 일반 용사 즉사' }]
+        ] },
+        { id: 'contagion', name: '전염', desc: '독을 퍼뜨린다', tiers: [
+            [{ id: 'spreadWide', name: '넓은 전염', desc: '옮는 범위 +1칸' }, { id: 'spreadStrong', name: '변이', desc: '옮은 독 피해 +50%' }],
+            [{ id: 'spreadElite', name: '고열', desc: '정예에게도 옮음' }, { id: 'spreadGold', name: '장례비', desc: '독으로 쓰러진 용사 골드 +50%' }],
+            [{ id: 'miasma', name: '역병 구름', desc: '새 스킬(E): 맨 앞 용사 자리에 6초 독 구름' }, { id: 'spreadChain', name: '열병', desc: '독이 옮을 때 2초간 이동 -30%' }],
+            [{ id: 'cloudBig', name: '짙은 구름', desc: '구름 범위 2배, 시간 +3초' }, { id: 'pandemic', name: '대유행', desc: '독으로 10명째 쓰러질 때마다 맵의 모든 독이 다시 처음부터' }]
+        ] },
+        { id: 'rot', name: '부패', desc: '썩어 약해진다', tiers: [
+            [{ id: 'rotCurse', name: '썩은 살', desc: '독 걸린 용사 받는 피해 +15%' }, { id: 'rotXp', name: '거름', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'rotMana', name: '정수 추출', desc: '독으로 정예를 쓰러뜨리면 마력 +1' }, { id: 'rotEdge', name: '녹슨 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
+            [{ id: 'rotWeaken', name: '쇠약', desc: '독 걸린 정예와 보스의 왕좌 피해 -30%' }, { id: 'rotSac', name: '역병 제물', desc: '제물을 바치면 맵의 모든 용사에게 독' }],
+            [{ id: 'rotDeep', name: '깊은 부패', desc: '독 걸린 용사 받는 피해 +30%' }, { id: 'rotBlast', name: '시체 가스', desc: '독으로 쓰러진 일반 용사 자리가 터짐' }]
+        ] }
     ]
 };
 
@@ -134,7 +154,8 @@ const LORD_POWERS = {
 const POWER_SKILLS = {
     gate: { key: 'portal', name: '균열', title: '균열 열기', icon: 'wave' },
     raise: { key: 'raise', name: '시체', title: '시체 일으키기', icon: 'soul' },
-    goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' }
+    goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' },
+    miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' }
 };
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
@@ -226,6 +247,18 @@ const DEMON_LORDS = {
             waveStart: ['입장료는 냈나? 안 냈으면 목숨으로.'],
             throneHit: ['이 의자 얼마짜린 줄 알아?!'],
             sacrifice: ['이건 낭비가 아니라 투자다.']
+        }
+    },
+    plague: {
+        id: 'plague', name: '역병의 군주', desc: '한 놈이 앓으면 옆 놈도 앓는다.',
+        sprite: 'lord_plague', footPx: 119,
+        portrait: { sprite: 'lord_plague', crop: [42, 8, 44] },
+        effects: { damage: -0.1 },
+        passive: { kind: 'plague', name: '역병', desc: '몬스터에게 맞은 용사 3초 독(초당 공격력 15%). 독 걸린 채 쓰러지면 둘레 1.5칸에 옮음', duration: 3, ratio: 0.15, radius: 1.5 },
+        speech: {
+            waveStart: ['기침 소리가 들리는군. 어서 와.'],
+            throneHit: ['가까이 오지 마, 옮는다.'],
+            sacrifice: ['거름이 되어라.']
         }
     }
 };

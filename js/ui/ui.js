@@ -47,10 +47,11 @@ const PARTY_CELL_W = 84; // 라운드 중 파티 칸 하나의 너비
 const BOSS_TROUGH = { x: 28, y: 18, w: 187, h: 12 }; // hud_bossbar에서 체력이 차는 칸(그림 px)
 const PLATE = { w: 620, h: 58, y: 12 }; // 위쪽 가운데 이름판(지역 이름, 스테이지, 라운드)
 // 선택 화면: 위쪽 마왕 카드, 아래쪽 유물 격자(48px 원래 크기)와 고른 유물 칸, 오른쪽 아래 시작 버튼
-const LORD_CARD_W = 500;
-const LORD_CARD_H = 470;
-const LORD_CARD_GAP = 40;
+const LORD_CARD_W = 248; // 마왕 7명이 한 줄에 든다(그림 2배, 이름)
+const LORD_CARD_H = 296;
+const LORD_CARD_GAP = 12;
 const LORD_CARD_Y = 104;
+const LORD_DETAIL = { x: 56, y: 416, w: 1808, h: 158 }; // 카드 아래: 고른(또는 마우스를 올린) 마왕의 효과와 패시브
 const RELIC_CELL = 64;
 const RELIC_GAP = 6;
 const RELIC_COLS = 10;
@@ -1926,7 +1927,7 @@ const UI = {
             UIKit.text(ctx, label, GAME_WIDTH - 60 - w / 2, 55, 26, T.cream, 'center', 'bold');
         }
 
-        // 마왕 카드: 그림(128px를 2배), 이름, 효과, 설명. 고른 카드는 금테
+        // 마왕 카드: 그림(128px를 2배)과 이름. 고른 카드는 금테. 효과와 패시브는 아래 상세 창에
         for (const b of this.buttons.filter(x => x.lordCard)) {
             const lord = DEMON_LORDS[b.lordCard];
             const on = L.lord === b.lordCard;
@@ -1939,21 +1940,12 @@ const UI = {
             const cx = b.x + b.w / 2;
             UIKit.panel(ctx, b.x, b.y, b.w, b.h, { tint: hover && !on ? 'hover' : null });
             if (on) UIKit.gradeFrame(ctx, b.x - 6, b.y - 6, b.w + 12, b.h + 12, T.goldLine, 5);
-            const img = Assets.get(lord.sprite);
-            if (img) {
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(img, Math.round(cx - img.width), Math.round(b.y + 268 - lord.footPx * 2), img.width * 2, img.height * 2);
-            }
+            this.drawLordArt(ctx, lord, cx, b.y + 248, 1);
             const index = Object.keys(DEMON_LORDS).indexOf(b.lordCard) + 1;
             UIKit.text(ctx, String(index), cx, b.y + 12, 20, T.cream, 'center');
-            UIKit.ink(ctx, lord.name, cx, b.y + 296, 36, on ? T.inkWax : T.ink, 'center', 'bold');
-            const y = this.drawEffectLines(ctx, lord.effects, cx, b.y + 336, 22, 29, 'center');
-            ctx.font = `18px ${UI_FONT}`;
-            // 고유 패시브: 이름과 설명
-            UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, cx, y + 8, 20, T.inkWax, 'center', 'bold');
-            ctx.font = `17px ${UI_FONT}`;
-            this.wrapLines(ctx, lord.passive.desc, b.w - 60).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, cx, y + 34 + i * 22, 17, T.ink, 'center'));
+            UIKit.ink(ctx, lord.name, cx, b.y + 270, 26, on ? T.inkWax : T.ink, 'center', 'bold');
         }
+        this.drawLordDetail(ctx);
 
         // 유물 격자: 은테 칸. 고른 유물은 금테 칸, 잠긴 유물은 흐린 그림 위에 자물쇠와 풀리는 스테이지 번호(도장)
         UIKit.text(ctx, '유물', RELIC_GRID_X, 636, 32, T.cream);
@@ -2029,34 +2021,50 @@ const UI = {
         this.drawTooltip(ctx, clamp(b.x - 183, 12, 1330 - 442), y, title, effectLines(RELICS[id].effects).join(', '));
     },
 
-    // 잠긴 마왕 카드: 가라앉힌 창, 흐린 그림 위에 큰 자물쇠와 "스테이지 N에서 해금"
+    // 잠긴 마왕 카드: 가라앉힌 창, 흐린 그림 위에 자물쇠와 풀리는 스테이지 번호
     drawLockedLord(ctx, b, lord, hover) {
         const T = UI_THEME;
         const cx = b.x + b.w / 2;
         UIKit.panel(ctx, b.x, b.y, b.w, b.h, { tint: hover ? 'rgba(5,9,24,0.35)' : 'shade' });
-        const img = Assets.get(lord.sprite);
-        if (img) {
-            ctx.save();
-            ctx.globalAlpha = 0.25;
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, Math.round(cx - img.width), Math.round(b.y + 268 - lord.footPx * 2), img.width * 2, img.height * 2);
-            ctx.restore();
-        }
-        UIKit.icon(ctx, 'lock', cx - 48, b.y + 64, 2);
+        this.drawLordArt(ctx, lord, cx, b.y + 248, 0.22);
+        UIKit.icon(ctx, 'lock', cx - 48, b.y + 70, 2);
         const st = unlockStage('lord', b.lordCard);
-        if (st) {
-            this.drawStageBadge(ctx, st.no, cx, b.y + 196, 30);
-            UIKit.text(ctx, `스테이지 ${st.no}에서 해금`, cx, b.y + 248, 22, T.creamSoft, 'center', 'bold');
-        }
+        if (st) this.drawStageBadge(ctx, st.no, cx, b.y + 196, 26);
         const index = Object.keys(DEMON_LORDS).indexOf(b.lordCard) + 1;
         UIKit.text(ctx, String(index), cx, b.y + 12, 20, T.creamSoft, 'center');
-        UIKit.ink(ctx, lord.name, cx, b.y + 296, 36, T.inkSoft, 'center', 'bold');
+        UIKit.ink(ctx, lord.name, cx, b.y + 270, 26, T.inkSoft, 'center', 'bold');
+    },
+
+    // 마왕 그림(128px를 2배). 발끝이 footY에 온다
+    drawLordArt(ctx, lord, cx, footY, alpha) {
+        const img = Assets.get(lord.sprite);
+        if (!img) return;
         ctx.save();
-        ctx.globalAlpha = 0.6;
-        const y = this.drawEffectLines(ctx, lord.effects, cx, b.y + 336, 22, 29, 'center');
-        ctx.font = `18px ${UI_FONT}`;
-        this.wrapLines(ctx, lord.desc, b.w - 80).slice(0, 3).forEach((line, i) => UIKit.ink(ctx, line, cx, y + 6 + i * 24, 18, T.inkSoft, 'center'));
+        ctx.globalAlpha = alpha;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, Math.round(cx - img.width), Math.round(footY - lord.footPx * 2), img.width * 2, img.height * 2);
         ctx.restore();
+    },
+
+    // 카드 아래 상세 창: 마우스를 올린 마왕(없으면 고른 마왕)의 이름, 한 줄 소개, 효과, 패시브, 권능 갈래. 잠겼으면 풀리는 스테이지
+    drawLordDetail(ctx) {
+        const T = UI_THEME;
+        const D = LORD_DETAIL;
+        const hover = this.hoverButton && this.hoverButton.lordCard;
+        const id = hover || this.loadout.lord;
+        const lord = DEMON_LORDS[id];
+        if (!lord) return;
+        const open = Meta.hasLord(id);
+        this.drawDetailFrame(ctx, D.x, D.y, D.w, D.h);
+        UIKit.ink(ctx, lord.name, D.x + 40, D.y + 46, 32, open ? T.inkWax : T.inkSoft, 'left', 'bold');
+        UIKit.ink(ctx, open ? lord.desc : this.unlockText('lord', id), D.x + 40, D.y + 84, 19, T.inkSoft, 'left');
+        // 효과(가운데 왼쪽 열), 패시브(오른쪽 넓은 열), 권능 갈래(맨 아래 줄)
+        this.drawEffectLines(ctx, lord.effects, D.x + 420, D.y + 44, 21, 27, 'left');
+        UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 720, D.y + 44, 22, T.inkWax, 'left', 'bold');
+        ctx.font = `19px ${UI_FONT}`;
+        this.wrapLines(ctx, lord.passive.desc, D.w - 760).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 720, D.y + 76 + i * 26, 19, T.ink, 'left'));
+        const branches = (LORD_POWERS[id] || []).map(br => br.name).join(' · ');
+        if (branches) UIKit.ink(ctx, `권능 · ${branches}`, D.x + 40, D.y + 128, 19, T.inkSoft, 'left');
     },
 
     // 메달에 스테이지 번호(가운데 cx, cy, 반지름 r)

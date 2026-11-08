@@ -24,6 +24,7 @@ const STORY_CAST = {
     rift: { name: '균열의 군주', lord: 'rift' },
     bone_queen: { name: '뼈의 여왕', lord: 'bone_queen' },
     gold_king: { name: '황금 마왕', lord: 'gold_king' },
+    plague: { name: '역병의 군주', lord: 'plague' },
     goblin: { name: '고블린 창병 꼬챙이', portrait: { sprite: 'pl_mon_goblin_spearman/rotations/south', crop: [12, 4, 24] } },
     warrior: { name: '견습 용사 덕수', portrait: { sprite: 'pl_hero_warrior/rotations/south', crop: [13, 3, 22] } },
     archmage: { name: '대마도사 몽글', portrait: { sprite: 'pl_boss_grand_wizard/rotations/south', crop: [31, 18, 28] } },
@@ -73,9 +74,11 @@ const STAGES = [
         outro: [
             ['bone_queen', '생각보다 쓸 만하네, 군주.'],
             ['rift', '월세는?'],
-            ['bone_queen', '뼈로 낼게. 족쇄랑 북, 눈알도 덤이야.']
+            ['bone_queen', '뼈로 낼게. 족쇄랑 북, 눈알도 덤이야.'],
+            ['plague', '콜록. 아랫집 하수도에 살던 자다. 시끄러워서 올라왔지.'],
+            ['plague', '용사들 기침 소리가 듣기 좋군. 나도 끼워 줘.']
         ],
-        unlocks: [{ kind: 'relic', id: 'iron_oath' }, { kind: 'relic', id: 'blood_altar' }, { kind: 'relic', id: 'broken_hourglass' }]
+        unlocks: [{ kind: 'lord', id: 'plague' }, { kind: 'relic', id: 'iron_oath' }, { kind: 'relic', id: 'blood_altar' }, { kind: 'relic', id: 'broken_hourglass' }]
     },
     {
         id: 's4', mapId: 'merge', no: 4, name: '왕국 정찰대', zone: 'skySea', waves: firstRounds(40), hpMul: 0.8, goldBonus: 20, map: [1110, 380],
