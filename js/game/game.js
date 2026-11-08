@@ -87,6 +87,7 @@ const Game = {
         this.prepTimer = COMBAT_RULES.firstPrepTime;
         this.paused = false;
         this.summonCount = 0;
+        this.familyLevels = {}; // 종족 강화 레벨(MONSTER_FAMILIES 열쇠 → 레벨)
         this.roundSummons = 0; // 이번 라운드에 소환한 수(계약 조항 소환 제한)
         this.summonLevel = 0;
         this.roundTimer = 0;
@@ -399,10 +400,24 @@ const Game = {
 
     inPlay() { return this.state === 'prep' || this.state === 'wave'; },
 
-    // 지금 소환 비용: 처음 cost(마왕과 유물의 summonBase를 더한다), 소환할 때마다 costStep씩 올라 maxCost에서 멈춘다
+    // 지금 소환 비용: 처음 cost(마왕과 유물의 summonBase를 더한다), 소환할 때마다 costStep씩 오른다. 상한이 없다(후반에 골드가 남지 않게)
     summonCost() {
         const r = SUMMON_RULES;
-        return Math.max(0, Math.min(r.maxCost, r.cost + this.mods.summonBase + r.costStep * this.summonCount));
+        return Math.max(0, r.cost + this.mods.summonBase + r.costStep * this.summonCount);
+    },
+
+    // 종족 강화 레벨과 올리기. 실패해도 골드를 쓴다. reason: 'state' | 'family' | 'gold'
+    familyLevel(family) { return this.familyLevels[family] || 0; },
+    upgradeFamily(family) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!hasEntry(MONSTER_FAMILIES, family)) return { ok: false, reason: 'family' };
+        const level = this.familyLevel(family);
+        const cost = familyUpgradeCost(level);
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        const success = rng('familyUp') < familyUpgradeChance(level);
+        if (success) this.familyLevels[family] = level + 1;
+        return { ok: true, success, level: this.familyLevel(family), cost };
     },
 
     // 맵에 더 둘 자리가 있는지(상한)
@@ -982,6 +997,7 @@ const Game = {
             case 'craft': return this.craftBag(cmd.a, cmd.b);
             case 'unequip': return this.unequipMonster(cmd.monster);
             case 'upgrade': return { ok: !!this.upgrade(cmd.monster, cmd.branch) };
+            case 'familyUp': return this.upgradeFamily(cmd.family);
             case 'lightning': return { ok: !!castLightning(cmd.x, cmd.y) };
             case 'roar': return { ok: !!castRoar() };
             case 'portal': return { ok: !!castPortal() };
@@ -1279,7 +1295,7 @@ const Game = {
     saveRun() {
         if (this.challenge) return; // 도전은 한 번에 끝낸다(시도는 무제한이다)
         const data = { v: 1, lord: this.lord, relics: this.relics, stage: this.stage, gold: this.gold, hp: this.hp, waveIndex: this.waveIndex,
-            prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, equipBag: this.equipBag, bossReward: this.bossReward,
+            prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, familyLevels: this.familyLevels, equipBag: this.equipBag, bossReward: this.bossReward,
             skills: this.skills, stats: this.stats, mana: this.mana, powers: this.powers, powerSeed: this.powerSeed, arrivals: this.arrivals,
             monsters: this.monsters.filter(m => !m.removed).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, xp: m.xp || 0, equip: m.equip || null })) };
         try { localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 저장을 못 해도 판은 계속된다 */ }
@@ -1307,6 +1323,8 @@ const Game = {
             this.prepTimer = +d.prepTimer || COMBAT_RULES.prepTime;
             this.summonCount = d.summonCount || 0;
             this.summonLevel = clamp(d.summonLevel || 0, 0, SUMMON_LEVELS.length - 1);
+            this.familyLevels = {};
+            for (const f of Object.keys(MONSTER_FAMILIES)) if (d.familyLevels && Number.isInteger(d.familyLevels[f]) && d.familyLevels[f] > 0) this.familyLevels[f] = d.familyLevels[f];
             this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
             this.bossReward = d.bossReward || null;
             if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0 }, d.skills);

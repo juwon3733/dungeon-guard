@@ -31,7 +31,6 @@ const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 const SUMMON_RULES = {
     cost: 25,       // 첫 소환 골드
     costStep: 1,    // 소환할 때마다 오르는 골드(다시 시작하면 처음으로)
-    maxCost: 60,    // 소환 비용 상한
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     // 등급별 확률은 SUMMON_LEVELS(소환 강화 레벨)에 있다
@@ -57,6 +56,18 @@ const SUMMON_LEVELS = [
 ];
 
 SUMMON_RULES.odds = SUMMON_LEVELS[0].odds; // 레벨 1의 확률(시험과 이전 코드용)
+
+// 종족 강화: 판 안에서 골드로 종족(MONSTER_FAMILIES)마다 레벨을 올린다. 그 종족 몬스터 전체의 피해 +damagePer x 레벨.
+// 비용은 cost에서 레벨마다 costStep씩 오르고 상한이 없다(후반 골드를 받아 준다).
+// sureLevels 레벨까지는 반드시 성공하고, 그 뒤로 레벨마다 chanceStep씩 성공률이 내려가 minChance에서 멈춘다.
+// 실패해도 골드는 쓰고 레벨은 그대로다. 성공 여부는 시드 난수(입력 재생이 같은 결과를 낸다)
+const FAMILY_UPGRADE = { damagePer: 0.08, cost: 50, costStep: 50, sureLevels: 3, chanceStep: 0.1, minChance: 0.3 };
+function familyUpgradeCost(level) { return FAMILY_UPGRADE.cost + FAMILY_UPGRADE.costStep * level; }
+function familyUpgradeChance(level) {
+    const F = FAMILY_UPGRADE;
+    if (level < F.sureLevels) return 1;
+    return Math.max(F.minChance, Math.round((1 - (level - F.sureLevels + 1) * F.chanceStep) * 100) / 100);
+}
 
 // 보스 보상 3택: 마지막 웨이브가 아닌 보스를 처치하면 그 웨이브가 끝나고 준비 단계에서 카드를 띄운다.
 //   monsterCards: 몬스터 카드 수(서로 다른 몬스터). 등급은 epicChance 확률로 영웅, 아니면 희귀.

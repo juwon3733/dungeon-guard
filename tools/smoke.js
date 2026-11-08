@@ -282,10 +282,10 @@ btn('begin');
 assert.strictEqual(Game.state, 'prep');
 assert.strictEqual(Game.lord, 'rift');
 assert.strictEqual(Game.gold, COMBAT_RULES.startGold);
-// 소환 비용: 25G에서 시작해 소환할 때마다 1G씩 올라 60G에서 멈춘다. 맵에는 24마리까지
+// 소환 비용: 25G에서 시작해 소환할 때마다 1G씩 오르고 상한이 없다. 맵에는 24마리까지
 assert.strictEqual(SUMMON_RULES.cost, 25);
 assert.strictEqual(SUMMON_RULES.costStep, 1);
-assert.strictEqual(SUMMON_RULES.maxCost, 60);
+assert.strictEqual(SUMMON_RULES.maxCost, undefined, 'no summon cost cap');
 assert.strictEqual(SUMMON_RULES.maxField, 24);
 assert.strictEqual(Game.summonCost(), 25);
 assert(BUILD_CELLS.size > SUMMON_RULES.maxField, 'enough build cells for the cap');
@@ -428,13 +428,11 @@ assert.strictEqual(k1.type, 'bone_knight');
 assert(Fx.pops.some(p => p.kind === 'summon' && p.grade === 'epic' && p.to.x === k1.x), 'epic summon effect on the cell');
 assert.strictEqual(Game.summonCost(), 29);
 
-// 비용은 60G에서 멈춘다
-Game.summonCount = 34;
-assert.strictEqual(Game.summonCost(), 59);
+// 비용은 멈추지 않고 계속 오른다
 Game.summonCount = 35;
 assert.strictEqual(Game.summonCost(), 60);
 Game.summonCount = 200;
-assert.strictEqual(Game.summonCost(), 60, 'cost capped');
+assert.strictEqual(Game.summonCost(), 225, 'no cap');
 
 // 원거리 몬스터는 사거리 안에 길이 들어오는 칸에만 나온다.
 // 건설 칸은 길에서 가로세로 2칸 안이라 어느 길에서든 대각선 2칸(2.83칸) 안이다. 이 시험 동안만 암흑 마법사 사거리를 1.5칸으로 줄인다
@@ -2808,7 +2806,7 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
     only('summonBase', -5);
     assert.strictEqual(Game.summonCost(), 20, 'start cost -5');
     Game.summonCount = 100;
-    assert.strictEqual(Game.summonCost(), SUMMON_RULES.maxCost, 'max cost unchanged');
+    assert.strictEqual(Game.summonCost(), SUMMON_RULES.cost - 5 + SUMMON_RULES.costStep * 100, 'cost keeps rising');
 
     // fieldMax
     only('fieldMax', 4);
@@ -6123,5 +6121,56 @@ console.log('smoke ok: equipment crafting');
     assert(sh === shields() && sh.includes('1'), 'shields are seeded');
     }).toString() + ')()', pctx);
     console.log('smoke ok: forbidden pact');
+}
+// 종족 강화: 골드로 종족 피해를 올린다. 3레벨부터 성공률이 내려가고 실패해도 골드를 쓴다. 성공 여부는 시드 난수
+{
+    const fctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), fctx, { filename: f });
+    vm.runInContext('(' + (() => {
+        assert.deepStrictEqual([0, 1, 2, 3, 4, 9, 30].map(familyUpgradeCost), [50, 100, 150, 200, 250, 500, 1550], 'cost rises without a cap');
+        assert.deepStrictEqual([0, 2, 3, 4, 8, 9, 20].map(familyUpgradeChance), [1, 1, 0.9, 0.8, 0.4, 0.3, 0.3], 'chance falls to a floor');
+        Game.reset(null, null, abyssChallenge('fam-w', 'rift', [], 3));
+        Game.state = 'wave';
+        // 피해: 그 종족만 레벨당 +8%
+        const k = [...BUILD_CELLS].find(x => { const [a, r] = x.split(',').map(Number); return Game.canPlace('fire_imp', a, r); }).split(',').map(Number);
+        const imp = Game.place('fire_imp', k[0], k[1]) || Game.monsters[Game.monsters.length - 1];
+        const fam = MONSTERS[imp.type].family;
+        const other = Object.keys(MONSTER_FAMILIES).find(f => f !== fam);
+        const base = monsterStats(imp).damage;
+        Game.familyLevels[other] = 5;
+        assert.strictEqual(monsterStats(imp).damage, base, 'other families do not count');
+        Game.familyLevels[fam] = 3;
+        assert(Math.abs(monsterStats(imp).damage - base * 1.24) < 1e-9, 'three levels = +24%');
+        Game.familyLevels = {};
+        // 골드가 모자라면 못 한다. 확실한 레벨은 늘 오른다
+        Game.gold = 40;
+        assert.strictEqual(Game.act({ kind: 'familyUp', family: fam }).reason, 'gold');
+        assert.strictEqual(Game.act({ kind: 'familyUp', family: 'nope' }).reason, 'family');
+        Game.gold = 1e6;
+        for (let i = 0; i < 3; i++) assert(Game.act({ kind: 'familyUp', family: fam }).success, 'sure levels');
+        assert.strictEqual(Game.familyLevel(fam), 3);
+        // 높은 레벨: 실패가 섞이고, 실패해도 골드는 나간다
+        let fails = 0;
+        for (let i = 0; i < 40; i++) {
+            const lv = Game.familyLevel(fam);
+            const g0 = Game.gold;
+            const r = Game.act({ kind: 'familyUp', family: fam });
+            assert(r.ok && g0 - Game.gold === familyUpgradeCost(lv), 'pays the cost either way');
+            if (!r.success) { fails++; assert.strictEqual(Game.familyLevel(fam), lv, 'failure keeps the level'); }
+        }
+        assert(fails > 0 && Game.familyLevel(fam) > 3, 'some fail, some succeed');
+        // 같은 시드와 입력이면 같은 결과(입력 재생)
+        const run = () => {
+            Game.reset(null, null, abyssChallenge('fam-r', 'rift', [], 3));
+            Game.state = 'wave';
+            Game.gold = 1e6;
+            for (let i = 0; i < 25; i++) Game.act({ kind: 'familyUp', family: 'demon' });
+            return Game.familyLevel('demon');
+        };
+        assert.strictEqual(run(), run(), 'seeded');
+        assert(Game.record.inputs.some(i => i.kind === 'familyUp' && i.family === 'demon'), 'recorded');
+    }).toString() + ')()', fctx);
+    console.log('smoke ok: family upgrade');
 }
 require('./smoke_maps.js');
