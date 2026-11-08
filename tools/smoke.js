@@ -5529,7 +5529,7 @@ Game.reset();
     let h = makeHero();
     const p = heroWorld(h);
     resolveStrike({ x: p.x, y: p.y });
-    assert(h.curse > 0 && h.curseMul === 1.3, 'lightning curse');
+    assert(h.curse > 0 && h.curseMul === DEMON_LORDS.rift.passive.takenMul, 'lightning curse');
     start('gold_king');
     h = makeHero();
     resolveStrike({ x: heroWorld(h).x, y: heroWorld(h).y });
@@ -6504,10 +6504,10 @@ console.log('smoke ok: equipment crafting');
         const tick = s => { for (let i = 0; i < Math.round(s * 30); i++) for (const h of Game.heroes.slice()) if (!h.dead && !h.boss) updateHero(h, 1 / 30); };
         start();
         assert(Game.lordPassive('shackle'), 'shackle passive');
-        // 확률: 많이 맞히면 약 8%가 묶인다(고정 난수)
+        // 확률: 많이 맞히면 패시브 확률만큼 묶인다(고정 난수)
         let bound = 0;
         for (let i = 0; i < 400; i++) { const h = hero(); chainOnHit(h); if (h.bound > 0) bound++; h.dead = true; }
-        assert(bound > 15 && bound < 50, 'about 8% bound: ' + bound);
+        assert(bound > 400 * DEMON_LORDS.chain.passive.chance * 0.5 && bound < 400 * DEMON_LORDS.chain.passive.chance * 1.6, 'about the passive chance: ' + bound);
         Game.heroes.length = 0;
         let eb = 0;
         for (let i = 0; i < 400; i++) { const h = hero(300, 'elite'); chainOnHit(h); if (h.bound > 0) eb++; h.dead = true; }
@@ -6705,19 +6705,19 @@ console.log('smoke ok: equipment crafting');
         const h = hero(), b = hero(300, 'boss');
         age(1);
         assert(Math.abs(clockSlowMul(h) - 0.6) < 1e-9 && Math.abs(clockSlowMul(b) - 0.8) < 1e-9, 'first 4 s: -40%, bosses half');
-        age(4.5);
-        assert.strictEqual(clockSlowMul(h), 1, 'after 4 s: normal');
+        age(DEMON_LORDS.clock.passive.duration + 0.5);
+        assert.strictEqual(clockSlowMul(h), 1, 'after the passive time: normal');
         // 다른 마왕은 감속하지 않는다
         Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
         assert.strictEqual(clockSlowMul(h), 1, 'only the clock lord');
         // 느린·무거운 초침, 태엽 감기
         start(['slowLong', 'slowDeep', 'slowBoss']);
         const h2 = hero(), b2 = hero(300, 'boss');
-        age(5.5);
-        assert(Math.abs(clockSlowMul(h2) - 0.45) < 1e-9 && Math.abs(clockSlowMul(b2) - 0.45) < 1e-9, '6 s, -55%, bosses too');
+        age(DEMON_LORDS.clock.passive.duration + 1.5);
+        assert(Math.abs(clockSlowMul(h2) - 0.45) < 1e-9 && Math.abs(clockSlowMul(b2) - 0.45) < 1e-9, '+2 s, -55%, bosses too');
         // 시계탑 그림자: 왕좌 3칸 안
         start(['slowAura']);
-        age(10);
+        age(20);
         const near = hero(ROUTES.north.length - 2 * TILE), far = hero(100);
         assert(Math.abs(clockSlowMul(near) - 0.75) < 1e-9 && clockSlowMul(far) === 1, 'shadow near the throne');
         // 가속: 첫 종소리 + 폭주 시계
@@ -6728,7 +6728,7 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(clockHaste(), 0, 'bell ends');
         // 몰아치기, 늦춰진 시간: 정예 처치
         start(['hasteKill', 'slowElite']);
-        age(10);
+        age(20);
         const e = hero(300, 'elite');
         e.bounty = 0;
         damageHero(e, 5000, 0, 0);
@@ -6760,6 +6760,15 @@ console.log('smoke ok: equipment crafting');
         Game.hp = 10;
         Game.endWave();
         assert.strictEqual(Game.hp, 11, 'repairman');
+        // 보스가 왕좌에 닿으면 바로 패배가 아니라 최대 체력의 절반
+        Game.reset({ lord: 'rift', relics: [] }, STAGES[5].id);
+        Game.state = 'wave';
+        Game.heroes.length = 0;
+        const boss = createHero(Object.keys(BOSSES)[0], 10, 0, true, 'north');
+        boss.waiting = false; boss.delay = 0; boss.d = ROUTES.north.length - 50;
+        Game.heroes.push(boss);
+        updateHero(boss, 1 / 30);
+        assert(boss.dead && Game.inPlay() && Game.hp === Game.maxHp() - Math.ceil(Game.maxHp() * COMBAT_RULES.bossArrival), 'boss arrival: half hp, not defeat');
         console.log('smoke ok: clock lord');
     }).toString() + ')()', kctx);
 }
