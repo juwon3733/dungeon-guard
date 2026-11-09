@@ -216,7 +216,8 @@ Object.assign(UI, {
     settingsRows() {
         const rows = [
             { id: 'set_sound', label: Sfx.muted ? '소리 켜기' : '소리 끄기', icon: 'sound', onClick: () => { Sfx.setMuted(!Sfx.muted); saveSettings(); } },
-            { id: 'set_fx', label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } }
+            { id: 'set_fx', label: Fx.reduce ? '효과 원래대로' : '효과 줄이기', icon: 'gear', onClick: () => { Fx.reduce = !Fx.reduce; saveSettings(); } },
+            { id: 'set_numbers', label: Fx.noNumbers ? '피해 숫자 켜기' : '피해 숫자 끄기', icon: 'attack', onClick: () => { Fx.noNumbers = !Fx.noNumbers; saveSettings(); } }
         ];
         if (!Game.inPlay()) rows.push({ id: 'set_tutorial', label: '튜토리얼 다시 보기', icon: 'book', onClick: () => this.replayTutorial() }); // js/ui/tutorial.js
         if (Game.state === 'hq') rows.push({ id: 'set_title', label: '타이틀로', icon: 'retry', onClick: () => { this.hqSettings = false; Game.state = 'title'; } });

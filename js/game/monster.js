@@ -64,6 +64,7 @@ function monsterStats(m) {
     }
     // 격분: 처치 뒤 잠시 빨라진다
     if (m.frenzyT > 0) stats.interval *= m.frenzyMul;
+    if (m.slowT > 0) stats.interval *= m.slowMul || 1; // 마법사 감속
     // 유물: 근접 몬스터
     if (MONSTER_ROLES[def.role].melee) {
         stats.damage *= 1 + mods.meleeDamage;
@@ -464,11 +465,6 @@ function setMonsterEquip2(m, id) {
     applyMonsterStats(m);
 }
 
-// 다음 랭크까지 남은 경험치(처치 수). 최고 랭크면 0. 장비로 경험치가 소수가 되면 올려서 센다
-function monsterXpToNext(m) {
-    const next = MONSTER_RANKS[(m.rank || 0) + 1];
-    return next ? Math.max(0, Math.ceil(next.xp - (m.xp || 0) - 1e-9)) : 0;
-}
 
 // 몬스터가 용사를 쓰러뜨림: 처치 경험치를 받고, 넘친 만큼 랭크를 올린다(체력은 비율을 유지한다).
 // 합쳐지거나 팔려 사라진 몬스터의 투사체가 마무리했으면 아무도 받지 않는다
@@ -487,14 +483,14 @@ function monsterKilledHero(m, hero) {
         Fx.anim('fx_gold', p.x, p.y - 75, 120);
         Fx.number(hero, p.x, p.y - 165, `+${loot.gold}G`, '#ffd76a', false);
     }
-    const gain = hero.boss ? RANK_KILL_XP.boss : (hero.elite ? RANK_KILL_XP.elite : RANK_KILL_XP.normal);
-    m.xp += gain * (1 + monsterEquip(m, 'xp')) * (1 + Game.mods.xp); // 장비, 마왕과 유물(처치 경험치)
-    const before = m.rank;
-    while (MONSTER_RANKS[m.rank + 1] && m.xp >= MONSTER_RANKS[m.rank + 1].xp) m.rank++;
-    if (m.rank === before) return;
-    applyMonsterStats(m);
+    m.kills = (m.kills || 0) + 1; // 처치 수(랭크는 골드로 돌린다)
+}
+
+// 랭크가 바뀐 연출(골드로 돌렸을 때). 오르면 고리와 글자, 내리면 조용히
+function showRankChange(m, before) {
+    if (m.rank <= before) return;
     m.rankUp = 1.2;
-    const top = m.rank === MONSTER_RANKS.length - 1;
+    const top = m.rank >= rankIndex('S');
     const color = MONSTER_RANKS[m.rank].color;
     const footY = m.y + MONSTER_FOOT;
     Fx.ring(m.x, footY, top ? 220 : 150, color, 0.5);
@@ -523,6 +519,7 @@ function updateMonster(m, dt) {
     m.thornsFx = Math.max(0, (m.thornsFx || 0) - dt);
     m.buffT = Math.max(0, (m.buffT || 0) - dt);
     m.frenzyT = Math.max(0, (m.frenzyT || 0) - dt);
+    m.slowT = Math.max(0, (m.slowT || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;

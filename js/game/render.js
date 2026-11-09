@@ -446,6 +446,13 @@ const Render = {
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
+        if (h.shieldT > 0) {
+            // 보스 무적 방패: 몸을 감싸는 금빛 막(깜빡인다)
+            ctx.save();
+            ctx.globalAlpha = 0.28 + Math.sin(Game.time * 10) * 0.1;
+            this.pixelDisc(ctx, p.x, p.y - (h.boss ? 120 : 40), h.boss ? 110 : 50, h.boss ? 130 : 60, '#ffe08a', { k: 4 });
+            ctx.restore();
+        }
         if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY + (h.boss ? 40 : 30), h.boss ? 100 : 56, h.lane * 0.1); // 머리 바로 위에 작게. 묶인 용사는 별 대신 사슬
         if (clockSlowMul(h) < 1) this.pixelRing(ctx, p.x, p.y + 10, 18, 6, '#ffcf6b', { k: 2 }); // 시계탑: 감속 받는 용사 발밑 호박색 고리
         if (h.bound > 0) this.chainShackle(ctx, p.x, p.y + 10, h.boss ? 2 : 1, h.bound, h.elite || h.boss);
@@ -1055,6 +1062,13 @@ const Render = {
             ctx.restore();
         }
         this.drawAuraRunes(ctx, m, footY);
+        if (m.slowT > 0) {
+            // 마법사 감속: 발밑에 푸른 서리 원
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            this.pixelDisc(ctx, m.x, footY, 56, 18, '#7fd8ff');
+            ctx.restore();
+        }
         const enraged = !!monsterEnrage(m);
         if (enraged) this.enrageAura(ctx, m.x, footY, m.x * 0.01);
         const { clip, name } = this.monsterFrame(def, m);
@@ -1182,7 +1196,7 @@ const Render = {
     rankMark(ctx, m, footY) {
         const rank = m.rank || 0;
         const r = MONSTER_RANKS[rank];
-        const top = rank === MONSTER_RANKS.length - 1;
+        const top = rank >= rankIndex('S');
         const up = m.rankUp > 0 ? m.rankUp / 1.2 : 0;
         if (rank > 0) {
             const x = m.x + 22;

@@ -19,7 +19,9 @@ const LORD_EFFECTS = {
     hp: { name: '몬스터 체력', mode: 'ratio' },
     attackSpeed: { name: '몬스터 공격 속도', mode: 'ratio' },
     range: { name: '몬스터 사거리', mode: 'ratio' },
-    xp: { name: '처치 경험치', mode: 'ratio' },
+    xp: { name: '처치 경험치', mode: 'ratio' }, // 2026-11-09부터 쓰지 않는다(랭크는 골드로 돌린다)
+    rankCost: { name: '랭크 돌리기 할인', mode: 'ratio' },
+    rankLuck: { name: 'S 이상 랭크 확률', mode: 'ratio' },
     bounty: { name: '처치 골드', mode: 'mul' },
     rareChance: { name: '소환 희귀 확률', mode: 'ratio' }, // 희귀 확률에 더하고 일반에서 뺀다
     summonBase: { name: '소환 시작 비용', mode: 'add', unit: 'G', low: true },
@@ -106,7 +108,8 @@ const LORD_EFFECTS = {
 // 항목의 자리와 연결은 시드로 정해 판마다 갈 수 있는 길이 다르다(같은 시드 도전은 모두 같은 지도).
 // 그래서 한 판의 빌드는 갈래 하나와 겹마다 고른 4개다. 마력은 판이 끝나면 사라진다(오래 한 사람이 랭킹에서 유리해지지 않게).
 // 수치는 플레이 후 고칠 초안이다.
-const POWER_RULES = { maxNodes: 4, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1 };
+// 권능: 갈래 하나를 고르면 그 갈래 8개를 모두 찍을 수 있다(이어진 곳부터). 다 찍으면 남는 마력으로 각성(몬스터 피해 +awakenDamage, 횟수 제한 없음)
+const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1, awakenCost: 4, awakenStep: 2, awakenDamage: 0.05 }; // 각성 값은 4, 6, 8...
 const LORD_POWERS = {
     rift: [
         { id: 'storm', name: '폭풍', desc: '번개 강화', tiers: [
@@ -136,7 +139,7 @@ const LORD_POWERS = {
             [{ id: 'volleyTwin', name: '두 번째 사격', desc: '일제 사격 2회' }, { id: 'volleyFear', name: '공포', desc: '일제 사격 맞은 용사 1.5초 정지' }]
         ] },
         { id: 'corpse', name: '시체', desc: '시체 폭발', tiers: [
-            [{ id: 'corpseBlast', name: '시체 폭발', desc: '일반 용사 5명 처치마다 시체 폭발' }, { id: 'xpUp', name: '죽음의 교훈', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'corpseBlast', name: '시체 폭발', desc: '일반 용사 5명 처치마다 시체 폭발' }, { id: 'xpUp', name: '죽음의 교훈', desc: '랭크 돌리기 비용 -30%', mods: { rankCost: 0.3 } }],
             [{ id: 'corpseFrost', name: '썩은 안개', desc: '폭발에 맞은 용사 2초간 이동 -30%' }, { id: 'boneEdge', name: '뼈 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
             [{ id: 'raise', name: '시체 일으키기', desc: '새 스킬(E): 최근 시체 8구 동시 폭발' }, { id: 'corpseQuick', name: '썩은 살', desc: '시체 폭발 주기 3명' }],
             [{ id: 'raiseFast', name: '끝없는 무덤', desc: '시체 일으키기 재사용 -40%' }, { id: 'corpseBig', name: '큰 폭발', desc: '폭발 범위 2배' }]
@@ -182,7 +185,7 @@ const LORD_POWERS = {
             [{ id: 'cloudBig', name: '짙은 구름', desc: '구름 범위 2배, 시간 +3초' }, { id: 'pandemic', name: '대유행', desc: '독 처치 10명마다 모든 중독 시간 초기화' }]
         ] },
         { id: 'rot', name: '부패', desc: '약화', tiers: [
-            [{ id: 'rotCurse', name: '썩은 살', desc: '중독된 용사 받는 피해 +15%' }, { id: 'rotXp', name: '거름', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'rotCurse', name: '썩은 살', desc: '중독된 용사 받는 피해 +15%' }, { id: 'rotXp', name: '거름', desc: '랭크 돌리기 비용 -30%', mods: { rankCost: 0.3 } }],
             [{ id: 'rotMana', name: '정수 추출', desc: '독으로 정예 처치 시 마력 +1' }, { id: 'rotEdge', name: '녹슨 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
             [{ id: 'rotWeaken', name: '쇠약', desc: '중독된 정예·보스 왕좌 피해 -30%' }, { id: 'rotSac', name: '역병 제물', desc: '제물 시 모든 용사 중독' }],
             [{ id: 'rotDeep', name: '깊은 부패', desc: '중독된 용사 받는 피해 +30%' }, { id: 'rotBlast', name: '시체 가스', desc: '독 처치 시 그 자리 폭발' }]
@@ -222,7 +225,7 @@ const LORD_POWERS = {
             [{ id: 'shieldBig', name: '큰 방패', desc: '왕좌 피해 무효 2회' }, { id: 'reflectAll', name: '전신 거울', desc: '되비침 피해 100%' }]
         ] },
         { id: 'transmute', name: '변환', desc: '합치기 강화', tiers: [
-            [{ id: 'transEdge', name: '은 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }, { id: 'transXp', name: '비친 경험', desc: '처치 경험치 +30%', mods: { xp: 0.3 } }],
+            [{ id: 'transEdge', name: '은 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }, { id: 'transXp', name: '비친 경험', desc: '랭크 돌리기 비용 -30%', mods: { rankCost: 0.3 } }],
             [{ id: 'transJump', name: '뒤틀린 상', desc: '합치기 2단계 상승 확률 +3%', mods: { mergeJump: 0.03 } }, { id: 'transRefund', name: '깨진 조각값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
             [{ id: 'transRecipe', name: '조합 거울', desc: '조합식 보존 확률 2배' }, { id: 'transGold', name: '은 세공', desc: '합치기마다 골드(일반 3 ~ 신화 100)' }],
             [{ id: 'transUp', name: '금빛 거울', desc: '보존 재료 한 등급 상승(전설까지)' }, { id: 'transFree', name: '공짜 거울', desc: '라운드 첫 소환 무료' }]
@@ -410,7 +413,7 @@ const RELICS = {
     glass_heart: { id: 'glass_heart', name: '유리 심장', effects: { fullHpDamage: 0.2 }, desc: '체력이 가득할 때 피해가 20% 증가한다' },
     merchant_bond: { id: 'merchant_bond', name: '상인의 보증서', effects: { startGold: 100 }, desc: '게임 시작 시 골드를 100G 더 받는다' },
     lord_armor: { id: 'lord_armor', name: '마왕의 갑옷', effects: { maxHp: 10 }, desc: '마왕의 최대 체력이 10 증가한다' },
-    tome_xp: { id: 'tome_xp', name: '경험의 서', effects: { xp: 0.5 }, desc: '처치로 얻는 경험치가 50% 증가한다' },
+    tome_xp: { id: 'tome_xp', name: '운명의 서', effects: { rankLuck: 1 }, desc: '랭크를 돌릴 때 S 이상이 나올 확률이 두 배가 된다' },
     pierce_tip: { id: 'pierce_tip', name: '꿰뚫는 화살촉', effects: { pierce: 1 }, desc: '원거리 공격이 용사 1명을 더 관통한다' },
     usury_ledger: { id: 'usury_ledger', name: '고리대금 장부', effects: { interest: 0.03 }, desc: '라운드 종료 시 현재 보유 골드의 3%만큼 이자를 받는다(최대 15G)' },
     mad_dice: { id: 'mad_dice', name: '미치광이의 주사위', effects: { mergeJump: 0.05 }, desc: '합성 시 5% 확률로 2단계 더 높은 등급의 몬스터가 나온다' },

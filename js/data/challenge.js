@@ -113,7 +113,7 @@ function dailyChallenge(date) {
 //   mutateEvery: 이 층수마다 변이(어렵게 만드는 규칙 카드)가 하나씩 쌓이고 지역이 바뀐다
 //   hpFrom, hpGrowth: 이 층부터 용사 체력이 층마다 몇 배로 늘어나는가. 일일 도전보다 가파르다
 //   scorePerMutation: 쌓인 변이 하나당 점수 배율
-const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.06, scorePerMutation: 0.25 };
+const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.025, scorePerMutation: 0.25 };
 
 // 주간 토벌전: 일주일 동안 모두 같은 시드, 같은 보스, 같은 조건으로 몇 단계까지 잡는지 겨룬다.
 //   tierEvery: 보스가 나오는 라운드 간격, tierHpGrowth: 보스를 잡을 때마다 다음 보스 체력 배율(곱해진다)
@@ -122,12 +122,13 @@ const RAID_RULES = { tierEvery: 10, tierHpGrowth: 2, relics: 2, hard: 2, bossDam
 
 // 토벌 보스: 그림은 Asteria 보스. 패턴 표는 BOSSES와 같다. 체력은 전사 체력 x hpMultiplier x 라운드 배율 x 단계 배율이다
 const RAID_BOSSES = {
-    war_avatar: { name: '전쟁의 화신', note: '체력 50%에 돌진, 25%에 주변 정지', patterns: [{ at: 0.5, kind: 'charge', time: 3, speed: 2.2 }, { at: 0.25, kind: 'stomp', windup: 1.2, range: 3, stun: 3 }] },
-    sea_king: { name: '심해의 왕', note: '체력 50%·25%에 넓은 감전', patterns: [{ at: 0.5, kind: 'shock', windup: 1.0, range: 4, stun: 2.5 }, { at: 0.25, kind: 'shock', windup: 1.6, range: 5, stun: 3 }] },
-    judge: { name: '심판자', note: '체력 75%·50%·25%에 감전', patterns: [{ at: 0.75, kind: 'shock', windup: 1.0, range: 3, stun: 2 }, { at: 0.5, kind: 'shock', windup: 1.0, range: 3, stun: 2 }, { at: 0.25, kind: 'shock', windup: 1.0, range: 4, stun: 2.5 }] },
-    gatekeeper: { name: '문지기', note: '느리지만 단단하고, 25%에 주변 정지', speed: 0.5, hpMultiplier: 20, patterns: [{ at: 0.25, kind: 'stomp', windup: 1.0, range: 4, stun: 3 }] },
-    golden_boar: { name: '황금 멧돼지', note: '빠르고 체력 75%·40%에 돌진', speed: 1, hpMultiplier: 11, patterns: [{ at: 0.75, kind: 'charge', time: 2, speed: 2.4 }, { at: 0.4, kind: 'charge', time: 3, speed: 2.6 }] },
-    star_herald: { name: '별의 사도', note: '체력 60%에 감전, 30%에 돌진', patterns: [{ at: 0.6, kind: 'shock', windup: 1.2, range: 4, stun: 2.5 }, { at: 0.3, kind: 'charge', time: 3, speed: 2.2 }] }
+    // 패턴 종류(2026-11-09 늘림): charge 돌진, stomp 주변 정지, shock 감전, rally 주변 용사 회복·가속, summon 일반 용사 부르기, shield 무적 방패
+    war_avatar: { name: '전쟁의 화신', note: '체력 60%에 주변 용사 회복과 가속, 25%에 주변 정지', patterns: [{ at: 0.6, kind: 'rally', range: 4, heal: 0.3, time: 5, speed: 1.4 }, { at: 0.25, kind: 'stomp', windup: 1.2, range: 3, stun: 3 }] },
+    sea_king: { name: '심해의 왕', note: '체력 60%에 용사 8명 부르기, 30%에 넓은 감전', patterns: [{ at: 0.6, kind: 'summon', type: 'warrior', count: 8 }, { at: 0.3, kind: 'shock', windup: 1.6, range: 5, stun: 3 }] },
+    judge: { name: '심판자', note: '체력 50%에 4초 무적, 25%에 감전', patterns: [{ at: 0.5, kind: 'shield', time: 4 }, { at: 0.25, kind: 'shock', windup: 1.0, range: 4, stun: 2.5 }] },
+    gatekeeper: { name: '문지기', note: '느리고 단단함, 체력 60%·30%에 3초 무적', speed: 0.5, hpMultiplier: 20, patterns: [{ at: 0.6, kind: 'shield', time: 3 }, { at: 0.3, kind: 'shield', time: 3 }] },
+    golden_boar: { name: '황금 멧돼지', note: '빠름, 체력 75%에 도적 떼, 40%에 돌진', speed: 1, hpMultiplier: 11, patterns: [{ at: 0.75, kind: 'summon', type: 'rogue', count: 10 }, { at: 0.4, kind: 'charge', time: 3, speed: 2.6 }] },
+    star_herald: { name: '별의 사도', note: '체력 60%에 모든 용사 가속, 30%에 감전', patterns: [{ at: 0.6, kind: 'rally', range: 99, heal: 0, time: 6, speed: 1.5 }, { at: 0.3, kind: 'shock', windup: 1.2, range: 4, stun: 2.5 }] }
 };
 for (const [id, b] of Object.entries(RAID_BOSSES)) {
     const a = ASTERIA_BOSS_ART[id];

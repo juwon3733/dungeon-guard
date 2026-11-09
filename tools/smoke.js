@@ -47,6 +47,13 @@ vm.runInContext(`{
     for (const [id, [name, effects]] of Object.entries(OLD)) RELICS[id] = { id, name, effects, desc: name };
     Object.assign(RELIC_LIMITS, { goldStep: 200, goldDamageMax: 0.15 });
     COMBAT_RULES.crit.chance = 0;
+    // 옛 시험은 소환 값이 1G씩 오르고 권능이 4개까지였다(2026-11-09 경제 개편 전). 새 규칙은 맨 끝 묶음에서 본다
+    SUMMON_RULES.costStep = 1;
+    POWER_RULES.maxNodes = 4;
+    ROUND_RULES.bosses = ['archmage', 'fallen_knight']; // 옛 시험은 보스 2종 순환, 마법사 정지였다
+    delete HEROES.mage.slow;
+    MONSTER_GRADES.mythic.fieldMax = 3; // 옛 시험은 신화 맵 제한(서로 다른 3마리, 같은 종 1마리)이 있었다
+    for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
     for (const st of STAGES) {
@@ -1388,12 +1395,12 @@ const shootAll = (m, target) => {
     shootAll(imp, h);
     assert.strictEqual(h.burn, 2, 'burn refreshed to full duration');
     assert.strictEqual(h.burnDps, 3, 'burn does not stack');
-    // 화상으로 쓰러뜨리면 건 몬스터가 처치 경험치를 받는다
+    // 화상으로 쓰러뜨리면 건 몬스터의 처치로 센다
     h.hp = 1;
-    const xp0 = imp.xp;
+    const k0 = imp.kills || 0;
     updateHero(h, 0.6);
     assert(h.dead, 'burned to death');
-    assert.strictEqual(imp.xp, xp0 + RANK_KILL_XP.normal, 'burn kill gives xp to the imp');
+    assert.strictEqual(imp.kills, k0 + 1, 'burn kill counts for the imp');
     // 능력 없는 그놀 사냥꾼은 화상을 걸지 않는다(도끼 투사체)
     const gnoll = putMonster('gnoll_hunter', 700);
     const h2 = tough(place('warrior', 700 + TILE));
@@ -1726,11 +1733,10 @@ Game.projectiles = [];
     Game.monsters = [];
 }
 
-// 랭크: D~S, 처치 경험치로만 오른다. 마지막 공격을 넣은 몬스터가 받는다(번개, 타락 유닛 제외)
-assert.strictEqual(MONSTER_RANKS.map(r => r.name).join(), 'D,C,B,A,S');
-assert.strictEqual(MONSTER_RANKS.map(r => r.xp).join(), '0,5,15,35,70');
-assert.strictEqual(MONSTER_RANKS.map(r => r.mul).join(), '1,1.25,1.5,1.75,2');
-assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":10}');
+// 랭크: D~S+, 골드로 돌린다(2026-11-09). 처치 수는 마지막 공격을 넣은 몬스터가 센다(번개, 타락 유닛 제외)
+assert.strictEqual(MONSTER_RANKS.map(r => r.name).join(), 'D,C,B,A,S,S+');
+assert.strictEqual(MONSTER_RANKS.map(r => r.mul).join(), '1,1.2,1.45,1.75,2.1,2.6');
+assert(Math.abs(MONSTER_RANKS.reduce((a, r) => a + r.odds, 0) - 1) < 1e-9, 'rank odds sum to 1');
 {
     const frail = h => { h.hp = 1; h.armor = 0; return h; };
     const land = () => { for (let i = 0; i < 180 && Game.projectiles.some(p => !p.done); i++) for (const p of Game.projectiles) if (!p.done) updateProjectile(p, 1 / 60); };
@@ -1738,17 +1744,17 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     clearBoard();
     Game.projectiles = [];
     const archer = putMonster('skeleton_archer', 700);
-    assert(archer.rank === 0 && archer.xp === 0, 'summoned at D');
+    assert(archer.rank === 0 && !archer.kills, 'summoned at D');
     const h1 = frail(place('warrior', 700 + TILE));
     fireMonsterShot(archer, monsterStats(archer), h1);
     land();
-    assert(h1.dead && archer.xp === 1, 'arrow kill credited');
+    assert(h1.dead && archer.kills === 1, 'arrow kill credited');
     // 근접: 막는 몬스터가 붙잡고 때려 쓰러뜨린다
     clearBoard();
     const orc = putMonster('orc_guard', 900);
     const h2 = frail(place('warrior', 900 + 0.3 * TILE));
     for (let i = 0; i < 90 && !h2.dead; i++) updateMonster(orc, 1 / 30);
-    assert(h2.dead && orc.xp === 1, 'melee kill credited');
+    assert(h2.dead && orc.kills === 1, 'melee kill credited');
     // 광역 구체: 맞아 쓰러진 용사마다 경험치
     clearBoard();
     Game.projectiles = [];
@@ -1756,14 +1762,14 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     const group = [0, 0.2, 0.4].map(k => frail(place('warrior', 1100 + (1 + k) * TILE)));
     fireMonsterShot(mage, monsterStats(mage), group[0]);
     land();
-    assert(group.every(h => h.dead) && mage.xp === 3, 'orb splash kills credited: ' + mage.xp);
+    assert(group.every(h => h.dead) && mage.kills === 3, 'orb splash kills credited: ' + mage.kills);
     // 빔(관통 갈래)
     clearBoard();
     const beamer = putMonster('dark_mage', 1100);
     Object.assign(beamer, { tier: 3, branch: 'B' });
     const h3 = frail(place('warrior', 1100 + TILE));
     fireMonsterShot(beamer, monsterStats(beamer), h3);
-    assert(h3.dead && beamer.xp === 1, 'beam kill credited');
+    assert(h3.dead && beamer.kills === 1, 'beam kill credited');
     // 처치는 마지막 공격을 넣은 몬스터만 받는다
     clearBoard();
     const a1 = putMonster('skeleton_archer', 700);
@@ -1772,16 +1778,15 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     h4.armor = 0;
     damageHero(h4, 9000, 0, 0, null, a1);
     damageHero(h4, 9000, 0, 0, null, a2);
-    assert(h4.dead && a1.xp === 0 && a2.xp === 1, 'last hit only');
-    // 정예 3, 보스 10
+    assert(h4.dead && !a1.kills && a2.kills === 1, 'last hit only');
+    // 정예와 보스도 한 명으로 센다. 처치로 랭크가 오르지 않는다
     const elite = tough(place('elite_swordsman', 700 + TILE));
     damageHero(elite, 99999, 0, 0, null, a1);
-    assert(elite.dead && a1.xp === 3, 'elite counts 3');
+    assert(elite.dead && a1.kills === 1, 'elite counts once');
     const boss = place(null, 700 + TILE, 'fallen_knight');
     damageHero(boss, 1e7, 0, 0, null, a1);
-    assert(boss.dead && a1.xp === 13, 'boss counts 10');
-    assert.strictEqual(a1.rank, 1, 'C at 13 xp');
-    assert.strictEqual(monsterXpToNext(a1), 2, '2 kills to B');
+    assert(boss.dead && a1.kills === 2, 'boss counts once');
+    assert.strictEqual(a1.rank, 0, 'kills do not raise rank');
     // 번개와 타락 유닛의 처치는 몬스터 경험치가 아니다. 사라진 몬스터의 투사체 처치도 아무도 받지 않는다
     clearBoard();
     Game.projectiles = [];
@@ -1796,53 +1801,53 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     fireMonsterShot(watcher, monsterStats(watcher), h7);
     Game.removeMonster(watcher);
     land();
-    assert(h5.dead && h6.dead && h7.dead && watcher.xp === 0, 'lightning, corrupt, removed shooter give no xp');
+    assert(h5.dead && h6.dead && h7.dead && !watcher.kills, 'lightning, corrupt, removed shooter give no kill');
 }
 {
-    // 랭크 상승과 수치: 랭크마다 체력과 피해 25%씩(S는 2배). 체력은 비율을 유지한다
+    // 랭크와 수치: 랭크 배율만큼 피해와 체력. 체력은 비율을 유지한다
     clearBoard();
     const og = putMonster('orc_guard', 900);
     const base = MONSTERS.orc_guard.stats;
     og.hp = og.maxHp * 0.5;
-    og.xp = 4;
-    const kill = (m, type, bossKey) => { const h = tough(place(type || 'warrior', 900 + TILE, bossKey)); damageHero(h, 1e7, 0, 0, null, m); };
-    kill(og);
-    assert.strictEqual(og.rank, 1, 'C at 5 kills');
-    assert(og.rankUp > 0, 'rank up effect');
-    assert(Math.abs(monsterStats(og).damage - base.damage * 1.25) < 1e-9 && og.maxHp === base.hp * 1.25, 'C stats +25%');
-    assert(Math.abs(og.hp / og.maxHp - 0.5) < 1e-9, 'hp ratio kept on rank up');
-    // 경험치가 넘치면 여러 단계를 한 번에 오른다. S에서 멈춘다
-    og.xp = 30;
-    kill(og, null, 'fallen_knight');
-    assert.strictEqual(og.rank, 3, 'A at 40');
-    og.xp = 69;
-    kill(og);
-    assert.strictEqual(og.rank, 4, 'S at 70');
-    assert(Math.abs(monsterStats(og).damage - base.damage * 2) < 1e-9 && og.maxHp === base.hp * 2, 'S doubles');
-    assert.strictEqual(monsterXpToNext(og), 0, 'S is top');
-    kill(og, null, 'fallen_knight');
-    assert.strictEqual(og.rank, 4, 'stays S');
+    setMonsterRank(og, 1);
+    assert(Math.abs(monsterStats(og).damage - base.damage * 1.2) < 1e-9, 'C damage x1.2');
+    assert(Math.abs(og.hp / og.maxHp - 0.5) < 1e-9, 'hp ratio kept on rank change');
+    // 골드로 돌린다: 값은 등급별, D~S+ 무작위, 처치 수는 그대로
+    const st0 = Game.state, gold0 = Game.gold;
+    Game.state = 'prep';
+    og.kills = 7;
+    const seen = new Set();
+    for (let i = 0; i < 400; i++) {
+        Game.gold = 1e6;
+        const res = Game.act({ kind: 'rollRank', monster: og });
+        assert(res.ok && Game.gold === 1e6 - RANK_ROLL.cost.common, 'roll costs gold by grade');
+        seen.add(og.rank);
+    }
+    assert(seen.size >= 5 && og.kills === 7, 'ranks vary and kills kept: ' + [...seen].join());
+    Game.gold = 0;
+    assert.strictEqual(Game.act({ kind: 'rollRank', monster: og }).reason, 'gold', 'needs gold');
+    Game.state = st0;
+    Game.gold = gold0;
+    setMonsterRank(og, 4);
+    assert(Math.abs(monsterStats(og).damage - base.damage * 2.1) < 1e-9, 'S x2.1');
     // 쓰러졌다 다시 나와도 랭크 유지, 체력은 랭크 기준 최대치로
     damageUnit(og, 1e6);
     assert(og.down > 0);
     for (let i = 0; i < 40 && og.down > 0; i++) updateMonster(og, 0.25);
-    assert(og.down <= 0 && og.rank === 4 && og.hp === base.hp * 2, 'rank kept after respawn');
+    assert(og.down <= 0 && og.rank === 4 && Math.abs(og.hp - base.hp * 2.1) < 1e-9, 'rank kept after respawn');
     // 합치면 재료 중 낮은 랭크, 경험치는 그 랭크의 시작값
     clearBoard();
     const m1 = Game.place('orc_guard', 3, 6);
     const m2 = Game.place('orc_guard', 3, 4) || Game.place('orc_guard', 5, 5);
     assert(m1 && m2, 'merge test cells');
     setMonsterRank(m1, 3);
-    m1.xp = 50;
     setMonsterRank(m2, 1);
-    m2.xp = 12;
     const m3 = Game.place('orc_guard', ...[...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => !Game.monsterAt(c, r)));
     setMonsterRank(m3, 2); // 등급 합치기 셋째 재료(랭크 B)
     const res = Game.merge({ monster: m2 }, { monster: m1 });
     assert(res.ok, 'merged');
     assert.strictEqual(res.monster.rank, 1, 'lower rank inherited');
-    assert.strictEqual(res.monster.xp, 5, 'xp at rank start');
-    assert.strictEqual(res.monster.maxHp, MONSTERS[res.type].stats.hp * 1.25, 'inherited rank stats');
+    assert(Math.abs(res.monster.maxHp - MONSTERS[res.type].stats.hp * MONSTER_RANKS[1].mul) < 1e-9, 'inherited rank stats');
     // 옮겨도 유지
     const free = [[5, 5], [7, 6], [9, 5], [11, 4]].find(([c, r]) => Game.canPlace(res.type, c, r));
     assert(Game.moveMonster(res.monster, free[0], free[1]) && res.monster.rank === 1, 'rank kept after move');
@@ -1855,12 +1860,13 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert.deepStrictEqual(sacrificeGain('curse_shooter'), { heal: 2, lightning: 5 }, 'rare');
     assert.deepStrictEqual(sacrificeGain('bone_knight'), { heal: 5, lightning: 10 }, 'epic');
     assert.deepStrictEqual(sacrificeGain('death_lord'), { heal: 10, lightning: 30 }, 'legendary');
-    // 랭크 보정: 랭크마다 +25%, S는 2배. 체력은 내림
-    assert.deepStrictEqual(sacrificeGain({ type: 'curse_shooter', rank: 1 }), { heal: 2, lightning: 6.25 }, 'rare C');
-    assert.deepStrictEqual(sacrificeGain({ type: 'curse_shooter', rank: 2 }), { heal: 3, lightning: 7.5 }, 'rare B');
-    assert.deepStrictEqual(sacrificeGain({ type: 'bone_knight', rank: 3 }), { heal: 8, lightning: 17.5 }, 'epic A');
-    assert.deepStrictEqual(sacrificeGain({ type: 'orc_guard', rank: 4 }), { heal: 2, lightning: 4 }, 'common S');
-    assert.deepStrictEqual(sacrificeGain({ type: 'death_lord', rank: 4 }), { heal: 20, lightning: 60 }, 'legendary S');
+    // 랭크 보정: 랭크 배율만큼. 체력은 내림
+    const rk = (type, rank, heal, light) => assert.deepStrictEqual(sacrificeGain({ type, rank }), { heal: Math.floor(heal * MONSTER_RANKS[rank].mul), lightning: light * MONSTER_RANKS[rank].mul }, type + ' rank ' + rank);
+    rk('curse_shooter', 1, 2, 5);
+    rk('curse_shooter', 2, 2, 5);
+    rk('bone_knight', 3, 5, 10);
+    rk('orc_guard', 4, 1, 2);
+    rk('death_lord', 5, 10, 30);
     assert.strictEqual(sacrificeText(sacrificeGain('curse_shooter')), '체력 +2, 번개 -5초');
     assert.strictEqual(sacrificeText({ heal: 2, lightning: 6.25 }), '체력 +2, 번개 -6.25초');
 
@@ -1878,7 +1884,7 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     assert(!Game.sacrifice(k).ok, 'cannot sacrifice twice');
     // 다시 소환(놓기) 가능
     assert(Game.canPlace('orc_guard', 3, 6), 'cell usable again');
-    assert(withRandom([0, 0, 0], () => Game.summon()).ok, 'summon after sacrifice');
+    { const sr = withRandom([0, 0, 0], () => Game.summon()); assert(sr.ok, 'summon after sacrifice: ' + sr.reason + ' gold ' + Game.gold + ' cost ' + Game.summonCost()); }
     // 체력 최대치를 넘지 않고, 번개 대기는 0 아래로 내려가지 않는다. 체력이 가득해도 바칠 수 있다
     clearBoard();
     const d1 = Game.place('death_lord', 3, 6);
@@ -2185,19 +2191,19 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     UI.clearSelection();
     setMonsterEquip(archer, null);
 
-    // 랭크 배율과 겹쳐도 곱해진다: 랭크 B(x1.5) + 뿔 투구(체력 +30%, 피해 +20%)
+    // 랭크 배율과 겹쳐도 곱해진다: 랭크 B(표의 배율) + 뿔 투구(체력 +30%, 피해 +20%)
     const orc = Game.place('orc_guard', 3, 4);
     setMonsterRank(orc, 2);
     setMonsterEquip(orc, 'helmet');
-    assert(near(orc.maxHp, 120 * 1.5 * 1.3) && near(monsterStats(orc).damage, 8 * 1.5 * 1.2), 'rank and equipment multiply');
+    assert(near(orc.maxHp, 120 * MONSTER_RANKS[2].mul * 1.3) && near(monsterStats(orc).damage, 8 * MONSTER_RANKS[2].mul * 1.2), 'rank and equipment multiply');
     setMonsterEquip(orc, null);
-    assert(near(orc.maxHp, 120 * 1.5) && near(monsterStats(orc).damage, 8 * 1.5), 'rank stays after unequip');
+    assert(near(orc.maxHp, 120 * MONSTER_RANKS[2].mul) && near(monsterStats(orc).damage, 8 * MONSTER_RANKS[2].mul), 'rank stays after unequip');
     // 체력 비율 유지: 절반 체력에서 강철 흉갑을 끼고 빼도 절반
     orc.hp = orc.maxHp / 2;
     Game.equipBag = ['armor'];
     dragTo(bagXY(0), monXY(orc));
-    assert(orc.equip === 'armor' && near(orc.maxHp, 180 * 1.3) && near(orc.hp / orc.maxHp, 0.5), 'hp ratio kept on equip');
-    assert(Game.unequipMonster(orc).ok && near(orc.maxHp, 180) && near(orc.hp, 90), 'hp ratio kept on unequip');
+    assert(orc.equip === 'armor' && near(orc.maxHp, 120 * MONSTER_RANKS[2].mul * 1.3) && near(orc.hp / orc.maxHp, 0.5), 'hp ratio kept on equip');
+    assert(Game.unequipMonster(orc).ok && near(orc.maxHp, 120 * MONSTER_RANKS[2].mul) && near(orc.hp, 60 * MONSTER_RANKS[2].mul), 'hp ratio kept on unequip');
     // 웨이브 중에도 끼운다. 보상을 고르는 동안은 안 된다
     Game.state = 'wave';
     Game.equipBag = ['shield'];
@@ -2207,15 +2213,12 @@ assert.strictEqual(JSON.stringify(RANK_KILL_XP), '{"normal":1,"elite":3,"boss":1
     Game.equipBag = ['sword'];
     assert(!Game.equipMonster(archer, 0).ok && !archer.equip, 'no equip while choosing reward');
     Game.bossReward = null;
-    // 처치 경험치: 영혼 수정 +100%, 뼈 왕관 +50%
+    // 처치 수는 장비와 관계없이 하나씩
     setMonsterRank(orc, 0);
+    const kills0 = orc.kills || 0;
     setMonsterEquip(orc, 'crystal');
     monsterKilledHero(orc, { boss: false, elite: false });
-    assert.strictEqual(orc.xp, 2, 'crystal doubles kill xp');
-    setMonsterEquip(orc, 'crown');
-    monsterKilledHero(orc, { boss: false, elite: false });
-    assert.strictEqual(orc.xp, 3.5, 'crown +50% xp');
-    assert.strictEqual(monsterXpToNext(orc), 2, 'xp to next rounds up');
+    assert.strictEqual(orc.kills, kills0 + 1, 'one kill each');
     setMonsterEquip(orc, null);
 
     // 합치기: 등급이 높은 쪽 장비 1개가 이어지고, 나머지는 보관함으로
@@ -2612,7 +2615,7 @@ assert.strictEqual(Game.units.length, 0);
 {
     // 랭크도 처음으로: 다시 소환한 몬스터는 D
     const r = Game.summon();
-    assert(r.ok && r.monster.rank === 0 && r.monster.xp === 0 && !r.monster.equip, 'rank and equipment reset on retry');
+    assert(r.ok && r.monster.rank === 0 && !r.monster.kills && !r.monster.equip, 'rank and equipment reset on retry');
     Game.removeMonster(r.monster);
     Game.gold = COMBAT_RULES.startGold;
     Game.summonCount = 0;
@@ -2743,8 +2746,8 @@ for (const t of Object.keys(MONSTERS)) {
     setMonsterEquip(m, 'helmet');
     const s = monsterStats(m);
     const b = MONSTERS.orc_guard.stats;
-    near(s.hp, b.hp * 1.5 * 1.3, 'hp');
-    near(s.damage, b.damage * 1.5 * 1.2, 'damage');
+    near(s.hp, b.hp * MONSTER_RANKS[2].mul * 1.3, 'hp');
+    near(s.damage, b.damage * MONSTER_RANKS[2].mul * 1.2, 'damage');
     assert(s.interval === b.interval && s.range === b.range && s.respawn === b.respawn, 'interval, range, respawn');
 }
 
@@ -2799,14 +2802,10 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
     near(s.range, b.range * 1.15 * 1.1, 'range after equipment');
     near(m.maxHp, b.hp * 1.15, 'max hp follows');
 
-    // xp
-    only('xp', 0.5);
-    const killer = Game.place('skeleton_archer', ...firstEmptyCell());
-    monsterKilledHero(killer, { elite: false, boss: false });
-    near(killer.xp, 1.5, 'xp +50%');
-    setMonsterEquip(killer, 'crystal');
-    monsterKilledHero(killer, { elite: true, boss: false });
-    near(killer.xp, 1.5 + 3 * 2 * 1.5, 'xp with equipment');
+    // 랭크 돌리기 할인
+    only('rankCost', 0.3);
+    const roller = Game.place('skeleton_archer', ...firstEmptyCell());
+    near(Game.rankRollCost(roller), Math.round(RANK_ROLL.cost.common * 0.7), 'rank roll -30%');
 
     // bounty
     only('bounty', 1.2);
@@ -4626,10 +4625,11 @@ console.log('smoke ok: summon level, rounds, save');
 // ----- 몬스터 칸 모양 -----
 vm.runInContext(`{
 for (const id of Object.keys(SAVED_CELLS)) if (SAVED_CELLS[id]) MONSTERS[id].art.cells = SAVED_CELLS[id];
-assert.deepStrictEqual([...monsterCells('crystal_giant')], [3, 3]);
+assert.deepStrictEqual([...monsterCells('crystal_giant')], [2, 2]);
 assert.deepStrictEqual([...monsterCells('orc_guard')], [1, 1]);
 const shapes = new Set(Object.keys(MONSTERS).map(id => monsterCells(id).join('x')));
-assert(['1x1', '2x1', '1x2', '3x2', '2x3', '3x3'].every(x => shapes.has(x)), 'shapes vary by monster');
+assert(['1x1', '2x1', '1x2', '2x2'].every(x => shapes.has(x)), 'shapes vary by monster');
+assert(Object.keys(MONSTERS).every(id => Math.max(...monsterCells(id)) <= 2), 'at most 2x2');
 assert(Object.values(MONSTERS).filter(m => m.grade === 'epic').every(m => monsterCells(m.id).join() !== '2,2'), 'no 2x2 epics');
 // 모든 칸 모양이 맵에 놓일 자리가 있다
 const fit = (type) => [...BUILD_CELLS].filter(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(type, c, r); });
@@ -4639,9 +4639,9 @@ for (const id of Object.keys(MONSTERS)) assert(fit(id).length > 0, id + ' fits s
 const [c, r] = fit('crystal_giant')[0].split(',').map(Number);
 const big = Game.place('crystal_giant', c, r);
 assert(big, 'placed');
-for (let dx = 0; dx < 3; dx++) for (let dy = 0; dy < 3; dy++) assert.strictEqual(Game.monsterAt(c + dx, r - dy), big);
-assert.strictEqual(Game.monsterAt(c + 3, r), null);
-assert.strictEqual(big.x, tileX(c + 1), 'centered on its cells');
+for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) assert.strictEqual(Game.monsterAt(c + dx, r - dy), big);
+assert.strictEqual(Game.monsterAt(c + 2, r), null);
+assert(Math.abs(big.x - (tileX(c) + tileX(c + 1)) / 2) < 1e-6, 'centered on its cells');
 assert(!Game.canPlace('orc_guard', c + 1, r - 1), 'cannot place on the giant');
 assert(!Game.canPlace('crystal_giant', c + 1, r), 'cannot overlap');
 // 한 칸 옆으로 옮길 때 자기 자리는 빈 것으로 본다
@@ -4677,7 +4677,7 @@ Game.saveRun();
 const d = Game.readRunSave();
 Game.reset();
 assert(Game.loadRun(d), 'load');
-assert.strictEqual(Game.monsterAt(c2 + 2, r2 - 2).type, 'crystal_giant');
+assert.strictEqual(Game.monsterAt(c2 + 1, r2 - 1).type, 'crystal_giant');
 Game.finish(false);
 delete globalThis.localStorage;
 console.log('smoke ok: monster cells');
@@ -5338,7 +5338,7 @@ Game.reset();
     Game.reset(null, null, abyssChallenge('77', 'rift', []));
     const ha = Game.endlessHpMul(60);
     Game.reset(null, null, dailyChallenge('2026-11-07'));
-    assert(ha > Game.endlessHpMul(60), 'steeper than daily');
+    assert(ha < Game.endlessHpMul(60), 'abyss is gentler than daily (150~200 floors target)');
     // 판 끝: 난이도마다 가장 깊은 층(같은 층이면 남은 왕좌 체력), 얕은 판은 덮지 않는다
     Meta.data.abyss = { week: '', levels: {} };
     assert(Meta.finishAbyss('w1', 9, { rounds: 30, hp: 3 }, { inputs: [] }).isBest);
@@ -5699,11 +5699,11 @@ assert.strictEqual(Game.powerCheck('nope').reason, 'none');
     assert.strictEqual(Game.powerCheck(start).reason, 'owned');
     const up = next(start).find(id => map.nodes.find(n => n.id === id).tier === 1);
     assert(up && Game.powerCheck(up).ok, 'owning a node opens its links');
-    // 한 겹에서 하나만
+    // 한 겹의 두 항목을 모두 찍을 수 있다(2026-11-09: 갈래 안은 전부)
     fresh(100);
     const br = branches[0];
     Game.powers[br.tiers[0][0].id] = true;
-    assert.strictEqual(Game.powerCheck(br.tiers[0][1].id).reason, 'tier', 'one per tier');
+    assert(Game.powerCheck(br.tiers[0][1].id).ok, 'both nodes of a tier');
     // 한 판에 한 갈래만
     assert.strictEqual(Game.powerCheck(branches[1].tiers[0][0].id).reason, 'branch', 'one branch per run');
     for (const b of buildPowerMap('rift', 'x').edges) {
@@ -5712,18 +5712,27 @@ assert.strictEqual(Game.powerCheck('nope').reason, 'none');
         assert(b.includes('core') || brOf(b[0]) === brOf(b[1]), 'no bridges between branches');
         assert(Math.abs(tierOf(b[0]) - tierOf(b[1])) <= 1);
     }
-    // 4개를 찍으면 갈래가 끝난다
+    // 갈래 하나의 8개를 모두 찍으면 갈래가 끝나고 각성이 열린다(옛 시험 묶음은 4개로 줄여 두어 여기서만 새 규칙)
+    POWER_RULES.maxNodes = 8;
     fresh(100);
     const pathIds = [];
-    for (let t = 0; t < 4; t++) {
+    assert.strictEqual(Game.awakenCheck().reason, 'branch', 'awaken needs a full branch');
+    for (let t = 0; t < 8; t++) {
         const next = Game.powerMap().nodes.find(n => Game.powerCheck(n.id).ok);
-        assert(next, 'a node is open at tier ' + t);
+        assert(next, 'a node is open at step ' + t);
         Game.act({ kind: 'power', id: next.id });
         pathIds.push(next.id);
     }
-    assert.strictEqual(Game.powerCount(), 4);
+    assert.strictEqual(Game.powerCount(), 8);
     assert(!Game.powerReady(), 'nothing to buy after a full branch');
     assert(new Set(pathIds.map(id => Game.powerNode(id).branch.id)).size === 1, 'all from one branch');
+    const dmgBefore = Game.mods.damage;
+    const manaBefore = Game.mana;
+    assert(Game.act({ kind: 'awaken' }).ok && Game.act({ kind: 'awaken' }).ok, 'awaken twice');
+    assert.strictEqual(Game.awaken, 2);
+    assert.strictEqual(Game.mana, manaBefore - POWER_RULES.awakenCost * 2 - POWER_RULES.awakenStep, 'awaken costs mana, rising');
+    assert(Math.abs(Game.mods.damage - dmgBefore - POWER_RULES.awakenDamage * 2) < 1e-9, 'awaken adds damage');
+    POWER_RULES.maxNodes = 4;
 }
 // 수치 효과
 fresh(100);
@@ -5890,8 +5899,8 @@ const raiseCd = Game.skillCooldown('raise');
 takeNode('raiseFast');
 assert(Math.abs(Game.skillCooldown('raise') - raiseCd * 0.6) < 1e-9, 'raiseFast');
 assert.strictEqual(Game.thirdSkill().key, 'raise');
-lordFresh('bone_queen', 0); const xp0 = Game.mods.xp, dmg0 = Game.mods.damage; takeNode('xpUp'); takeNode('boneEdge');
-assert(Math.abs(Game.mods.xp - xp0 - 0.3) < 1e-9 && Math.abs(Game.mods.damage - dmg0 - 0.08) < 1e-9, 'bone mods');
+lordFresh('bone_queen', 0); const rc0 = Game.mods.rankCost, dmg0 = Game.mods.damage; takeNode('xpUp'); takeNode('boneEdge');
+assert(Math.abs(Game.mods.rankCost - rc0 - 0.3) < 1e-9 && Math.abs(Game.mods.damage - dmg0 - 0.08) < 1e-9, 'bone mods');
 // 뼈의 여왕: 제물
 const offer = (...nodes) => { lordFresh('bone_queen', 0); nodes.forEach(takeNode); Game.gold = 9999; Game.state = 'prep'; const a = Game.place('orc_guard', 3, 6); const b = Game.place('orc_guard', 7, 4); assert(a && b, 'placed'); return { a, b }; };
 let pair = offer('sacRage'); assert(Game.sacrifice(pair.a).ok);
@@ -6853,7 +6862,8 @@ console.log('smoke ok: equipment crafting');
         const imp2 = put(ofFamily('demon'));
         assert(Math.abs(damageHero(h, 100, 0, 0, null, imp2) - 250) < 1e-6, 'blood cup crit x2.5');
         COMBAT_RULES.crit.chance = 0;
-        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp2) - 100) < 1e-6, 'no crit');
+        Game.mods.critChance = 0; // 피의 잔의 치명타 확률 15%도 뺀다(난수 운에 기대지 않게)
+        { const dd = damageHero(h, 100, 0, 0, null, imp2); assert(Math.abs(dd - 100) < 1e-6, 'no crit: ' + dd); }
         assert(Math.abs(damageHero(h, 100, 0, 0) - 100) < 1e-6, 'no attacker, no crit');
         // 고문 도구: 상태 이상이면 +20%
         start(['torture_kit']);
@@ -6869,7 +6879,7 @@ console.log('smoke ok: equipment crafting');
             return undead;
         };
         const plain = count([]), grail = count(['undead_grail']);
-        assert(grail > plain * 1.4, 'undead odds up: ' + plain + ' -> ' + grail);
+        assert(grail > plain * 1.25, 'undead odds up (expected about 1.6x, 300 rolls): ' + plain + ' -> ' + grail);
         // 일곱 번째 별: 7번째 소환은 영웅 이상
         start(['seventh_star'], 'prep');
         Game.summonCount = 6;
@@ -7015,5 +7025,122 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(Render.monsterFrame(MONSTERS.time_witch, m).clip.folder, 'attack', 'plain attack');
     }).toString() + ')()', sctx);
     console.log('smoke ok: mythic skill motions');
+}
+// 골드 쓸 곳(2026-11-09): 칸 넓히기, 마력 사기, 몬스터 바꾸기, 합치기 결과가 설 자리
+{
+    const gctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files.filter(f => !f.startsWith('js/ui/'))) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), gctx, { filename: f });
+    vm.runInContext('(' + (() => {
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'prep';
+        // 칸 넓히기: 값이 mul배씩 오르고 max번까지
+        const F = GOLD_SHOP.field;
+        const base = Game.maxField();
+        Game.gold = 0;
+        assert.strictEqual(Game.act({ kind: 'buyField' }).reason, 'gold', 'field needs gold');
+        Game.gold = 1e9;
+        let paid = 0;
+        for (let i = 0; i < F.max; i++) {
+            const cost = Game.fieldCost();
+            assert.strictEqual(cost, Math.round(F.cost * F.mul ** i), 'field cost ' + i);
+            assert(Game.act({ kind: 'buyField' }).ok);
+            paid += cost;
+        }
+        assert.strictEqual(Game.maxField(), base + F.max, 'field grows');
+        assert.strictEqual(Game.gold, 1e9 - paid, 'paid');
+        assert(Game.fieldCost() === null && Game.act({ kind: 'buyField' }).reason === 'max', 'field max');
+        // 마력 사기: step씩 오른다
+        const m0 = Game.mana;
+        assert(Game.act({ kind: 'buyMana' }).ok && Game.act({ kind: 'buyMana' }).ok);
+        assert.strictEqual(Game.mana, m0 + 2, 'mana bought');
+        assert.strictEqual(Game.manaCost(), GOLD_SHOP.mana.cost + GOLD_SHOP.mana.step * 2, 'mana cost rises');
+        // 바꾸기: 같은 등급의 다른 몬스터, 랭크와 장비는 그대로, 신화는 못 바꾼다
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'prep';
+        Game.gold = 1e6;
+        const cell = t => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace(t, c, r));
+        const orc = Game.place('orc_guard', ...cell('orc_guard'));
+        setMonsterRank(orc, 3);
+        setMonsterEquip(orc, 'sword');
+        orc.kills = 9;
+        const res = Game.act({ kind: 'reroll', monster: orc });
+        assert(res.ok && res.type !== 'orc_guard' && MONSTERS[res.type].grade === 'common', 'rerolled to another common');
+        assert(res.monster.rank === 3 && res.monster.equip === 'sword' && res.monster.kills === 9, 'rank, equipment and kills kept');
+        assert(!Game.monsters.includes(orc) && Game.monsters.includes(res.monster), 'replaced in place');
+        assert.strictEqual(Game.gold, 1e6 - GOLD_SHOP.reroll.common, 'reroll cost');
+        const myth = Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'mythic' && Game.canPlace(id, ...cell(id)));
+        const mm = Game.place(myth, ...cell(myth));
+        assert.strictEqual(Game.act({ kind: 'reroll', monster: mm }).reason, 'top', 'mythic cannot reroll');
+        // 칸은 2x2까지
+        assert(Object.keys(MONSTERS).every(id => Math.max(...monsterCells(id)) <= 2), 'cells at most 2x2');
+        // 합치기 결과가 어디에도 서지 못하면 합치지 않는다(겹쳐 서지 않는다)
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'prep';
+        const big = Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'rare' && monsterCells(id).join() === '2,2') ||
+            Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'epic' && monsterCells(id).join() === '2,2');
+        if (big) {
+            const grade = MONSTERS[big].grade;
+            const lower = GRADE_ORDER[GRADE_ORDER.indexOf(grade) - 1];
+            const small = Object.keys(MONSTERS).find(id => MONSTERS[id].grade === lower && monsterCells(id).join() === '1,1' && MONSTERS[id].gradeMerge !== false);
+            // 결과 후보를 큰 몬스터 하나로 두고(나머지는 잠시 등급 합치기에서 뺀다), 맵을 1칸 몬스터로 가득 채운다
+            const saved = {};
+            for (const id of mergePool(grade)) if (id !== big) { saved[id] = MONSTERS[id].gradeMerge; MONSTERS[id].gradeMerge = false; }
+            for (const k of BUILD_CELLS) { const [c, r] = k.split(',').map(Number); if (Game.canPlace(small, c, r)) Game.place(small, c, r); }
+            const ms = Game.monsters.slice(0, 3);
+            const r2 = Game.merge({ monster: ms[0] }, { monster: ms[1] }, [ms[2]]);
+            const fits = [...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(big, c, r, ms); });
+            if (!fits) assert(!r2.ok && r2.reason === 'room', 'merge refused when the result cannot stand');
+            const own = new Map();
+            for (const m of Game.monsters) {
+                const [w, h] = monsterCells(m.type);
+                for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) {
+                    const key = (m.col + dx) + ',' + (m.row - dy);
+                    assert(!own.has(key), 'no overlap at ' + key);
+                    own.set(key, m);
+                }
+            }
+            for (const id of Object.keys(saved)) { if (saved[id] === undefined) delete MONSTERS[id].gradeMerge; else MONSTERS[id].gradeMerge = saved[id]; }
+        }
+        // 마법사는 정지 대신 몬스터 공격을 늦춘다
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'wave';
+        const archer = Game.place('skeleton_archer', ...cell('skeleton_archer'));
+        const before = monsterStats(archer).interval;
+        const mage = createHero('mage', 0, 0, false, 'north');
+        Object.assign(mage, { waiting: false, delay: 0, cast: 0 });
+        mage.d = 0;
+        let best = Infinity;
+        for (let d = 0; d < ROUTES.north.length; d += 4) { mage.d = d; const w = heroWorld(mage); const dd = distance(w.x, w.y, archer.x, archer.y); if (dd < best) { best = dd; var at = d; } }
+        mage.d = at;
+        Game.heroes.push(mage);
+        updateMageCast(mage, 0.01);
+        assert(archer.slowT > 0 && !(archer.stun > 0), 'mage slows instead of stunning');
+        assert(Math.abs(monsterStats(archer).interval - before * HEROES.mage.slow.mul) < 1e-9, 'slower attacks');
+        // 보스 패턴: 무적 방패, 부르기, 격려
+        const boss = createHero('warrior', 10, 0, 'judge', 'north');
+        Object.assign(boss, { waiting: false, delay: 0, d: 300 });
+        Game.heroes.push(boss);
+        boss.hp = boss.maxHp * 0.49;
+        updateBossPatterns(boss, 0.01);
+        assert(boss.shieldT > 0 && damageHero(boss, 1000) === 0, 'judge shield blocks damage');
+        const n0 = Game.heroes.length;
+        const sea = createHero('warrior', 10, 0, 'sea_king', 'north');
+        Object.assign(sea, { waiting: false, delay: 0, d: 400 });
+        Game.heroes.push(sea);
+        sea.hp = sea.maxHp * 0.59;
+        updateBossPatterns(sea, 0.01);
+        assert.strictEqual(Game.heroes.length, n0 + 1 + 8, 'sea king calls 8 heroes');
+        const hurt = Game.heroes[Game.heroes.length - 1];
+        hurt.hp = hurt.maxHp * 0.5;
+        const war = createHero('warrior', 10, 0, 'war_avatar', 'north');
+        Object.assign(war, { waiting: false, delay: 0, d: hurt.d });
+        Game.heroes.push(war);
+        war.hp = war.maxHp * 0.59;
+        updateBossPatterns(war, 0.01);
+        assert(hurt.hp > hurt.maxHp * 0.75 && hurt.haste > 0, 'war avatar heals and hastes');
+        assert(ROUND_RULES.bosses.length === 8 && ROUND_RULES.bosses.every(b => BOSSES[b]), 'eight bosses rotate');
+        console.log('smoke ok: gold shop, merge room, mage slow, boss patterns');
+    }).toString() + ')()', gctx);
 }
 require('./smoke_maps.js');

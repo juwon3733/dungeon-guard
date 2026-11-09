@@ -21,7 +21,7 @@ const MONSTER_GRADES = {
     rare: { name: '희귀', color: '#3d8bff', glow: '90,150,255', light: '#a8ccff', ink: '#7fb6ff', fx: 0 },
     epic: { name: '영웅', color: '#b45cff', glow: '190,100,255', light: '#e2b0ff', ink: '#d39bff', fx: 1 },
     legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', ink: '#ffd25a', summon: false, secret: true, fx: 2 },
-    mythic: { name: '신화', color: '#ff2d55', glow: '255,60,90', light: '#ff9cb0', ink: '#ff7a92', summon: false, secret: true, fx: 3, fieldMax: 3,
+    mythic: { name: '신화', color: '#ff2d55', glow: '255,60,90', light: '#ff9cb0', ink: '#ff7a92', summon: false, secret: true, fx: 3, // 2026-11-09: 맵 제한 없음(같은 신화도 여럿)
         rainbow: ['#ff2d55', '#ff7a1a', '#ffd23d', '#ff3dd2', '#ff2d55'] }
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
@@ -30,7 +30,7 @@ const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 // odds는 등급별 소환 확률이다(합이 1). 전설은 몬스터가 생기면 확률을 넣는다
 const SUMMON_RULES = {
     cost: 25,       // 첫 소환 골드
-    costStep: 1,    // 소환할 때마다 오르는 골드(다시 시작하면 처음으로)
+    costStep: 2,    // 소환할 때마다 오르는 골드(다시 시작하면 처음으로)
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     // 등급별 확률은 SUMMON_LEVELS(소환 강화 레벨)에 있다
@@ -61,6 +61,16 @@ SUMMON_RULES.odds = SUMMON_LEVELS[0].odds; // 레벨 1의 확률(시험과 이�
 // 비용은 cost에서 레벨마다 costStep씩 오르고 상한이 없다(후반 골드를 받아 준다).
 // sureLevels 레벨까지는 반드시 성공하고, 그 뒤로 레벨마다 chanceStep씩 성공률이 내려가 minChance에서 멈춘다.
 // 실패해도 골드는 쓰고 레벨은 그대로다. 성공 여부는 시드 난수(입력 재생이 같은 결과를 낸다)
+// 맵이 찬 뒤 골드 쓸 곳(2026-11-09): 칸 넓히기, 몬스터 바꾸기, 마력 사기. 모두 판 안에서만 유지된다
+//   field: 맵에 둘 수 있는 몬스터 수를 1씩 늘린다. 처음 cost, 살 때마다 mul배. max번까지
+//   reroll: 몬스터 한 마리를 같은 등급의 다른 몬스터로 바꾼다(랭크와 장비는 그대로). 등급별 골드, 신화는 못 바꾼다
+//   mana: 골드로 마력 1. 처음 cost, 살 때마다 step씩 오른다
+const GOLD_SHOP = {
+    field: { max: 12, cost: 400, mul: 1.35 },
+    reroll: { common: 30, rare: 80, epic: 200, legendary: 500 },
+    mana: { cost: 300, step: 100 }
+};
+
 const FAMILY_UPGRADE = { damagePer: 0.08, cost: 50, costStep: 50, sureLevels: 3, chanceStep: 0.1, minChance: 0.3 };
 function familyUpgradeCost(level) { return FAMILY_UPGRADE.cost + FAMILY_UPGRADE.costStep * level; }
 function familyUpgradeChance(level) {
@@ -93,28 +103,28 @@ const EQUIPMENT = {
     sword: { id: 'sword', name: '저주받은 검', grade: 'common', effects: { damage: 0.2 } },
     ring: { id: 'ring', name: '보랏빛 반지', grade: 'common', effects: { speed: 0.15 } },
     bow: { id: 'bow', name: '뼈 활', grade: 'common', effects: { range: 0.15 } },
-    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { xp: 0.5 } },
+    elixir: { id: 'elixir', name: '초록 비약', grade: 'common', effects: { damage: 0.1 } },
     armor: { id: 'armor', name: '강철 흉갑', grade: 'common', effects: { bossDmg: 0.25 } },
     boots: { id: 'boots', name: '날개 장화', grade: 'common', effects: { gold: 0.3 } },
     // 완성
     axe: { id: 'axe', name: '룬 전투 도끼', grade: 'rare', effects: { damage: 0.5 } },
     gauntlet: { id: 'gauntlet', name: '악마 손아귀', grade: 'epic', effects: { damage: 0.35, speed: 0.25 } },
     staff: { id: 'staff', name: '해골 지팡이', grade: 'epic', effects: { damage: 0.3, range: 0.25 } },
-    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { damage: 0.4, xp: 0.75 } },
+    crown: { id: 'crown', name: '뼈 왕관', grade: 'epic', effects: { damage: 0.55 } },
     shield: { id: 'shield', name: '해골 방패', grade: 'rare', effects: { damage: 0.25, bossDmg: 0.4 } },
     helmet: { id: 'helmet', name: '뿔 투구', grade: 'rare', effects: { damage: 0.3, gold: 0.5 } },
     amulet: { id: 'amulet', name: '핏빛 목걸이', grade: 'rare', effects: { speed: 0.45 } },
     cape: { id: 'cape', name: '어둠의 망토', grade: 'rare', effects: { speed: 0.25, range: 0.25 } },
-    crystal: { id: 'crystal', name: '영혼 수정', grade: 'epic', effects: { speed: 0.25, xp: 1 } },
+    crystal: { id: 'crystal', name: '영혼 수정', grade: 'epic', effects: { speed: 0.25, damage: 0.2 } },
     frostArmor: { id: 'frostArmor', name: '서리 갑주', grade: 'epic', effects: { speed: 0.2, bossDmg: 0.2 }, onHit: { slow: [1.5, 0.8] }, note: '맞은 용사 이동 -20%' },
     stormBoots: { id: 'stormBoots', name: '폭풍 장화', grade: 'rare', effects: { speed: 0.25, gold: 0.3 } },
     tome: { id: 'tome', name: '고대 주문서', grade: 'rare', effects: { range: 0.5 } },
-    moonCharm: { id: 'moonCharm', name: '별빛 목걸이', grade: 'rare', effects: { range: 0.2, xp: 0.5 } },
+    moonCharm: { id: 'moonCharm', name: '별빛 목걸이', grade: 'rare', effects: { range: 0.2, damage: 0.1 } },
     hunterHelm: { id: 'hunterHelm', name: '사냥꾼 투구', grade: 'rare', effects: { range: 0.2, bossDmg: 0.4 } },
     windBoots: { id: 'windBoots', name: '바람 장화', grade: 'rare', effects: { range: 0.2, gold: 0.3 } },
-    sageOrb: { id: 'sageOrb', name: '현자의 보주', grade: 'rare', effects: { xp: 1.5 } },
-    curseGlove: { id: 'curseGlove', name: '저주 장갑', grade: 'epic', effects: { xp: 0.4 }, onHit: { curse: [3, 1.15] }, note: '맞은 용사 3초간 받는 피해 +15%' },
-    goldHelm: { id: 'goldHelm', name: '황금 투구', grade: 'rare', effects: { xp: 0.5, gold: 0.5 } },
+    sageOrb: { id: 'sageOrb', name: '현자의 보주', grade: 'rare', effects: { damage: 0.3 } },
+    curseGlove: { id: 'curseGlove', name: '저주 장갑', grade: 'epic', effects: { damage: 0.08 }, onHit: { curse: [3, 1.15] }, note: '맞은 용사 3초간 받는 피해 +15%' },
+    goldHelm: { id: 'goldHelm', name: '황금 투구', grade: 'rare', effects: { damage: 0.1, gold: 0.5 } },
     fireCrown: { id: 'fireCrown', name: '불꽃 왕관', grade: 'epic', effects: { bossDmg: 0.7 }, onHit: { burn: [3, 8] }, note: '맞은 용사 3초간 화상' },
     bloodPlate: { id: 'bloodPlate', name: '핏빛 갑옷', grade: 'rare', effects: { bossDmg: 0.3, gold: 0.4 } },
     boarBoots: { id: 'boarBoots', name: '황금 장화', grade: 'rare', effects: { gold: 1 } }
@@ -150,14 +160,17 @@ const EQUIP_RULES = {
 //   xp: 그 랭크가 되는 누적 처치 경험치, mul: 체력과 피해 배율(D 기준), color: 맵과 팝업의 글자 색
 //   killXp: 처치 하나의 경험치. 마지막 공격을 넣은 몬스터가 받는다(번개, 타락 유닛의 처치는 몬스터 경험치가 아니다)
 //   합치면 재료 중 낮은 랭크를 결과가 이어받고 경험치는 그 랭크의 시작값이 된다
+// 2026-11-09 사용자 결정: 랭크는 처치로 오르지 않고 골드로 돌린다(무작위, 내려갈 수도 있다). 처치 수는 따로 센다.
+//   mul: 피해 배율(D 기준), odds: 돌렸을 때 나올 확률(합 1). 돌리는 값은 RANK_ROLL.cost(등급별)
 const MONSTER_RANKS = [
-    { name: 'D', xp: 0, mul: 1, color: '#c9c2d8' },
-    { name: 'C', xp: 5, mul: 1.25, color: '#9fe39a' },
-    { name: 'B', xp: 15, mul: 1.5, color: '#8cc4ff' },
-    { name: 'A', xp: 35, mul: 1.75, color: '#e0a8ff' },
-    { name: 'S', xp: 70, mul: 2, color: '#ffd23d' }
+    { name: 'D', xp: 0, mul: 1, color: '#c9c2d8', odds: 0.30 },
+    { name: 'C', xp: 0, mul: 1.2, color: '#9fe39a', odds: 0.30 },
+    { name: 'B', xp: 0, mul: 1.45, color: '#8cc4ff', odds: 0.22 },
+    { name: 'A', xp: 0, mul: 1.75, color: '#e0a8ff', odds: 0.12 },
+    { name: 'S', xp: 0, mul: 2.1, color: '#ffd23d', odds: 0.05 },
+    { name: 'S+', xp: 0, mul: 2.6, color: '#ff7a3d', odds: 0.01 }
 ];
-const RANK_KILL_XP = { normal: 1, elite: 3, boss: 10 };
+const RANK_ROLL = { cost: { common: 40, rare: 100, epic: 250, legendary: 600, mythic: 1500 } };
 
 // 제물: 맵의 몬스터를 끌어 왕좌의 마왕 위에 놓으면 몬스터가 사라지고 마왕이 힘을 얻는다(웨이브 중에도, 준비 중에도). 판매 환불은 없다.
 //   heal: 마왕 체력 회복(최대 체력 Game.maxHp()를 넘지 않는다), lightning: 번개 재사용 대기 감소(초, 0 아래로 내려가지 않는다)
@@ -340,7 +353,7 @@ const MONSTERS = {
     dark_mage: {
         id: 'dark_mage', name: '암흑 마법사', role: 'area', family: 'demon', grade: 'common',
         sprite: HD_MONSTER_ART.dark_mage.sprite, cost: 100,
-        stats: { hp: 30, damage: 20, interval: 2.0, range: 2.5, splash: 1 },
+        stats: { hp: 30, damage: 15, interval: 2.0, range: 2.5, splash: 1 },
         abilities: [], unlock: 'start',
         desc: '길 옆에서 마력 구체로 무리를 함께 공격한다.',
         branches: {
@@ -451,7 +464,7 @@ const MONSTERS = {
     nightmare_jester: {
         id: 'nightmare_jester', name: '악몽 광대', role: 'ranged', family: 'demon', grade: 'rare',
         sprite: HD_MONSTER_ART.nightmare_jester.sprite, cost: 120,
-        stats: { hp: 40, damage: 12, interval: 1.2, range: 3.5 },
+        stats: { hp: 40, damage: 16, interval: 1.2, range: 3.5 },
         abilities: [{ kind: 'stunShot', chance: 0.2, duration: 1 }], unlock: 'start',
         desc: '악몽 원반을 던져 가끔 용사를 그 자리에 멈춰 세운다.',
         art: astArt('nightmare_jester', { glow: '235,110,255', shot: 'fx_shot_jester' })
@@ -491,7 +504,7 @@ const MONSTERS = {
     ancient_treant: {
         id: 'ancient_treant', name: '고대 나무 정령', role: 'tank', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.ancient_treant.sprite, cost: 250,
-        stats: { hp: 700, damage: 20, interval: 1.3, range: 2, block: 6, respawn: 6 },
+        stats: { hp: 700, damage: 28, interval: 1.3, range: 2, block: 6, respawn: 6 },
         abilities: [{ kind: 'slowShot', name: '뿌리 묶기', speedMul: 0.7, duration: 2 }], unlock: 'start',
         desc: '곁의 용사 6명을 뿌리로 묶어 느리게 한다.',
         art: astArt('ancient_treant', { glow: '140,255,100' })
@@ -499,7 +512,7 @@ const MONSTERS = {
     hell_general: {
         id: 'hell_general', name: '지옥 대장군', role: 'melee', family: 'demon', grade: 'legendary',
         sprite: ASTERIA_ART.hell_general.sprite, cost: 500, summon: false,
-        stats: { hp: 800, damage: 110, interval: 0.8, range: 2.4, block: 4, respawn: 5 },
+        stats: { hp: 800, damage: 95, interval: 0.8, range: 2.4, block: 4, respawn: 5 },
         abilities: [{ kind: 'cleave', radius: 2, ratio: 0.7 }, { kind: 'frenzy', duration: 3, intervalMul: 0.6 }], unlock: 'start',
         skills: [{ kind: 'meteor', name: '지옥불 강타', cooldown: 12, reach: 5, radius: 2, mul: 3, burn: 3 }],
         desc: '곁의 용사를 불칼로 쓸어버린다.',
@@ -576,7 +589,7 @@ const MONSTERS = {
         id: 'ogre_crusher', name: '오우거 파쇄자', role: 'melee', family: 'orc', grade: 'epic',
         sprite: HD_MONSTER_ART.ogre_crusher.sprite, cost: 250,
         stats: { hp: 560, damage: 60, interval: 1.4, range: 2.4, block: 4, respawn: 7 },
-        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.8 }], unlock: 'start',
+        abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.6 }], unlock: 'start',
         desc: '느리지만 한 번에 여럿을 부수는 거한이다.',
         art: astArt('ogre_crusher', { glow: '255,170,90' })
     },
@@ -584,7 +597,7 @@ const MONSTERS = {
         id: 'orc_high_chief', name: '대족장', role: 'melee', family: 'orc', grade: 'legendary',
         sprite: ASTERIA_ART.orc_high_chief.sprite, cost: 500, summon: false,
         stats: { hp: 1000, damage: 95, interval: 0.9, range: 2.4, block: 6, respawn: 5 },
-        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.5 }, { kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.4 }, { kind: 'aura', stat: 'damage', radius: 3, value: 0.2 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '전쟁의 함성', cooldown: 20, duration: 8, damage: 0.3 }],
         desc: '철퇴를 휘두르며 둘레 몬스터를 함께 강하게 만든다.',
         art: astArt('orc_high_chief', { glow: '255,160,70' })
@@ -698,7 +711,7 @@ const MONSTERS = {
     earth_behemoth: {
         id: 'earth_behemoth', name: '대지의 거수', role: 'tank', family: 'beast', grade: 'legendary',
         sprite: ASTERIA_ART.earth_behemoth.sprite, cost: 500, summon: false,
-        stats: { hp: 1500, damage: 55, interval: 1.2, range: 2, block: 9, respawn: 6 },
+        stats: { hp: 1500, damage: 64, interval: 1.2, range: 2, block: 9, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.5 }, { kind: 'slowShot', name: '가시 덩굴', speedMul: 0.7, duration: 2 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '가시 폭풍', cooldown: 14, radius: 3.5, mul: 2, slow: 3 }],
         desc: '곁의 용사 9명을 가시로 찔러 느리게 한다.',
@@ -773,7 +786,7 @@ const MONSTERS = {
     crystal_giant: {
         id: 'crystal_giant', name: '수정 거인', role: 'tank', family: 'spirit', grade: 'legendary',
         sprite: ASTERIA_ART.crystal_giant.sprite, cost: 500, summon: false,
-        stats: { hp: 1600, damage: 50, interval: 1.3, range: 2, block: 10, respawn: 6 },
+        stats: { hp: 1600, damage: 66, interval: 1.3, range: 2, block: 10, respawn: 6 },
         abilities: [{ kind: 'cleave', radius: 1.5, ratio: 0.4 }, { kind: 'stunShot', chance: 0.2, duration: 1.2 }], unlock: 'start',
         skills: [{ kind: 'buff', name: '수정 공명', cooldown: 20, duration: 6, damage: 0.2 }],
         desc: '곁의 용사 10명을 수정 주먹으로 내리친다.',
@@ -820,7 +833,7 @@ const MONSTERS = {
     kraken: {
         id: 'kraken', name: '심연의 크라켄', role: 'tank', family: 'beast', grade: 'mythic',
         sprite: ASTERIA_ART.kraken.sprite, cost: 1000,
-        stats: { hp: 2400, damage: 90, interval: 1.1, range: 2, block: 14, respawn: 5 },
+        stats: { hp: 2400, damage: 130, interval: 1.1, range: 2, block: 14, respawn: 5 },
         abilities: [{ kind: 'slowShot', name: '먹물', speedMul: 0.6, duration: 2.5 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '촉수 붙잡기', cooldown: 14, radius: 4, mul: 1.5, stun: 2.5 }, { kind: 'push', name: '소용돌이', cooldown: 20, radius: 5, mul: 1, tiles: 2 }],
         desc: '곁의 용사 14명을 촉수로 후려친다.',
@@ -829,7 +842,7 @@ const MONSTERS = {
     frost_queen: {
         id: 'frost_queen', name: '서리 여왕', role: 'area', family: 'spirit', grade: 'mythic',
         sprite: ASTERIA_ART.frost_queen.sprite, cost: 1000,
-        stats: { hp: 220, damage: 150, interval: 1.6, range: 5, splash: 2.2 },
+        stats: { hp: 220, damage: 180, interval: 1.6, range: 5, splash: 2.2 },
         abilities: [{ kind: 'slowShot', speedMul: 0.5, duration: 3 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '절대 영도', cooldown: 20, radius: 'map', mul: 0.8, slow: 6 }, { kind: 'buff', name: '얼음 숨결', cooldown: 18, duration: 6, speed: 0.25 }],
         desc: '맵 전체를 얼려 용사의 발을 묶는다.',
@@ -867,7 +880,7 @@ const MONSTERS = {
     moon_god: {
         id: 'moon_god', name: '달의 여신', role: 'ranged', family: 'spirit', grade: 'mythic',
         sprite: ASTERIA_ART.moon_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
-        stats: { hp: 380, damage: 290, interval: 0.9, range: 6.5 },
+        stats: { hp: 380, damage: 380, interval: 0.9, range: 6.5 },
         abilities: [{ kind: 'chain', count: 4, ratio: 0.6, jump: 3 }], unlock: 'start',
         skills: [{ kind: 'timeStop', name: '달빛 정지', cooldown: 20, duration: 3 }, { kind: 'buff', name: '달의 장막', cooldown: 18, duration: 8, damage: 0.3 }],
         desc: '히든 신화. 시간을 멈추고 몬스터를 달빛으로 강하게 한다.',
@@ -876,8 +889,8 @@ const MONSTERS = {
     death_god: {
         id: 'death_god', name: '죽음의 신', role: 'melee', family: 'undead', grade: 'mythic',
         sprite: ASTERIA_ART.death_god.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
-        stats: { hp: 2800, damage: 320, interval: 0.8, range: 2.4, block: 8, respawn: 4 },
-        abilities: [{ kind: 'cleave', radius: 2.5, ratio: 0.8 }], unlock: 'start',
+        stats: { hp: 2800, damage: 280, interval: 0.8, range: 2.4, block: 8, respawn: 4 },
+        abilities: [{ kind: 'cleave', radius: 2.5, ratio: 0.45 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '사신의 낫', cooldown: 10, reach: 'map', below: 0.35, gold: 2 }, { kind: 'barrage', name: '저승의 군세', cooldown: 14, count: 15, mul: 1.2, reach: 'map' }],
         desc: '히든 신화. 약해진 용사는 맵 어디에 있어도 거둔다.',
         art: astArt('death_god', { glow: '200,170,255' })
@@ -885,9 +898,9 @@ const MONSTERS = {
     god_king: {
         id: 'god_king', name: '신왕', role: 'melee', family: 'spirit', grade: 'mythic',
         sprite: ASTERIA_ART.god_king.sprite, cost: 1000, hiddenMythic: true, gradeMerge: false,
-        stats: { hp: 3600, damage: 300, interval: 0.9, range: 2.4, block: 12, respawn: 4 },
+        stats: { hp: 3600, damage: 200, interval: 0.9, range: 2.4, block: 12, respawn: 4 },
         abilities: [{ kind: 'aura', stat: 'damage', radius: 5, value: 0.3 }], unlock: 'start',
-        skills: [{ kind: 'buff', name: '신왕의 칙령', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }, { kind: 'barrage', name: '천벌', cooldown: 15, count: 20, mul: 1.5, reach: 'map' }],
+        skills: [{ kind: 'buff', name: '신왕의 칙령', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }, { kind: 'barrage', name: '천벌', cooldown: 15, count: 14, mul: 1.1, reach: 'map' }],
         desc: '히든 신화. 맵의 모든 몬스터를 강하게 하고 하늘의 벌을 내린다.',
         art: astArt('god_king', { glow: '255,225,150' })
     }

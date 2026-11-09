@@ -24,12 +24,13 @@ function mergePair(G) {
     }
     return best;
 }
+const TRACE = [];
 function play(bot, stageId, daily) {
-    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
+    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', bot.relics || [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
-    let guard = 0, thinkMerge = 0;
+    let guard = 0, thinkMerge = 0, spendThink = 0;
     while ((G.state === 'prep' || G.state === 'wave') && guard++ < 400000) {
         if (G.bossReward) {
             const c = G.bossReward.cards;
@@ -37,7 +38,7 @@ function play(bot, stageId, daily) {
             if (i < 0) i = c.findIndex(x => G.canTakeReward(x));
             G.pickBossReward(i);
         }
-        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= 18)) {
+        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= (bot.spend ? G.maxField() * 0.85 : 18))) {
             thinkMerge = 15; // 사람처럼 0.5초에 한 번만
             const p = mergePair(G);
             if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
@@ -46,7 +47,9 @@ function play(bot, stageId, daily) {
             const cost = G.summonUpgradeCost();
             if (cost !== null && G.gold >= cost && G.monsters.length >= 6 && G.upgradeSummon().ok) s.ups++;
         }
-        if (bot.summon && !G.fieldFull() && G.gold >= G.summonCost() && G.summon().ok) s.summons++;
+        // spend 봇은 사람처럼 소환 강화 값을 먼저 모은다(몬스터가 8마리 넘으면)
+        const saving = bot.spend && G.summonUpgradeCost() !== null && G.monsters.length >= G.maxField() * 0.85;
+        if (bot.summon && !saving && !G.fieldFull() && G.gold >= G.summonCost() && G.summon().ok) s.summons++;
         if (bot.equip && G.equipBag.length) {
             const m = G.monsters.filter(x => !x.equip && !x.removed).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
             if (m) G.equipMonster(m, 0);
@@ -57,6 +60,30 @@ function play(bot, stageId, daily) {
             const node = br && br.tiers.flat().find(n => G.powerCheck(n.id).ok);
             if (node) G.act({ kind: 'power', id: node.id });
         }
+        // 남는 골드 쓰기(bot.spend): 맵이 차면 칸 넓히기, 높은 등급부터 랭크 돌리기(S 이상이면 멈춤), 종족 강화, 마력 사기와 각성
+        if (bot.spend && G.inPlay() && !G.bossReward && spendThink-- <= 0) {
+            spendThink = 15;
+            if (G.awakenCheck().ok) G.act({ kind: 'awaken' });
+            if (G.fieldFull() && G.summonUpgradeCost() === null && !mergePair(G)) { // 강화를 다 올리고 합칠 짝도 없을 때만
+                const fc = G.fieldCost();
+                const ms = G.monsters.filter(m => !m.removed && !m.clone);
+                const roll = ms.filter(m => (m.rank || 0) < rankIndex('S') && G.rankRollCost(m) !== null)
+                    .sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
+                const fams = {};
+                for (const m of ms) fams[MONSTERS[m.type].family] = (fams[MONSTERS[m.type].family] || 0) + GRADE_ORDER.indexOf(MONSTERS[m.type].grade) + 1;
+                const fam = Object.keys(fams).sort((a, b) => fams[b] - fams[a])[0];
+                // 싼 것부터: 칸, 높은 등급 랭크(A 미만), 종족 강화. 차례로 돌아가며 쓴다
+                const opts = [];
+                if (fc !== null) opts.push([fc, { kind: 'buyField' }]);
+                if (roll && (roll.rank || 0) < rankIndex('A')) opts.push([G.rankRollCost(roll), { kind: 'rollRank', monster: roll }]);
+                if (fam) opts.push([familyUpgradeCost(G.familyLevel(fam)), { kind: 'familyUp', family: fam }]);
+                opts.sort((x, y) => x[0] - y[0]);
+                if (opts.length && G.gold >= opts[0][0]) G.act(opts[0][1]);
+                else if (G.lordPowers().length && !G.powerReady() && G.gold >= G.manaCost() * 2) G.act({ kind: 'buyMana' });
+            }
+        }
+        // 발동형 유물(학살의 종, 영혼 수확 낫): 채워지면 바로
+        if (bot.skill && G.state === 'wave') for (const id of G.relics) if (relicCharge(id) >= 1) G.act({ kind: 'relicFire', id });
         const third = G.thirdSkill();
         if (bot.skill && third && G.state === 'wave' && G.skills[third.key] <= 0) G.act({ kind: third.key });
         if (bot.skill && G.skills.lightning === 0 && G.state === 'wave') {
@@ -68,7 +95,14 @@ function play(bot, stageId, daily) {
             if (g > s.top) s.top = g;
             if (g >= 3 && !s.legendWave) s.legendWave = G.waveIndex + 1;
         }
+        const before = G.gold;
         G.update(DT);
+        if (G.gold > before) s.earned = (s.earned || 0) + G.gold - before;
+        // 골드 흐름 기록(bot.trace): 10라운드마다 번 골드, 남은 골드, 소환 비용, 맵 몬스터 수
+        if (bot.trace && G.waveIndex + 1 !== s.lastRound) {
+            s.lastRound = G.waveIndex + 1;
+            if (s.lastRound % (bot.every || 10) === 0) TRACE.push({ hp: Math.round(G.hp), maxHp: G.maxHp(), myth: G.monsters.filter(m => MONSTERS[m.type].grade === 'mythic').length, leg: G.monsters.filter(m => MONSTERS[m.type].grade === 'legendary').length,  round: s.lastRound, earned: Math.round(s.earned || 0), gold: Math.round(G.gold), cost: G.summonCost(), n: G.monsters.length, level: G.summonLevel + 1, top: GRADE_ORDER[s.top], field: G.maxField(), fam: Object.values(G.familyLevels).reduce((a, b) => a + b, 0), awaken: G.awaken, ranks: G.monsters.filter(m => (m.rank || 0) >= 4).length });
+        }
     }
     return { tier: G.raidTier, score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
         n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
@@ -116,10 +150,35 @@ if (process.argv[4] === 'lords') {
     for (const lord of lords) {
         for (let b = 0; b < 3; b++) {
             const rs = [];
-            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
+            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
             const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
             console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
         }
+    }
+}
+// 유물 비교: 마왕 하나(기본 뼈의 여왕, 첫 갈래)에 유물 하나씩 들려 심연을 같은 시드로. 5번째 값 난이도, 6번째 유물(쉼표, 없으면 전부, '없음'은 유물 없이)
+if (process.argv[4] === 'relics') {
+    vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
+    const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
+    const lord = process.argv[7] || 'bone_queen';
+    const ids = process.argv[6] ? process.argv[6].split(',') : vm.runInContext('Object.keys(RELICS)', context);
+    for (const id of ids) {
+        const relics = id === '없음' ? '[]' : `['${id}']`;
+        const rs = [];
+        for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:0,lord:'${lord}',level:${level},relics:${relics}}, null, 'abyss${i}'))`, context)));
+        const name = id === '없음' ? '없음' : vm.runInContext(`RELICS['${id}'].name`, context);
+        console.log(`${id} ${name} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')})`);
+    }
+}
+// 골드 흐름: 노말 심연을 한 판 돌며 10라운드마다 번 골드와 남은 골드(봇은 남는 골드를 쓰지 못한다)
+if (process.argv[4] === 'economy') {
+    vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
+    const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
+    for (let i = 1; i <= N; i++) {
+        vm.runInContext('TRACE.length = 0', context);
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${+(process.env.BRANCH || 0)},lord:'${process.env.LORD || 'bone_queen'}',level:${level},trace:true,every:${+(process.env.EVERY || 10)}}, null, 'abyss${i}'))`, context));
+        console.log(`시드 ${i}: ${r.wave}층에서 끝`);
+        for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 체력 ${t.hp}/${t.maxHp} | 신화 ${t.myth} 전설 ${t.leg} | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}/${t.field}마리 | 소환 강화 ${t.level} | 최고 ${t.top} | 종족 Lv합 ${t.fam} | 각성 ${t.awaken} | S이상 ${t.ranks}`);
     }
 }
 if (process.argv[4] === 'raid') {

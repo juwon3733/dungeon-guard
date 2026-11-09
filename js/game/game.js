@@ -124,6 +124,9 @@ const Game = {
         this.manaLeft = 0;
         this.mana = 0;
         this.powers = {};
+        this.awaken = 0; // 각성 횟수
+        this.fieldBought = 0; // 골드로 넓힌 칸 수
+        this.manaBought = 0; // 골드로 산 마력 수
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
         this.powerSeed = challenge ? String(challenge.seed) : String(Math.floor(Math.random() * 1e9));
         this.arrivals = 0;
@@ -238,7 +241,6 @@ const Game = {
         const cost = POWER_RULES.tierCost[at.tier];
         const other = this.lordPowers().find(b => b !== at.branch && b.tiers.some(t => t.some(n => this.power(n.id))));
         if (other) return { ok: false, cost, reason: 'branch' };
-        if (at.branch.tiers[at.tier].some(n => this.power(n.id))) return { ok: false, cost, reason: 'tier' };
         if (!this.powerLinked(id)) return { ok: false, cost, reason: 'locked' };
         if (this.powerCount() >= POWER_RULES.maxNodes) return { ok: false, cost, reason: 'limit' };
         return { ok: this.mana >= cost, cost, reason: this.mana >= cost ? null : 'mana' };
@@ -263,6 +265,117 @@ const Game = {
             const at = this.powerNode(id);
             if (at) this.addNodeMods(at.node);
         }
+        this.mods.damage += this.awaken * POWER_RULES.awakenDamage;
+    },
+    // 각성: 고른 갈래를 모두 찍은 뒤 마력으로 몬스터 피해를 계속 올린다. { ok, cost, reason: 'branch' | 'mana' }
+    awakenCheck() {
+        const cost = POWER_RULES.awakenCost + POWER_RULES.awakenStep * this.awaken;
+        const full = this.lordPowers().some(b => b.tiers.every(t => t.every(n => this.power(n.id))));
+        if (!full) return { ok: false, cost, reason: 'branch' };
+        return { ok: this.mana >= cost, cost, reason: this.mana >= cost ? null : 'mana' };
+    },
+    buyAwaken() {
+        const c = this.awakenCheck();
+        if (!c.ok) return c;
+        this.mana -= c.cost;
+        this.awaken++;
+        this.mods.damage += POWER_RULES.awakenDamage;
+        Sfx.play('charge');
+        return c;
+    },
+
+    // 칸 넓히기: 다음 값(다 샀으면 null)과 사기
+    fieldCost() {
+        const F = GOLD_SHOP.field;
+        return this.fieldBought >= F.max ? null : Math.round(F.cost * F.mul ** this.fieldBought);
+    },
+    buyField() {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        const cost = this.fieldCost();
+        if (cost === null) return { ok: false, reason: 'max' };
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        this.fieldBought++;
+        Sfx.play('upgrade');
+        return { ok: true, cost };
+    },
+    // 마력 사기
+    manaCost() { return GOLD_SHOP.mana.cost + GOLD_SHOP.mana.step * this.manaBought; },
+    buyMana() {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!this.lordPowers().length || this.mods.powerSeal) return { ok: false, reason: 'seal' };
+        const cost = this.manaCost();
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        this.manaBought++;
+        this.mana++;
+        Sfx.play('charge');
+        return { ok: true, cost };
+    },
+    // 랭크 돌리기: 골드를 내고 D~S+ 중 무작위로 다시 정한다(내려갈 수도 있다). 비용은 등급별, 마왕과 유물이 깎는다
+    rankRollCost(m) {
+        if (!m) return null;
+        const base = RANK_ROLL.cost[MONSTERS[m.type].grade];
+        return base === undefined ? null : Math.max(1, Math.round(base * (1 - Math.min(0.9, this.mods.rankCost || 0))));
+    },
+    rankOdds() {
+        const luck = 1 + (this.mods.rankLuck || 0);
+        const odds = MONSTER_RANKS.map((r, i) => (i >= rankIndex('S') ? r.odds * luck : r.odds));
+        const extra = odds.reduce((a, b) => a + b, 0) - 1;
+        odds[0] = Math.max(0, odds[0] - extra); // 늘어난 만큼 D에서 뺀다
+        return odds;
+    },
+    rollRank(m) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!m || m.removed || m.clone || !this.monsters.includes(m)) return { ok: false, reason: 'empty' };
+        const cost = this.rankRollCost(m);
+        if (cost === null) return { ok: false, reason: 'none' };
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        const odds = this.rankOdds();
+        let r = rng('rank');
+        let rank = 0;
+        for (let i = 0; i < odds.length; i++) {
+            if (r < odds[i]) { rank = i; break; }
+            r -= odds[i];
+            rank = i;
+        }
+        const before = m.rank || 0;
+        setMonsterRank(m, rank);
+        showRankChange(m, before);
+        if (rank < before) Sfx.play('mergeFail');
+        return { ok: true, rank, before, cost };
+    },
+
+    // 몬스터 바꾸기: 같은 등급에서 그 자리에 들어가는 다른 몬스터로. 비용은 등급별(신화는 null)
+    rerollCost(m) { return m && GOLD_SHOP.reroll[MONSTERS[m.type].grade] !== undefined ? GOLD_SHOP.reroll[MONSTERS[m.type].grade] : null; },
+    rerollPool(m) {
+        const grade = MONSTERS[m.type].grade;
+        return mergePool(grade).filter(t => t !== m.type && this.canPlace(t, m.col, m.row, [m]));
+    },
+    reroll(m) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        if (!m || m.removed || m.clone || !this.monsters.includes(m)) return { ok: false, reason: 'empty' };
+        const cost = this.rerollCost(m);
+        if (cost === null) return { ok: false, reason: 'top' };
+        const pool = this.rerollPool(m);
+        if (!pool.length) return { ok: false, reason: 'room' };
+        if (this.gold < cost) return { ok: false, reason: 'gold' };
+        this.gold -= cost;
+        const type = rngItem('merge', pool);
+        const next = createMonster(type, m.col, m.row);
+        setMonsterRank(next, m.rank || 0);
+        next.kills = m.kills || 0;
+        if (m.equip) setMonsterEquip(next, m.equip);
+        if (m.equip2) setMonsterEquip2(next, m.equip2);
+        m.equip = null;
+        m.equip2 = null;
+        this.removeMonster(m);
+        this.monsters.push(next);
+        Meta.seeMonster(type);
+        Fx.pop({ kind: 'summon', to: { x: next.x, y: next.y }, type, grade: MONSTERS[type].grade });
+        Sfx.play('summon', GRADE_ORDER.indexOf(MONSTERS[type].grade));
+        return { ok: true, type, monster: next, cost };
     },
     buyPower(id) {
         const c = this.powerCheck(id);
@@ -331,7 +444,7 @@ const Game = {
     lightningDamage() { return COMBAT_RULES.lightning.damage * this.mods.lightningDamage * (this.power('focus') ? 1.3 : 1); },
 
     // 맵에 둘 수 있는 몬스터 수
-    maxField() { return SUMMON_RULES.maxField + this.mods.fieldMax; },
+    maxField() { return SUMMON_RULES.maxField + this.mods.fieldMax + (this.fieldBought || 0); },
 
     // 등급별 소환 확률: 희귀 확률(rareChance)을 일반에서 옮긴다
     summonOdds() {
@@ -922,8 +1035,8 @@ const Game = {
         }
         const grade = MONSTERS[recipe.result].grade;
         const others = this.monsters.filter(o => !o.removed && !used.includes(o));
-        if (others.some(o => o.type === recipe.result)) return { kind: 'none', reason: 'unique', grade, sameKind: true, recipe };
         const max = MONSTER_GRADES[grade].fieldMax;
+        if (max !== undefined && others.some(o => o.type === recipe.result)) return { kind: 'none', reason: 'unique', grade, sameKind: true, recipe };
         if (max !== undefined && others.filter(o => MONSTERS[o.type].grade === grade).length >= max) return { kind: 'none', reason: 'unique', grade, recipe };
         return { kind: 'recipe', recipe, result: recipe.result, src: b[0], dst: m, extra };
     },
@@ -950,7 +1063,7 @@ const Game = {
     // 자동 합치기 한 번: 가장 낮은 등급부터 같은 등급 3마리를 합친다.
     // S랭크는 히든 조합 재료이므로 쓰지 않는다. 합칠 수 있으면 { ok: true }
     autoMergeStep() {
-        const free = m => !m.removed && !m.clone && (m.rank || 0) < MONSTER_RANKS.length - 1;
+        const free = m => !m.removed && !m.clone && (m.rank || 0) < rankIndex('S'); // S 이상은 자동 합치기 재료로 쓰지 않는다
         for (const grade of GRADE_ORDER) {
             if (!nextGrade(grade)) continue;
             const list = this.monsters.filter(m => free(m) && MONSTERS[m.type].grade === grade).sort((a, b) => (b.rank || 0) - (a.rank || 0));
@@ -1110,6 +1223,11 @@ const Game = {
                 return this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
             }
             case 'summon': return this.summon();
+            case 'buyField': return this.buyField();
+            case 'buyMana': return this.buyMana();
+            case 'awaken': return this.buyAwaken();
+            case 'reroll': return this.reroll(cmd.monster);
+            case 'rollRank': return this.rollRank(cmd.monster);
             case 'upgradeSummon': return this.upgradeSummon();
             case 'sell': this.sell(cmd.monster); return { ok: true };
             case 'sacrifice': return this.sacrifice(cmd.monster);
@@ -1121,7 +1239,7 @@ const Game = {
     // 끌어온 몬스터(src)를 다른 몬스터(dst) 위에 놓아 합친다. 결과는 dst 자리에 남고 다른 재료 자리는 빈다.
     //   조합식: src와 dst 2마리. 등급 합치기: 같은 등급 gradeCount마리(나머지는 extra, 못 쓰면 자동으로 고른다)
     //   랭크는 재료 중 가장 낮은 값, 장비는 가장 좋은 것 하나를 잇고(같으면 끌어온 쪽, 놓은 쪽, 나머지 순) 나머지는 보관함으로
-    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' | 'count' }
+    // 실패하면 { ok: false, reason: 'same' | 'empty' | 'top' | 'mismatch' | 'unique' | 'count' | 'room' }
     merge(src, dst, extra, gradeOnly, fullPlan) {
         const a = this.typeAt(src);
         const b = this.typeAt(dst);
@@ -1136,7 +1254,12 @@ const Game = {
             const higher = nextGrade(plan.grade);
             if (higher && higher !== 'mythic') resultGrade = higher;
         }
-        const type = plan.kind === 'recipe' ? plan.result : rngItem('merge', this.mergeResultPool(resultGrade, [src.monster, dst.monster, ...(plan.extra || [])]));
+        // 결과는 재료가 비울 자리를 포함해 맵 어딘가에 들어가는 몬스터만(큰 몬스터가 겹쳐 서지 않게). 하나도 없으면 합치지 않는다
+        const leaving = [src.monster, dst.monster, ...(plan.extra || [])];
+        const fits = t => [...BUILD_CELLS].some(k => { const [c, r] = k.split(',').map(Number); return this.canPlace(t, c, r, leaving); });
+        const pool = (plan.kind === 'recipe' ? [plan.result] : this.mergeResultPool(resultGrade, leaving)).filter(fits);
+        if (!pool.length) return { ok: false, reason: 'room', plan: { kind: 'none', reason: 'room' } };
+        const type = plan.kind === 'recipe' ? plan.result : rngItem('merge', pool);
         const hidden = !!(plan.recipe && plan.recipe.hidden);
         // 조합식은 영구 기록(도감)에 한 번만 남는다. 히든 발견 연출은 기록에 처음 남을 때만 띄운다
         const found = plan.recipe ? Meta.findRecipe(plan.recipe) : false;
@@ -1425,7 +1548,8 @@ const Game = {
         const data = { v: 1, lord: this.lord, relics: this.relics, stage: this.stage, gold: this.gold, hp: this.hp, waveIndex: this.waveIndex,
             prepTimer: this.prepTimer, summonCount: this.summonCount, summonLevel: this.summonLevel, familyLevels: this.familyLevels, equipBag: this.equipBag, bossReward: this.bossReward,
             skills: this.skills, stats: this.stats, mana: this.mana, powers: this.powers, powerSeed: this.powerSeed, arrivals: this.arrivals,
-            monsters: this.monsters.filter(m => !m.removed && !m.clone).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, xp: m.xp || 0, equip: m.equip || null, equip2: m.equip2 || null })) };
+            awaken: this.awaken, fieldBought: this.fieldBought, manaBought: this.manaBought,
+            monsters: this.monsters.filter(m => !m.removed && !m.clone).map(m => ({ type: m.type, col: m.col, row: m.row, rank: m.rank || 0, kills: m.kills || 0, equip: m.equip || null, equip2: m.equip2 || null })) };
         try { localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 저장을 못 해도 판은 계속된다 */ }
     },
 
@@ -1458,6 +1582,9 @@ const Game = {
             if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 }, d.skills);
             this.mana = d.mana || 0;
             this.powers = d.powers || {};
+            this.awaken = Math.max(0, d.awaken | 0);
+            this.fieldBought = clamp(d.fieldBought | 0, 0, GOLD_SHOP.field.max);
+            this.manaBought = Math.max(0, d.manaBought | 0);
             this.applyPowerMods();
             if (d.powerSeed) this.powerSeed = d.powerSeed;
             this.arrivals = d.arrivals || 0;
@@ -1466,7 +1593,7 @@ const Game = {
                 if (!MONSTERS[o.type] || !this.canPlace(o.type, o.col, o.row)) continue;
                 const m = createMonster(o.type, o.col, o.row);
                 setMonsterRank(m, clamp(o.rank || 0, 0, MONSTER_RANKS.length - 1));
-                m.xp = o.xp || 0;
+                m.kills = o.kills || 0;
                 if (o.equip && EQUIPMENT[o.equip]) setMonsterEquip(m, o.equip);
                 if (o.equip2 && EQUIPMENT[o.equip2]) setMonsterEquip2(m, o.equip2);
                 this.monsters.push(m);

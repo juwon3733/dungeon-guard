@@ -25,7 +25,7 @@ function toVirtual(event) {
 
 function saveSettings() {
     try {
-        localStorage.setItem('dungeonGuard.settings', JSON.stringify({ muted: Sfx.muted, reduce: Fx.reduce, volume: Sfx.volume, abyssLevel: UI.abyssLevel }));
+        localStorage.setItem('dungeonGuard.settings', JSON.stringify({ muted: Sfx.muted, reduce: Fx.reduce, noNumbers: Fx.noNumbers, volume: Sfx.volume, abyssLevel: UI.abyssLevel }));
     } catch (e) { /* 저장을 못 해도 게임은 그대로 돈다 */ }
 }
 
@@ -35,6 +35,7 @@ function loadSettings() {
         Sfx.muted = !!raw.muted;
         if (raw.volume) for (const k of Object.keys(Sfx.volume)) if (typeof raw.volume[k] === 'number') Sfx.volume[k] = clamp(raw.volume[k], 0, 100);
         Fx.reduce = !!raw.reduce;
+        Fx.noNumbers = !!raw.noNumbers;
         if (Number.isInteger(raw.abyssLevel)) UI.abyssLevel = abyssLevelOf(raw.abyssLevel).id;
     } catch (e) { /* 기본값 사용 */ }
 }

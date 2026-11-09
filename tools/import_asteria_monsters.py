@@ -9,6 +9,7 @@ WWW = os.path.join(os.environ['USERPROFILE'], r'Downloads\Asteria-stove-3.2.0-wi
 LZ = os.path.join(WWW, 'lz')
 OUT = os.path.join(ROOT, 'assets', 'sprites')
 CELL = 80  # 칸 하나의 화면 px
+MAX_CELLS = 2  # 몬스터 한 마리가 차지하는 칸의 가로·세로 최대(2026-11-09 사용자 결정)
 
 # id: (원본, 칸 가로, 칸 세로)
 #   e:이름 일반 몹(enemy_ 앞/옆, anim_ 걷기/공격) / b:이름 보스 그림(boss_ 앞, 있으면 옆/기술)
@@ -130,6 +131,7 @@ def attack_clip(mid, sprite, key=None, folder='attack'):
 
 art = {}
 for mid, (src, w, h) in ART.items():
+    w, h = min(w, MAX_CELLS), min(h, MAX_CELLS)  # 큰 몬스터도 2x2까지(자리가 없어 소환이 막히지 않게)
     current = mid
     kind, name = src.split(':')
     sprite = f'ast_mon_{mid}'

@@ -98,6 +98,7 @@ function updateHero(h, dt) {
     h.kick = Math.max(0, h.kick - dt);
     h.atkPose = Math.max(0, h.atkPose - dt);
     h.haste = Math.max(0, h.haste - dt);
+    if (h.shieldT > 0) h.shieldT -= dt; // 보스 무적 방패
     h.slip = Math.max(0, h.slip - dt);
     h.curse = Math.max(0, h.curse - dt);
     h.slow = Math.max(0, h.slow - dt);
@@ -229,15 +230,19 @@ function updateMageCast(h, dt) {
     let best = Infinity;
     for (const t of targets) {
         const dd = distance(w.x, w.y, t.x, t.y);
-        if (dd < best && !(t.stun > 0)) { best = dd; target = t; }
+        if (dd < best && !(t.stun > 0) && !(def.slow && t.slowT > 0)) { best = dd; target = t; }
     }
     if (!target) { h.cast = 0.4; return; }
     h.cast = def.stunEvery;
     h.atkPose = h.atkPoseMax = def.atkTime || ATTACK_POSE_TIME; // 정예 그림에는 atkTime이 없다
-    applyStun(target, def.stunTime);
+    if (def.slow && target.kind === 'monster') {
+        // 마법사: 정지 대신 감속(공격이 느려진다)
+        target.slowT = Math.max(target.slowT || 0, def.slow.time);
+        target.slowMul = def.slow.mul;
+    } else applyStun(target, def.stunTime);
     Fx.beam(w.x, w.y - (h.elite ? 80 : 44), target.x, target.y - 60, '#7fd8ff', 4, 0.22); // 용사 쪽 효과는 몬스터 효과보다 작고 짧게
     Fx.ring(target.x, target.y - 30, 60, '#7fd8ff', 0.3);
-    if (Math.random() < 0.3) Fx.say(w.x, w.y - 150, '멈춰라!', 0.9);
+    if (Math.random() < 0.3) Fx.say(w.x, w.y - 150, def.slow ? '느려져라!' : '멈춰라!', 0.9);
     Sfx.play('stun');
 }
 
@@ -347,6 +352,38 @@ function updateBossPatterns(h, dt) {
             h.blocker = null;
             Fx.addShake(10);
             Fx.say(w.x, w.y - 340, '돌격!', 1.2, true);
+            Sfx.play('charge');
+        } else if (rule.kind === 'rally') {
+            // 격려: 주변 용사 체력 회복과 가속
+            for (const o of Game.heroes) {
+                if (o.dead || o.waiting) continue;
+                const q = heroWorld(o);
+                if (distance(w.x, w.y, q.x, q.y) > rule.range * TILE) continue;
+                o.hp = Math.min(o.maxHp, o.hp + o.maxHp * rule.heal);
+                o.haste = Math.max(o.haste, rule.time);
+                o.hasteMul = rule.speed;
+            }
+            Fx.ring(w.x, w.y, rule.range * TILE, '#8dffb4', 0.5);
+            Fx.rise(w.x, w.y - 120, '#b8ffcf', 30, 60, 0.9);
+            Fx.say(w.x, w.y - 360, '일어나라, 형제들!', 1.4, true);
+            Sfx.play('spawn');
+        } else if (rule.kind === 'summon') {
+            // 부르기: 보스 자리에 일반 용사 count명
+            for (let k = 0; k < rule.count; k++) {
+                const o = createHero(rule.type, Game.waveIndex, 0, false, h.route);
+                o.waiting = false;
+                o.delay = 0;
+                o.d = Math.max(0, h.d - (k + 1) * 12);
+                Game.heroes.push(o);
+            }
+            Fx.ring(w.x, w.y, 2 * TILE, '#9fd0ff', 0.5);
+            Fx.say(w.x, w.y - 360, '지원군, 앞으로!', 1.4, true);
+            Sfx.play('spawn');
+        } else if (rule.kind === 'shield') {
+            // 무적 방패: time초 동안 피해를 받지 않는다
+            h.shieldT = rule.time;
+            Fx.ring(w.x, w.y - 120, 220, '#ffe08a', 0.6);
+            Fx.say(w.x, w.y - 360, '빛의 가호!', 1.4, true);
             Sfx.play('charge');
         } else {
             startBlast(h, { kind: rule.kind, x: w.x, y: w.y, range: rule.range, stun: rule.stun, windup: rule.windup });
