@@ -11,7 +11,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
     if (bossDef) type = bossDef.base;
     const def = HEROES[type];
     const scale = (1 + COMBAT_RULES.hpPerWave * waveIndex) * Game.heroHpMul * Game.endlessHpMul(waveIndex); // 스테이지 체력 배율(스토리 없으면 1)
-    const swarm = !bossDef && !def.elite; // 일반 용사는 떼로 나오는 만큼 한 명이 약하다(SWARM_RULES)
+    const swarm = !bossDef && !def.elite && !def.goblin; // 일반 용사는 떼로 나오는 만큼 한 명이 약하다(SWARM_RULES). 보물 고블린은 한 마리 몫
     const hp = bossDef ? def.hp * bossDef.hpMultiplier * scale * (bossDef.waveHpMul || 1) * Game.raidBossMul() : def.hp * scale * (swarm ? SWARM_RULES.hpMul : 1);
     const src = bossDef || def;
     return {
@@ -19,11 +19,11 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         boss: !!bossDef,
         bossKey: bossDef ? key : null,
         elite: !bossDef && !!def.elite,
-        throneDamage: (src.throneDamage || 1) * (swarm ? SWARM_RULES.leak : 1),
+        throneDamage: (src.throneDamage === undefined ? 1 : src.throneDamage) * (swarm ? SWARM_RULES.leak : 1),
         name: src.name,
         route: route || 'north',
         // 일반 용사의 생김새(연출만, 판 결과와 무관). 같은 그림이 줄지어 보이지 않게 섞는다
-        skin: swarm && ASTERIA_HERO_SKINS[type] ? randItem(ASTERIA_HERO_SKINS[type]) : null,
+        skin: def.skinSprite ? heroSkinOf(def.skinSprite) : (swarm && ASTERIA_HERO_SKINS[type] ? randItem(ASTERIA_HERO_SKINS[type]) : null),
         d: 0, // route 길 위에서 입구로부터 이동한 거리
         lane: bossDef ? 0 : rngRange('spawn', -34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
@@ -61,6 +61,12 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         blast: null, // windup이 끝나면 터질 범위 정지
         dead: false
     };
+}
+
+// Asteria 일반 용사 그림 하나(ASTERIA_HERO_SKINS에서 이름으로 찾는다)
+function heroSkinOf(sprite) {
+    for (const list of Object.values(ASTERIA_HERO_SKINS)) for (const s of list) if (s.sprite === sprite) return s;
+    return null;
 }
 
 // 유닛 u가 용사 h를 새로 붙잡을 수 있는지
@@ -197,6 +203,11 @@ function updateHero(h, dt) {
         h.dead = true;
         h.arrived = true;
         const w = heroWorld(h);
+        if (h.event) G.eventHeroGone(h, true);
+        if (h.type === 'gold_goblin') { // 보물 고블린은 왕좌를 치지 않고 금화를 들고 달아난다
+            Fx.say(w.x - 60, w.y - 150, '금화는 내 거다!', 1.5);
+            return;
+        }
         if (Math.random() < 0.25) Fx.say(w.x - 60, w.y - 150, randItem(SPEECH.arrive), 1.5);
         if (h.boss) damageThrone(Math.max(1, Math.ceil(G.maxHp() * COMBAT_RULES.bossArrival))); // 보스가 닿으면 최대 체력의 절반(바로 패배하지 않는다)
         else {

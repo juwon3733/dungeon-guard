@@ -51,6 +51,8 @@ const Game = {
         this.autoMerge = false; // 자동 합치기(입력으로 켜고 끈다)
         this.raidTier = 0; // 주간 토벌전에서 잡은 보스 수
         this.mutations = []; // 끝없는 심연에서 쌓인 변이(규칙 카드 id)
+        this.curseAccept = {}; // 저주 라운드를 받아들였는지: { 라운드 번호(1부터): true }
+        this.eventRun = null; // 진행 중인 이벤트 라운드의 용사 세기(보물 고블린, 저주): { id, round, total, left, escaped }
         this.leak = 0; // 아직 왕좌를 깎지 않은 일반 용사 피해
         this.goldLeft = 0; // 아직 주지 않은 처치 골드
         this.score = 0;
@@ -1086,10 +1088,89 @@ const Game = {
     // 도전의 r번째 라운드: 토벌전은 보스 자리에 이번 주 보스를 세운다
     roundFor(r, wave) {
         const c = this.challenge;
+        if (!c) return wave;
         // 계약 조항 잦은 보스: 10라운드 보스 사이(5, 15, 25...)에도 대마도사가 온다
-        if (c && this.mods.bossEvery5 && !wave.boss && r % 5 === 0) return Object.assign({}, wave, { boss: 'archmage' });
-        if (!c || c.kind !== 'raid' || !wave.boss) return wave;
-        return Object.assign({}, wave, { boss: c.boss });
+        if (this.mods.bossEvery5 && !wave.boss && r % 5 === 0) return Object.assign({}, wave, { boss: 'archmage' });
+        if (c.kind === 'raid' && wave.boss) return Object.assign({}, wave, { boss: c.boss });
+        return wave.boss ? wave : this.eventRound(r, wave);
+    },
+
+    // 도전의 이벤트 라운드(ROUND_EVENTS): 시드 일정(roundEventAt)에 있으면 라운드 구성을 바꾼다
+    eventRound(r, wave) {
+        const id = roundEventAt(this.challenge.seed, r);
+        if (!id) return wave;
+        const ev = ROUND_EVENTS[id];
+        const w = Object.assign({}, wave, { event: id });
+        if (id === 'goblin') w.goblins = ev.count(r);
+        if (id === 'parade') {
+            w.members = {};
+            for (const [k, n] of Object.entries(wave.members)) w.members[k] = Math.max(1, Math.round(n * ev.memberMul));
+            w.elites = {};
+            const list = ROUND_RULES.elites;
+            for (let i = 0; i < ev.elites(r); i++) { const e = list[(r + i) % list.length]; w.elites[e] = (w.elites[e] || 0) + 1; }
+        }
+        return w;
+    },
+
+    // 다가오는 저주 라운드의 번호(1부터): 준비 중이면 이번 라운드, 라운드 중이면 다음 라운드. 없으면 0
+    curseRound() {
+        if (!this.inPlay() || !this.challenge) return 0;
+        const i = this.state === 'prep' ? this.waveIndex : this.waveIndex + 1;
+        const w = this.waves[i];
+        return w && w.event === 'curse' ? i + 1 : 0;
+    },
+
+    // 저주 라운드에 들어갈지 고른다(시작하기 전까지 바꿀 수 있다)
+    chooseCurse(accept) {
+        const r = this.curseRound();
+        if (!r) return { ok: false, reason: 'none' };
+        if (accept) this.curseAccept[r] = true;
+        else delete this.curseAccept[r];
+        return { ok: true };
+    },
+
+    // 이벤트 라운드의 용사에게 표시와 효과를 붙인다
+    tagEventHero(h, wave, r, cursed) {
+        const ev = ROUND_EVENTS[wave.event];
+        h.event = wave.event;
+        h.eventRound = r;
+        if (ev.goldMul) h.goldMul = ev.goldMul;
+        if (cursed) {
+            h.cursed = true;
+            h.hp *= ev.hpMul;
+            h.maxHp = h.hp;
+            h.speed *= ev.speedMul;
+        }
+    },
+
+    // 세는 이벤트 용사(보물 고블린, 받아들인 저주)가 쓰러지거나 왕좌에 닿았다. 다 나가면 결과를 낸다
+    eventHeroGone(h, escaped) {
+        const run = this.eventRun;
+        if (!run || h.eventRound !== run.round || h.counted) return;
+        if (run.id === 'goblin' && h.type !== 'gold_goblin') return;
+        h.counted = true;
+        run.left--;
+        if (escaped) run.escaped++;
+        if (run.left > 0) return;
+        this.eventRun = null;
+        const ev = ROUND_EVENTS[run.id];
+        if (run.id === 'goblin') {
+            const caught = run.total - run.escaped;
+            Fx.banner = { name: '고블린 사냥', sub: `${run.total}마리 중 ${caught}마리를 잡았다`, age: 0, life: 2, small: true, keep: true };
+            return;
+        }
+        if (run.escaped > 0) {
+            Fx.banner = { name: '저주 실패', sub: `용사 ${run.escaped}명을 놓쳤다`, age: 0, life: 2, small: true, keep: true };
+            return;
+        }
+        // 저주 극복: 골드, 마력, 희귀 장비 하나(보상 난수 흐름)
+        const gold = ev.gold(run.round);
+        this.gold += gold;
+        Fx.goldPulse = 1;
+        this.addMana(ev.mana);
+        this.gainEquip(rngItem('reward', equipPool('rare')));
+        Fx.banner = { name: '저주 극복', sub: `${gold} 골드, 마력 ${ev.mana}, 희귀 장비`, age: 0, life: 2.6, small: true, keep: true };
+        Sfx.play('waveClear');
     },
 
     // 토벌전 보스 체력의 단계 배율. 곱셈을 되풀이한다(입력 재생)
@@ -1201,6 +1282,7 @@ const Game = {
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
             case 'startWave': this.startWave(); return { ok: true };
+            case 'curse': return this.chooseCurse(cmd.accept);
             case 'surrender': {
                 // 항복: 마왕 체력을 0으로(남은 체력이 순위에 득이 되지 않게) 하고 진 판으로 끝낸다
                 if (!this.inPlay()) return { ok: false, reason: 'state' };
@@ -1403,6 +1485,9 @@ const Game = {
             Fx.goldPulse = 1;
         }
         const wave = this.currentWave();
+        const round = this.waveIndex + 1;
+        const event = wave.event ? ROUND_EVENTS[wave.event] : null;
+        const cursed = wave.event === 'curse' && !!this.curseAccept[round];
         const queue = [];
         for (const [type, count] of [...Object.entries(wave.members), ...Object.entries(wave.elites || {})]) {
             for (let i = 0; i < count; i++) queue.push(type);
@@ -1425,9 +1510,26 @@ const Game = {
                 // 계약 조항: 일반 용사 일부가 방패를 들거나 한 번 되살아난다(시드 난수라 모두 같다)
                 if (!h.elite && this.mods.heroShield && rng('pact') < this.mods.heroShield) h.shield = 1;
                 if (!h.elite && this.mods.heroRevive && rng('pact') < this.mods.heroRevive) h.revive = 1;
+                if (event) this.tagEventHero(h, wave, round, cursed);
                 this.heroes.push(h);
                 lastStart = Math.max(lastStart, delay + gap);
             }
+        }
+        // 보물 고블린: 무리와 따로 입구를 번갈아 달려온다
+        for (let i = 0; i < (wave.goblins || 0); i++) {
+            const h = createHero('gold_goblin', this.waveLevel(wave), 1.5 + i * 1.6, false, ROUTE_IDS[i % ROUTE_IDS.length]);
+            h.bounty = event.gold(round);
+            this.tagEventHero(h, wave, round, false);
+            this.heroes.push(h);
+        }
+        if (wave.goblins || cursed) {
+            const total = this.heroes.filter(h => h.eventRound === round && (cursed || h.type === 'gold_goblin')).length;
+            this.eventRun = { id: wave.event, round, total, left: total, escaped: 0 };
+        }
+        if (event) {
+            const sub = { goblin: '잡으면 큰 골드를 준다', festival: '처치 골드가 두 배다', parade: '정예가 무리 지어 온다' }[wave.event]
+                || (cursed ? '용사가 강해졌다' : '저주를 거절했다');
+            Fx.banner = { name: event.name, sub, age: 0, life: 2.6, small: true };
         }
         if (wave.boss) {
             const route = this.bossEntry(wave.boss);
@@ -1611,6 +1713,12 @@ const Game = {
     // 이번 라운드가 시작되고 지난 판 시간(초). 라운드 중이 아니면 0
     roundAge() { return this.state === 'wave' && this.roundFull > 0 ? this.roundFull - this.roundTimer : 0; },
 
+    // 끝나는 라운드가 축제면 라운드 보상 배율
+    eventGoldMul() {
+        const w = this.currentWave();
+        return (w.event && ROUND_EVENTS[w.event].goldMul) || 1;
+    },
+
     nextRoundLocked() {
         return this.state === 'wave' && this.roundFull > 0 && this.roundFull - this.roundTimer < COMBAT_RULES.nextRoundLock; // 이어하기로 불러온 판은 roundFull이 없어 잠기지 않는다
     },
@@ -1620,7 +1728,7 @@ const Game = {
         if (this.nextRoundLocked()) return false;
         const n = this.waveIndex + 1;
         const early = this.roundTimer * COMBAT_RULES.earlyGoldPerSecond * (this.power('rewindGold') ? 1.5 : 1); // 권능 이른 종
-        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(early);
+        const reward = (COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(early)) * this.eventGoldMul();
         const calledEarly = this.roundTimer > 0;
         if (calledEarly && this.mods.earlyGold) this.gold += this.mods.earlyGold; // 깨진 모래시계
         this.addScore(SCORE_RULES.earlySecond * Math.floor(this.roundTimer));
@@ -1642,7 +1750,7 @@ const Game = {
 
     endWave() {
         const n = this.waveIndex + 1;
-        const reward = COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond);
+        const reward = (COMBAT_RULES.waveBaseReward + COMBAT_RULES.waveStepReward * n + Math.floor(this.roundTimer * COMBAT_RULES.earlyGoldPerSecond)) * this.eventGoldMul();
         const bossDown = this.bossDefeated;
         this.bossDefeated = false;
         // 왕좌가 맞지 않고 다 잡은 라운드는 마력을 준다
@@ -1659,7 +1767,7 @@ const Game = {
         this.gold += reward;
         this.payInterest();
         Fx.goldPulse = 1;
-        Fx.banner = { name: `라운드 ${n} 완료`, sub: scored ? `+${reward} 골드 · +${scored.toLocaleString()}점` : `+${reward} 골드`, age: 0, life: 1.6, small: true };
+        if (!(Fx.banner && Fx.banner.keep)) Fx.banner = { name: `라운드 ${n} 완료`, sub: scored ? `+${reward} 골드 · +${scored.toLocaleString()}점` : `+${reward} 골드`, age: 0, life: 1.6, small: true };
         Sfx.play('waveClear');
         this.waveIndex = n;
         this.prepTimer = COMBAT_RULES.prepTime;
