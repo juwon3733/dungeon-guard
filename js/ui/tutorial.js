@@ -59,7 +59,7 @@ Object.assign(UI, {
         // 라운드 시작 전 단계에서는 준비 시간이 흐르지 않는다
         G.holdPrep = G.state === 'prep' && t.step <= TUTORIAL_BATTLE_STEPS.indexOf('start');
         // 조준을 취소하면 번개 버튼으로 돌아간다
-        if (this.tutStep() === 'aim' && !this.targeting && G.skills.lightning <= 0) t.step = TUTORIAL_BATTLE_STEPS.indexOf('lightning');
+        if (this.tutStep() === 'aim' && !this.targeting && G.skills[G.skillKey(0)] <= 0) t.step = TUTORIAL_BATTLE_STEPS.indexOf('lightning');
         let guard = 0;
         while (this.tut && this.tutDone() && guard++ < 6) {
             t.step++;
@@ -81,8 +81,8 @@ Object.assign(UI, {
             case 'summon': return !!this.tutMergeable() || G.stats.merged > 0 || !G.canPaySummon() || G.fieldFull() || G.state !== 'prep';
             case 'merge': return G.stats.merged > 0 || !this.tutMergeable() || G.state !== 'prep';
             case 'start': return G.state !== 'prep' && G.heroes.some(h => !h.dead && !h.waiting);
-            case 'lightning': return this.targeting || G.skills.lightning > 0;
-            case 'aim': return G.skills.lightning > 0;
+            case 'lightning': return this.targeting || G.skills[G.skillKey(0)] > 0;
+            case 'aim': return G.skills[G.skillKey(0)] > 0;
             case 'end': return this.tut.age > TUTORIAL_END_TIME;
         }
         return false;
@@ -199,15 +199,15 @@ Object.assign(UI, {
             }
             case 'lightning': {
                 const b = btn(this.tab === 'demon' ? 'lightning' : 'tab_demon');
-                return { rects: b ? [b] : [], text: this.tab === 'demon' ? '번개 (Q)' : '마왕 탭', sub: '용사가 몰릴 때' };
+                return { rects: b ? [b] : [], text: this.tab === 'demon' ? `${LORD_SKILLS[G.skillKey(0)].name} (Q)` : '마왕 탭', sub: '용사가 몰릴 때' };
             }
             case 'aim': {
                 const h = G.heroes.find(h => !h.dead && !h.waiting);
                 const p = h && heroWorld(h);
-                return { rects: p ? [cellRect(p.x, p.y)] : [], text: '용사 위 누르기', sub: '번개 · 둘레 피해' };
+                return { rects: p ? [cellRect(p.x, p.y)] : [], text: '용사 위 누르기', sub: `${LORD_SKILLS[G.skillKey(0)].name} · 둘레 피해` };
             }
             case 'end':
-                return { rects: [], text: '준비 끝', sub: '소환 · 합치기 · 번개 되풀이' };
+                return { rects: [], text: '준비 끝', sub: `소환 · 합치기 · ${LORD_SKILLS[G.skillKey(0)].name} 되풀이` };
         }
         return { rects: [], text: '' };
     },

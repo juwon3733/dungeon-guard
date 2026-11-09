@@ -641,7 +641,9 @@ Object.assign(UI, {
                 UIKit.ink(ctx, lord.desc, x, y, 22, T.inkSoft, 'left', 'bold');
                 UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, x, y + 40, 22, T.inkWax, 'left', 'bold');
                 ctx.font = `20px ${UI_FONT}`;
-                this.wrapLines(ctx, lord.passive.desc, D.w - 64).slice(0, 4).forEach((t, j) => UIKit.ink(ctx, t, x, y + 74 + j * 28, 20, T.ink));
+                const passive = this.wrapLines(ctx, lord.passive.desc, D.w - 64).slice(0, 4);
+                passive.forEach((t, j) => UIKit.ink(ctx, t, x, y + 74 + j * 28, 20, T.ink));
+                UIKit.ink(ctx, lordSkillLine(lord), x, y + 86 + passive.length * 28, 20, T.inkWax, 'left', 'bold'); // 마왕마다 다른 Q, W
             } else {
                 const st = unlockStage('lord', pick.id);
                 UIKit.text(ctx, st ? `스테이지 ${st.no}에서 해금` : '처음부터', x, y, 26, T.creamSoft, 'left', 'bold');

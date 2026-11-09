@@ -124,7 +124,7 @@ function killHero(hero, pos, attacker) {
     if (hero.event) G.eventHeroGone(hero, false);
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + monsterEquip(attacker, 'gold')) * (hero.goldMul || 1);
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.bombing && G.power('coinLoot') ? 2 : 1) * (G.bribing && G.power('bribeCheap') ? 2 : 1) * (hero.gildT > G.stats.time ? 2 : 1) * (1 + monsterEquip(attacker, 'gold')) * (hero.goldMul || 1);
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -142,17 +142,18 @@ function killHero(hero, pos, attacker) {
     if (!hero.boss && !hero.elite) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
         const y = pos.y - 24;
-        // 권능 시체: 쓰러진 자리를 기억하고, 몇 명째마다 그 자리가 터진다
-        G.graves.push({ x: pos.x, y: pos.y });
-        if (G.graves.length > COMBAT_RULES.raise.count) G.graves.shift();
+        // 쓰러진 자리를 기억한다(뼈의 여왕 망령 깨우기, 무덤 폭발). 권능 시체 폭발은 몇 명째마다 그 자리가 터진다
+        G.graves.push({ x: pos.x, y: pos.y, type: hero.type, route: hero.route, d: hero.d, dir: hero.dir });
+        if (G.graves.length > COMBAT_RULES.graveBlast.count) G.graves.shift();
         if (G.power('corpseBlast')) {
             const rule = COMBAT_RULES.corpseBlast;
             G.corpseCount++;
             if (G.corpseCount % (G.power('corpseQuick') ? rule.quickEvery : rule.every) === 0) corpseExplode(pos.x, pos.y, rule.radius, rule.damageMul);
         }
-        // 권능 과부하: 처치가 번개를 충전한다
+        // 권능 과부하: 처치가 스킬 1(낙뢰)을 충전한다
         const charge = G.power('frenzy') ? 0.3 : (G.power('killCharge') ? 0.1 : 0);
-        if (charge) G.skills.lightning = Math.max(0, G.skills.lightning - charge);
+        const q = G.skillKey(0);
+        if (charge) G.skills[q] = Math.max(0, G.skills[q] - charge);
         if (bounty > 0) Fx.coin(pos.x, pos.y - 30, 1, 1);
         // 처치한 몬스터의 등급만큼 크게 터진다. 흔들림은 영웅 이상만: 약한 처치까지 흔들면 화면이 늘 떨린다
         const killer = attacker && MONSTERS[attacker.type];
@@ -174,7 +175,7 @@ function killHero(hero, pos, attacker) {
     }
     Fx.coin(pos.x, pos.y - 60, bounty);
     G.addMana(hero.boss ? POWER_RULES.manaBoss : POWER_RULES.manaElite, pos.x, pos.y - (hero.boss ? 300 : 140));
-    if (hero.elite && G.power('eliteCharge')) G.skills.lightning = 0;
+    if (hero.elite && G.power('eliteCharge')) G.skills[G.skillKey(0)] = 0;
     Fx.hitStop(hero.boss ? 0.2 : 0.06); // 큰 처치에는 시간이 잠깐 멎는다
     // 처치: 터지는 빛, 흰 불꽃과 주황 파편, 금화, 떠오르는 골드 글자(연출만, 계산과 무관)
     const cy = pos.y - (hero.boss ? 140 : 45);
@@ -263,6 +264,7 @@ function splashDamage(x, y, radiusPx, damage, color, onHit, attacker, onDealt) {
 
 function damageThrone(amount, heroName) {
     const G = Game;
+    if (mirrorWardBlocks()) return; // 거울 마녀 반사막(Q)
     if (mirrorShieldBlocks()) return; // 권능 거울 방패
     G.roundHit = true;
     G.hp = Math.max(0, G.hp - amount);
@@ -332,7 +334,6 @@ function resolveStrike(strike) {
     Game.striking = true;
     splashDamage(strike.x, strike.y, radius, Game.lightningDamage() * (strike.mul || 1), '#bfe9ff');
     Game.striking = false;
-    if (Game.power('coinRain')) Game.gold += struck.length;
     // 균열의 군주: 최대 체력에 비례한 추가 피해(깊은 층에서도 번개가 의미 있게)
     const mark = Game.lordPassive('lightningCurse');
     if (mark && mark.hpRatio) {
@@ -345,7 +346,6 @@ function resolveStrike(strike) {
     }
     // 권능: 맞은 용사에게 붙는 효과
     const G = Game;
-    const stun = G.power('longTear') ? 2 : (G.power('tear') ? 1 : 0);
     for (const h of struck) {
         if (h.dead) continue;
         if (G.power('smite') && (h.boss || h.elite)) {
@@ -354,9 +354,7 @@ function resolveStrike(strike) {
             Fx.anim('fx_hit_crit', p.x, p.y - 30, 200, 0.3);
             if (h.dead) continue;
         }
-        if (stun) h.stun = Math.max(h.stun, stun);
         if (G.power('static')) slowHero(h, 3, 0.7);
-        if (G.power('pull') && !h.boss) h.d = Math.max(0, h.d - 2 * TILE * (G.power('exile') ? 2 : 1));
     }
     // 권능 메아리: 1초 뒤 같은 자리에 약한 번개(메아리는 다시 메아리를 만들지 않는다)
     if (G.power('echo') && !strike.mul) G.pendingStrikes.push({ x: strike.x, y: strike.y, t: 1, mul: 0.5 });
@@ -387,25 +385,58 @@ function resolveStrike(strike) {
     Sfx.play('lightning');
 }
 
-// 권능 균열 열기: 왕좌에 가장 가까운 용사들을 뒤로 되돌린다(보스 제외)
+// 왕좌에 가장 가까운 용사부터 n명(filter로 거른다)
+function frontHeroes(n, filter) {
+    return Game.heroes.filter(h => !h.dead && !h.waiting && (!filter || filter(h))).sort((a, b) => remainingDistance(a) - remainingDistance(b)).slice(0, n);
+}
+
+// 스킬 피해: 기본값에 라운드마다 perRound씩 더 곱한다(뒤 라운드에서도 쓸모 있게)
+function skillPower(G, key) {
+    const rule = COMBAT_RULES[key];
+    return rule.damage * (1 + (rule.perRound || 0) * G.waveIndex);
+}
+
+// 마왕 말풍선(스킬을 쓸 때)
+function lordSay(text) {
+    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, text, 2);
+}
+
+// 균열의 군주 W 균열 문: 왕좌에 가장 가까운 용사들을 뒤로 되돌린다(보스 제외). 권능 균열 갈래가 강화한다
+function portalCount() { return COMBAT_RULES.portal.count + (Game.power('pull') ? COMBAT_RULES.portal.pullUp : 0); }
 function castPortal() {
     const G = Game;
     const rule = COMBAT_RULES.portal;
-    if (!G.power('gate') || G.skills.portal > 0) return false;
-    const list = G.heroes.filter(h => !h.dead && !h.waiting && !h.boss);
+    if (G.skills.portal > 0) return false;
+    const list = frontHeroes(portalCount(), h => !h.boss);
     if (!list.length) return false;
     G.skills.portal = G.skillCooldown('portal');
-    list.sort((a, b) => remainingDistance(a) - remainingDistance(b));
-    for (const h of list.slice(0, rule.count)) {
+    const stun = G.power('longTear') ? 2 : (G.power('tear') ? 1 : 0);
+    for (const h of list) {
         const from = heroWorld(h);
         Fx.anim('fx_blastViolet', from.x, from.y - 20, 180, 0.4);
         h.d = Math.max(0, h.d - rule.back * TILE * (G.power('exile') ? 2 : 1));
+        if (stun) applyStun(h, stun);
         if (G.power('abyss')) curseHero(h, 5, 1.4);
         const to = heroWorld(h);
         Fx.anim('fx_blastViolet', to.x, to.y - 20, 180, 0.4);
     }
     Fx.addShake(10);
     Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '다시 줄 서.', 2);
+    Sfx.play('charge');
+    return true;
+}
+
+// 균열의 군주 E 뇌우: 맨 앞 용사들에게 차례로 약한 낙뢰(메아리와 연쇄는 붙지 않는다)
+function castThunder() {
+    const G = Game;
+    const rule = COMBAT_RULES.thunder;
+    if (G.skills.thunder > 0) return false;
+    const list = frontHeroes(rule.count);
+    if (!list.length) return false;
+    G.skills.thunder = G.skillCooldown('thunder');
+    list.forEach((h, i) => { const p = heroWorld(h); G.pendingStrikes.push({ x: p.x, y: p.y, t: 0.16 + i * rule.gap, mul: rule.mul }); });
+    Fx.dim = 0.75;
+    lordSay('비 온다, 우산은 없다.');
     Sfx.play('charge');
     return true;
 }
@@ -422,38 +453,161 @@ function corpseExplode(x, y, radius, damageMul) {
     G.blasting = false;
 }
 
-// 권능 시체 일으키기: 최근 쓰러진 자리가 한꺼번에 터진다
-function castRaise() {
+// 뼈의 여왕 E 무덤 폭발: 최근 쓰러진 자리가 한꺼번에 터진다
+function castGraveBlast() {
     const G = Game;
-    const rule = COMBAT_RULES.raise;
-    if (!G.power('raise') || G.skills.raise > 0 || !G.graves.length) return false;
-    G.skills.raise = G.skillCooldown('raise');
+    const rule = COMBAT_RULES.graveBlast;
+    if (G.skills.graveBlast > 0 || !G.graves.length) return false;
+    G.skills.graveBlast = G.skillCooldown('graveBlast');
     for (const g of G.graves.slice()) corpseExplode(g.x, g.y, rule.radius, rule.damageMul);
     G.graves = [];
     Fx.addShake(12);
-    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '일어나서 한 번 더 죽어.', 2);
+    lordSay('일어나서 한 번 더 죽어.');
     Sfx.play('charge');
     return true;
 }
 
-// 권능 금화 폭격: 골드 일부를 써서 맨 앞 용사 둘레를 때린다. 쓴 돈만큼 세다
+// 뼈의 여왕 Q 뼈 창: 왕좌에서 맨 앞 용사로 창을 던져, 맨 앞 용사와 그 뒤 length칸 안의 용사를 모두 꿰뚫는다
+function castBoneSpear() {
+    const G = Game;
+    const rule = COMBAT_RULES.boneSpear;
+    if (G.skills.boneSpear > 0) return false;
+    const front = frontHeroes(1)[0];
+    if (!front) return false;
+    G.skills.boneSpear = G.skillCooldown('boneSpear');
+    const fp = heroWorld(front);
+    const lead = remainingDistance(front);
+    const reach = rule.length * TILE;
+    const hit = G.heroes.filter(h => {
+        if (h.dead || h.waiting) return false;
+        const w = heroWorld(h);
+        return remainingDistance(h) >= lead && remainingDistance(h) <= lead + reach && distance(w.x, w.y, fp.x, fp.y) <= reach;
+    });
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row) - 60;
+    Fx.beam(tx, ty, fp.x, fp.y - 30, '#efe6d0', 18, 0.3);
+    Fx.anim('fx_arrowBig', fp.x, fp.y - 30, 220, 0.35, Math.atan2(fp.y - 30 - ty, fp.x - tx));
+    const damage = skillPower(G, 'boneSpear');
+    for (const h of hit) {
+        const w = heroWorld(h);
+        Fx.anim('fx_hit_crit', w.x, w.y - 30, 170, 0.3);
+        damageHero(h, damage, fp.x, fp.y, '#efe6d0');
+        if (!h.dead) damageHero(h, h.maxHp * rule.hpRatio, fp.x, fp.y, '#efe6d0', null, true);
+    }
+    Fx.addShake(8);
+    lordSay('꼬치로 꿰어 주마.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 뼈의 여왕 W 망령 깨우기: 최근 쓰러진 용사들이 타락 유닛처럼 일어나 잠깐 싸운다(시간이 다 되면 사라진다)
+function castGhosts() {
+    const G = Game;
+    const rule = COMBAT_RULES.ghosts;
+    if (G.skills.ghosts > 0 || !G.graves.length) return false;
+    const list = G.graves.slice(-rule.count);
+    G.graves = G.graves.slice(0, G.graves.length - list.length);
+    G.skills.ghosts = G.skillCooldown('ghosts');
+    for (const g of list) {
+        const base = HEROES[g.type] && HEROES[g.type].base;
+        const kind = CORRUPTED[g.type] ? g.type : (CORRUPTED[base] ? base : 'warrior');
+        const u = createCorruptUnit({ type: kind, x: g.x, y: g.y, route: g.route, d: g.d, dir: g.dir });
+        if (HEROES[g.type]) u.heroType = g.type; // 그림은 쓰러진 용사 그대로
+        u.hp = u.maxHp = u.maxHp * (1 + rule.hpPerRound * G.waveIndex);
+        u.damage *= 1 + rule.damagePerRound * G.waveIndex;
+        u.life = rule.life;
+        u.ghost = true;
+        G.units.push(u);
+        Fx.anim('fx_adv_doomMelody_requiem', g.x, g.y - 20, 220, 0.6);
+        Fx.rise(g.x, g.y, '#c9a6ff', 18, 30, 0.7);
+    }
+    Fx.addShake(8);
+    lordSay('일어나라, 내 아이들아.');
+    Sfx.play('corrupt');
+    return true;
+}
+
+// 황금 마왕 Q 금화 폭격: 골드 일부를 써서 맨 앞 용사 둘레를 때린다. 쓴 돈만큼 세다
 function castGoldBomb() {
     const G = Game;
     const rule = COMBAT_RULES.goldBomb;
-    if (!G.power('goldBomb') || G.skills.goldBomb > 0 || G.gold < rule.minGold) return false;
-    const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+    if (G.skills.goldBomb > 0 || G.gold < rule.minGold) return false;
+    const front = frontHeroes(1)[0];
     if (!front) return false;
     const rich = G.power('bombRich');
     const spend = Math.min(rule.maxSpend, Math.floor(G.gold * (rich ? rule.richSpend : rule.spend)));
     G.gold -= spend;
     G.skills.goldBomb = G.skillCooldown('goldBomb');
     const p = heroWorld(front);
-    const r = (rule.radius + (G.power('bombBig') ? rule.bigRadius : 0)) * TILE;
+    const r = (rule.radius + (G.power('coinWide') ? rule.wideUp : 0) + (G.power('bombBig') ? rule.bigRadius : 0)) * TILE;
     Fx.anim('fx_blastGold', p.x, p.y - 30, r * 1.6, 0.5);
+    Fx.anim('fx_coin_blast', p.x, p.y - 30, r * 1.2, 0.5);
     Fx.ring(p.x, p.y, r, '#ffd34d', 0.4);
     Fx.addShake(14);
-    splashDamage(p.x, p.y, r, spend * rule.damagePerGold * (rich ? 2 : 1), '#ffd34d');
-    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '영수증은 안 줘.', 2);
+    G.bombing = true; // 권능 전리품(처치 골드 2배)
+    const mul = (rich ? 2 : 1) * (G.power('goldFocus') ? 1.25 : 1);
+    const hits = splashDamage(p.x, p.y, r, spend * rule.damagePerGold * mul, '#ffd34d', h => { if (!h.dead && rule.hpRatio) damageHero(h, h.maxHp * rule.hpRatio * mul, p.x, p.y, '#ffd34d', null, true); });
+    G.bombing = false;
+    if (G.power('coinRain')) G.gold += hits;
+    lordSay('영수증은 안 줘.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 황금 마왕 W 매수: 가장 앞선 정예(보스 제외)를 골드를 내고 바로 처치한다. 값은 남은 체력에 비례한다
+function bribeTarget() { return frontHeroes(1, h => h.elite && !h.boss)[0] || null; }
+function bribeCost(h) {
+    const rule = COMBAT_RULES.bribe;
+    return Math.max(rule.minCost, Math.ceil(h.hp * rule.goldPerHp * (Game.power('longRoar') ? 0.75 : 1)));
+}
+function castBribe() {
+    const G = Game;
+    const rule = COMBAT_RULES.bribe;
+    if (G.skills.bribe > 0) return false;
+    const h = bribeTarget();
+    if (!h) return false;
+    const cost = bribeCost(h);
+    if (G.gold < cost) return false;
+    G.gold -= cost;
+    G.skills.bribe = G.skillCooldown('bribe');
+    const p = heroWorld(h);
+    if (G.power('traitor')) for (const o of G.heroes) if (!o.dead && !o.waiting) curseHero(o, 3, 1.3);
+    if (G.power('bribeRoar')) {
+        for (const o of G.heroes) {
+            if (o === h || o.dead || o.waiting) continue;
+            const w = heroWorld(o);
+            if (distance(p.x, p.y, w.x, w.y) <= rule.stunRadius * TILE) applyStun(o, rule.stun);
+        }
+    }
+    Fx.coin(p.x, p.y - 40, cost, 12);
+    Fx.anim('fx_gold', p.x, p.y - 40, 240, 0.5);
+    G.bribing = true; // 권능 단골(처치 골드 2배)
+    h.hp = 0;
+    killHero(h, p, null);
+    G.bribing = false;
+    Fx.number(h, p.x, p.y - 200, `-${cost}G`, '#ffd34d', true);
+    lordSay('얼마면 돼?');
+    Sfx.play('charge');
+    return true;
+}
+
+// 황금 마왕 E 황금 손: 맨 앞 용사들이 잠깐 황금으로 굳는다(정지). 굳은 동안 처치하면 골드 두 배(killHero)
+function castMidas() {
+    const G = Game;
+    const rule = COMBAT_RULES.midas;
+    if (G.skills.midas > 0) return false;
+    const list = frontHeroes(rule.count);
+    if (!list.length) return false;
+    G.skills.midas = G.skillCooldown('midas');
+    for (const h of list) {
+        const t = h.boss ? rule.bossDuration : rule.duration;
+        applyStun(h, t);
+        h.gildT = G.stats.time + t;
+        const w = heroWorld(h);
+        Fx.anim('fx_blastGold', w.x, w.y - 30, 200, 0.4);
+    }
+    Fx.addShake(8);
+    lordSay('너희도 내 재산이다.');
     Sfx.play('charge');
     return true;
 }
@@ -548,18 +702,60 @@ function plagueKill(hero, pos) {
     G.poisonKill = true;
 }
 
-// 권능 역병 구름(E): 맨 앞 용사 자리에 독 구름(장판). 안의 용사는 0.5초마다 독이 다시 걸린다
+// 역병의 군주 Q 독 화살비: 고른 자리에 독 화살이 쏟아진다(피해와 중독)
+function castVenomRain(x, y) {
+    const G = Game;
+    const rule = COMBAT_RULES.venomRain;
+    if (G.skills.venomRain > 0 || !(x >= 0) || !(y >= 0)) return false;
+    G.skills.venomRain = G.skillCooldown('venomRain');
+    const r = rule.radius * TILE;
+    for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        Fx.anim('fx_arrowPoison', x + Math.cos(a) * r * 0.5, y + Math.sin(a) * r * 0.35 - 40, 120, 0.35, Math.PI / 2);
+    }
+    Fx.anim('fx_acid_splash', x, y - 6, r * 1.4, 0.5);
+    Fx.ring(x, y, r, '#8eea3f', 0.35);
+    const dps = rule.dps + rule.dpsPerRound * G.waveIndex;
+    splashDamage(x, y, r, skillPower(G, 'venomRain'), '#8eea3f', h => { if (!h.dead) poisonHero(h, rule.poison, dps, null); });
+    Fx.addShake(8);
+    Sfx.play('lightning');
+    return true;
+}
+
+// 역병의 군주 W 역병 구름: 맨 앞 용사 자리에 독 구름(장판). 안의 용사는 0.5초마다 독이 다시 걸린다
 function castMiasma() {
     const G = Game;
     const rule = COMBAT_RULES.miasma;
-    if (!G.power('miasma') || G.skills.miasma > 0) return false;
+    if (G.skills.miasma > 0) return false;
     const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
     if (!front) return false;
     G.skills.miasma = G.skillCooldown('miasma');
     const p = heroWorld(front);
     const big = G.power('cloudBig');
     G.hazards.push({ kind: 'poison', x: p.x, y: p.y, radius: rule.radius * (big ? 2 : 1) * TILE, dps: rule.dps + rule.dpsPerRound * G.waveIndex, life: rule.duration + (big ? rule.bigDuration : 0), age: 0, tick: 0, owner: null });
-    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '숨 깊이 들이마셔.', 2);
+    lordSay('숨 깊이 들이마셔.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 역병의 군주 E 창궐: 중독된 용사마다 남은 독 피해를 한 번에 받는다(독은 끝난다)
+function castOutbreak() {
+    const G = Game;
+    const rule = COMBAT_RULES.outbreak;
+    if (G.skills.outbreak > 0) return false;
+    const sick = G.heroes.filter(h => !h.dead && !h.waiting && h.poison > 0);
+    if (!sick.length) return false;
+    G.skills.outbreak = G.skillCooldown('outbreak');
+    for (const h of sick) {
+        const amount = poisonDps(h) * h.poison * rule.mul;
+        const w = heroWorld(h);
+        Fx.anim('fx_acid_splash', w.x, w.y - 10, 150, 0.5);
+        h.poison = 0;
+        h.poisonStacks = 0;
+        poisonDamage(h, amount);
+    }
+    Fx.addShake(10);
+    lordSay('한꺼번에 앓아라.');
     Sfx.play('charge');
     return true;
 }
@@ -622,11 +818,54 @@ function chainKill(hero, pos) {
     }
 }
 
-// 권능 사슬 감옥(E): 맨 앞 용사 둘레의 용사를 묶는다(보스는 짧게). 권능 쇠사슬 회수면 2칸 뒤로
+// 사슬의 군주 Q 사슬 끌기: 맨 앞 용사 몇 명을 사슬로 끌어 뒤로 당기고 묶는다(보스는 묶기만 짧게)
+function castChainPull() {
+    const G = Game;
+    const rule = COMBAT_RULES.chainPull;
+    if (G.skills.chainPull > 0) return false;
+    const list = frontHeroes(rule.count);
+    if (!list.length) return false;
+    G.skills.chainPull = G.skillCooldown('chainPull');
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row) - 60;
+    for (const h of list) {
+        const from = heroWorld(h);
+        Fx.beam(tx, ty, from.x, from.y - 30, '#c9c2b8', 10, 0.3);
+        if (!h.boss) h.d = Math.max(0, h.d - rule.back * TILE);
+        bindHero(h, h.boss ? rule.bossBind : rule.bind);
+        const to = heroWorld(h);
+        Fx.ring(to.x, to.y - 10, 70, '#c9c2b8', 0.3);
+    }
+    Fx.addShake(8);
+    lordSay('이리 와.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 사슬의 군주 E 처형대: 묶인 용사 모두에게 최대 체력 비례 피해(방어력 무시)
+function castGallows() {
+    const G = Game;
+    const rule = COMBAT_RULES.gallows;
+    if (G.skills.gallows > 0) return false;
+    const list = G.heroes.filter(h => !h.dead && !h.waiting && h.bound > 0);
+    if (!list.length) return false;
+    G.skills.gallows = G.skillCooldown('gallows');
+    for (const h of list) {
+        const w = heroWorld(h);
+        Fx.anim('fx_cleave', w.x, w.y - 30, 200, 0.35);
+        damageHero(h, h.maxHp * (h.boss ? rule.bossRatio : rule.hpRatio), w.x, w.y, '#c9c2b8', null, true);
+    }
+    Fx.addShake(12);
+    lordSay('형을 집행한다.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 사슬의 군주 W 사슬 감옥: 맨 앞 용사 둘레의 용사를 묶는다(보스는 짧게). 권능 쇠사슬 회수면 2칸 뒤로
 function castJail() {
     const G = Game;
     const rule = COMBAT_RULES.jail;
-    if (!G.power('jail') || G.skills.jail > 0) return false;
+    if (G.skills.jail > 0) return false;
     const front = G.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
     if (!front) return false;
     G.skills.jail = G.skillCooldown('jail');
@@ -643,7 +882,7 @@ function castJail() {
     }
     Fx.ring(c.x, c.y, r, '#c9c2b8', 0.45);
     Fx.addShake(8);
-    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '면회는 금지다.', 2);
+    lordSay('면회는 금지다.');
     Sfx.play('charge');
     return true;
 }
@@ -681,11 +920,11 @@ function mirrorAfterMerge(src, plan, resultGrade) {
     return m;
 }
 
-// 권능 거울 분신(E): 가장 높은 등급 몬스터의 분신이 잠깐 빈 칸에 선다. 분신은 합치기·판매·제물이 안 된다
+// 거울 마녀 W 거울 분신: 가장 높은 등급 몬스터의 분신이 잠깐 빈 칸에 선다. 분신은 합치기·판매·제물이 안 된다
 function castMirrorClone() {
     const G = Game;
     const rule = COMBAT_RULES.mirrorClone;
-    if (!G.power('mirrorClone') || G.skills.mirrorClone > 0) return false;
+    if (G.skills.mirrorClone > 0) return false;
     // 등급이 높은 몬스터부터, 분신이 설 빈자리가 있는 첫 몬스터(큰 몬스터는 자리가 없을 수 있다)
     const best = G.monsters.filter(m => !m.removed && !m.clone).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade)).find(m => G.pickSummonCell(m.type, true));
     if (!best) return false;
@@ -703,7 +942,59 @@ function castMirrorClone() {
     }
     if (!made) return false;
     G.skills.mirrorClone = G.skillCooldown('mirrorClone');
-    Fx.say(tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - LORD_SAY_Y, '거울아, 하나 더.', 2);
+    lordSay('거울아, 하나 더.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 거울 마녀 Q 반사막: 잠깐 왕좌가 받는 피해를 막는다(damageThrone이 mirrorWardBlocks로 묻는다)
+function castMirrorWard() {
+    const G = Game;
+    if (G.skills.mirrorWard > 0) return false;
+    G.skills.mirrorWard = G.skillCooldown('mirrorWard');
+    G.wardT = COMBAT_RULES.mirrorWard.duration;
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row);
+    Fx.ring(tx, ty - 80, 260, '#bff6ff', 0.5);
+    Fx.anim('fx_blastCyan', tx, ty - 80, 420, 0.5);
+    lordSay('거울 뒤로 숨어야지.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 반사막이 켜져 있으면 왕좌 피해를 막고 맨 앞 용사에게 낙뢰 기본 피해를 되돌린다. 막았으면 true
+function mirrorWardBlocks() {
+    const G = Game;
+    if (!(G.wardT > 0)) return false;
+    const tx = tileX(THRONE_TILE.col);
+    const ty = tileY(THRONE_TILE.row);
+    Fx.ring(tx, ty - 120, 180, '#bff6ff', 0.3);
+    Fx.number('throne', tx, ty - 330, '막음', '#bff6ff', true);
+    const front = frontHeroes(1)[0];
+    if (front) {
+        const w = heroWorld(front);
+        Fx.beam(tx, ty - 120, w.x, w.y - 30, '#bff6ff', 10, 0.25);
+        damageHero(front, G.lightningDamage(), tx, ty, '#bff6ff');
+    }
+    Sfx.play('shieldBreak');
+    return true;
+}
+
+// 거울 마녀 E 깨진 거울: 용사마다 잃은 체력의 일부만큼 피해(방어력 무시)
+function castShatter() {
+    const G = Game;
+    const rule = COMBAT_RULES.shatter;
+    if (G.skills.shatter > 0) return false;
+    const list = G.heroes.filter(h => !h.dead && !h.waiting && h.hp < h.maxHp);
+    if (!list.length) return false;
+    G.skills.shatter = G.skillCooldown('shatter');
+    for (const h of list) {
+        const w = heroWorld(h);
+        Fx.anim('fx_blastCyan', w.x, w.y - 30, 160, 0.35);
+        damageHero(h, (h.maxHp - h.hp) * (h.boss ? rule.bossRatio : rule.ratio), w.x, w.y, '#bff6ff', null, true);
+    }
+    Fx.addShake(10);
+    lordSay('금 간 곳부터 깨진다.');
     Sfx.play('charge');
     return true;
 }
@@ -723,7 +1014,7 @@ function mirrorThroneHit() {
         }
     }
     if (G.power('reflectCurse')) for (const h of G.heroes) if (!h.dead && !h.waiting) curseHero(h, 2, 1.2);
-    if (G.power('reflectRoar')) G.skills.roar = Math.max(0, G.skills.roar - 10);
+    if (G.power('reflectRoar')) { const q = G.skillKey(0); G.skills[q] = Math.max(0, G.skills[q] - 10); } // 날 선 거울: 반사막(Q)
 }
 
 // 권능 거울 방패: 라운드마다 왕좌 피해를 1(큰 방패 2)번 막는다. 막았으면 true
@@ -745,10 +1036,15 @@ function mirrorShieldBlocks() {
 // 용사 이동 배율(멈춘 초침, 늦춰진 시간, 시계탑 그림자). 다른 마왕이면 1
 function clockSlowMul(h) {
     const G = Game;
-    const p = G.lordPassive('stopwatch');
-    if (!p) return 1;
-    const rule = COMBAT_RULES.clock;
     let mul = 1;
+    // 감속 시계탑(Q): 둘레 안의 용사
+    if (G.towers.length) {
+        const w = heroWorld(h);
+        if (G.towers.some(t => distance(t.x, t.y, w.x, w.y) <= t.radius)) mul *= COMBAT_RULES.clockTower.slow;
+    }
+    const p = G.lordPassive('stopwatch');
+    if (!p) return mul;
+    const rule = COMBAT_RULES.clock;
     if (G.state === 'wave' && G.roundAge() < p.duration + (G.power('slowLong') ? rule.slowLong : 0)) {
         const cut = G.power('slowDeep') ? rule.deepCut : p.cut;
         mul *= 1 - (h.boss && !G.power('slowBoss') ? cut / 2 : cut);
@@ -760,7 +1056,8 @@ function clockSlowMul(h) {
 // 몬스터 공격 속도 보너스(가속 갈래). 더할 값
 function clockHaste() {
     const G = Game;
-    if (!G.lordPassive('stopwatch')) return 0;
+    const accel = G.accelT > 0 ? COMBAT_RULES.accel.haste : 0; // 시간 가속(E)
+    if (!G.lordPassive('stopwatch')) return accel;
     const rule = COMBAT_RULES.clock;
     const age = G.roundAge();
     let add = 0;
@@ -768,7 +1065,7 @@ function clockHaste() {
     if (G.clockHasteT > 0) add += rule.haste;
     if (G.state === 'wave' && G.power('overclock') && age % rule.overclockEvery < rule.overclockTime) add += rule.overclock;
     if (G.timeStopT > 0 && G.power('timeStopHaste')) add += rule.overclock;
-    return add * (G.power('hasteMax') ? 2 : 1);
+    return add * (G.power('hasteMax') ? 2 : 1) + accel;
 }
 
 // 정예 처치: 늦춰진 시간(모든 용사 2초 감속), 몰아치기(5초 공격 속도), 보스 처치: 되감기(스킬 즉시 충전)
@@ -781,11 +1078,37 @@ function clockKill(hero) {
     if (hero.boss && G.power('rewindSkill')) for (const k of Object.keys(G.skills)) G.skills[k] = 0;
 }
 
-// 권능 시간 정지(E): 모든 용사를 멈춘다(보스는 짧게)
+// 시계탑의 마왕 Q 감속 시계탑: 고른 자리에 시계탑을 세운다. 둘레의 용사는 느려진다(clockSlowMul)
+function castClockTower(x, y) {
+    const G = Game;
+    const rule = COMBAT_RULES.clockTower;
+    if (G.skills.clockTower > 0 || !(x >= 0) || !(y >= 0)) return false;
+    G.skills.clockTower = G.skillCooldown('clockTower');
+    G.towers.push({ x, y, radius: rule.radius * TILE, life: rule.duration, age: 0 });
+    Fx.ring(x, y, rule.radius * TILE, '#ffcf6b', 0.5);
+    Fx.anim('fx_blastGold', x, y - 40, 260, 0.45);
+    lordSay('여기서는 천천히.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 시계탑의 마왕 E 시간 가속: 잠깐 모든 몬스터의 공격 속도가 오른다(clockHaste)
+function castAccel() {
+    const G = Game;
+    if (G.skills.accel > 0) return false;
+    G.skills.accel = G.skillCooldown('accel');
+    G.accelT = COMBAT_RULES.accel.duration;
+    for (const m of G.monsters) if (!m.removed) Fx.anim('fx_rune_attackSpeed', m.x, m.y + MONSTER_FOOT, 120, 0.6);
+    lordSay('바늘을 돌려라.');
+    Sfx.play('charge');
+    return true;
+}
+
+// 시계탑의 마왕 W 시간 정지: 모든 용사를 멈춘다(보스는 짧게)
 function castTimeStop() {
     const G = Game;
     const rule = COMBAT_RULES.timeStop;
-    if (!G.power('timeStop') || G.skills.timeStop > 0) return false;
+    if (G.skills.timeStop > 0) return false;
     const live = G.heroes.filter(h => !h.dead && !h.waiting);
     if (!live.length) return false;
     G.skills.timeStop = G.skillCooldown('timeStop');
@@ -831,17 +1154,10 @@ function castRoar() {
     const G = Game;
     const rule = COMBAT_RULES.roar;
     if (G.roarLocked() || G.skills.roar > 0) return false;
-    if (G.power('bribeRoar')) {
-        const cost = Math.floor(COMBAT_RULES.bribeRoar.cost * (G.power('bribeCheap') ? 0.5 : 1));
-        if (G.gold < cost) return false;
-        G.gold -= cost;
-    }
     G.skills.roar = G.skillCooldown('roar');
-    if (G.power('rally')) G.skills.lightning = 0;
     for (const h of G.heroes) {
         if (h.dead) continue;
-        h.stun = Math.max(h.stun, rule.duration + (G.power('longRoar') ? 1 : 0));
-        if (G.power('traitor')) curseHero(h, 3, 1.3);
+        h.stun = Math.max(h.stun, rule.duration);
     }
     const tx = tileX(THRONE_TILE.col);
     const ty = tileY(THRONE_TILE.row);
@@ -890,3 +1206,12 @@ function slowHero(hero, seconds, mul) {
 function applyStun(target, seconds) {
     target.stun = Math.max(target.stun || 0, seconds);
 }
+
+// 스킬 키(LORD_SKILLS)마다 시전 함수. Game.useSkill이 그 마왕의 스킬인지 본 뒤 부른다. 조준 스킬은 (x, y)를 받는다
+const SKILL_CASTS = {
+    lightning: castLightning, roar: castRoar, portal: castPortal,
+    boneSpear: castBoneSpear, ghosts: castGhosts, goldBomb: castGoldBomb, bribe: castBribe,
+    venomRain: castVenomRain, miasma: castMiasma, chainPull: castChainPull, jail: castJail,
+    mirrorWard: castMirrorWard, mirrorClone: castMirrorClone, clockTower: castClockTower, timeStop: castTimeStop,
+    thunder: castThunder, graveBlast: castGraveBlast, midas: castMidas, outbreak: castOutbreak, gallows: castGallows, shatter: castShatter, accel: castAccel
+};
