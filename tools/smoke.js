@@ -2772,7 +2772,7 @@ const firstEmptyCell = () => [...BUILD_CELLS].map(k => k.split(',').map(Number))
 
     // skillCooldown, lightningDamage
     only('skillCooldown', 0.8);
-    assert(castLightning(500, 500) && Game.skills.lightning === 24, 'lightning cooldown x0.8');
+    assert(castLightning(500, 500) && Math.abs(Game.skills.lightning - COMBAT_RULES.lightning.cooldown * 0.8) < 1e-9, 'lightning cooldown x0.8');
     Game.hp = 5;
     assert(castRoar() && Game.skills.roar === 48, 'roar cooldown x0.8');
     only('lightningDamage', 1.5);
@@ -5876,13 +5876,13 @@ assert.strictEqual(volleyTargets(hs), 0, 'no volley at 20 without volleyFast');
 lordFresh('bone_queen', 0); takeNode('volleyFast'); hs = arena(); Game.stats.kills = 20; Game.soulVolley();
 assert.strictEqual(volleyTargets(hs), 6, 'volleyFast');
 lordFresh('bone_queen', 0); takeNode('volleyHeavy'); hs = arena(); Game.soulVolley(true);
-assert(Math.abs((hs[5].maxHp - hs[5].hp) - volleyBase * 1.5) < 1e-6, 'volleyHeavy');
+assert(Math.abs((hs[5].maxHp - hs[5].hp) - volleyBase * 1.3) < 1e-6, 'volleyHeavy');
 lordFresh('bone_queen', 0); takeNode('volleyCurse'); takeNode('volleyFear'); hs = arena(); Game.soulVolley(true);
 assert(hs[5].curse === 3 && hs[5].curseMul === 1.2 && hs[5].stun === 1.5, 'volleyCurse and volleyFear');
 lordFresh('bone_queen', 0); takeNode('volleyTwin'); hs = arena(); Game.soulVolley(true);
 assert(Math.abs((hs[5].maxHp - hs[5].hp) - volleyBase * 2) < 1e-6, 'volleyTwin');
 lordFresh('bone_queen', 0); takeNode('volleyCharge'); hs = arena(); Game.skills.lightning = 10; Game.soulVolley(true);
-assert.strictEqual(Game.skills.lightning, 7, 'volleyCharge');
+assert.strictEqual(Game.skills.lightning, 8, 'volleyCharge -2s');
 lordFresh('bone_queen', 0); takeNode('volleyBoss'); hs = arena(); hs[0].elite = true; Game.soulVolley(true);
 assert(hs[0].hp < hs[0].maxHp, 'volleyBoss aims at the farthest elite');
 lordFresh('bone_queen', 0); takeNode('volleyWide'); hs = arena();

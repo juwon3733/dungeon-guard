@@ -262,10 +262,15 @@ function splashDamage(x, y, radiusPx, damage, color, onHit, attacker, onDealt) {
     return hits;
 }
 
-function damageThrone(amount, heroName) {
+function damageThrone(amount, heroName, boss) {
     const G = Game;
-    if (mirrorWardBlocks()) return; // 거울 마녀 반사막(Q)
-    if (mirrorShieldBlocks()) return; // 권능 거울 방패
+    // 반사막과 거울 방패: 보통 피해는 막고, 보스 도착 피해는 절반만 막는다(거울 마녀만 보스 벽을 건너뛰지 않게)
+    if (boss) {
+        if (mirrorWardBlocks() || mirrorShieldBlocks()) amount = Math.ceil(amount / 2);
+    } else {
+        if (mirrorWardBlocks()) return; // 거울 마녀 반사막(Q)
+        if (mirrorShieldBlocks()) return; // 권능 거울 방패
+    }
     G.roundHit = true;
     G.hp = Math.max(0, G.hp - amount);
     G.throneFlash = 0.4;
@@ -784,9 +789,11 @@ function chainOnHit(hero) {
     const p = G.lordPassive('shackle');
     if (!p || hero.dead || hero.bound > 0) return;
     let chance = p.chance + (G.power('shackleChance') ? COMBAT_RULES.chain.chanceUp : 0);
-    if (hero.boss || (hero.elite && !G.power('shackleElite'))) chance *= 0.5;
+    // 보스는 맞는 횟수가 많아 거의 계속 묶이지 않게 확률 1/5, 시간 절반. 정예는 확률 절반(무거운 족쇄면 그대로)
+    if (hero.boss) chance *= 0.2;
+    else if (hero.elite && !G.power('shackleElite')) chance *= 0.5;
     if (rng('battle') >= chance) return;
-    const time = p.duration + (G.power('shackleLong') ? COMBAT_RULES.chain.longUp : 0);
+    const time = (p.duration + (G.power('shackleLong') ? COMBAT_RULES.chain.longUp : 0)) * (hero.boss ? 0.5 : 1);
     bindHero(hero, time);
     const w = heroWorld(hero);
     Fx.ring(w.x, w.y - 10, 60, '#c9c2b8', 0.25);
