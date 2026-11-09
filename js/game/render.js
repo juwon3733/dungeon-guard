@@ -1948,34 +1948,72 @@ const Render = {
         }
     },
 
-    // 광선: 굵은 바깥 빛, 밝은 속, 흰 가운데. 흐르는 띠와 손끝의 빛 덩이
+    // 광선: 가로로 자른 띠를 칸으로 찍는다(바깥 테두리, 주황, 노랑, 흰 심). 띠 폭이 마디마다 출렁여 가장자리가 계단지고,
+    // 바깥 띠는 프레임마다 깜빡인다. 손 쪽에는 빛살이 도는 광원, 맞은 자리에는 위로 솟는 불꽃
     atk_beam(ctx, p, L) {
         const t = p.age / p.life;
         const v = p.v;
         const nx = -v.dy;
         const ny = v.dx;
+        const c = 2 * ART_SCALE; // 비스듬한 띠에 틈이 생기지 않게 2px 간격으로 3px 칸을 겹쳐 찍는다
         const grow = Math.min(1, p.age / 0.08);
-        const ex = p.ox + v.dx * p.len * grow;
-        const ey = p.oy + v.dy * p.len * grow;
-        const flick = Math.floor(p.age * 30) % 2 ? 1 : 0.85;
-        const w = p.width * (1 - t * t) * flick;
-        this.pixelLine(ctx, p.ox, p.oy, ex, ey, L.c[0], w * 1.25);
-        this.pixelLine(ctx, p.ox, p.oy, ex, ey, L.c[1], w);
-        this.pixelLine(ctx, p.ox, p.oy, ex, ey, L.c[2], w * 0.55);
-        this.pixelLine(ctx, p.ox, p.oy, ex, ey, L.c[3], w * 0.22);
-        // 흐르는 밝은 띠
-        ctx.fillStyle = L.c[3];
-        for (let d = (p.age * 900) % 40; d < p.len * grow; d += 40) {
-            for (const side of [-1, 1]) this.px(ctx, p.ox + v.dx * d + nx * side * w * 0.38, p.oy + v.dy * d + ny * side * w * 0.38, 2);
+        const len = p.len * grow;
+        const fade = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
+        const W = p.width * 0.62 * (0.35 + 0.65 * fade);
+        const frame = Math.floor(p.age * 30);
+        const flick = frame % 2;
+        for (let d = 0; d <= len; d += c) {
+            const seg = Math.floor(d / (c * 6)); // 여섯 칸 마디마다 폭이 바뀌어 계단진다
+            const wave = 1 + 0.14 * Math.sin(seg * 1.7 - p.age * 38) + (fxNoise(seg, frame, p.seed) - 0.5) * 0.12;
+            const w = W * wave * (d < 18 ? 0.6 + 0.4 * d / 18 : 1);
+            const cx = p.ox + v.dx * d;
+            const cy = p.oy + v.dy * d;
+            for (let j = -w - c; j <= w + c; j += c) {
+                const e = Math.abs(j) / w;
+                let color;
+                if (e > 1) { if (flick) continue; color = L.c[1]; } // 깜빡이는 바깥 빛
+                else if (e > 0.82) color = L.c[0];
+                else if (e > 0.58) color = L.c[1];
+                else if (e > 0.28) color = L.c[2];
+                else color = L.c[3];
+                ctx.fillStyle = color;
+                this.px(ctx, cx + nx * j, cy + ny * j, 3);
+            }
         }
-        this.pixelDisc(ctx, p.ox, p.oy, w * 0.9, w * 0.9, L.c[1], { k: 3, hard: true });
-        this.pixelDisc(ctx, p.ox, p.oy, w * 0.5, w * 0.5, L.c[3], { k: 3, hard: true });
-        // 끝에서 튀는 불꽃
-        for (let i = 0; i < 6; i++) {
-            const a = fxNoise(p.seed, i, Math.floor(p.age * 20)) * Math.PI * 2;
-            const r = w * (0.6 + fxNoise(i, p.seed, 2));
-            ctx.fillStyle = i % 2 ? L.c[2] : L.c[3];
-            this.px(ctx, ex + Math.cos(a) * r, ey + Math.sin(a) * r, 3);
+        // 띠를 따라 흐르는 흰 조각
+        ctx.fillStyle = L.c[3];
+        for (let d = (p.age * 1100) % 46; d < len; d += 46) {
+            for (const side of [-1, 1]) this.px(ctx, p.ox + v.dx * d + nx * side * W * 0.45, p.oy + v.dy * d + ny * side * W * 0.45, 3);
+        }
+        // 손 쪽 광원: 겹친 원판과 도는 빛살 여덟 줄
+        const R = W * 1.25;
+        for (let i = 0; i < 8; i++) {
+            const a = i / 8 * Math.PI * 2 + p.age * 6;
+            const r = R * (i % 2 ? 1.5 : 2.1) * (0.85 + 0.15 * flick);
+            this.dots(ctx, p.ox + Math.cos(a) * R * 0.6, p.oy + Math.sin(a) * R * 0.6, p.ox + Math.cos(a) * r, p.oy + Math.sin(a) * r, 2, i % 2 ? L.c[1] : L.c[2]);
+        }
+        this.pixelDisc(ctx, p.ox, p.oy, R, R, L.c[0], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.82, R * 0.82, L.c[1], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.6, R * 0.6, L.c[2], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.34, R * 0.34, L.c[3], { k: 3, hard: true });
+        // 맞은 자리: 위로 솟는 불꽃 혀와 튀는 불똥
+        if (grow >= 1) {
+            const ex = p.ox + v.dx * len;
+            const ey = p.oy + v.dy * len;
+            for (let i = -3; i <= 3; i++) {
+                const H = (22 + fxNoise(i, frame, p.seed) * 26) * fade * (1 - Math.abs(i) * 0.15);
+                for (let h = 0; h < H; h += c) {
+                    const k = h / H;
+                    ctx.fillStyle = k > 0.7 ? L.c[0] : (k > 0.4 ? L.c[1] : (Math.abs(i) < 2 ? L.c[3] : L.c[2]));
+                    this.px(ctx, ex + i * c + Math.sin(k * 5 + p.age * 20 + i) * 3, ey - h, 3);
+                }
+            }
+            for (let i = 0; i < 6; i++) {
+                const a = -Math.PI / 2 + (fxNoise(p.seed, i, 3) - 0.5) * 2.4;
+                const r = ((p.age * 3 + fxNoise(i, p.seed, 4)) % 1) * 46;
+                ctx.fillStyle = i % 2 ? L.c[2] : L.c[3];
+                this.px(ctx, ex + Math.cos(a) * r, ey + Math.sin(a) * r, 2);
+            }
         }
     },
 
@@ -2005,38 +2043,49 @@ const Render = {
         ctx.globalAlpha = 1;
     },
 
-    // 숨결: 입에서 부채꼴로 번지는 칸. 입 가까이는 밝고 끝으로 갈수록 어둡다. 뼈 숨결은 해골 조각이 섞인다
+    // 숨결: 입에서 뻗는 불꽃 덩어리. 칸을 빈틈없이 채우고 가운데부터 흰 심, 밝은 색, 바탕, 어두운 테두리 네 단으로 나눈다.
+    // 가장자리는 혀처럼 갈라지고(앞으로 흐르는 물결), 끝은 둥글게 닫힌다. 끝날 때는 입 쪽부터 끊겨 앞으로 밀려 나간다
     atk_breath(ctx, p, L) {
         const t = p.age / p.life;
-        const front = p.len * Math.min(1, p.age / 0.16);
-        const fade = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
         const v = p.v;
         const nx = -v.dy;
         const ny = v.dx;
-        const half = Math.sqrt(1 - p.cos * p.cos) / p.cos; // 부채꼴 끝의 폭 비율(tan)
-        const c = 3 * ART_SCALE;
-        const frame = Math.floor(p.age * 18);
-        ctx.globalAlpha = fade;
-        for (let d = c; d <= front; d += c) {
-            const w = d * half;
-            for (let j = -w; j <= w; j += c) {
-                const k = d / p.len;
-                const e = Math.abs(j) / Math.max(1, w);
-                const nz = fxNoise(Math.round(d / c), Math.round(j / c), frame + p.seed);
-                if (nz < k * 0.55 + e * 0.35 - 0.05) continue; // 끝과 가장자리는 듬성듬성
-                const heat = (1 - k) * 0.7 + (1 - e) * 0.3 + (nz - 0.5) * 0.3;
-                ctx.fillStyle = heat > 0.75 ? L.c[3] : heat > 0.5 ? L.c[2] : heat > 0.3 ? L.c[1] : L.c[0];
-                this.px(ctx, p.ox + v.dx * d + nx * j, p.oy + v.dy * d + ny * j, 3);
+        const c = 2 * ART_SCALE; // 2px 간격으로 3px 칸을 겹쳐 찍어 틈을 없앤다
+        const front = p.len * Math.min(1, p.age / 0.16);
+        const back = p.len * Math.max(0, (t - 0.55) / 0.45);
+        const spread = Math.sqrt(1 - p.cos * p.cos) / p.cos * 0.8; // 부채꼴 끝 폭 비율(tan)
+        const frame = Math.floor(p.age * 24);
+        for (let d = back; d <= front; d += c) {
+            const k = d / p.len;
+            const tip = Math.min(1, (front - d) / 30); // 앞 끝을 둥글게
+            const base = (6 + d * spread) * Math.sqrt(Math.max(0.05, tip));
+            for (const side of [-1, 1]) {
+                // 혀: 가장자리가 앞으로 흐르는 물결 두 겹으로 들쭉날쭉하다
+                const tongue = 1 + 0.22 * Math.sin(d * 0.09 - p.age * 34 + side * 1.3) + 0.12 * Math.sin(d * 0.23 - p.age * 52 + side);
+                const w = base * tongue;
+                for (let j = 0; j <= w; j += c) {
+                    const e = j / w;
+                    const heat = e + k * 0.45;
+                    ctx.fillStyle = heat < 0.3 ? L.c[3] : heat < 0.62 ? L.c[2] : heat < 0.9 ? L.c[1] : L.c[0];
+                    this.px(ctx, p.ox + v.dx * d + nx * j * side, p.oy + v.dy * d + ny * j * side, 3);
+                }
             }
+        }
+        // 떨어져 앞으로 날리는 불씨(가장자리 바깥, 자리는 정해진 무늬)
+        for (let i = 0; i < 7; i++) {
+            const q = (p.age * 2.2 + i / 7) % 1;
+            const d = back + (front - back) * (0.3 + q * 0.75);
+            const side = i % 2 ? 1 : -1;
+            const j = side * (8 + d * spread) * (1.05 + fxNoise(i, p.seed, 1) * 0.35);
+            ctx.fillStyle = q > 0.7 ? L.c[1] : L.c[2];
+            this.px(ctx, p.ox + v.dx * d + nx * j, p.oy + v.dy * d + ny * j - q * 10, 3);
         }
         if (L.shape === 'bones') {
-            for (let i = 0; i < 4; i++) {
-                const d = front * (0.3 + fxNoise(p.seed, i, 5) * 0.6);
-                const j = (fxNoise(p.seed, i, 6) - 0.5) * d * half;
-                this.skull(ctx, p.ox + v.dx * d + nx * j, p.oy + v.dy * d + ny * j);
+            for (let i = 0; i < 2; i++) {
+                const d = back + (front - back) * ((p.age * 1.5 + i * 0.5) % 1);
+                this.skull(ctx, p.ox + v.dx * d, p.oy + v.dy * d);
             }
         }
-        ctx.globalAlpha = 1;
     },
     // 작은 도트 해골(뼈 숨결)
     skull(ctx, x, y) {
