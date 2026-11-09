@@ -5342,7 +5342,7 @@ Game.reset();
     Game.reset(null, null, abyssChallenge('77', 'rift', []));
     const ha = Game.endlessHpMul(60);
     Game.reset(null, null, dailyChallenge('2026-11-07'));
-    assert(ha > Game.endlessHpMul(60), 'steeper than daily');
+    assert(ha < Game.endlessHpMul(60), 'abyss is gentler than daily (150~200 floors target)');
     // 판 끝: 난이도마다 가장 깊은 층(같은 층이면 남은 왕좌 체력), 얕은 판은 덮지 않는다
     Meta.data.abyss = { week: '', levels: {} };
     assert(Meta.finishAbyss('w1', 9, { rounds: 30, hp: 3 }, { inputs: [] }).isBest);

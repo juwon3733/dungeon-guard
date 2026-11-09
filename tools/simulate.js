@@ -38,7 +38,7 @@ function play(bot, stageId, daily) {
             if (i < 0) i = c.findIndex(x => G.canTakeReward(x));
             G.pickBossReward(i);
         }
-        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || (!bot.spend && G.monsters.length >= 18))) {
+        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= (bot.spend ? G.maxField() * 0.85 : 18))) {
             thinkMerge = 15; // 사람처럼 0.5초에 한 번만
             const p = mergePair(G);
             if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
@@ -184,7 +184,7 @@ if (process.argv[4] === 'economy') {
     const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
     for (let i = 1; i <= N; i++) {
         vm.runInContext('TRACE.length = 0', context);
-        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:0,lord:'bone_queen',level:${level},trace:true,every:${+(process.env.EVERY || 10)}}, null, 'abyss${i}'))`, context));
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${+(process.env.BRANCH || 0)},lord:'${process.env.LORD || 'bone_queen'}',level:${level},trace:true,every:${+(process.env.EVERY || 10)}}, null, 'abyss${i}'))`, context));
         console.log(`시드 ${i}: ${r.wave}층에서 끝`);
         for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 체력 ${t.hp}/${t.maxHp} | 신화 ${t.myth} 전설 ${t.leg} | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}/${t.field}마리 | 소환 강화 ${t.level} | 최고 ${t.top} | 종족 Lv합 ${t.fam} | 각성 ${t.awaken} | S이상 ${t.ranks}`);
     }
