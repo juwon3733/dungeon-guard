@@ -7143,4 +7143,146 @@ console.log('smoke ok: equipment crafting');
         console.log('smoke ok: gold shop, merge room, mage slow, boss patterns');
     }).toString() + ')()', gctx);
 }
+// 이벤트 라운드(2026-11-09): 시드 일정, 보물 고블린, 축제, 정예 행렬, 저주 라운드(고르기와 입력 재생)
+{
+    const ectx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files.filter(f => !f.startsWith('js/ui/'))) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ectx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const store = {};
+        globalThis.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+        // 일정: 같은 시드면 같고, 간격은 7~13(밀리면 조금 더), 보스·정예·변이 라운드를 피하고, 같은 이벤트가 이어지지 않는다
+        const plan = seed => { const out = []; for (let r = 1; r <= 200; r++) { const id = roundEventAt(seed, r); if (id) out.push([r, id]); } return out; };
+        const A = plan('daily-2026-11-07');
+        assert.strictEqual(JSON.stringify(A), JSON.stringify(plan('daily-2026-11-07')), 'same seed, same events');
+        assert.notStrictEqual(JSON.stringify(A), JSON.stringify(plan('daily-2026-11-08')), 'other seed, other events');
+        for (const seed of ['daily-2026-11-07', 'abyss-x', 'raid-2026-11-02', '7']) {
+            const P = plan(seed);
+            assert(P[0][0] >= ROUND_EVENT_RULES.first[0] && P[0][0] <= ROUND_EVENT_RULES.first[1] + 2, 'first event early');
+            for (let i = 0; i < P.length; i++) {
+                const [r, id] = P[i];
+                assert(r % 5 !== 0 && r % 10 !== 1, 'no event on boss, elite or mutation round ' + r);
+                if (i) {
+                    const gap = r - P[i - 1][0];
+                    assert(gap >= ROUND_EVENT_RULES.gap[0] && gap <= ROUND_EVENT_RULES.gap[1] + 2, 'gap ' + gap);
+                    assert(id !== P[i - 1][1], 'no repeat');
+                }
+            }
+            assert(ROUND_EVENT_IDS.every(id => P.some(p => p[1] === id)), 'every event shows up');
+        }
+        // 스토리와 시험 판에는 이벤트가 없다
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        assert(Game.waves.every(w => !w.event), 'no events without a challenge');
+        // 도전 판의 라운드 표에 이벤트가 실리고, 보스 라운드에는 없다
+        const C = dailyChallenge('2026-11-07');
+        const at = id => A.find(p => p[1] === id)[0];
+        const start = r => {
+            Game.reset(null, null, C);
+            Game.state = 'prep';
+            Game.waveIndex = r - 1;
+            Game.extendRounds();
+            Game.startWave();
+            return Game.heroes.filter(h => h.eventRound === r);
+        };
+        Game.reset(null, null, C);
+        for (const [r, id] of A.filter(p => p[0] <= 60)) assert.strictEqual(Game.waves[r - 1].event, id, 'wave carries event');
+        assert(Game.waves.every(w => !(w.boss && w.event)), 'boss rounds have no event');
+        // 보물 고블린: 따로 달려오고, 잡으면 큰 골드, 왕좌에 닿으면 피해 없이 달아난다. 다 나가면 결과 배너
+        const rg = at('goblin');
+        const tagged = start(rg);
+        const gobs = Game.heroes.filter(h => h.type === 'gold_goblin');
+        assert.strictEqual(gobs.length, ROUND_EVENTS.goblin.count(rg), 'goblin count');
+        assert(gobs.every(h => h.bounty === ROUND_EVENTS.goblin.gold(rg) && h.maxHp > HEROES.rogue.hp), 'goblin bounty and hp');
+        assert(gobs.some(h => h.route === 'south') && gobs.some(h => h.route === 'north'), 'goblins use both gates');
+        assert(tagged.length > gobs.length, 'other heroes of the round are tagged too');
+        assert(Fx.banner && Fx.banner.name === ROUND_EVENTS.goblin.name, 'event banner');
+        const g0 = Game.gold;
+        Object.assign(gobs[0], { waiting: false, delay: 0, d: 200 });
+        damageHero(gobs[0], 1e9);
+        assert(gobs[0].dead && Game.gold - g0 >= Math.floor(ROUND_EVENTS.goblin.gold(rg) * Game.mods.bounty), 'goblin gold');
+        const hp0 = Game.hp;
+        for (const h of gobs.slice(1)) { Object.assign(h, { waiting: false, delay: 0, d: ROUTES[h.route].length }); updateHero(h, 0.01); }
+        assert(gobs.slice(1).every(h => h.dead && h.arrived), 'goblins ran away');
+        assert.strictEqual(Game.hp, hp0, 'goblins do not hurt the throne');
+        assert(!Game.eventRun && Fx.banner.name === '고블린 사냥' && Fx.banner.sub.includes(`${gobs.length}마리 중 1마리`), 'goblin result');
+        // 축제: 처치 골드와 라운드 보상이 두 배
+        const rf = at('festival');
+        start(rf);
+        const fh = Game.heroes.find(h => h.eventRound === rf && !h.elite);
+        assert.strictEqual(fh.goldMul, 2, 'festival gold');
+        Object.assign(fh, { waiting: false, delay: 0, d: 200, bounty: 5 });
+        Game.goldLeft = 0;
+        const f0 = Game.gold;
+        damageHero(fh, 1e9);
+        assert.strictEqual(Game.gold - f0, Math.floor(5 * 2 * Game.mods.bounty + 1e-9), 'festival kill gold doubled');
+        assert.strictEqual(Game.eventGoldMul(), 2, 'festival round reward doubled');
+        // 정예 행렬: 일반이 줄고 정예가 무리 지어 온다
+        const rp = at('parade');
+        const base = buildRound(rp);
+        const pw = Game.waves[rp - 1] || (Game.extendRounds(), Game.waves[rp - 1]);
+        const sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
+        assert(sum(pw.members) < sum(base.members) * 0.5 && sum(pw.elites) === ROUND_EVENTS.parade.elites(rp), 'parade make-up');
+        // 저주 라운드: 고르지 않으면 평소대로, 받아들이면 강해지고, 하나도 놓치지 않으면 골드, 마력, 장비
+        const rc = at('curse');
+        Game.reset(null, null, C);
+        Game.state = 'prep';
+        assert.strictEqual(Game.act({ kind: 'curse', accept: true }).reason, 'none', 'no curse to choose now');
+        const plain = start(rc).filter(h => !h.elite)[0];
+        assert(!plain.cursed && !Game.eventRun && Fx.banner.sub === '저주를 거절했다', 'declined curse is a plain round');
+        Game.reset(null, null, C);
+        Game.state = 'wave';
+        Game.waveIndex = rc - 2;
+        Game.extendRounds();
+        assert.strictEqual(Game.curseRound(), rc, 'curse is next round');
+        assert(Game.act({ kind: 'curse', accept: true }).ok && Game.curseAccept[rc], 'accepted during the round before');
+        assert(Game.act({ kind: 'curse', accept: false }).ok && !Game.curseAccept[rc], 'can change mind');
+        Game.act({ kind: 'curse', accept: true });
+        Game.state = 'prep';
+        Game.waveIndex = rc - 1;
+        Game.startWave();
+        const cursed = Game.heroes.filter(h => h.eventRound === rc);
+        const same = cursed.find(h => h.type === plain.type && !h.elite);
+        assert(cursed.every(h => h.cursed) && Math.abs(same.maxHp - plain.maxHp * ROUND_EVENTS.curse.hpMul) < 1e-6, 'cursed heroes are tougher');
+        assert(Math.abs(same.speed - plain.speed * ROUND_EVENTS.curse.speedMul) < 1e-6, 'and faster');
+        assert(Game.eventRun && Game.eventRun.total === cursed.length, 'cursed heroes counted');
+        const c0 = { gold: Game.gold, mana: Game.mana, bag: Game.equipBag.length };
+        for (const h of cursed) { Object.assign(h, { waiting: false, delay: 0, d: 200 }); damageHero(h, 1e12); }
+        assert(Game.gold - c0.gold >= ROUND_EVENTS.curse.gold(rc), 'curse gold');
+        assert(Game.mana >= c0.mana + ROUND_EVENTS.curse.mana && Game.equipBag.length === c0.bag + 1, 'curse mana and equipment');
+        assert(Fx.banner.name === '저주 극복' && Fx.banner.keep, 'curse result banner');
+        // 하나라도 놓치면 보상이 없다
+        Game.reset(null, null, C);
+        Game.state = 'wave';
+        Game.waveIndex = rc - 2;
+        Game.extendRounds();
+        Game.act({ kind: 'curse', accept: true });
+        Game.state = 'prep';
+        Game.waveIndex = rc - 1;
+        Game.startWave();
+        const again = Game.heroes.filter(h => h.eventRound === rc);
+        Object.assign(again[0], { waiting: false, delay: 0, d: ROUTES[again[0].route].length });
+        updateHero(again[0], 0.01);
+        const m0 = Game.mana;
+        for (const h of again.slice(1)) { Object.assign(h, { waiting: false, delay: 0, d: 200 }); damageHero(h, 1e12); }
+        assert(Fx.banner.name === '저주 실패' && Game.mana === m0 && Game.equipBag.length === 0, 'missed one, no reward');
+        // 입력 재생: 저주를 받아들인 판을 다시 돌려도 같은 판이 나온다
+        Game.reset(null, null, C);
+        Game.state = 'prep';
+        let guard = 0;
+        while (Game.inPlay() && !Game.heroes.some(h => h.cursed) && Game.waveIndex < rc && guard++ < 60 * 60 * 40) {
+            if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+            if (Game.tick % 15 === 0 && !Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+            if (Game.curseRound() === rc && !Game.curseAccept[rc]) Game.act({ kind: 'curse', accept: true });
+            Game.update(GAME_TICK);
+        }
+        assert(Game.record.inputs.some(i => i.kind === 'curse') && Game.heroes.some(h => h.cursed), 'played into the curse');
+        const ticks = Game.tick + 600;
+        while (Game.inPlay() && Game.tick < ticks) Game.update(GAME_TICK);
+        const want = JSON.stringify({ gold: Game.gold, score: Game.score, hp: Game.hp, kills: Game.stats.kills, wave: Game.waveIndex, mana: Game.mana });
+        const record = JSON.parse(JSON.stringify(Game.record));
+        replayChallenge(record, ticks);
+        assert.strictEqual(JSON.stringify({ gold: Game.gold, score: Game.score, hp: Game.hp, kills: Game.stats.kills, wave: Game.waveIndex, mana: Game.mana }), want, 'replay with curse matches');
+        console.log('smoke ok: round events (schedule, goblin, festival, parade, curse, replay)');
+    }).toString() + ')()', ectx);
+}
 require('./smoke_maps.js');

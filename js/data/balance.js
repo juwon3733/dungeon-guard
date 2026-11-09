@@ -258,6 +258,64 @@ for (const [type, elite] of Object.entries(ELITES)) {
     };
 }
 
+// 이벤트 라운드: 도전(일일, 심연, 토벌)에서 몇 라운드마다 한 번 끼어드는 특별한 라운드. 판이 밋밋하지 않게 한다.
+// 언제 무엇이 나올지는 시드로 정한다(roundEventAt). 같은 시드면 모두 같은 라운드에 같은 이벤트를 만난다.
+//   first: 첫 이벤트가 나오는 라운드 범위, gap: 다음 이벤트까지 라운드 수 범위(양 끝 포함)
+//   보스(10의 배수), 정예·잦은 보스(5의 배수), 심연 변이가 쌓이는 라운드(10의 배수 + 1)에는 나오지 않고 한 라운드 뒤로 밀린다
+// 종류별 수치:
+//   goblin: 보물 고블린 count(r)마리가 따로 달려온다. 잡으면 gold(r) 골드, 왕좌에 닿으면 피해 없이 달아난다
+//   festival: 그 라운드 용사의 처치 골드와 라운드 보상이 goldMul배
+//   parade: 일반 용사가 memberMul배로 줄고 정예 elites(r)명이 행렬을 이룬다
+//   curse: 들어갈지 고른다(Game.act { kind: 'curse', accept }). 고르지 않으면 평소 라운드다.
+//     받아들이면 그 라운드 용사의 체력이 hpMul배, 이동 속도가 speedMul배. 하나도 놓치지 않고 다 잡으면
+//     gold(r) 골드, 마력 mana, 희귀 장비 하나를 받는다
+const ROUND_EVENT_RULES = { first: [7, 10], gap: [7, 13] };
+const ROUND_EVENTS = {
+    goblin: {
+        name: '보물 고블린', note: '금고블린을 잡으면 큰 골드를 준다. 놓치면 달아난다.',
+        count: r => Math.min(6, 3 + Math.floor(r / 30)), gold: r => 20 + 2 * r
+    },
+    festival: { name: '축제 라운드', note: '처치 골드와 라운드 보상이 두 배로 늘어난다.', goldMul: 2 },
+    parade: {
+        name: '정예 행렬', note: '일반 용사가 줄고 정예가 무리 지어 온다.',
+        memberMul: 0.4, elites: r => Math.min(10, 4 + Math.floor(r / 15))
+    },
+    curse: {
+        name: '저주 라운드', note: '받아들이면 용사가 강해진다. 하나도 놓치지 않으면 큰 보상을 준다.', choice: true,
+        hpMul: 1.7, speedMul: 1.15, mana: 2, gold: r => (COMBAT_RULES.waveBaseReward + r) * 4
+    }
+};
+const ROUND_EVENT_IDS = Object.keys(ROUND_EVENTS); // 순서가 시드 결과를 정한다. 새 이벤트는 뒤에 붙인다
+
+// 보물 고블린: 도적 그림에 금빛을 입힌다. 떼 규칙(SWARM_RULES)을 받지 않는 한 마리 용사다
+HEROES.gold_goblin = Object.assign({}, HEROES.rogue, {
+    name: '보물 고블린', hp: HEROES.rogue.hp * 6, speed: 1.9, armor: 1, bounty: 0, throneDamage: 0, goblin: true,
+    skinSprite: 'ast_hero_desperado', counter: '빠르게 달아남, 잡으면 큰 골드'
+});
+
+// 시드의 이벤트 일정: { 라운드: 이벤트 id }. 앞에서부터 차례로 만들어 두고 늘려 쓴다(같은 시드면 같은 표)
+const ROUND_EVENT_CACHE = {};
+function roundEventAt(seed, r) {
+    const key = String(seed);
+    let plan = ROUND_EVENT_CACHE[key];
+    if (!plan) plan = ROUND_EVENT_CACHE[key] = { s: hashSeed(`${key}/events`), at: {}, last: 0, prev: null };
+    const R = ROUND_EVENT_RULES;
+    const roll = (lo, hi) => {
+        plan.s = (Math.imul(plan.s, 1664525) + 1013904223) | 0;
+        return lo + (plan.s >>> 8) % (hi - lo + 1);
+    };
+    while (plan.last < r) {
+        let at = plan.last === 0 ? roll(R.first[0], R.first[1]) : plan.last + roll(R.gap[0], R.gap[1]);
+        while (at % 5 === 0 || at % 10 === 1) at++;
+        const pool = ROUND_EVENT_IDS.filter(id => id !== plan.prev); // 같은 이벤트가 두 번 이어지지 않는다
+        const id = pool[roll(0, pool.length - 1)];
+        plan.at[at] = id;
+        plan.prev = id;
+        plan.last = at;
+    }
+    return plan.at[r] || null;
+}
+
 const SPEECH = {
     waveStart: ['또 왔어?', '문 좀 닫고 다녀라.', '이번엔 몇 명이야?', '내 낮잠 시간인데.'],
     throneHit: ['내 의자 만지지 마!', '거기 먼지 묻잖아!', '아야, 내 왕좌!'],
