@@ -278,7 +278,7 @@ const ROUND_EVENTS = {
     festival: { name: '축제 라운드', note: '처치 골드와 라운드 보상이 두 배로 늘어난다.', goldMul: 2 },
     parade: {
         name: '정예 행렬', note: '일반 용사가 줄고 정예가 무리 지어 온다.',
-        memberMul: 0.4, elites: r => Math.min(10, 4 + Math.floor(r / 15))
+        memberMul: 0.6, elites: r => Math.min(10, 3 + Math.floor(r / 20)) // 정예 하나는 떼 용사 약 11명 몫이라 전체 체력은 평소 라운드와 비슷하다
     },
     curse: {
         name: '저주 라운드', note: '받아들이면 용사가 강해진다. 하나도 놓치지 않으면 큰 보상을 준다.', choice: true,

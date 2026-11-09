@@ -7221,7 +7221,7 @@ console.log('smoke ok: equipment crafting');
         const base = buildRound(rp);
         const pw = Game.waves[rp - 1] || (Game.extendRounds(), Game.waves[rp - 1]);
         const sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
-        assert(sum(pw.members) < sum(base.members) * 0.5 && sum(pw.elites) === ROUND_EVENTS.parade.elites(rp), 'parade make-up');
+        assert(sum(pw.members) < sum(base.members) * 0.7 && sum(pw.elites) === ROUND_EVENTS.parade.elites(rp), 'parade make-up');
         // 저주 라운드: 고르지 않으면 평소대로, 받아들이면 강해지고, 하나도 놓치지 않으면 골드, 마력, 장비
         const rc = at('curse');
         Game.reset(null, null, C);
