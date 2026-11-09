@@ -175,7 +175,7 @@ const COMBAT_RULES = {
     corruptCostMul: 8,
     corruptMax: 3,
     // 마왕 스킬(js/data/demonlords.js의 LORD_SKILLS). 마왕마다 스킬 1(Q)과 스킬 2(W)가 다르다. perRound: 라운드마다 피해가 그만큼 늘어난다
-    lightning: { damage: 48, radius: 1.5, cooldown: 30 }, // 균열의 군주 Q 낙뢰
+    lightning: { damage: 48, radius: 1.5, cooldown: 22 }, // 균열의 군주 Q 낙뢰
     roar: { unlockHp: 10, duration: 3, cooldown: 60 }, // 옛 공용 W 호통(쓰는 마왕이 없다)
     portal: { cooldown: 40, count: 6, back: 5, pullUp: 3 }, // 균열의 군주 W 균열 문
     boneSpear: { cooldown: 18, damage: 40, perRound: 0.12, hpRatio: 0.1, length: 4 }, // 뼈의 여왕 Q 뼈 창
@@ -186,7 +186,7 @@ const COMBAT_RULES = {
     miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 역병의 군주 W 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
     chainPull: { cooldown: 12, count: 2, back: 3, bind: 1.5, bossBind: 0.5 }, // 사슬의 군주 Q 사슬 끌기
     mirrorWard: { cooldown: 35, duration: 6 }, // 거울 마녀 Q 반사막(막을 때마다 맨 앞 용사에게 낙뢰 기본 피해)
-    mirrorClone: { cooldown: 35, duration: 15 }, // 거울 마녀 W 거울 분신
+    mirrorClone: { cooldown: 35, duration: 10 }, // 거울 마녀 W 거울 분신
     clockTower: { cooldown: 24, radius: 2, duration: 8, slow: 0.5 }, // 시계탑의 마왕 Q 감속 시계탑
     timeStop: { cooldown: 40, duration: 3, bossDuration: 1, longUp: 1.5 }, // 시계탑의 마왕 W 시간 정지
     // 권능 스킬(E)

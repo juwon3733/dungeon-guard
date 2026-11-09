@@ -218,7 +218,7 @@ const Game = {
         const score = h => remainingDistance(h) - (this.power('volleyBoss') && (h.boss || h.elite) ? 1e6 : 0);
         const count = p.count + (this.power('volleyWide') ? 3 : 0);
         const list = this.heroes.filter(h => !h.dead && !h.waiting).sort((a, b) => score(a) - score(b)).slice(0, count);
-        const damage = (p.base + p.perRound * this.waveIndex) * (this.power('volleyHeavy') ? 1.5 : 1);
+        const damage = (p.base + p.perRound * this.waveIndex) * (this.power('volleyHeavy') ? 1.3 : 1);
         for (let shot = 0; shot < (this.power('volleyTwin') ? 2 : 1); shot++) {
             for (const h of list) {
                 if (h.dead) continue;
@@ -227,10 +227,10 @@ const Game = {
                 damageHero(h, damage, w.x, w.y, '#c9a6ff');
                 if (h.dead) continue;
                 if (this.power('volleyCurse')) curseHero(h, 3, 1.2);
-                if (this.power('volleyFear')) h.stun = Math.max(h.stun, 1.5);
+                if (this.power('volleyFear') && !h.boss) h.stun = Math.max(h.stun, h.elite ? 0.75 : 1.5); // 공포: 보스는 멈추지 않고 정예는 절반
             }
         }
-        if (this.power('volleyCharge')) for (const key of Object.keys(this.skills)) this.skills[key] = Math.max(0, this.skills[key] - 3);
+        if (this.power('volleyCharge')) for (const key of Object.keys(this.skills)) this.skills[key] = Math.max(0, this.skills[key] - 2);
         this.volleying = false;
     },
 

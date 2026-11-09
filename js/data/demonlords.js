@@ -134,9 +134,9 @@ const LORD_POWERS = {
     bone_queen: [
         { id: 'wraith', name: '망령', desc: '일제 사격 강화', tiers: [
             [{ id: 'volleyFast', name: '재촉', desc: '일제 사격 주기 20명' }, { id: 'volleyWide', name: '망령 무리', desc: '일제 사격 대상 +3명' }],
-            [{ id: 'volleyHeavy', name: '무거운 혼', desc: '일제 사격 피해 +50%' }, { id: 'volleyCurse', name: '저주받은 화살', desc: '일제 사격 맞은 용사 3초간 받는 피해 +20%' }],
-            [{ id: 'volleyBoss', name: '우두머리 사냥', desc: '정예·보스 우선 공격' }, { id: 'volleyCharge', name: '혼의 환류', desc: '일제 사격마다 스킬 재사용 -3초' }],
-            [{ id: 'volleyTwin', name: '두 번째 사격', desc: '일제 사격 2회' }, { id: 'volleyFear', name: '공포', desc: '일제 사격 맞은 용사 1.5초 정지' }]
+            [{ id: 'volleyHeavy', name: '무거운 혼', desc: '일제 사격 피해 +30%' }, { id: 'volleyCurse', name: '저주받은 화살', desc: '일제 사격 맞은 용사 3초간 받는 피해 +20%' }],
+            [{ id: 'volleyBoss', name: '우두머리 사냥', desc: '정예·보스 우선 공격' }, { id: 'volleyCharge', name: '혼의 환류', desc: '일제 사격마다 스킬 재사용 -2초' }],
+            [{ id: 'volleyTwin', name: '두 번째 사격', desc: '일제 사격 2회' }, { id: 'volleyFear', name: '공포', desc: '일제 사격 맞은 용사 1.5초 정지(정예 절반, 보스 제외)' }]
         ] },
         { id: 'corpse', name: '시체', desc: '시체 폭발', tiers: [
             [{ id: 'corpseBlast', name: '시체 폭발', desc: '일반 용사 5명 처치마다 시체 폭발' }, { id: 'xpUp', name: '죽음의 교훈', desc: '랭크 돌리기 비용 -30%', mods: { rankCost: 0.3 } }],
@@ -258,7 +258,7 @@ const LORD_POWERS = {
 //   aim: 땅을 눌러 쓰는 스킬(radius(G): 조준 원 반경 칸). desc(G): 툴팁 설명(재사용 시간은 화면이 붙인다)
 const LORD_SKILLS = {
     lightning: { name: '낙뢰', icon: 'bolt', aim: true, radius: G => G.lightningRadius(),
-        desc: G => `고른 자리 둘레 ${G.lightningRadius()}칸에 ${Math.round(G.lightningDamage())}의 피해를 준다` + (G.lordPassive('lightningCurse') ? '. 맞은 용사는 최대 체력 15%만큼 더 다치고 감전 낙인이 붙는다' : '') },
+        desc: G => `고른 자리 둘레 ${G.lightningRadius()}칸에 ${Math.round(G.lightningDamage())}의 피해를 준다` + (G.lordPassive('lightningCurse') ? `. 맞은 용사는 최대 체력 ${Math.round(G.lordPassive('lightningCurse').hpRatio * 100)}%만큼 더 다치고 감전 낙인이 붙는다` : '') },
     roar: { name: '호통', desc: () => `모든 용사가 ${COMBAT_RULES.roar.duration}초 멈춘다. 마왕 체력이 ${COMBAT_RULES.roar.unlockHp} 이하일 때만 쓴다` }, // 옛 공용 스킬(지금은 쓰는 마왕이 없다)
     portal: { name: '균열 문', icon: 'wave', desc: G => `왕좌에 가장 가까운 용사 ${G.portalCount()}명이 ${COMBAT_RULES.portal.back * (G.power('exile') ? 2 : 1)}칸 뒤로 밀려난다(보스 제외)` },
     boneSpear: { name: '뼈 창', icon: 'attack', desc: G => `맨 앞 용사와 그 뒤 ${COMBAT_RULES.boneSpear.length}칸 안의 용사를 모두 꿰뚫어 ${Math.round(skillPower(G, 'boneSpear'))}의 피해와 최대 체력 ${Math.round(COMBAT_RULES.boneSpear.hpRatio * 100)}%만큼의 피해를 준다` },
@@ -270,7 +270,7 @@ const LORD_SKILLS = {
     miasma: { name: '역병 구름', icon: 'soul', desc: () => `맨 앞 용사 자리에 ${COMBAT_RULES.miasma.duration}초 동안 독 구름이 남는다` },
     chainPull: { name: '사슬 끌기', icon: 'retry', desc: () => `맨 앞 용사 ${COMBAT_RULES.chainPull.count}명을 ${COMBAT_RULES.chainPull.back}칸 끌어당기고 ${COMBAT_RULES.chainPull.bind}초 묶는다(보스는 묶기만)` },
     jail: { name: '사슬 감옥', icon: 'lock', desc: () => `맨 앞 용사 둘레 ${COMBAT_RULES.jail.radius}칸의 용사를 ${COMBAT_RULES.jail.duration}초 묶는다(보스 ${COMBAT_RULES.jail.bossDuration}초)` },
-    mirrorWard: { name: '반사막', icon: 'lord', desc: () => `${COMBAT_RULES.mirrorWard.duration}초 동안 왕좌가 받는 피해를 막고, 막을 때마다 맨 앞 용사에게 피해를 되돌린다` },
+    mirrorWard: { name: '반사막', icon: 'lord', desc: () => `${COMBAT_RULES.mirrorWard.duration}초 동안 왕좌가 받는 피해를 막고(보스 도착 피해는 절반), 막을 때마다 맨 앞 용사에게 피해를 되돌린다` },
     mirrorClone: { name: '거울 분신', icon: 'summon', desc: () => `가장 높은 등급 몬스터의 분신이 ${COMBAT_RULES.mirrorClone.duration}초 동안 함께 싸운다` },
     clockTower: { name: '시계탑', icon: 'gear', aim: true, radius: () => COMBAT_RULES.clockTower.radius,
         desc: () => `고른 자리에 ${COMBAT_RULES.clockTower.duration}초 동안 시계탑이 서서 둘레 ${COMBAT_RULES.clockTower.radius}칸 용사의 이동 속도가 절반으로 줄어든다` },
@@ -368,7 +368,7 @@ const DEMON_LORDS = {
         sprite: 'lord_rift', footPx: 120, skills: ['lightning', 'portal'],
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '낙뢰가 최대 체력 15% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.15 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '낙뢰가 최대 체력 20% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.2 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
@@ -380,7 +380,7 @@ const DEMON_LORDS = {
         sprite: 'lord_bone_queen', footPx: 119, skills: ['boneSpear', 'ghosts'],
         portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'soulVolley', name: '망령 일제 사격', desc: '용사 25명 처치마다 망령이 선두 6명 공격', every: 25, count: 6, base: 30, perRound: 8 },
+        passive: { kind: 'soulVolley', name: '망령 일제 사격', desc: '용사 25명 처치마다 망령이 선두 6명 공격', every: 25, count: 6, base: 30, perRound: 6 },
         speech: {
             waveStart: ['얘들아, 간식 왔다. 뼈는 남기지 마.'],
             throneHit: ['내 왕관 삐뚤어졌잖아!'],
@@ -416,7 +416,7 @@ const DEMON_LORDS = {
         sprite: 'lord_chain', footPx: 120, skills: ['chainPull', 'jail'],
         portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 14% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.14, duration: 0.6 },
+        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 14% 확률로 0.6초 속박(정예는 확률 절반, 보스는 확률 5분의 1과 시간 절반)', chance: 0.14, duration: 0.6 },
         speech: {
             waveStart: ['줄 맞춰 들어와라.'],
             throneHit: ['감히 간수를 쳐?'],
@@ -428,7 +428,7 @@ const DEMON_LORDS = {
         sprite: 'lord_mirror', footPx: 119, skills: ['mirrorWard', 'mirrorClone'],
         portrait: { sprite: 'lord_mirror', crop: [42, 8, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 12% 확률로 재료 1마리 보존', chance: 0.12 },
+        passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 8% 확률로 재료 1마리 보존', chance: 0.08 },
         speech: {
             waveStart: ['어서 와. 너도 둘이 되고 싶니?'],
             throneHit: ['내 거울에 금이 갔잖아.'],
