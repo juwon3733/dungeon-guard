@@ -132,7 +132,6 @@ function monsterCleave(m, target, damage) {
     const a = monsterAbility(m.type, 'cleave');
     if (!a) return;
     const c = heroWorld(target);
-    Fx.anim('fx_cleave', c.x, c.y + 6, a.radius * TILE * 1.2);
     for (const h of Game.heroes.slice()) {
         if (h === target || h.dead || h.waiting) continue;
         const p = heroWorld(h);
@@ -181,6 +180,9 @@ function dropBurnGround(m, x, y) {
 }
 
 function updateHazard(z, dt) {
+    if (z.kind === 'puddle') { updatePuddle(z, dt); return; }
+    if (z.kind === 'trap') { updateTrap(z, dt); return; }
+    if (z.kind === 'vortex') { updateVortex(z, dt); return; }
     z.age += dt;
     z.tick -= dt;
     if (z.tick > 1e-6) return;
@@ -192,6 +194,56 @@ function updateHazard(z, dt) {
         if (z.kind === 'poison') poisonHero(h, 1.5, z.dps, null); // 역병 구름: 피해는 독으로
         else damageHero(h, z.dps * HAZARD_TICK, z.x, z.y, '#ff9d4d', z.owner, true);
     }
+}
+
+// 웅덩이(공격 모양 puddle): 0.5초마다 안의 용사를 느리게 하고(slow) 방어력을 줄인다(armorMul, damageHero가 읽는다). 겹치지 않고 시간만 채운다
+function updatePuddle(z, dt) {
+    z.age += dt;
+    z.tick -= dt;
+    if (z.tick > 1e-6) return;
+    z.tick += HAZARD_TICK;
+    const keep = HAZARD_TICK + 0.2;
+    for (const h of heroesInCircle(z.x, z.y, z.radius)) {
+        h.slowMul = h.slow > 0 ? Math.min(h.slowMul, z.slow) : z.slow;
+        h.slow = Math.max(h.slow, keep);
+        if (z.armorMul < 1) {
+            const on = h.shredUntil > Game.time; // 판 시간으로 끝을 잰다(용사 갱신을 건드리지 않는다)
+            h.shredMul = on ? Math.min(h.shredMul, z.armorMul) : z.armorMul;
+            h.shredUntil = Math.max(on ? h.shredUntil : 0, Game.time + keep);
+        }
+    }
+}
+
+// 덫(공격 모양 trap): arm초 뒤부터 용사가 trigger 안에 들어오면 radius 안을 때리고 사라진다
+function updateTrap(z, dt) {
+    z.age += dt;
+    if (z.age < z.arm) return;
+    const near = heroesInCircle(z.x, z.y, z.trigger);
+    if (!near.length) return;
+    const hits = strikeArea(z, z.x, z.y, z.radius, z.damage);
+    strikeChain(z, hits.includes(near[0]) ? near[0] : hits[0], z.damage);
+    const owner = liveOwner(z);
+    if (owner) dropBurnGround(owner, z.x, z.y);
+    attackImpact(z.look, z.src, z.x, z.y, z.radius, z.tier);
+    Fx.addShake(4);
+    Sfx.play('blast');
+    z.age = z.life;
+}
+
+// 소용돌이(공격 모양 vortex): 보스가 아닌 용사 가운데 지나친 용사를 길 뒤로 끌어 가운데에 붙잡고, tick초마다 피해
+function updateVortex(z, dt) {
+    z.age += dt;
+    for (const h of heroesInCircle(z.x, z.y, z.radius)) {
+        if (h.boss) continue;
+        const w = heroWorld(h);
+        const back = routePoint(h, -6);
+        if (distance(back.x, back.y, z.x, z.y) < distance(w.x, w.y, z.x, z.y) - 0.5) h.d = Math.max(0, h.d - z.pull * dt);
+    }
+    z.tick -= dt;
+    if (z.tick > 1e-6) return;
+    z.tick += z.every;
+    const owner = liveOwner(z);
+    for (const h of heroesInCircle(z.x, z.y, z.radius)) monsterDealt(owner, damageHero(h, z.damage, z.x, z.y, z.color, owner));
 }
 
 // 광폭화 중이면 그 능력을, 아니면 null. 체력이 없는 몬스터(팝업 미리보기, 원거리)와 쓰러진 몬스터는 걸리지 않는다
@@ -605,31 +657,545 @@ function updateSideMonster(m, dt) {
     m.shot = { target, t: m.atkPoseMax * MONSTER_RELEASE };
 }
 
-// 근접 몬스터: 투사체 없이 사거리 안에서 가장 앞선 용사부터 stats.block명을 함께 때린다(사실상 사거리가 짧은 공격)
-function monsterMelee(m, stats, first) {
-    const inReach = Game.heroes.filter(h => !h.dead && !h.waiting && h !== first).filter(h => {
+// ----- 공격 모양(ATTACK_KINDS, MONSTER_ATTACKS) -----
+// 모든 공격은 Game.projectiles에 개체(kind 'atk') 하나 이상을 남긴다. 날아가는 공격은 개체가 움직이며 때리고,
+// 바로 맞는 공격은 쏜 순간 때린 뒤 개체는 그림으로만 남는다(그리기는 Render.drawAttack, 색과 모양은 ATTACK_LOOKS).
+// 판 결과를 바꾸는 계산은 rng와 Math.sqrt만 쓴다(입력 재생). 삼각함수와 Math.random은 그림에만 쓴다
+const ATTACK_HIT_COLOR = '#ffd26a';
+const ATTACK_MAX_LIFE = 2.5; // 날아가는 공격이 대상을 잃고 떠돌지 않게 하는 상한(초)
+// 바로 맞는 근접 모양(대상 고르기만 다르다). 원거리 몬스터가 쓰면 한 명만 때린다
+const MELEE_ATTACKS = ['claw', 'spikes', 'tentacle', 'thrust', 'slam', 'sweep', 'whirl', 'smite'];
+
+function liveOwner(p) { return p.owner && !p.owner.removed ? p.owner : null; }
+function attackLookColor(look) {
+    const L = typeof ATTACK_LOOKS !== 'undefined' && ATTACK_LOOKS[look];
+    return L ? L.hit : ATTACK_HIT_COLOR;
+}
+function liveHeroList() { return Game.heroes.filter(h => !h.dead && !h.waiting); }
+// 화살이 노리는 몸 높이
+function heroBody(h) {
+    const w = heroWorld(h);
+    return { x: w.x, y: w.y - (h.boss ? 90 : 46) };
+}
+function unitVec(ax, ay, bx, by) {
+    const len = distance(ax, ay, bx, by) || 1;
+    return { dx: (bx - ax) / len, dy: (by - ay) / len, len };
+}
+// 길을 따라 k px 떨어진 자리(용사 h의 길과 줄)
+function routePoint(h, k) { return heroWorld({ d: h.d + k, route: h.route, lane: h.lane }); }
+// t초 동안 용사가 길을 따라 갈 거리(멈춰 있거나 붙잡혀 있으면 0)와 그 발끝 자리
+function heroLead(h, t) {
+    const moving = !(h.stun > 0) && !h.blocker && !(h.bound > 0);
+    return moving ? (h.speed || 0) * (h.slow > 0 ? h.slowMul : 1) * t : 0;
+}
+function heroAhead(h, t) { return routePoint(h, heroLead(h, t)); }
+
+// 선분(시작 o, 방향 v, 길이 len, 폭 width px) 위의 용사를 가까운 순으로. body면 몸 높이, 아니면 발끝으로 잰다
+function heroesOnLine(ox, oy, v, len, width, body) {
+    const list = [];
+    for (const h of liveHeroList()) {
+        const p = body ? heroBody(h) : heroWorld(h);
+        const along = (p.x - ox) * v.dx + (p.y - oy) * v.dy;
+        if (along < -width || along > len + width * 0.5) continue;
+        if (Math.abs((p.x - ox) * v.dy - (p.y - oy) * v.dx) <= width) list.push({ h, along });
+    }
+    return list.sort((a, b) => a.along - b.along).map(o => o.h);
+}
+// 부채꼴: 시작 o에서 반지름 len 안, 방향 v와 이루는 각의 코사인이 cos 이상(발끝)
+function heroesInCone(ox, oy, v, len, cos) {
+    return liveHeroList().filter(h => {
         const p = heroWorld(h);
-        return distance(m.x, m.y, p.x, p.y) <= stats.range * TILE;
-    }).sort((a, b) => remainingDistance(a) - remainingDistance(b));
-    const targets = [first, ...inReach.slice(0, Math.max(1, stats.block) - 1)];
-    // 휘두르는 궤적: 몬스터와 첫 대상 사이에 크게
-    const fp = heroWorld(first);
-    Fx.anim('fx_cleave', (m.x + fp.x) / 2, (m.y + fp.y) / 2 - 24, 220 + Math.max(...monsterCells(m.type)) * 40, 0.3);
-    for (const h of targets) {
+        const d = distance(ox, oy, p.x, p.y);
+        if (d > len) return false;
+        return d < 1 || ((p.x - ox) * v.dx + (p.y - oy) * v.dy) / d >= cos;
+    });
+}
+function heroesInCircle(x, y, r) {
+    return liveHeroList().filter(h => {
         const p = heroWorld(h);
-        Fx.anim('fx_cleave', p.x, p.y - 10, 130);
-        monsterDealt(m, damageHero(h, stats.damage, m.x, m.y, '#ffb76b', m));
-        monsterHitHero(m.type, h, m);
+        return distance(x, y, p.x, p.y) <= r;
+    });
+}
+// 대상 수 제한: 첫 대상을 먼저, 나머지는 왕좌에 가까운 순으로 cap명까지
+function capTargets(first, list, cap) {
+    const rest = list.filter(h => h !== first).sort((a, b) => remainingDistance(a) - remainingDistance(b));
+    return (first && !first.dead ? [first, ...rest] : rest).slice(0, cap);
+}
+// 사거리 안 용사를 앞선 순으로(첫 대상 먼저)
+function rangeTargets(m, stats, first) {
+    return capTargets(first, heroesInCircle(m.x, m.y, stats.range * TILE), Infinity);
+}
+
+// 공격 개체: 그림(look)과 쏜 몬스터. big은 2칸 넘는 몬스터(그림을 키운다), tier는 등급 순서(높을수록 화려하다)
+function pushAttack(m, a, atk, extra) {
+    const def = MONSTERS[m.type];
+    const p = Object.assign({
+        kind: 'atk', atk, look: a.look || atk, src: m.type, owner: m, age: 0, life: 0.4,
+        color: attackLookColor(a.look), big: Math.max(...monsterCells(m.type)) > 1, tier: GRADE_ORDER.indexOf(def.grade), seed: Math.random() * 100
+    }, extra);
+    Game.projectiles.push(p);
+    return p;
+}
+
+// 공격 하나가 용사 한 명을 맞힘: 피해, 흡혈, 맞으면 걸리는 능력. p는 공격 개체(src, owner, color)
+function strikeHero(p, h, damage, fx, fy) {
+    if (!h || h.dead) return 0;
+    const owner = liveOwner(p);
+    const dealt = damageHero(h, damage, fx, fy, p.color || ATTACK_HIT_COLOR, owner);
+    monsterDealt(owner, dealt);
+    monsterHitHero(p.src, h, owner);
+    return dealt;
+}
+function strikeChain(p, first, damage) {
+    const owner = liveOwner(p);
+    if (owner && first) monsterChain(owner, first, damage);
+}
+// 자리 (x, y) 반경 안 용사를 모두 맞힌다(광역)
+function strikeArea(p, x, y, r, damage) {
+    const hits = heroesInCircle(x, y, r);
+    for (const h of hits) strikeHero(p, h, damage, x, y);
+    return hits;
+}
+// 그림만 남는 터짐(덫, 던진 것이 떨어진 자리)
+function attackImpact(look, src, x, y, r, tier) {
+    Game.projectiles.push({ kind: 'atk', atk: 'impact', look, src, x, y, r, tier: tier || 0, age: 0, life: 0.45, seed: Math.random() * 100 });
+}
+
+// 근접 모양: 첫 대상(first)을 기준으로 모양 안 용사를 stats.block명까지(원거리 몬스터가 쓰면 한 명) 바로 때린다
+function meleeAttack(m, stats, first, a) {
+    const cap = Math.max(1, stats.block || 0);
+    const reach = stats.range * TILE;
+    const foot = { x: m.x, y: m.y + MONSTER_FOOT };
+    const f = heroWorld(first);
+    const v = unitVec(foot.x, foot.y, f.x, f.y);
+    const size = Math.max(...monsterCells(m.type));
+    let list;
+    if (a.kind === 'thrust') list = heroesOnLine(foot.x, foot.y, v, reach + a.extra * TILE, a.width * TILE * (1 + (size - 1) * 0.25), false);
+    else if (a.kind === 'slam') list = heroesInCircle(f.x, f.y, a.radius * TILE * (1 + (size - 1) * 0.3));
+    else if (a.kind === 'sweep') list = heroesInCone(foot.x, foot.y, v, reach, a.cos);
+    else list = heroesInCircle(foot.x, foot.y, reach);
+    const targets = capTargets(first, list, cap);
+    const p = pushAttack(m, a, a.kind, {
+        ox: foot.x, oy: foot.y, tx: f.x, ty: f.y, v, cos: a.cos, reach: a.kind === 'thrust' ? reach + a.extra * TILE : reach, size,
+        radius: a.kind === 'slam' ? a.radius * TILE * (1 + (size - 1) * 0.3) : (a.radius || 0) * TILE,
+        hits: targets.map(h => { const w = heroWorld(h); return { x: w.x, y: w.y, boss: !!h.boss }; }),
+        life: a.kind === 'whirl' || a.kind === 'smite' ? 0.5 : 0.4
+    });
+    for (const h of targets) strikeHero(p, h, stats.damage, m.x, m.y);
+    // 천벌: 번개가 떨어진 둘레의 다른 용사도(한 번씩)
+    if (a.kind === 'smite') {
+        const done = targets.slice();
+        for (const t of p.hits) {
+            for (const h of heroesInCircle(t.x, t.y, a.radius * TILE)) {
+                if (done.includes(h)) continue;
+                done.push(h);
+                strikeHero(p, h, stats.damage * a.ratio, t.x, t.y);
+            }
+        }
+        Fx.addShake(4);
     }
     monsterCleave(m, first, stats.damage);
-    Sfx.play(monsterHitSfx(m.type, 'slash'));
+    if (a.kind === 'slam' || a.kind === 'tentacle') Fx.addShake(size > 1 ? 5 : 2);
+    Sfx.play(monsterHitSfx(m.type, a.kind === 'slam' || a.kind === 'spikes' ? 'hitHeavy' : 'slash'));
+}
+
+// 원거리 모양(그리고 근접이 쓰는 숨결, 땅 가르기, 파동). (몬스터, 수치, 대상, 공격 값, 근접인가)
+const ATTACKS = {
+    pierce(m, s, target, a) {
+        const o = monsterHand(m);
+        const aim = heroAhead(target, 0.12);
+        const v = unitVec(o.x, o.y, aim.x, aim.y - (target.boss ? 90 : 46));
+        pushAttack(m, a, 'pierce', { x: o.x, y: o.y, sx: o.x, sy: o.y, v, speed: a.speed || 1500, dist: 0, max: s.range * TILE + TILE, damage: s.damage, ratio: a.ratio, cap: a.max, hit: [], life: ATTACK_MAX_LIFE });
+        Sfx.play('arrow');
+    },
+    boomerang(m, s, target, a) {
+        const o = monsterHand(m);
+        const aim = heroAhead(target, 0.15);
+        const v = unitVec(o.x, o.y, aim.x, aim.y - (target.boss ? 90 : 46));
+        const len = Math.min(v.len + TILE * 0.8, s.range * TILE + TILE);
+        const sheet = MONSTERS[m.type].art.shot; // 시트 그림(도끼, 원반)이 있으면 돌려 그린다. 'bolt'은 시트가 아니다
+        const shot = sheet && sheet !== 'bolt' ? sheet : null;
+        pushAttack(m, a, 'boomerang', {
+            x: o.x, y: o.y, sx: o.x, sy: o.y, ex: o.x + v.dx * len, ey: o.y + v.dy * len, nx: -v.dy, ny: v.dx, bow: TILE * 0.35,
+            s: 0, back: false, time: len / (shot ? 1100 : 650), damage: s.damage * a.ratio, base: s.damage, max: a.max, hitOut: [], hitBack: [], chained: false,
+            shot, life: ATTACK_MAX_LIFE
+        });
+        Sfx.play('arrow');
+    },
+    stream(m, s, target, a) {
+        const o = monsterHand(m);
+        const b = heroBody(target);
+        const v = unitVec(o.x, o.y, b.x, b.y);
+        const len = s.range * TILE + TILE * 0.5;
+        const hits = capTargets(target, heroesOnLine(o.x, o.y, v, len, a.width * TILE, true), a.count);
+        const far = hits.reduce((d, h) => { const q = heroBody(h); return Math.max(d, (q.x - o.x) * v.dx + (q.y - o.y) * v.dy); }, v.len);
+        const p = pushAttack(m, a, 'stream', { ox: o.x, oy: o.y, v, len: far + 24, life: 0.5, hits: [] });
+        hits.forEach((h, i) => {
+            strikeHero(p, h, s.damage * (i ? a.ratio : 1), o.x, o.y);
+            if (!h.dead && !h.boss && a.push > 0) {
+                h.d = Math.max(0, h.d - a.push * TILE);
+                h.blocker = null;
+            }
+            const w = heroBody(h);
+            p.hits.push({ x: w.x, y: w.y });
+        });
+        strikeChain(p, target, s.damage);
+        if (a.puddle) {
+            const f = heroWorld(target);
+            dropPuddle(m, Object.assign({}, ATTACK_KINDS.puddle, { look: a.look }), f.x, f.y);
+        }
+        Sfx.play('hitIce');
+    },
+    puddle(m, s, target, a) { lobAttack(m, s, target, a, 'puddle'); },
+    vortex(m, s, target, a) { lobAttack(m, s, target, a, 'vortex'); },
+    trap(m, s, target, a) {
+        // 대상 앞 길(0.4칸)에 놓는다. 몬스터당 max개, 넘으면 가장 오래된 덫이 사라진다
+        const mine = Game.hazards.filter(z => z.kind === 'trap' && z.owner === m && z.age < z.life);
+        if (mine.length >= a.max) mine[0].age = mine[0].life;
+        const spot = routePoint(target, TILE * 0.4);
+        const o = monsterHand(m);
+        pushAttack(m, a, 'lob', { x: o.x, y: o.y, sx: o.x, sy: o.y, tx: spot.x, ty: spot.y, target: null, time: 0.32, arc: 80, then: 'trap', a, damage: s.damage * a.ratio, splash: (s.splash || a.radius) * TILE, life: ATTACK_MAX_LIFE });
+        Sfx.play('orb');
+    },
+    drop(m, s, target, a, melee) {
+        // 떨어질 때 용사가 설 자리. 여럿이면 길을 따라 앞뒤로 벌린다
+        const lead = heroLead(target, a.delay);
+        const pts = [];
+        for (let i = 0; i < a.count; i++) {
+            const q = routePoint(target, lead + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * a.spread * TILE);
+            pts.push({ x: q.x, y: q.y });
+        }
+        pushAttack(m, a, 'drop', { pts, delay: a.delay, radius: (s.splash || a.radius) * TILE, damage: s.damage * a.ratio, cap: melee ? Math.max(1, s.block) : Infinity, fired: false, life: a.delay + 0.5 });
+        Sfx.play('orb');
+    },
+    beam(m, s, target, a) {
+        const o = monsterHand(m);
+        const b = heroBody(target);
+        const v = unitVec(o.x, o.y, b.x, b.y);
+        const f = heroWorld(target);
+        pushAttack(m, a, 'beam', { ox: o.x, oy: o.y, v, len: s.range * TILE + a.extra * TILE, width: a.width * TILE, ticks: a.ticks, every: a.duration / a.ticks, n: 0, damage: s.damage * a.ratio, life: a.duration + 0.15 });
+        dropBurnGround(m, f.x, f.y);
+        Fx.addShake(3);
+        Sfx.play('beam');
+    },
+    zap(m, s, target, a) {
+        const o = monsterHand(m);
+        const b = heroBody(target);
+        const f = heroWorld(target);
+        const p = pushAttack(m, a, 'zap', { ox: o.x, oy: o.y, tx: b.x, ty: b.y, fx: f.x, fy: f.y, splash: (s.splash || 0) * TILE, life: 0.28 });
+        if (s.splash) strikeArea(p, f.x, f.y, s.splash * TILE, s.damage);
+        else strikeHero(p, target, s.damage, o.x, o.y);
+        strikeChain(p, target, s.damage);
+        dropBurnGround(m, f.x, f.y);
+        Sfx.play('hitLightning');
+    },
+    breath(m, s, target, a, melee) {
+        const o = monsterHand(m);
+        const f = heroWorld(target);
+        const v = unitVec(m.x, m.y, f.x, f.y);
+        const len = s.range * TILE + TILE * 0.3;
+        const list = heroesInCone(m.x, m.y, v, len, a.cos);
+        const targets = capTargets(target, list, melee ? Math.max(1, s.block) : Infinity);
+        const p = pushAttack(m, a, 'breath', { ox: o.x, oy: o.y, v, len: len + (m.y - o.y) * 0.3, cos: a.cos, life: 0.5 });
+        for (const h of targets) strikeHero(p, h, s.damage, m.x, m.y);
+        strikeChain(p, target, s.damage);
+        dropBurnGround(m, f.x, f.y);
+        if (melee) monsterCleave(m, target, s.damage);
+        Sfx.play('hitFire');
+    },
+    volley(m, s, target, a) {
+        const o = monsterHand(m);
+        const list = rangeTargets(m, s, target);
+        const b = heroBody(target);
+        const v = unitVec(o.x, o.y, b.x, b.y);
+        for (let i = 0; i < a.count; i++) {
+            const side = i - (a.count - 1) / 2;
+            pushAttack(m, a, 'shot', {
+                x: o.x, y: o.y, target: list[i % list.length], vx: (v.dx * 0.55 - v.dy * side * 0.5) * 900, vy: (v.dy * 0.55 + v.dx * side * 0.5) * 900,
+                speed: a.speed || 1150, wait: i * 0.04, damage: s.damage * a.ratio, splash: (s.splash || 0) * TILE * 0.5, life: ATTACK_MAX_LIFE, n: i
+            });
+        }
+        Sfx.play('arrow');
+    },
+    tether(m, s, target, a) {
+        const o = monsterHand(m);
+        const list = capTargets(target, heroesInCircle(m.x, m.y, s.range * TILE), a.count);
+        pushAttack(m, a, 'tether', { ox: o.x, oy: o.y, list, ticks: a.ticks, every: a.duration / a.ticks, n: 0, damage: s.damage * a.ratio, life: a.duration + 0.2 });
+        Sfx.play('hitCurse');
+    },
+    fissure(m, s, target, a, melee) {
+        const f = heroWorld(target);
+        const v = unitVec(m.x, m.y, f.x, f.y);
+        pushAttack(m, a, 'fissure', {
+            ox: m.x, oy: m.y + MONSTER_FOOT, v, len: s.range * TILE + a.extra * TILE, front: 0, speed: a.speed * TILE, width: a.width * TILE,
+            cap: melee ? Math.max(1, s.block) : Infinity, hit: [], damage: s.damage, end: 0, ground: true, life: ATTACK_MAX_LIFE
+        });
+        Fx.addShake(4);
+        Sfx.play('hitHeavy');
+    },
+    shockwave(m, s, target, a, melee) {
+        pushAttack(m, a, 'shockwave', {
+            ox: m.x, oy: m.y + MONSTER_FOOT, r: 0, max: s.range * TILE, speed: a.speed * TILE, cap: melee ? Math.max(1, s.block) : Infinity,
+            hit: [], damage: s.damage, first: target, end: 0, ground: true, life: ATTACK_MAX_LIFE
+        });
+        Fx.addShake(3);
+        Sfx.play('hitHeavy');
+    },
+    rewind(m, s, target, a) {
+        const f = heroWorld(target);
+        pushAttack(m, a, 'rewind', { target, x: f.x, y: f.y, delay: a.delay, fired: false, damage: s.damage * a.ratio, push: a.push * TILE, life: a.delay + 0.4 });
+        Sfx.play('orb');
+    },
+    elements(m, s, target, a) {
+        const o = monsterHand(m);
+        const list = rangeTargets(m, s, target);
+        const art = MONSTERS[m.type].art;
+        ['fire', 'ice', 'storm'].forEach((look, i) => {
+            const t = list[i % list.length];
+            const w = heroWorld(t);
+            Game.projectiles.push({
+                kind: 'orb', look, x: o.x, y: o.y, tx: w.x, ty: w.y - 30, sx: o.x, sy: o.y, target: t,
+                age: -i * 0.06, time: clamp(distance(o.x, o.y, w.x, w.y) / 760, 0.25, 0.6),
+                damage: s.damage * a.ratio, splash: (s.splash || 1) * a.splashMul * TILE, src: m.type, owner: m,
+                shot: 'bolt', impact: { fire: 'fx_hit_fire', ice: 'fx_snowflake', storm: 'fx_hit_lightning' }[look], glow: { fire: '255,140,50', ice: '140,210,255', storm: '255,240,120' }[look] || art.glow
+            });
+        });
+        Sfx.play('orb');
+    }
+};
+
+// 던져서 떨어지는 공격(웅덩이, 소용돌이): 떨어진 자리에서 맞히고 장판을 남긴다. 광역이 아니면 대상을 따라가 대상에게 떨어진다
+function lobAttack(m, s, target, a, then) {
+    const o = monsterHand(m);
+    const f = heroWorld(target);
+    pushAttack(m, a, 'lob', {
+        x: o.x, y: o.y, sx: o.x, sy: o.y, tx: f.x, ty: f.y, target, home: !s.splash, time: clamp(distance(o.x, o.y, f.x, f.y) / 700, 0.3, 0.6), arc: 110,
+        then, a, damage: s.damage * (then === 'vortex' ? a.ratio : 1), splash: (s.splash || 0) * TILE, life: ATTACK_MAX_LIFE
+    });
+    Sfx.play('orb');
+}
+
+// 웅덩이 장판: 안의 용사는 느려지고 방어력이 준다(Game.hazards, updateHazard)
+function dropPuddle(m, a, x, y) {
+    Game.hazards.push({ kind: 'puddle', x, y, radius: a.radius * TILE, slow: a.slow, armorMul: a.armorMul, life: a.duration, age: 0, tick: 0, look: a.look, owner: m, seed: Math.random() * 100 });
+}
+
+// 던진 것이 떨어짐: 광역이면 반경 안 모두, 아니면 대상 하나. 그 뒤 장판(웅덩이, 소용돌이)이나 덫
+function landLob(p) {
+    const a = p.a;
+    const owner = liveOwner(p);
+    if (p.then === 'trap') {
+        Game.hazards.push({ kind: 'trap', x: p.tx, y: p.ty, arm: a.arm, trigger: a.trigger * TILE, radius: p.splash, damage: p.damage, life: a.life, age: 0, look: p.look, src: p.src, owner: p.owner, color: p.color, tier: p.tier, seed: p.seed });
+        return;
+    }
+    let first = null;
+    if (p.splash > 0) {
+        const hits = strikeArea(p, p.tx, p.ty, p.splash, p.damage);
+        first = p.target && !p.target.dead && hits.includes(p.target) ? p.target : hits[0];
+    } else if (p.target && !p.target.dead) {
+        strikeHero(p, p.target, p.damage, p.tx, p.ty);
+        first = p.target;
+    }
+    strikeChain(p, first, p.damage);
+    if (owner) dropBurnGround(owner, p.tx, p.ty);
+    if (p.then === 'puddle' && owner) dropPuddle(owner, a, p.tx, p.ty);
+    if (p.then === 'vortex') {
+        Game.hazards.push({
+            kind: 'vortex', x: p.tx, y: p.ty, radius: Math.max(p.splash, TILE), life: a.duration, age: 0, tick: a.tick, every: a.tick,
+            damage: p.damage / a.ratio * a.tickRatio, pull: a.pull * TILE, look: p.look, src: p.src, owner: p.owner, color: p.color, seed: p.seed
+        });
+        Fx.addShake(5);
+    }
+    attackImpact(p.look, p.src, p.tx, p.ty, Math.max(p.splash, TILE * 0.5), p.tier);
+    Sfx.play(p.then === 'vortex' ? 'blast' : 'hitIce');
+}
+
+// 공격 개체 움직이기(kind 'atk'). 그림만 남은 개체는 수명이 다하면 끝난다
+const ATTACK_UPDATE = {
+    pierce(p, dt) {
+        const step = p.speed * dt;
+        p.dist += step;
+        p.x += p.v.dx * step;
+        p.y += p.v.dy * step;
+        for (const h of liveHeroList()) {
+            if (p.hit.includes(h) || p.hit.length >= p.cap) continue;
+            const b = heroBody(h);
+            if (distance(p.x, p.y, b.x, b.y) > (h.boss ? 70 : 36)) continue;
+            p.hit.push(h);
+            const first = p.hit.length === 1;
+            strikeHero(p, h, p.damage * (first ? 1 : p.ratio), p.x, p.y);
+            if (first) strikeChain(p, h, p.damage);
+        }
+        if (p.dist >= p.max) p.done = true;
+    },
+    boomerang(p, dt) {
+        p.s += dt / p.time * (p.back ? -1 : 1);
+        if (!p.back && p.s >= 1) { p.s = 1; p.back = true; }
+        const s = clamp(p.s, 0, 1);
+        const k = p.back ? 4 * s * (1 - s) * p.bow : 0; // 갈 때는 곧게(대상을 맞힌다), 돌아올 때는 휘어 옆 줄을 훑는다
+        p.x = p.sx + (p.ex - p.sx) * s + p.nx * k;
+        p.y = p.sy + (p.ey - p.sy) * s + p.ny * k;
+        const list = p.back ? p.hitBack : p.hitOut;
+        for (const h of liveHeroList()) {
+            if (list.includes(h) || list.length >= p.max) continue;
+            const b = heroBody(h);
+            if (distance(p.x, p.y, b.x, b.y) > (h.boss ? 70 : 44)) continue;
+            list.push(h);
+            strikeHero(p, h, p.damage, p.x, p.y);
+            if (!p.chained) { p.chained = true; strikeChain(p, h, p.base); }
+        }
+        if (p.back && p.s <= 0) p.done = true;
+    },
+    lob(p, dt) {
+        p.age += dt;
+        if (p.home && p.target && !p.target.dead) {
+            const f = heroWorld(p.target);
+            p.tx = f.x;
+            p.ty = f.y;
+        }
+        const t = clamp(p.age / p.time, 0, 1);
+        p.x = p.sx + (p.tx - p.sx) * t;
+        p.y = p.sy + (p.ty - p.sy) * t - 4 * t * (1 - t) * p.arc;
+        if (t >= 1) {
+            p.done = true;
+            landLob(p);
+        }
+    },
+    drop(p, dt) {
+        p.age += dt;
+        if (!p.fired && p.age >= p.delay - 1e-9) {
+            p.fired = true;
+            const hit = [];
+            for (const pt of p.pts) {
+                for (const h of capTargets(null, heroesInCircle(pt.x, pt.y, p.radius), p.cap)) {
+                    if (hit.includes(h) || hit.length >= p.cap) continue;
+                    hit.push(h);
+                    strikeHero(p, h, p.damage, pt.x, pt.y);
+                }
+            }
+            strikeChain(p, hit[0], p.damage);
+            const owner = liveOwner(p);
+            if (owner) dropBurnGround(owner, p.pts[0].x, p.pts[0].y);
+            Fx.addShake(p.big ? 5 : 3);
+            Sfx.play('blast');
+        }
+        if (p.age >= p.life) p.done = true;
+    },
+    beam(p, dt) {
+        p.age += dt;
+        while (p.n < p.ticks && p.age >= p.n * p.every - 1e-9) {
+            p.n++;
+            for (const h of heroesOnLine(p.ox, p.oy, p.v, p.len, p.width, true)) strikeHero(p, h, p.damage, p.ox, p.oy);
+        }
+        if (p.age >= p.life) p.done = true;
+    },
+    shot(p, dt) {
+        p.age += dt;
+        if (p.wait > 0) { p.wait -= dt; return; }
+        let t = p.target;
+        if (!t || t.dead) {
+            t = p.target = nearestHero(p.x, p.y, TILE * 2);
+            if (!t) { p.done = true; return; }
+        }
+        const b = heroBody(t);
+        const d = unitVec(p.x, p.y, b.x, b.y);
+        const k = Math.min(1, 9 * dt);
+        p.vx += (d.dx * p.speed - p.vx) * k;
+        p.vy += (d.dy * p.speed - p.vy) * k;
+        const step = distance(0, 0, p.vx, p.vy) * dt;
+        if (d.len <= Math.max(16, step + 6)) {
+            p.done = true;
+            if (p.splash > 0) {
+                const f = heroWorld(t);
+                strikeArea(p, f.x, f.y, p.splash, p.damage);
+                attackImpact(p.look, p.src, b.x, b.y, p.splash, p.tier);
+            } else strikeHero(p, t, p.damage, p.x, p.y);
+            return;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.age >= p.life) p.done = true;
+    },
+    tether(p, dt) {
+        p.age += dt;
+        while (p.n < p.ticks && p.age >= p.n * p.every - 1e-9) {
+            p.n++;
+            for (const h of p.list) if (!h.dead) strikeHero(p, h, p.damage, p.ox, p.oy);
+        }
+        if (p.age >= p.life) p.done = true;
+    },
+    fissure(p, dt) {
+        p.age += dt;
+        if (p.front < p.len) {
+            p.front = Math.min(p.len, p.front + p.speed * dt);
+            for (const h of heroesOnLine(p.ox, p.oy, p.v, p.front, p.width, false)) {
+                if (p.hit.includes(h) || p.hit.length >= p.cap) continue;
+                p.hit.push(h);
+                strikeHero(p, h, p.damage, p.ox, p.oy);
+                const owner = liveOwner(p);
+                if (p.hit.length === 1 && owner) monsterCleave(owner, h, p.damage);
+            }
+        } else {
+            p.end += dt;
+            if (p.end >= 0.6) p.done = true;
+        }
+        if (p.age >= p.life) p.done = true;
+    },
+    shockwave(p, dt) {
+        p.age += dt;
+        if (p.r < p.max) {
+            p.r = Math.min(p.max, p.r + p.speed * dt);
+            const fresh = heroesInCircle(p.ox, p.oy, p.r).filter(h => !p.hit.includes(h));
+            for (const h of capTargets(fresh.includes(p.first) ? p.first : null, fresh, p.cap - p.hit.length)) {
+                p.hit.push(h);
+                strikeHero(p, h, p.damage, p.ox, p.oy);
+                const owner = liveOwner(p);
+                if (p.hit.length === 1 && owner) monsterCleave(owner, h, p.damage);
+            }
+        } else {
+            p.end += dt;
+            if (p.end >= 0.35) p.done = true;
+        }
+        if (p.age >= p.life) p.done = true;
+    },
+    rewind(p, dt) {
+        p.age += dt;
+        if (!p.fired) {
+            if (p.target && !p.target.dead) {
+                const f = heroWorld(p.target);
+                p.x = f.x;
+                p.y = f.y;
+            }
+            if (p.age >= p.delay - 1e-9) {
+                p.fired = true;
+                const h = p.target && !p.target.dead ? p.target : nearestHero(p.x, p.y, TILE * 0.7);
+                if (h) {
+                    strikeHero(p, h, p.damage, p.x, p.y);
+                    if (!h.dead && !h.boss) {
+                        h.d = Math.max(0, h.d - p.push);
+                        h.blocker = null;
+                    }
+                }
+                Sfx.play('hitIce');
+            }
+        }
+        if (p.age >= p.life) p.done = true;
+    }
+};
+
+function updateAttack(p, dt) {
+    const step = ATTACK_UPDATE[p.atk];
+    if (step) { step(p, dt); return; }
+    p.age += dt;
+    if (p.age >= p.life) p.done = true;
 }
 
 function fireMonsterShot(m, stats, target) {
-    if (MONSTER_ROLES[MONSTERS[m.type].role].melee) {
-        monsterMelee(m, stats, target);
-        return;
-    }
+    const a = monsterAttack(m.type);
+    const melee = !!MONSTER_ROLES[MONSTERS[m.type].role].melee;
+    if (MELEE_ATTACKS.includes(a.kind)) { meleeAttack(m, stats, target, a); return; }
+    if (ATTACKS[a.kind]) { ATTACKS[a.kind](m, stats, target, a, melee); return; }
+    if (melee) { meleeAttack(m, stats, target, Object.assign({}, ATTACK_KINDS.claw, { kind: 'claw' })); return; }
     const tp = heroWorld(target);
     const hand = monsterHand(m);
     if (stats.beam) {
@@ -708,6 +1274,7 @@ function reviveMonster(m) {
 }
 
 function updateProjectile(p, dt) {
+    if (p.kind === 'atk') { updateAttack(p, dt); return; }
     if (p.kind === 'arrow') {
         const t = p.target;
         if (t.dead) { p.done = true; return; }
@@ -764,7 +1331,7 @@ function updateProjectile(p, dt) {
             // 연쇄 번개는 노린 용사(쓰러졌으면 그 자리에서 가장 가까운 용사)에서 시작한다
             const first = p.target && !p.target.dead ? p.target : nearestHero(p.tx, p.ty + 30, p.splash);
             if (owner) monsterChain(owner, first, p.damage);
-            dropBurnGround(owner, p.tx, p.ty + 30);
+            if (!p.look || p.look === 'fire') dropBurnGround(owner, p.tx, p.ty + 30); // 세 원소는 불 구체만
             Fx.ring(p.tx, p.ty + 30, p.splash, `rgb(${rgb})`, 0.3);
             Fx.anim(p.impact || 'fx_blastViolet', p.tx, p.ty + 10, p.splash * 2.8, 0.42);
             Fx.glow(p.tx, p.ty, p.splash * 1.5, `rgba(${rgb},1)`, 0.24);

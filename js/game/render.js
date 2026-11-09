@@ -7,6 +7,79 @@ const GROUND_DESAT = 0.6; // 배경 채도를 빼는 세기
 const ROAD_DESAT = 0.35; // 길 채도를 빼는 세기
 const THRONE_BACK = 180; // 왕좌 의자의 발끝을 왕좌 칸 가운데에서 위로 올린 거리(세계 px). 왕좌 둘레 뒷줄에 서서 등받이가 마왕 머리 위로 보인다
 
+// 공격 모양 그림의 색(MONSTER_ATTACKS의 look). c: [어두운 테두리, 바탕, 밝은 면, 가운데 빛], hit: 맞은 용사 불꽃 색, shape: 같은 공격 안의 다른 모양
+// 모든 효과는 도트 칸(화면 k px, 세계 k * ART_SCALE)으로 찍는다. 부드러운 원과 그라데이션은 쓰지 않는다
+const ATTACK_LOOKS = {
+    default: { c: ['#3a2a5a', '#b48cff', '#e6d4ff', '#ffffff'], hit: '#d7a8ff' },
+    // 근접
+    steel: { c: ['#2a2f3a', '#9aa6b8', '#dfe6f0', '#ffffff'], hit: '#e6ecf5' },
+    spear: { c: ['#3a2410', '#a07040', '#e8e0d0', '#ffffff'], hit: '#f0e6d0' },
+    rot: { c: ['#1c2a14', '#5e8a3a', '#a8d070', '#e8ffc0'], hit: '#a8d070', shape: 'splat' },
+    hellfire: { c: ['#3a0a04', '#e8461a', '#ffa040', '#fff0a0'], hit: '#ff8a3a' },
+    dirt: { c: ['#2a1a0c', '#8a6038', '#c8a070', '#f0dcb0'], hit: '#d8b080' },
+    grave: { c: ['#1a1a24', '#7a7a90', '#c8c8d8', '#f4f4ff'], hit: '#c8c8d8' },
+    cross: { c: ['#3a0808', '#c82828', '#ff7a5a', '#ffe0d0'], hit: '#ff6a4a', shape: 'cross' },
+    beast: { c: ['#2a1a10', '#b07848', '#f0d0a0', '#ffffff'], hit: '#f0d0a0' },
+    club: { c: ['#2a1a0a', '#7a5a30', '#b89060', '#e8d0a0'], hit: '#c8a070' },
+    ghost: { c: ['#0a2030', '#3aa8c8', '#9ef0ff', '#ffffff'], hit: '#9ef0ff' },
+    paw: { c: ['#20140c', '#8a6038', '#e0c090', '#fff4e0'], hit: '#e0c090' },
+    bone: { c: ['#2a2418', '#c8bc98', '#f0ead4', '#ffffff'], hit: '#f0ead4' },
+    horn: { c: ['#2a1a0a', '#c89050', '#f0d8a8', '#ffffff'], hit: '#f0c890' },
+    root: { c: ['#1a1408', '#6a4a20', '#8ab040', '#d8f080'], hit: '#a8c860' },
+    iron: { c: ['#1a1c24', '#7a8090', '#c8d0dc', '#ffffff'], hit: '#c8d0dc' },
+    stone: { c: ['#1c1a18', '#787068', '#b8b0a0', '#ece4d4'], hit: '#c8c0b0' },
+    doom: { c: ['#140408', '#8a1a2a', '#e04050', '#ffd0d8'], hit: '#ff5a6a' },
+    saber: { c: ['#2a2008', '#d8b048', '#fff0a8', '#ffffff'], hit: '#ffe080' },
+    deathlord: { c: ['#120a1e', '#6a3aa8', '#c8a8f0', '#ffffff'], hit: '#c8a8f0' },
+    inferno: { c: ['#2a0404', '#e83010', '#ffb030', '#fff8c0'], hit: '#ff9030' },
+    chief: { c: ['#2a1a04', '#c88a20', '#ffe070', '#ffffff'], hit: '#ffd060' },
+    giant: { c: ['#1c140c', '#8a6a48', '#d0b088', '#fff0d0'], hit: '#e0c098' },
+    earth: { c: ['#1a120a', '#7a5630', '#c89a5a', '#f4dca8'], hit: '#d8a868' },
+    crystal: { c: ['#101838', '#4a78e0', '#a8d0ff', '#ffffff'], hit: '#a8d0ff' },
+    kraken: { c: ['#1a0a24', '#7a3a9a', '#d070c0', '#ffd0f0'], hit: '#d070c0' },
+    scythe: { c: ['#0c0814', '#4a2a7a', '#b090e8', '#f0e8ff'], hit: '#b090e8' },
+    thunder: { c: ['#2a2008', '#ffc830', '#fff0a0', '#ffffff'], hit: '#ffe070' },
+    // 원거리
+    wind: { c: ['#10302a', '#5ad0a0', '#c8fff0', '#ffffff'], hit: '#c8fff0', shape: 'blade' },
+    feather: { c: ['#2a1e10', '#c89a60', '#fff4e0', '#ffffff'], hit: '#fff0d0', shape: 'feather' },
+    storm: { c: ['#101a3a', '#5a8aff', '#fff07a', '#ffffff'], hit: '#fff07a', shape: 'zig' },
+    sound: { c: ['#2a1408', '#e08a3a', '#ffd090', '#ffffff'], hit: '#ffd090', shape: 'sound' },
+    fallen: { c: ['#0a0614', '#3a1a5a', '#c070ff', '#ffffff'], hit: '#c070ff', shape: 'lance' },
+    axe: { c: ['#202428', '#8a94a0', '#e0e6ec', '#ffffff'], hit: '#e0e6ec' },
+    jester: { c: ['#2a0a2a', '#e050c8', '#ffb0f0', '#ffffff'], hit: '#ffb0f0' },
+    moon: { c: ['#141c3a', '#a8b8ff', '#e8f0ff', '#ffffff'], hit: '#e8f0ff', shape: 'crescent' },
+    water: { c: ['#0a2a4a', '#3a8ae0', '#9ad8ff', '#ffffff'], hit: '#9ad8ff' },
+    star: { c: ['#140a3a', '#5a6aff', '#b8c8ff', '#ffffff'], hit: '#b8c8ff', shape: 'stars' },
+    web: { c: ['#20202a', '#a8a8b8', '#e8e8f0', '#ffffff'], hit: '#e8e8f0', shape: 'web' },
+    toxic: { c: ['#102008', '#5aa82a', '#b0f060', '#f0ffc0'], hit: '#b0f060', shape: 'bubbles' },
+    chaos: { c: ['#14082a', '#8a3ae0', '#e070ff', '#ffe0ff'], hit: '#e070ff', shape: 'swirl' },
+    abyss: { c: ['#04101a', '#1a6a7a', '#5ae0d0', '#d0fff8'], hit: '#5ae0d0' },
+    bomb: { c: ['#141418', '#3a3a44', '#8a8a98', '#ffd040'], hit: '#ffb040' },
+    ember: { c: ['#3a0a04', '#e85a1a', '#ffc040', '#fff8d0'], hit: '#ffa040' },
+    rock: { c: ['#1c1810', '#6a5a44', '#a8987a', '#e0d4b8'], hit: '#c8b898', shape: 'rock' },
+    ice: { c: ['#0a2040', '#5aa8e8', '#c8ecff', '#ffffff'], hit: '#c8ecff', shape: 'shard' },
+    icicle: { c: ['#0a1a3a', '#6ab8f0', '#d8f4ff', '#ffffff'], hit: '#d8f4ff', shape: 'shard' },
+    lava: { c: ['#2a0804', '#c83a10', '#ff9a30', '#fff0a0'], hit: '#ff8a30', shape: 'rock' },
+    moonlight: { c: ['#1a2040', '#8aa0ff', '#e0e8ff', '#ffffff'], hit: '#e0e8ff', shape: 'pillar' },
+    wisp: { c: ['#0a2a3a', '#3ad0ff', '#b0f4ff', '#ffffff'], hit: '#b0f4ff' },
+    totem: { c: ['#0a2a10', '#3ac85a', '#b0ffb0', '#ffffff'], hit: '#b0ffb0' },
+    necro: { c: ['#06200e', '#2ae070', '#a0ffc0', '#ffffff'], hit: '#a0ffc0' },
+    heart: { c: ['#3a0820', '#ff3a8a', '#ffa0c8', '#ffffff'], hit: '#ffa0c8', shape: 'heart' },
+    bat: { c: ['#140408', '#6a1020', '#d03040', '#ffb0b0'], hit: '#ff5060', shape: 'bat' },
+    frost: { c: ['#0a1a3a', '#6ab0f0', '#d8f0ff', '#ffffff'], hit: '#d8f0ff', shape: 'shard' },
+    fire: { c: ['#3a0804', '#e8501a', '#ffb040', '#fff4c0'], hit: '#ff9040' },
+    acid: { c: ['#0e2008', '#6ac02a', '#d0ff60', '#ffffd0'], hit: '#c0f060' },
+    bonefire: { c: ['#06140a', '#2aa860', '#a0ffb0', '#f0fff0'], hit: '#a0ffb0', shape: 'bones' },
+    sun: { c: ['#3a1404', '#ff8a1a', '#ffe060', '#ffffff'], hit: '#ffd060' },
+    clock: { c: ['#2a1c08', '#d8a848', '#fff0b0', '#ffffff'], hit: '#ffe090' },
+    soul: { c: ['#0c0a1e', '#6a5ae0', '#b0f0a0', '#ffffff'], hit: '#b0f0a0' }
+};
+// 도트 노이즈(그림 흔들림용, 판 결과와 무관)
+function fxNoise(a, b, c) {
+    const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
+    return v - Math.floor(v);
+}
+
 const Render = {
     mapLayer: null,
 
@@ -1553,6 +1626,10 @@ const Render = {
     },
 
     drawProjectile(ctx, p) {
+        if (p.kind === 'atk') { // 공격 모양(땅에 그리는 것은 drawHazards 뒤에 먼저 그렸다)
+            if (!p.ground) this.drawAttack(ctx, p);
+            return;
+        }
         // 투사체 모양: 몬스터 표의 art.shot(시트 또는 'bolt'). 없으면 화살(무거운 화살은 2배)과 보라 마력 구체
         const shot = p.shot || (p.kind === 'arrow' ? (p.big ? 'fx_arrowBig' : 'fx_arrowPoison') : null);
         if (shot && FX_SHEETS[shot]) {
@@ -1560,19 +1637,917 @@ const Render = {
             const frame = Math.floor(Game.time / sheet.life * sheet.frames) % sheet.frames;
             this.drawSheetFrame(ctx, shot, frame, p.x, p.y, (p.big ? 2 : 1) * sheet.fit / WORLD_ZOOM, p.angle || 0); // 화면 1배, 무거운 화살 2배
         } else {
-            // 'bolt'은 몬스터 빛 색(glow)으로, 마력 구체는 보라로
-            const rgb = shot === 'bolt' && p.glow ? p.glow : '180,100,255';
-            const r = p.kind === 'arrow' ? 22 : 32;
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r);
-            g.addColorStop(0, 'rgba(255,245,255,1)');
-            g.addColorStop(0.4, `rgba(${rgb},0.9)`);
-            g.addColorStop(1, `rgba(${rgb},0)`);
-            ctx.fillStyle = g;
-            ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
-            ctx.restore();
+            // 'bolt'은 몬스터 빛 색(glow)으로, 마력 구체는 보라로. 계단진 도트 구슬: 어두운 테두리, 바탕, 밝은 면, 흰 점과 꼬리 칸
+            const rgb = (shot === 'bolt' || p.look) && p.glow ? p.glow : '180,100,255';
+            const [r0, g0, b0] = rgb.split(',').map(Number);
+            const mix = (k, w) => `rgb(${Math.round(r0 * k + 255 * w)},${Math.round(g0 * k + 255 * w)},${Math.round(b0 * k + 255 * w)})`;
+            const r = p.kind === 'arrow' ? 8 : 12;
+            const wob = Math.floor(Game.time * 12) % 2;
+            this.pixelDisc(ctx, p.x, p.y, r + 3, r + 3, mix(0.3, 0), { k: 2, hard: true });
+            this.pixelDisc(ctx, p.x, p.y, r + wob, r + wob, mix(1, 0), { k: 2, hard: true });
+            this.pixelDisc(ctx, p.x - r * 0.25, p.y - r * 0.25, r * 0.55, r * 0.55, mix(0.5, 0.5), { k: 2, hard: true });
+            ctx.fillStyle = '#ffffff';
+            this.px(ctx, p.x - r * 0.4, p.y - r * 0.45, 2);
+            if (p.look === 'storm') this.sparkle(ctx, p.x + r, p.y - r, 2, mix(0.4, 0.6));
         }
+    },
+
+    // ----- 공격 모양 그림(ATTACK_LOOKS). 모두 도트 칸으로 찍는다 -----
+    // 칸 하나: (x, y)가 가운데인 화면 k px 네모(세계 좌표). 색은 미리 fillStyle로 정한다
+    px(ctx, x, y, k) {
+        const c = k * ART_SCALE;
+        ctx.fillRect(snapWorld(x - c / 2), snapWorld(y - c / 2), c, c);
+    },
+    // 칸을 이어 찍은 선(계단진 도트 선)
+    dots(ctx, ax, ay, bx, by, k, color) {
+        const c = k * ART_SCALE;
+        const n = Math.max(1, Math.ceil(distance(ax, ay, bx, by) / c));
+        ctx.fillStyle = color;
+        for (let i = 0; i <= n; i++) this.px(ctx, ax + (bx - ax) * i / n, ay + (by - ay) * i / n, k);
+    },
+    // 굵은 도트 선: 테두리(어두운 색) 위에 속 색. w는 세계 px
+    inkLine(ctx, ax, ay, bx, by, w, inner, outer) {
+        if (outer) this.pixelLine(ctx, ax, ay, bx, by, outer, w + 4 * ART_SCALE);
+        this.pixelLine(ctx, ax, ay, bx, by, inner, w);
+    },
+    // 납작한 타원 고리 위의 칸(땅에 깔린 원). from~to는 각(라디안), ry/rx 비율 flat
+    arcDots(ctx, x, y, r, flat, from, to, k, color) {
+        const c = k * ART_SCALE;
+        const n = Math.max(6, Math.ceil(Math.abs(to - from) * r / c));
+        ctx.fillStyle = color;
+        for (let i = 0; i <= n; i++) {
+            const a = from + (to - from) * i / n;
+            this.px(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r * flat, k);
+        }
+    },
+    // 4갈래 반짝임
+    sparkle(ctx, x, y, s, color, core) {
+        const c = ART_SCALE * 2;
+        ctx.fillStyle = color;
+        for (let i = 1; i <= s; i++) {
+            this.px(ctx, x + i * c, y, 2);
+            this.px(ctx, x - i * c, y, 2);
+            this.px(ctx, x, y + i * c, 2);
+            this.px(ctx, x, y - i * c, 2);
+        }
+        ctx.fillStyle = core || '#ffffff';
+        this.px(ctx, x, y, 2);
+    },
+    // 흩어지는 조각(터짐): seed로 정한 방향, t(0~1)만큼 날아가 떨어진다
+    debris(ctx, x, y, r, t, seed, n, colors, k) {
+        for (let i = 0; i < n; i++) {
+            const a = fxNoise(seed, i, 1) * Math.PI * 2;
+            const v = 0.5 + fxNoise(seed, i, 2) * 0.6;
+            const d = r * v * Math.min(1, t * 1.6);
+            ctx.fillStyle = colors[i % colors.length];
+            this.px(ctx, x + Math.cos(a) * d, y + Math.sin(a) * d * 0.55 - Math.sin(t * Math.PI) * r * 0.5 * v, k || 2);
+        }
+    },
+    // 땅의 충격 고리: 퍼지며 옅어지는 납작한 고리 두 겹
+    groundRing(ctx, x, y, r, t, L) {
+        ctx.globalAlpha = Math.max(0, 1 - t);
+        this.arcDots(ctx, x, y, r * (0.35 + 0.65 * t), 0.42, 0, Math.PI * 2, t < 0.5 ? 3 : 2, L.c[2]);
+        if (t < 0.6) this.arcDots(ctx, x, y, r * (0.2 + 0.5 * t), 0.42, 0, Math.PI * 2, 2, L.c[3]);
+        ctx.globalAlpha = 1;
+    },
+
+    drawAttack(ctx, p) {
+        const fn = this['atk_' + p.atk];
+        if (!fn) return;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        fn.call(this, ctx, p, ATTACK_LOOKS[p.look] || ATTACK_LOOKS.default);
+        ctx.restore();
+    },
+
+    // 꿰뚫기: 촉이 있는 긴 화살대와 꼬리 잔상. 바람 칼날, 깃털, 번개, 소리 물결, 어둠의 창
+    atk_pierce(ctx, p, L) {
+        const s = p.big ? 1.4 : 1;
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const c = ART_SCALE;
+        if (L.shape === 'sound' || L.shape === 'blade') {
+            // 진행 방향에 수직인 호: 소리는 세 겹, 바람은 초승달 하나에 잔상(작은 몬스터도 눈에 띄게 1.5배)
+            const rings = L.shape === 'sound' ? 3 : 4;
+            const s = (p.big ? 1.4 : 1) * 1.5;
+            for (let i = 0; i < rings; i++) {
+                const back = i * 12 * s;
+                const half = (L.shape === 'sound' ? 10 + i * 5 : 16 - i * 2) * s;
+                const cx = p.x - v.dx * back;
+                const cy = p.y - v.dy * back;
+                ctx.globalAlpha = 1 - i * (L.shape === 'sound' ? 0.25 : 0.22);
+                ctx.fillStyle = i === 0 ? L.c[3] : (i === 1 ? L.c[2] : L.c[1]);
+                for (let j = -half; j <= half; j += 2 * c) {
+                    const bend = (1 - (j / half) * (j / half)) * 9 * s;
+                    this.px(ctx, cx + nx * j + v.dx * bend, cy + ny * j + v.dy * bend, 3);
+                    if (i === 0) this.px(ctx, cx + nx * j + v.dx * (bend - 2 * c), cy + ny * j + v.dy * (bend - 2 * c), 2);
+                }
+            }
+            return;
+        }
+        const len = (L.shape === 'lance' ? 58 : 36) * s;
+        const bx = p.x - v.dx * len;
+        const by = p.y - v.dy * len;
+        // 꼬리 잔상(뒤로 갈수록 옅다)
+        for (let i = 1; i <= 5; i++) {
+            ctx.globalAlpha = 0.55 - i * 0.09;
+            ctx.fillStyle = i % 2 ? L.c[1] : L.c[2];
+            const zig = L.shape === 'zig' ? (i % 2 ? 5 : -5) * s : 0;
+            this.px(ctx, bx - v.dx * i * 9 * s + nx * zig, by - v.dy * i * 9 * s + ny * zig, 2);
+        }
+        ctx.globalAlpha = 1;
+        this.inkLine(ctx, bx, by, p.x, p.y, (L.shape === 'lance' ? 7 : 4) * s, L.c[1], L.c[0]);
+        this.pixelLine(ctx, bx + v.dx * len * 0.3, by + v.dy * len * 0.3, p.x, p.y, L.c[2], 2.5 * s);
+        // 촉: 앞 끝 세모
+        for (let i = 0; i < 4; i++) {
+            const w = (4 - i) * 1.6 * s * (L.shape === 'lance' ? 1.5 : 1);
+            const qx = p.x - v.dx * (i * 3 + 2) * s;
+            const qy = p.y - v.dy * (i * 3 + 2) * s;
+            this.dots(ctx, qx + nx * w, qy + ny * w, qx - nx * w, qy - ny * w, 2, i === 0 ? L.c[3] : L.c[2]);
+        }
+        if (L.shape === 'feather') {
+            for (const side of [1, -1]) this.dots(ctx, bx + v.dx * 8, by + v.dy * 8, bx - v.dx * 4 + nx * side * 9, by - v.dy * 4 + ny * side * 9, 2, L.c[2]);
+        }
+        if (L.shape === 'lance') this.sparkle(ctx, p.x, p.y, 3, L.c[2], L.c[3]);
+    },
+
+    // 부메랑: 도는 시트 그림(도끼, 원반)이거나 도는 초승달(달). 지나간 자리에 옅은 칸
+    atk_boomerang(ctx, p, L) {
+        const spin = p.age * 22 + p.seed;
+        if (p.shot && FX_SHEETS[p.shot]) {
+            const sheet = FX_SHEETS[p.shot];
+            const frame = Math.floor(Game.time / sheet.life * sheet.frames) % sheet.frames;
+            this.drawSheetFrame(ctx, p.shot, frame, p.x, p.y, sheet.fit / WORLD_ZOOM, spin);
+            return;
+        }
+        const s = p.big ? 1.6 : 1;
+        // 초승달: 큰 원판에서 비낀 원판을 뺀 칸
+        const R = 13 * s;
+        const c = 2 * ART_SCALE;
+        const ox = Math.cos(spin) * R * 0.55;
+        const oy = Math.sin(spin) * R * 0.55;
+        for (let pass = 0; pass < 2; pass++) {
+            for (let i = -R; i <= R; i += c) {
+                for (let j = -R; j <= R; j += c) {
+                    const d = i * i + j * j;
+                    if (d > R * R) continue;
+                    const e = (i - ox) * (i - ox) + (j - oy) * (j - oy);
+                    if (e < R * R * 0.62) continue;
+                    if (pass === 0) {
+                        ctx.fillStyle = L.c[0];
+                        this.px(ctx, p.x + i, p.y + j, 4);
+                    } else {
+                        ctx.fillStyle = d > R * R * 0.6 ? L.c[1] : (e > R * R * 1.2 ? L.c[3] : L.c[2]);
+                        this.px(ctx, p.x + i, p.y + j, 2);
+                    }
+                }
+            }
+        }
+        if (Math.floor(p.age * 20) % 2 === 0) this.sparkle(ctx, p.x - ox * 1.6, p.y - oy * 1.6, 2, L.c[2]);
+    },
+
+    // 물줄기: 손에서 대상까지 굽이치는 굵은 물기둥(가운데 밝음), 끝에서 물방울이 튄다. 별의 고래는 별빛이 섞인다
+    atk_stream(ctx, p, L) {
+        const t = p.age / p.life;
+        const s = p.big ? 1.5 : 1;
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const reach = p.len * Math.min(1, t * 5);
+        const thick = (1 - t * 0.6) * 15 * s;
+        const c = 2 * ART_SCALE;
+        for (let d = 0; d <= reach; d += c) {
+            const k = d / p.len;
+            const wave = Math.sin(d * 0.035 - p.age * 26) * 3 * s * (0.2 + k);
+            const w = thick * (0.55 + 0.45 * Math.min(1, d / 40)) * (1 - k * 0.3);
+            const cx = p.ox + v.dx * d + nx * wave;
+            const cy = p.oy + v.dy * d + ny * wave;
+            for (let j = -w; j <= w; j += c) {
+                const e = Math.abs(j) / w;
+                ctx.fillStyle = e > 0.8 ? L.c[0] : (e > 0.45 ? L.c[1] : (e > 0.15 ? L.c[2] : L.c[3]));
+                this.px(ctx, cx + nx * j, cy + ny * j, 2);
+            }
+            if (L.shape === 'stars' && fxNoise(Math.floor(d / 14), Math.floor(p.age * 12), p.seed) > 0.8) this.sparkle(ctx, cx + nx * w * 1.4, cy + ny * w * 1.4, 2, L.c[2]);
+        }
+        // 맞은 자리마다 물보라
+        for (const h of p.hits) {
+            for (let i = 0; i < 8; i++) {
+                const a = fxNoise(p.seed, i, 3) * Math.PI * 2;
+                const r = (8 + fxNoise(p.seed, i, 4) * 22) * s * Math.min(1, t * 3);
+                ctx.fillStyle = i % 3 ? L.c[2] : L.c[3];
+                this.px(ctx, h.x + Math.cos(a) * r, h.y + Math.sin(a) * r * 0.7 - t * 14, 2);
+            }
+        }
+    },
+
+    // 던진 덩이(웅덩이, 소용돌이, 덫): 바닥 그림자와 날아가는 덩이
+    atk_lob(ctx, p, L) {
+        const t = clamp(p.age / p.time, 0, 1);
+        const gx = p.sx + (p.tx - p.sx) * t;
+        const gy = p.sy + (p.ty - p.sy) * t + 40 * (1 - t);
+        ctx.globalAlpha = 0.35;
+        this.pixelDisc(ctx, gx, gy, 10, 4, '#000000', { k: 2, hard: true });
+        ctx.globalAlpha = 1;
+        const s = p.big ? 1.5 : 1;
+        if (p.look === 'bomb') {
+            this.pixelDisc(ctx, p.x, p.y, 12, 12, L.c[0], { k: 2, hard: true });
+            this.pixelDisc(ctx, p.x, p.y, 10, 10, L.c[1], { k: 2, hard: true });
+            ctx.fillStyle = L.c[2];
+            this.px(ctx, p.x - 3, p.y - 3, 2);
+            ctx.fillStyle = Math.floor(p.age * 24) % 2 ? '#ffffff' : L.c[3];
+            this.px(ctx, p.x + 6, p.y - 10, 3);
+            return;
+        }
+        if (p.look === 'ember') {
+            this.pixelDisc(ctx, p.x, p.y, 9 * s, 12 * s, L.c[0], { k: 2, hard: true });
+            this.pixelDisc(ctx, p.x, p.y + 1, 7 * s, 10 * s, L.c[1], { k: 2, hard: true });
+            this.pixelDisc(ctx, p.x - 1, p.y - 2, 4 * s, 5 * s, L.c[2], { k: 2, hard: true });
+            for (let i = 1; i <= 4; i++) {
+                ctx.fillStyle = i % 2 ? L.c[2] : L.c[1];
+                this.px(ctx, p.x - (p.tx - p.sx) * 0.02 * i, p.y + i * 6 * s, 2);
+            }
+            return;
+        }
+        const r = (p.look === 'abyss' ? 16 : 12) * s;
+        this.pixelDisc(ctx, p.x, p.y, r + 2, r + 2, L.c[0], { k: 2, hard: true });
+        this.pixelDisc(ctx, p.x, p.y, r, r, L.c[1], { k: 2, hard: true });
+        this.pixelDisc(ctx, p.x - r * 0.25, p.y - r * 0.25, r * 0.5, r * 0.5, L.c[2], { k: 2, hard: true });
+        ctx.fillStyle = L.c[3];
+        this.px(ctx, p.x - r * 0.35, p.y - r * 0.4, 2);
+        if (p.look === 'abyss') this.arcDots(ctx, p.x, p.y, r + 6, 1, p.age * 12, p.age * 12 + Math.PI * 1.2, 2, L.c[2]);
+        // 떨어지는 방울 꼬리
+        for (let i = 1; i <= 3; i++) {
+            ctx.fillStyle = L.c[1];
+            ctx.globalAlpha = 0.7 - i * 0.18;
+            this.px(ctx, p.x - (p.tx - p.sx) * 0.03 * i, p.y + (i * 7) * (t < 0.5 ? 1 : -1), 2);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 낙하: 떨어질 자리에 그림자와 점선 경고, 위에서 떨어지는 바위·얼음·용암·달빛, 닿으면 갈라짐과 조각
+    atk_drop(ctx, p, L) {
+        const s = p.big ? 1.4 : 1;
+        const t = clamp(p.age / p.delay, 0, 1);
+        const after = Math.max(0, p.age - p.delay) / Math.max(0.01, p.life - p.delay);
+        for (let n = 0; n < p.pts.length; n++) {
+            const pt = p.pts[n];
+            const r = Math.min(p.radius, TILE * (p.look === 'moonlight' ? 0.5 : 0.9));
+            if (t < 1) {
+                ctx.globalAlpha = 0.25 + 0.3 * t;
+                this.pixelDisc(ctx, pt.x, pt.y, r * (0.3 + 0.7 * t), r * 0.4 * (0.3 + 0.7 * t), '#000000', { k: 3, hard: true });
+                ctx.globalAlpha = 0.8;
+                this.arcDots(ctx, pt.x, pt.y, r, 0.4, p.age * 2, p.age * 2 + Math.PI * 2, 2, L.c[2]);
+                ctx.globalAlpha = 1;
+                const fall = t * t;
+                const y = pt.y - (1 - fall) * 300;
+                if (L.shape === 'pillar') {
+                    // 달빛 기둥: 위에서 내려오는 가는 빛줄기
+                    const top = pt.y - 460;
+                    ctx.globalAlpha = 0.3 + 0.5 * t;
+                    this.pixelLine(ctx, pt.x, top, pt.x, y, L.c[1], 10);
+                    this.pixelLine(ctx, pt.x, top, pt.x, y, L.c[3], 3);
+                    ctx.globalAlpha = 1;
+                } else if (L.shape === 'shard') {
+                    // 얼음 송곳: 아래를 향한 긴 세모
+                    const H = 34 * s;
+                    for (let i = 0; i < H; i += 2 * ART_SCALE) {
+                        const w = (1 - i / H) * 8 * s;
+                        this.dots(ctx, pt.x - w, y - H + (H - i), pt.x + w, y - H + (H - i), 2, i > H * 0.7 ? L.c[3] : (i > H * 0.3 ? L.c[2] : L.c[1]));
+                    }
+                    this.dots(ctx, pt.x - 8 * s, y - 34 * s, pt.x, y, 2, L.c[0]);
+                } else {
+                    // 바위·용암 덩이와 꼬리
+                    const R = 13 * s;
+                    for (let i = 1; i <= 4; i++) {
+                        ctx.globalAlpha = 0.6 - i * 0.12;
+                        ctx.fillStyle = p.look === 'lava' ? L.c[2] : L.c[1];
+                        this.px(ctx, pt.x + (fxNoise(i, p.seed, 7) - 0.5) * 8, y - R - i * 12, 3);
+                    }
+                    ctx.globalAlpha = 1;
+                    this.pixelDisc(ctx, pt.x, y - R, R + 2, R + 2, L.c[0], { k: 2, hard: true });
+                    this.pixelDisc(ctx, pt.x, y - R, R, R * 0.9, L.c[1], { k: 2, hard: true });
+                    this.pixelDisc(ctx, pt.x - R * 0.3, y - R * 1.3, R * 0.45, R * 0.35, L.c[2], { k: 2, hard: true });
+                    if (p.look === 'lava') this.pixelDisc(ctx, pt.x + R * 0.2, y - R * 0.8, R * 0.3, R * 0.3, L.c[3], { k: 2, hard: true });
+                }
+            } else {
+                // 닿은 뒤: 충격 고리, 갈라짐, 튀는 조각
+                this.groundRing(ctx, pt.x, pt.y, r * 1.2, after, L);
+                ctx.globalAlpha = Math.max(0, 1 - after);
+                for (let i = 0; i < 5; i++) {
+                    const a = fxNoise(p.seed, n, i) * Math.PI * 2;
+                    const len = r * (0.5 + fxNoise(p.seed, i, n + 9) * 0.4);
+                    const mx = pt.x + Math.cos(a) * len * 0.5 + (fxNoise(i, n, p.seed) - 0.5) * 10;
+                    const my = pt.y + Math.sin(a) * len * 0.22;
+                    this.dots(ctx, pt.x, pt.y, mx, my, 2, L.c[0]);
+                    this.dots(ctx, mx, my, pt.x + Math.cos(a) * len, pt.y + Math.sin(a) * len * 0.42, 2, L.c[0]);
+                }
+                if (L.shape === 'pillar') {
+                    ctx.globalAlpha = Math.max(0, 1 - after * 1.5);
+                    this.pixelLine(ctx, pt.x, pt.y - 460, pt.x, pt.y, L.c[2], 18 * (1 - after));
+                    this.pixelLine(ctx, pt.x, pt.y - 460, pt.x, pt.y, L.c[3], 6 * (1 - after));
+                    this.sparkle(ctx, pt.x, pt.y - 20, 4, L.c[2]);
+                }
+                ctx.globalAlpha = Math.max(0, 1 - after);
+                this.debris(ctx, pt.x, pt.y - 10, r * 1.1, after, p.seed + n, 12, [L.c[1], L.c[2], L.c[3]], 3);
+                ctx.globalAlpha = 1;
+            }
+        }
+    },
+
+    // 광선: 가로로 자른 띠를 칸으로 찍는다(바깥 테두리, 주황, 노랑, 흰 심). 띠 폭이 마디마다 출렁여 가장자리가 계단지고,
+    // 바깥 띠는 프레임마다 깜빡인다. 손 쪽에는 빛살이 도는 광원, 맞은 자리에는 위로 솟는 불꽃
+    atk_beam(ctx, p, L) {
+        const t = p.age / p.life;
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const c = 2 * ART_SCALE; // 비스듬한 띠에 틈이 생기지 않게 2px 간격으로 3px 칸을 겹쳐 찍는다
+        const grow = Math.min(1, p.age / 0.08);
+        const len = p.len * grow;
+        const fade = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
+        const W = p.width * 0.62 * (0.35 + 0.65 * fade);
+        const frame = Math.floor(p.age * 30);
+        const flick = frame % 2;
+        for (let d = 0; d <= len; d += c) {
+            const seg = Math.floor(d / (c * 6)); // 여섯 칸 마디마다 폭이 바뀌어 계단진다
+            const wave = 1 + 0.14 * Math.sin(seg * 1.7 - p.age * 38) + (fxNoise(seg, frame, p.seed) - 0.5) * 0.12;
+            const w = W * wave * (d < 18 ? 0.6 + 0.4 * d / 18 : 1);
+            const cx = p.ox + v.dx * d;
+            const cy = p.oy + v.dy * d;
+            for (let j = -w - c; j <= w + c; j += c) {
+                const e = Math.abs(j) / w;
+                let color;
+                if (e > 1) { if (flick) continue; color = L.c[1]; } // 깜빡이는 바깥 빛
+                else if (e > 0.82) color = L.c[0];
+                else if (e > 0.58) color = L.c[1];
+                else if (e > 0.28) color = L.c[2];
+                else color = L.c[3];
+                ctx.fillStyle = color;
+                this.px(ctx, cx + nx * j, cy + ny * j, 3);
+            }
+        }
+        // 띠를 따라 흐르는 흰 조각
+        ctx.fillStyle = L.c[3];
+        for (let d = (p.age * 1100) % 46; d < len; d += 46) {
+            for (const side of [-1, 1]) this.px(ctx, p.ox + v.dx * d + nx * side * W * 0.45, p.oy + v.dy * d + ny * side * W * 0.45, 3);
+        }
+        // 손 쪽 광원: 겹친 원판과 도는 빛살 여덟 줄
+        const R = W * 1.25;
+        for (let i = 0; i < 8; i++) {
+            const a = i / 8 * Math.PI * 2 + p.age * 6;
+            const r = R * (i % 2 ? 1.5 : 2.1) * (0.85 + 0.15 * flick);
+            this.dots(ctx, p.ox + Math.cos(a) * R * 0.6, p.oy + Math.sin(a) * R * 0.6, p.ox + Math.cos(a) * r, p.oy + Math.sin(a) * r, 2, i % 2 ? L.c[1] : L.c[2]);
+        }
+        this.pixelDisc(ctx, p.ox, p.oy, R, R, L.c[0], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.82, R * 0.82, L.c[1], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.6, R * 0.6, L.c[2], { k: 3, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, R * 0.34, R * 0.34, L.c[3], { k: 3, hard: true });
+        // 맞은 자리: 위로 솟는 불꽃 혀와 튀는 불똥
+        if (grow >= 1) {
+            const ex = p.ox + v.dx * len;
+            const ey = p.oy + v.dy * len;
+            for (let i = -3; i <= 3; i++) {
+                const H = (22 + fxNoise(i, frame, p.seed) * 26) * fade * (1 - Math.abs(i) * 0.15);
+                for (let h = 0; h < H; h += c) {
+                    const k = h / H;
+                    ctx.fillStyle = k > 0.7 ? L.c[0] : (k > 0.4 ? L.c[1] : (Math.abs(i) < 2 ? L.c[3] : L.c[2]));
+                    this.px(ctx, ex + i * c + Math.sin(k * 5 + p.age * 20 + i) * 3, ey - h, 3);
+                }
+            }
+            for (let i = 0; i < 6; i++) {
+                const a = -Math.PI / 2 + (fxNoise(p.seed, i, 3) - 0.5) * 2.4;
+                const r = ((p.age * 3 + fxNoise(i, p.seed, 4)) % 1) * 46;
+                ctx.fillStyle = i % 2 ? L.c[2] : L.c[3];
+                this.px(ctx, ex + Math.cos(a) * r, ey + Math.sin(a) * r, 2);
+            }
+        }
+    },
+
+    // 번개: 손에서 대상까지 꺾인 선(테두리, 속, 흰 가운데). 0.05초마다 모양이 바뀐다. 광역이면 바닥 고리
+    atk_zap(ctx, p, L) {
+        const t = p.age / p.life;
+        const n = 7;
+        const frame = Math.floor(p.age * 20);
+        const pts = [[p.ox, p.oy]];
+        const v = unitVec(p.ox, p.oy, p.tx, p.ty);
+        for (let i = 1; i < n; i++) {
+            const k = i / n;
+            const off = (fxNoise(p.seed, i, frame) - 0.5) * 34 * (p.big ? 1.4 : 1);
+            pts.push([p.ox + (p.tx - p.ox) * k - v.dy * off, p.oy + (p.ty - p.oy) * k + v.dx * off]);
+        }
+        pts.push([p.tx, p.ty]);
+        const w = (p.big ? 8 : 5) * (1 - t * 0.5);
+        ctx.globalAlpha = t > 0.7 ? (1 - t) / 0.3 : 1;
+        for (const [color, ww] of [[L.c[0], w + 5], [L.c[1], w], [L.c[3], Math.max(2, w * 0.4)]]) {
+            for (let i = 1; i < pts.length; i++) this.pixelLine(ctx, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], color, ww);
+        }
+        // 갈래
+        const b = pts[3];
+        this.dots(ctx, b[0], b[1], b[0] + (fxNoise(frame, 3, p.seed) - 0.5) * 50, b[1] + 26, 2, L.c[2]);
+        this.sparkle(ctx, p.tx, p.ty, 4, L.c[2]);
+        if (p.splash > 0) this.groundRing(ctx, p.fx, p.fy, p.splash, t, L);
+        ctx.globalAlpha = 1;
+    },
+
+    // 숨결: 입에서 뻗는 불꽃 덩어리. 칸을 빈틈없이 채우고 가운데부터 흰 심, 밝은 색, 바탕, 어두운 테두리 네 단으로 나눈다.
+    // 가장자리는 혀처럼 갈라지고(앞으로 흐르는 물결), 끝은 둥글게 닫힌다. 끝날 때는 입 쪽부터 끊겨 앞으로 밀려 나간다
+    atk_breath(ctx, p, L) {
+        const t = p.age / p.life;
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const c = 2 * ART_SCALE; // 2px 간격으로 3px 칸을 겹쳐 찍어 틈을 없앤다
+        const front = p.len * Math.min(1, p.age / 0.16);
+        const back = p.len * Math.max(0, (t - 0.55) / 0.45);
+        const spread = Math.sqrt(1 - p.cos * p.cos) / p.cos * 0.8; // 부채꼴 끝 폭 비율(tan)
+        const frame = Math.floor(p.age * 24);
+        for (let d = back; d <= front; d += c) {
+            const k = d / p.len;
+            const tip = Math.min(1, (front - d) / 30); // 앞 끝을 둥글게
+            const base = (6 + d * spread) * Math.sqrt(Math.max(0.05, tip));
+            for (const side of [-1, 1]) {
+                // 혀: 가장자리가 앞으로 흐르는 물결 두 겹으로 들쭉날쭉하다
+                const tongue = 1 + 0.22 * Math.sin(d * 0.09 - p.age * 34 + side * 1.3) + 0.12 * Math.sin(d * 0.23 - p.age * 52 + side);
+                const w = base * tongue;
+                for (let j = 0; j <= w; j += c) {
+                    const e = j / w;
+                    const heat = e + k * 0.45;
+                    ctx.fillStyle = heat < 0.3 ? L.c[3] : heat < 0.62 ? L.c[2] : heat < 0.9 ? L.c[1] : L.c[0];
+                    this.px(ctx, p.ox + v.dx * d + nx * j * side, p.oy + v.dy * d + ny * j * side, 3);
+                }
+            }
+        }
+        // 떨어져 앞으로 날리는 불씨(가장자리 바깥, 자리는 정해진 무늬)
+        for (let i = 0; i < 7; i++) {
+            const q = (p.age * 2.2 + i / 7) % 1;
+            const d = back + (front - back) * (0.3 + q * 0.75);
+            const side = i % 2 ? 1 : -1;
+            const j = side * (8 + d * spread) * (1.05 + fxNoise(i, p.seed, 1) * 0.35);
+            ctx.fillStyle = q > 0.7 ? L.c[1] : L.c[2];
+            this.px(ctx, p.ox + v.dx * d + nx * j, p.oy + v.dy * d + ny * j - q * 10, 3);
+        }
+        if (L.shape === 'bones') {
+            for (let i = 0; i < 2; i++) {
+                const d = back + (front - back) * ((p.age * 1.5 + i * 0.5) % 1);
+                this.skull(ctx, p.ox + v.dx * d, p.oy + v.dy * d);
+            }
+        }
+    },
+    // 작은 도트 해골(뼈 숨결)
+    skull(ctx, x, y) {
+        const c = 2 * ART_SCALE;
+        const rows = ['.###.', '#####', '#.#.#', '.###.', '.#.#.'];
+        rows.forEach((row, j) => [...row].forEach((ch, i) => {
+            if (ch !== '#') return;
+            ctx.fillStyle = (i === 1 || i === 3) && j === 2 ? '#06140a' : '#f0fff0';
+            this.px(ctx, x + (i - 2) * c, y + (j - 2) * c, 2);
+        }));
+    },
+
+    // 흩뿌리기 한 발: 하트, 박쥐, 얼음 조각, 그 밖은 작은 마름모
+    atk_shot(ctx, p, L) {
+        if (p.wait > 0) return;
+        const c = 3 * ART_SCALE;
+        const pat = L.shape === 'heart' ? ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
+            : L.shape === 'bat' ? (Math.floor(p.age * 16) % 2 ? ['#.....#', '##.#.##', '#######', '..###..'] : ['.......', '#..#..#', '#######', '#.###.#'])
+            : null;
+        if (pat) {
+            const w = pat[0].length;
+            pat.forEach((row, j) => [...row].forEach((ch, i) => {
+                if (ch !== '#') return;
+                ctx.fillStyle = j === 0 || i === 0 || i === w - 1 ? L.c[1] : (j === 1 && i === 2 ? L.c[3] : L.c[2]);
+                if (L.shape === 'bat') ctx.fillStyle = (j === 2 && (i === 2 || i === 4)) ? L.c[3] : L.c[1];
+                this.px(ctx, p.x + (i - w / 2) * c, p.y + (j - pat.length / 2) * c, 3);
+            }));
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = L.c[1];
+            this.px(ctx, p.x - p.vx * 0.02, p.y - p.vy * 0.02, 2);
+            ctx.globalAlpha = 1;
+            return;
+        }
+        // 얼음 조각: 날아가는 방향으로 긴 마름모와 꼬리
+        const v = unitVec(0, 0, p.vx, p.vy);
+        const s = p.big ? 1.9 : 1.3;
+        for (let i = 0; i < 4; i++) {
+            ctx.globalAlpha = 0.5 - i * 0.12;
+            ctx.fillStyle = L.c[1];
+            this.px(ctx, p.x - v.dx * (14 + i * 7) * s, p.y - v.dy * (14 + i * 7) * s, 2);
+        }
+        ctx.globalAlpha = 1;
+        for (let d = -10 * s; d <= 10 * s; d += c) {
+            const w = (1 - Math.abs(d) / (10 * s)) * 5 * s;
+            this.dots(ctx, p.x + v.dx * d - v.dy * w, p.y + v.dy * d + v.dx * w, p.x + v.dx * d + v.dy * w, p.y + v.dy * d - v.dx * w, 2, d > 4 ? L.c[3] : (Math.abs(d) < 6 ? L.c[2] : L.c[1]));
+        }
+    },
+
+    // 영혼 흡수: 몬스터에서 용사마다 굽이치는 줄, 줄을 따라 영혼 방울이 몬스터 쪽으로 흐른다
+    atk_tether(ctx, p, L) {
+        const t = p.age / p.life;
+        ctx.globalAlpha = t > 0.75 ? (1 - t) / 0.25 : 1;
+        p.list.forEach((h, n) => {
+            if (h.dead) return;
+            const b = heroBody(h);
+            const v = unitVec(p.ox, p.oy, b.x, b.y);
+            const steps = Math.max(8, Math.floor(v.len / (3 * ART_SCALE)));
+            for (let i = 0; i <= steps; i++) {
+                const k = i / steps;
+                const wave = Math.sin(k * 9 + p.age * 14 + n) * 8 * Math.sin(k * Math.PI);
+                const x = p.ox + (b.x - p.ox) * k - v.dy * wave;
+                const y = p.oy + (b.y - p.oy) * k + v.dx * wave;
+                ctx.fillStyle = L.c[0];
+                this.px(ctx, x, y, 5);
+                ctx.fillStyle = i % 4 === 0 ? L.c[2] : L.c[1];
+                this.px(ctx, x, y, 3);
+            }
+            for (let j = 0; j < 3; j++) {
+                const k = 1 - ((p.age * 1.6 + j / 3 + n * 0.17) % 1);
+                const wave = Math.sin(k * 9 + p.age * 14 + n) * 8 * Math.sin(k * Math.PI);
+                const x = p.ox + (b.x - p.ox) * k - v.dy * wave;
+                const y = p.oy + (b.y - p.oy) * k + v.dx * wave;
+                this.pixelDisc(ctx, x, y, 5, 5, L.c[2], { k: 2, hard: true });
+                ctx.fillStyle = L.c[3];
+                this.px(ctx, x, y - 2, 2);
+            }
+            this.arcDots(ctx, b.x, b.y + 30, 14, 0.4, 0, Math.PI * 2, 2, L.c[1]);
+        });
+        this.pixelDisc(ctx, p.ox, p.oy, 9, 9, L.c[1], { k: 2, hard: true });
+        this.pixelDisc(ctx, p.ox, p.oy, 5, 5, L.c[3], { k: 2, hard: true });
+        ctx.globalAlpha = 1;
+    },
+
+    // 땅 가르기(땅에 그린다): 앞으로 나아가는 갈라진 금과 그 뒤로 솟았다 가라앉는 바위 가시
+    atk_fissure(ctx, p, L) {
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const fade = p.front >= p.len ? Math.max(0, 1 - p.end / 0.6) : 1;
+        const step = 14;
+        let prev = [p.ox, p.oy];
+        ctx.globalAlpha = fade;
+        for (let d = step; d <= p.front; d += step) {
+            const off = (fxNoise(p.seed, Math.round(d / step), 1) - 0.5) * 14;
+            const q = [p.ox + v.dx * d + nx * off, p.oy + v.dy * d + ny * off];
+            this.inkLine(ctx, prev[0], prev[1], q[0], q[1], 3, '#140c06', null);
+            this.dots(ctx, prev[0], prev[1] - 3, q[0], q[1] - 3, 2, L.c[2]);
+            prev = q;
+        }
+        // 가시: 금을 따라 일정한 간격, 앞쪽일수록 막 솟는 중
+        for (let d = 30; d <= p.front; d += 34) {
+            const since = (p.front - d) / p.speed + (p.front >= p.len ? p.end : 0);
+            const up = since < 0.08 ? since / 0.08 : Math.max(0, 1 - (since - 0.25) / 0.3);
+            if (up <= 0) continue;
+            const off = (fxNoise(p.seed, d, 2) - 0.5) * 18;
+            const x = p.ox + v.dx * d + nx * off;
+            const y = p.oy + v.dy * d + ny * off;
+            const H = (26 + fxNoise(p.seed, d, 3) * 22) * up * (p.big ? 1.3 : 1);
+            for (let i = 0; i < H; i += 2 * ART_SCALE) {
+                const w = (1 - i / H) * 9;
+                this.dots(ctx, x - w, y - i, x + w, y - i, 2, i > H * 0.75 ? L.c[3] : (i > H * 0.35 ? L.c[2] : L.c[1]));
+            }
+            ctx.fillStyle = L.c[0];
+            this.px(ctx, x - 9, y, 2);
+            this.px(ctx, x + 9, y, 2);
+        }
+        // 앞 끝 먼지
+        if (p.front < p.len) this.debris(ctx, p.ox + v.dx * p.front, p.oy + v.dy * p.front, 26, (p.age * 4) % 1, Math.floor(p.age * 4), 8, [L.c[1], L.c[2]], 2);
+        ctx.globalAlpha = 1;
+    },
+
+    // 수정 파동(땅에 그린다): 퍼지는 고리와 고리를 따라 솟은 수정 조각
+    atk_shockwave(ctx, p, L) {
+        const fade = p.r >= p.max ? Math.max(0, 1 - p.end / 0.35) : 1;
+        ctx.globalAlpha = fade;
+        this.arcDots(ctx, p.ox, p.oy, p.r, 0.45, 0, Math.PI * 2, 3, L.c[1]);
+        this.arcDots(ctx, p.ox, p.oy, p.r * 0.85, 0.45, 0, Math.PI * 2, 2, L.c[2]);
+        const n = 12;
+        for (let i = 0; i < n; i++) {
+            const a = i / n * Math.PI * 2 + p.seed;
+            const x = p.ox + Math.cos(a) * p.r;
+            const y = p.oy + Math.sin(a) * p.r * 0.45;
+            const H = (16 + fxNoise(p.seed, i, 1) * 14) * (p.big ? 1.3 : 1);
+            for (let j = 0; j < H; j += 2 * ART_SCALE) {
+                const w = (j < H * 0.4 ? j / (H * 0.4) : 1 - (j - H * 0.4) / (H * 0.6)) * 6;
+                this.dots(ctx, x - w, y - j, x + w, y - j, 2, j > H * 0.6 ? L.c[3] : (fxNoise(i, j, 2) > 0.5 ? L.c[2] : L.c[1]));
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 되감기: 용사 발밑의 시계(용사 위에 그려 몰려 선 용사에 가리지 않는다). 바늘이 거꾸로 돌고, 닿으면 빛 고리가 퍼진다
+    atk_rewind(ctx, p, L) {
+        const t = clamp(p.age / p.delay, 0, 1);
+        const after = Math.max(0, p.age - p.delay) / Math.max(0.01, p.life - p.delay);
+        const R = 46;
+        ctx.globalAlpha = after > 0 ? Math.max(0, 1 - after) : Math.min(1, t * 3);
+        this.arcDots(ctx, p.x, p.y, R + 3, 0.42, 0, Math.PI * 2, 2, L.c[0]);
+        this.arcDots(ctx, p.x, p.y, R, 0.42, 0, Math.PI * 2, 2, L.c[1]);
+        for (let i = 0; i < 12; i++) {
+            const a = i / 12 * Math.PI * 2;
+            ctx.fillStyle = i % 3 === 0 ? L.c[3] : L.c[2];
+            this.px(ctx, p.x + Math.cos(a) * (R - 6), p.y + Math.sin(a) * (R - 6) * 0.42, i % 3 === 0 ? 3 : 2);
+        }
+        const a = -Math.PI / 2 - t * Math.PI * 4; // 두 바퀴 거꾸로
+        this.dots(ctx, p.x, p.y, p.x + Math.cos(a) * (R - 8), p.y + Math.sin(a) * (R - 8) * 0.42, 2, L.c[3]);
+        this.dots(ctx, p.x, p.y, p.x + Math.cos(a * 0.25) * (R - 18), p.y + Math.sin(a * 0.25) * (R - 18) * 0.42, 2, L.c[2]);
+        ctx.fillStyle = L.c[3];
+        this.px(ctx, p.x, p.y, 3);
+        if (after > 0) {
+            this.groundRing(ctx, p.x, p.y, R * 2.2, after, L);
+            ctx.globalAlpha = Math.max(0, 1 - after);
+            for (let i = 0; i < 3; i++) this.sparkle(ctx, p.x + (i - 1) * 22, p.y - 40 - after * 50 - i * 8, 3, L.c[2]);
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // 그림만 남는 터짐: 고리와 튀는 조각(웅덩이 덩이, 덫, 흩뿌리기 얼음)
+    atk_impact(ctx, p, L) {
+        const t = p.age / p.life;
+        this.groundRing(ctx, p.x, p.y, p.r, t, L);
+        ctx.globalAlpha = Math.max(0, 1 - t);
+        this.debris(ctx, p.x, p.y - 12, p.r * 0.9, t, p.seed, 10 + (p.tier || 0) * 2, [L.c[1], L.c[2], L.c[3]], 3);
+        if (t < 0.3) {
+            this.pixelDisc(ctx, p.x, p.y - 10, p.r * 0.5 * (1 - t), p.r * 0.35 * (1 - t), L.c[2], { k: 3, hard: true });
+            this.pixelDisc(ctx, p.x, p.y - 10, p.r * 0.25 * (1 - t), p.r * 0.18 * (1 - t), L.c[3], { k: 3, hard: true });
+        }
+        ctx.globalAlpha = 1;
+    },
+
+    // ----- 근접 모양 -----
+    // 할퀴기: 대상마다 비스듬한 손톱 자국 세 줄(오크 광전사는 X자 두 줄)이 그어졌다 사라진다
+    atk_claw(ctx, p, L) {
+        const t = p.age / p.life;
+        const draw = Math.min(1, p.age / 0.08);
+        const s = p.big ? 1.5 : 1;
+        ctx.globalAlpha = t > 0.5 ? (1 - t) / 0.5 : 1;
+        for (const h of p.hits) {
+            const cx = h.x;
+            const cy = h.y - (h.boss ? 90 : 34);
+            const lines = L.shape === 'cross' ? [[-1, 1, 0], [1, 1, 0]] : [[1, 1, -9], [1, 1, 0], [1, 1, 9]];
+            for (const [sx, sy, off] of lines) {
+                const half = 20 * s;
+                const ax = cx - sx * half + off * s;
+                const ay = cy - sy * half;
+                const bx = ax + (cx + sx * half + off * s - ax) * draw;
+                const by = ay + (cy + sy * half - ay) * draw;
+                this.inkLine(ctx, ax, ay, bx, by, 4 * s, L.c[1], L.c[0]);
+                this.pixelLine(ctx, ax + (bx - ax) * 0.2, ay + (by - ay) * 0.2, bx, by, L.c[3], 2);
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+    // 솟구침과 촉수: 대상 발밑에서 가시(뼈, 무덤 손, 뿌리)나 촉수가 솟았다 들어간다
+    atk_spikes(ctx, p, L) {
+        const t = p.age / p.life;
+        const up = t < 0.25 ? t / 0.25 : Math.max(0, 1 - (t - 0.55) / 0.45);
+        const s = p.big ? 1.5 : 1;
+        for (const h of p.hits) {
+            this.groundRing(ctx, h.x, h.y, 30 * s, t, L);
+            const n = p.look === 'root' ? 2 : 3;
+            for (let i = 0; i < n; i++) {
+                const ox = (i - (n - 1) / 2) * 14 * s;
+                const H = (34 + (i === 1 ? 14 : 0)) * s * up;
+                const lean = (i - (n - 1) / 2) * 0.25;
+                for (let j = 0; j < H; j += 2 * ART_SCALE) {
+                    const k = j / Math.max(1, H);
+                    const w = (1 - k) * (p.look === 'root' ? 6 : 5) * s;
+                    const bend = p.look === 'root' ? Math.sin(k * 3 + i) * 6 * s : lean * j;
+                    this.dots(ctx, h.x + ox + bend - w, h.y - j, h.x + ox + bend + w, h.y - j, 2, k > 0.75 ? L.c[3] : (k > 0.3 ? L.c[2] : L.c[1]));
+                }
+                ctx.fillStyle = L.c[0];
+                this.px(ctx, h.x + ox - 6 * s, h.y, 2);
+                this.px(ctx, h.x + ox + 6 * s, h.y, 2);
+            }
+        }
+    },
+    atk_tentacle(ctx, p, L) {
+        const t = p.age / p.life;
+        const up = t < 0.3 ? t / 0.3 : Math.max(0, 1 - (t - 0.6) / 0.4);
+        for (const h of p.hits) {
+            this.groundRing(ctx, h.x, h.y, 40, t, L);
+            const H = 70 * up;
+            for (let j = 0; j < H; j += 3 * ART_SCALE) {
+                const k = j / Math.max(1, H);
+                const sway = Math.sin(k * 4 + p.age * 10) * 12 * k;
+                const w = (1 - k * 0.8) * 9;
+                this.pixelDisc(ctx, h.x + sway, h.y - j, w + 2, 3, L.c[0], { k: 2, hard: true });
+                this.pixelDisc(ctx, h.x + sway, h.y - j, w, 2, k > 0.85 ? L.c[3] : L.c[1], { k: 2, hard: true });
+                if (Math.round(j / (3 * ART_SCALE)) % 4 === 0) { ctx.fillStyle = L.c[2]; this.px(ctx, h.x + sway + w * 0.5, h.y - j, 2); } // 빨판
+            }
+        }
+    },
+    // 찌르기: 몸에서 첫 대상 쪽으로 길게 뻗는 창끝과 속도선
+    atk_thrust(ctx, p, L) {
+        const t = p.age / p.life;
+        const ext = t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7 * 0.6;
+        const v = p.v;
+        const nx = -v.dy;
+        const ny = v.dx;
+        const s = (p.big ? 1.6 : 1) * (p.look === 'chief' ? 1.4 : 1);
+        const lift = 30 * s;
+        const ax = p.ox + v.dx * 20;
+        const ay = p.oy - lift + v.dy * 20;
+        const tx = p.ox + v.dx * p.reach * ext;
+        const ty = p.oy - lift + v.dy * p.reach * ext;
+        ctx.globalAlpha = t > 0.6 ? (1 - t) / 0.4 : 1;
+        // 속도선
+        for (let i = -2; i <= 2; i++) {
+            if (!i) continue;
+            const o = i * 7 * s;
+            this.dots(ctx, ax + nx * o + v.dx * 30, ay + ny * o + v.dy * 30, tx + nx * o * 0.6 - v.dx * 30, ty + ny * o * 0.6 - v.dy * 30, 2, Math.abs(i) === 1 ? L.c[2] : L.c[1]);
+        }
+        this.inkLine(ctx, ax, ay, tx - v.dx * 14 * s, ty - v.dy * 14 * s, 4 * s, L.c[1], L.c[0]);
+        // 창끝(세모)
+        for (let i = 0; i < 6; i++) {
+            const w = (6 - i) * 1.5 * s;
+            const qx = tx - v.dx * (16 - i * 3) * s;
+            const qy = ty - v.dy * (16 - i * 3) * s;
+            this.dots(ctx, qx + nx * w, qy + ny * w, qx - nx * w, qy - ny * w, 2, i > 3 ? L.c[3] : L.c[2]);
+        }
+        if (t < 0.4) this.sparkle(ctx, tx, ty, 3 + (p.tier >= 3 ? 2 : 0), L.c[2]);
+        ctx.globalAlpha = 1;
+    },
+    // 내려찍기: 대상 자리의 납작한 충격 고리, 사방으로 갈라지는 금, 튀어 오르는 돌 조각
+    atk_slam(ctx, p, L) {
+        const t = p.age / p.life;
+        const r = Math.max(p.radius, TILE * 0.7) * 1.15;
+        this.groundRing(ctx, p.tx, p.ty, r, t, L);
+        ctx.globalAlpha = Math.max(0, 1 - t * 1.6);
+        this.arcDots(ctx, p.tx, p.ty, r * (0.25 + 0.6 * t), 0.42, 0, Math.PI * 2, 4, L.c[1]);
+        if (t < 0.35) this.sparkle(ctx, p.tx, p.ty - 18, 5 + (p.size > 1 ? 3 : 0), L.c[2], L.c[3]);
+        ctx.globalAlpha = 1;
+        ctx.globalAlpha = Math.max(0, 1 - t * 1.2);
+        const n = p.size > 1 ? 8 : 6;
+        for (let i = 0; i < n; i++) {
+            const a = i / n * Math.PI * 2 + fxNoise(p.seed, i, 1) * 0.6;
+            const len = r * (0.4 + fxNoise(p.seed, i, 2) * 0.35) * Math.min(1, t * 6);
+            const mx = p.tx + Math.cos(a + 0.3) * len * 0.5;
+            const my = p.ty + Math.sin(a + 0.3) * len * 0.5 * 0.42;
+            this.dots(ctx, p.tx, p.ty, mx, my, 2, L.c[0]);
+            this.dots(ctx, mx, my, p.tx + Math.cos(a) * len, p.ty + Math.sin(a) * len * 0.42, 2, L.c[0]);
+        }
+        if (L.shape === 'splat') {
+            for (let i = 0; i < 6; i++) {
+                const a = fxNoise(p.seed, i, 4) * Math.PI * 2;
+                this.pixelDisc(ctx, p.tx + Math.cos(a) * r * 0.5, p.ty + Math.sin(a) * r * 0.2, 6, 3, L.c[1], { k: 2, hard: true });
+            }
+        }
+        this.debris(ctx, p.tx, p.ty - 6, r * 1.1, t, p.seed, p.size > 1 ? 18 : 12, [L.c[1], L.c[2], L.c[0]], p.size > 1 ? 5 : 4);
+        if (t < 0.25) this.pixelDisc(ctx, p.tx, p.ty, r * 0.4, r * 0.16, L.c[3], { k: 3, hard: true });
+        ctx.globalAlpha = 1;
+    },
+    // 휘두르기: 몸 앞쪽을 도는 굵은 반달 띠. 앞 끝은 희고 지나간 자리는 옅어진다
+    atk_sweep(ctx, p, L) {
+        const t = p.age / p.life;
+        const base = Math.atan2(p.v.dy, p.v.dx);
+        const span = Math.acos(clamp(p.cos, -1, 1));
+        const prog = Math.min(1, p.age / 0.14);
+        const from = base - span;
+        const head = from + span * 2 * prog;
+        const s = p.big ? 1.3 : 1;
+        const r1 = Math.min(p.reach, TILE * 2.2) * 0.95;
+        const r0 = r1 * 0.55;
+        const cy = p.oy - 26 * s;
+        ctx.globalAlpha = t > 0.45 ? Math.max(0, (1 - t) / 0.55) : 1;
+        const steps = Math.ceil(span * 2 * r1 / (3 * ART_SCALE));
+        for (let i = 0; i <= steps; i++) {
+            const a = from + (head - from) * i / steps;
+            const age = (head - a) / (span * 2); // 앞 끝 0, 지나간 자리 1
+            const thick = (1 - age) * (r1 - r0);
+            for (let r = r1 - thick; r <= r1; r += 3 * ART_SCALE) {
+                const e = (r1 - r) / Math.max(1, thick);
+                ctx.fillStyle = age < 0.12 ? L.c[3] : (e < 0.3 ? L.c[2] : (age < 0.6 ? L.c[1] : L.c[0]));
+                this.px(ctx, p.ox + Math.cos(a) * r, cy + Math.sin(a) * r * 0.6, 3);
+            }
+        }
+        ctx.globalAlpha = 1;
+    },
+    // 회전 베기: 몸 둘레를 한 바퀴 도는 띠와 큰 낫날
+    atk_whirl(ctx, p, L) {
+        const t = p.age / p.life;
+        const r = Math.min(p.reach, TILE * 2.4);
+        const head = t * Math.PI * 2.4 - Math.PI / 2;
+        ctx.globalAlpha = t > 0.7 ? (1 - t) / 0.3 : 1;
+        for (let k = 0; k < 28; k++) {
+            const a = head - k * 0.09;
+            const fade = 1 - k / 28;
+            ctx.fillStyle = k < 3 ? L.c[3] : (k < 10 ? L.c[2] : L.c[1]);
+            for (let w = 0; w < 4 * fade; w++) this.px(ctx, p.ox + Math.cos(a) * (r - w * 5), p.oy - 20 + Math.sin(a) * (r - w * 5) * 0.5, 3);
+        }
+        // 낫날: 앞 끝에서 바깥으로 휜 세모
+        const hx = p.ox + Math.cos(head) * r;
+        const hy = p.oy - 20 + Math.sin(head) * r * 0.5;
+        for (let i = 0; i < 10; i++) {
+            const a = head + 0.12 * i;
+            const rr = r + 8 - i * 1.8;
+            this.dots(ctx, hx, hy, p.ox + Math.cos(a) * rr, p.oy - 20 + Math.sin(a) * rr * 0.5, 2, i < 3 ? L.c[3] : L.c[2]);
+        }
+        this.arcDots(ctx, p.ox, p.oy, r * 0.9, 0.42, 0, Math.PI * 2 * Math.min(1, t * 1.3), 2, L.c[0]);
+        ctx.globalAlpha = 1;
+    },
+    // 천벌: 대상마다 하늘에서 내리꽂는 꺾인 번개와 바닥 고리
+    atk_smite(ctx, p, L) {
+        const t = p.age / p.life;
+        const frame = Math.floor(p.age * 20);
+        p.hits.forEach((h, n) => {
+            const pts = [];
+            for (let i = 0; i <= 8; i++) pts.push([h.x + (i === 8 ? 0 : (fxNoise(p.seed + n, i, frame) - 0.5) * 36), h.y - 520 + i * 65]);
+            ctx.globalAlpha = t < 0.5 ? 1 : (1 - t) / 0.5;
+            for (const [color, w] of [[L.c[0], 12], [L.c[1], 8], [L.c[3], 3]]) {
+                for (let i = 1; i < pts.length; i++) this.pixelLine(ctx, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], color, w * (1 - t * 0.5));
+            }
+            this.groundRing(ctx, h.x, h.y, p.radius || TILE * 0.8, t, L);
+            this.debris(ctx, h.x, h.y - 8, 40, t, p.seed + n, 8, [L.c[2], L.c[3]], 3);
+        });
+        ctx.globalAlpha = 1;
+    },
+
+    // ----- 땅에 남는 장판(웅덩이, 덫, 소용돌이) -----
+    drawPuddle(ctx, z, a) {
+        const L = ATTACK_LOOKS[z.look] || ATTACK_LOOKS.water;
+        const rx = z.radius;
+        const ry = z.radius * 0.42;
+        const grow = Math.min(1, z.age / 0.2);
+        ctx.save();
+        ctx.globalAlpha = 0.5 * a;
+        this.pixelDisc(ctx, z.x, z.y, rx * grow, ry * grow, L.c[1], { k: 3 });
+        ctx.globalAlpha = 0.8 * a;
+        this.pixelRing(ctx, z.x, z.y, rx * grow, ry * grow, L.c[0], { k: 2 });
+        if (L.shape === 'web') {
+            // 거미줄: 바퀴살과 점선 고리
+            for (let i = 0; i < 8; i++) {
+                const ang = i / 8 * Math.PI * 2 + z.seed;
+                this.dots(ctx, z.x, z.y, z.x + Math.cos(ang) * rx * grow, z.y + Math.sin(ang) * ry * grow, 2, L.c[2]);
+            }
+            for (const k of [0.35, 0.7]) this.pixelRing(ctx, z.x, z.y, rx * k * grow, ry * k * grow, L.c[3], { k: 2, dash: 8 });
+        } else {
+            // 물결 고리가 가운데에서 퍼지고, 거품이나 별빛이 떠오른다
+            const ph = (z.age * 0.9 + z.seed) % 1;
+            this.pixelRing(ctx, z.x, z.y, rx * ph * grow, ry * ph * grow, L.c[2], { k: 2, dash: 10, offset: z.age * 3 });
+            for (let i = 0; i < 4; i++) {
+                const q = (z.age * 1.3 + i / 4 + z.seed) % 1;
+                const bx = z.x + (fxNoise(z.seed, i, 1) - 0.5) * rx * 1.2;
+                const by = z.y + (fxNoise(z.seed, i, 2) - 0.5) * ry * 1.2;
+                if (L.shape === 'stars') this.sparkle(ctx, bx, by - q * 20, q < 0.5 ? 2 : 1, L.c[2]);
+                else {
+                    ctx.fillStyle = q > 0.7 ? L.c[3] : L.c[2];
+                    this.px(ctx, bx, by - q * 10, q > 0.7 ? 2 : 3);
+                }
+            }
+        }
+        ctx.restore();
+    },
+    drawTrap(ctx, z, a) {
+        const L = ATTACK_LOOKS[z.look] || ATTACK_LOOKS.bomb;
+        const armed = z.age >= z.arm;
+        const blink = armed && Math.floor(z.age * 4) % 2 === 0;
+        ctx.save();
+        ctx.globalAlpha = a;
+        if (armed) this.pixelRing(ctx, z.x, z.y, z.trigger, z.trigger * 0.42, blink ? L.c[3] : L.c[1], { k: 2, dash: 12, offset: z.age * 2 });
+        if (z.look === 'ember') {
+            const pulse = 1 + Math.sin(z.age * 8) * 0.12;
+            this.pixelDisc(ctx, z.x, z.y - 8, 10, 13, L.c[0], { k: 2, hard: true });
+            this.pixelDisc(ctx, z.x, z.y - 7, 8 * pulse, 11 * pulse, L.c[1], { k: 2, hard: true });
+            this.pixelDisc(ctx, z.x - 1, z.y - 10, 4, 5, blink ? L.c[3] : L.c[2], { k: 2, hard: true });
+        } else {
+            this.pixelDisc(ctx, z.x, z.y - 11, 13, 13, L.c[0], { k: 2, hard: true });
+            this.pixelDisc(ctx, z.x, z.y - 11, 11, 11, L.c[1], { k: 2, hard: true });
+            ctx.fillStyle = L.c[2];
+            this.px(ctx, z.x - 3, z.y - 13, 2);
+            this.dots(ctx, z.x + 5, z.y - 17, z.x + 9, z.y - 23, 2, '#6a4a2a');
+            ctx.fillStyle = blink ? '#ffffff' : L.c[3];
+            this.px(ctx, z.x + 10, z.y - 25, 3);
+        }
+        ctx.restore();
+    },
+    drawVortex(ctx, z, a) {
+        const L = ATTACK_LOOKS[z.look] || ATTACK_LOOKS.abyss;
+        const grow = Math.min(1, z.age / 0.25);
+        const R = z.radius * grow;
+        ctx.save();
+        ctx.globalAlpha = 0.45 * a;
+        this.pixelDisc(ctx, z.x, z.y, R, R * 0.45, L.c[0], { k: 3 });
+        ctx.globalAlpha = a;
+        // 나선 팔 셋: 바깥에서 안으로 감기며 돈다
+        for (let arm = 0; arm < 3; arm++) {
+            for (let i = 0; i < 26; i++) {
+                const k = i / 26;
+                const ang = arm / 3 * Math.PI * 2 + k * 4.2 - z.age * 7;
+                const r = R * (1 - k);
+                ctx.fillStyle = k > 0.75 ? L.c[3] : (k > 0.4 ? L.c[2] : L.c[1]);
+                this.px(ctx, z.x + Math.cos(ang) * r, z.y + Math.sin(ang) * r * 0.45, k > 0.5 ? 3 : 2);
+            }
+        }
+        this.pixelRing(ctx, z.x, z.y, R, R * 0.45, L.c[1], { k: 2, dash: 14, offset: -z.age * 6 });
+        this.pixelDisc(ctx, z.x, z.y, 10, 5, '#020608', { k: 2, hard: true });
+        // 빨려 드는 조각
+        for (let i = 0; i < 6; i++) {
+            const q = 1 - ((z.age * 1.5 + i / 6) % 1);
+            const ang = i * 1.7 + z.age * 5;
+            ctx.fillStyle = L.c[2];
+            this.px(ctx, z.x + Math.cos(ang) * R * q, z.y + Math.sin(ang) * R * 0.45 * q - q * 20, 2);
+        }
+        ctx.restore();
     },
 
     // 맵 기믹 칸: 강화 제단과 저주받은 땅 그림(64px, 그림 1px = 화면 1px). 제단 룬은 천천히 달아오른다. 판 중에 늘 보인다
@@ -1746,6 +2721,9 @@ const Render = {
     drawHazards(ctx) {
         for (const z of Game.hazards) {
             const a = clamp((z.life - z.age) / 0.5, 0, 1) * clamp(z.age / 0.15, 0, 1);
+            if (z.kind === 'puddle') { this.drawPuddle(ctx, z, a); continue; }
+            if (z.kind === 'trap') { this.drawTrap(ctx, z, clamp((z.life - z.age) / 0.5, 0, 1)); continue; }
+            if (z.kind === 'vortex') { this.drawVortex(ctx, z, a); continue; }
             const poison = z.kind === 'poison'; // 역병 구름
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
@@ -1971,6 +2949,7 @@ const Render = {
         }
 
         this.drawHazards(ctx);
+        for (const p of Game.projectiles) if (p.kind === 'atk' && p.ground) this.drawAttack(ctx, p); // 땅을 가르는 공격은 몬스터와 용사 아래
         // 거울 마녀 반사막: 왕좌를 감싸는 은빛 고리(깜빡인다)
         if (Game.wardT > 0) {
             ctx.save();

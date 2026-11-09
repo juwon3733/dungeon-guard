@@ -276,6 +276,59 @@ const ABILITY_KINDS = {
     burnGround: { name: '용암 장판', desc: a => `떨어진 자리 ${a.radius}칸에 ${a.duration}초간 초당 ${a.dps} 불 장판` }
 };
 
+// 공격 모양(2026-11-09): 몬스터마다 MONSTER_ATTACKS에 { kind, look, ...값 }으로 적는다. 코드는 kind로 동작한다(js/game/monster.js의 fireMonsterShot).
+// look은 그림의 색과 모양이다(js/game/render.js의 ATTACK_LOOKS). 값을 적지 않으면 ATTACK_KINDS의 기본값을 쓴다. 거리는 칸, 시간은 초.
+// 근접 몬스터는 사거리 안에서 그 모양에 드는 용사를 stats.block명까지 때린다. 광역 몬스터의 splash는 모양이 허락하면 그대로 쓴다.
+// 전설과 신화는 서로 다른 kind를 하나씩 가진다(시험이 확인한다). name과 desc는 정보 창에 보이는 이름과 한 줄 설명이다
+//   arrow: 가장 앞선 용사 하나에게 화살(art.shot 그림). orb: 구체를 던져 떨어진 자리 splash칸 안을 함께
+//   pierce: 한 줄로 날아가(초당 speed px) 지나는 용사를 max명까지 맞힌다. 첫 용사 뒤로는 피해 x ratio
+//   boomerang: 대상 뒤까지 곧게 갔다 휘어 돌아오며 지나는 용사를 갈 때와 올 때 max명씩(피해 x ratio)
+//   stream: 한 줄로 뿜어 폭 width 안 용사를 count명까지(첫 용사 뒤 x ratio), 보스가 아니면 push칸 길 뒤로 민다. puddle이 true면 끝에 웅덩이
+//   puddle: 맞힌 자리에 duration초 radius칸 웅덩이. 안의 용사는 이동 속도 x slow, 방어력 x armorMul
+//   drop: delay초 뒤 하늘에서 떨어져 radius칸(광역이면 splash) 안을 때린다(근접이면 block명까지). count개면 길을 따라 spread칸씩 벌린다(하나 피해 x ratio)
+//   beam: duration초 동안 한 줄 광선(사거리 + extra칸, 폭 width), ticks번 피해 x ratio
+//   vortex: 떨어진 자리에 duration초 소용돌이. 처음 피해 x ratio, tick초마다 x tickRatio, 보스가 아닌 용사를 초당 pull칸 가운데로 끈다
+//   trap: 대상 앞 길에 덫(몬스터당 max개, life초). arm초 뒤부터 용사가 trigger칸 안에 들어오면 radius칸(광역이면 splash)에 피해 x ratio
+//   zap: 곧바로 번개로 맞힌다(광역이면 splash칸 안 함께)
+//   breath: 앞쪽 부채꼴(반각의 코사인 cos)로 사거리 안 용사를 모두. 근접이면 block명까지
+//   volley: count발을 앞선 용사들에게 나눠 쏜다(초당 speed px, 한 발 피해 x ratio, 광역이면 반경 splash x 0.5 안 함께)
+//   tether: 사거리 안 용사 count명에게 줄을 이어 duration초 동안 ticks번 피해 x ratio
+//   fissure: 첫 대상 쪽으로 땅이 갈라져 사거리 + extra칸까지 초당 speed칸으로 나아간다. 폭 width 안 용사를 block명까지
+//   spikes, tentacle, claw: 기본 근접처럼 고른 대상의 발밑에서 솟거나 할퀸다
+//   thrust: 첫 대상 쪽 한 줄(사거리 + extra칸, 폭 width). slam: 첫 대상 자리 radius칸 원. sweep: 몸 앞 부채꼴(반각 코사인 cos). whirl: 몸 둘레 전체
+//   smite: 근접 대상마다 하늘에서 번개, 그 둘레 radius칸의 다른 용사에게 피해 x ratio
+//   rewind: 대상 발밑에 시계. delay초 뒤 피해 x ratio, 보스가 아니면 push칸 길 뒤로
+//   elements: 불, 얼음, 번개 구체 셋을 앞선 용사들에게 던진다(구체 하나 피해 x ratio, 반경 splash x splashMul)
+//   shockwave: 몸에서 초당 speed칸으로 퍼지는 파동이 사거리 안 용사에게 닿는다
+const ATTACK_KINDS = {
+    arrow: { name: '화살', desc: '가장 앞선 용사 하나를 쏜다' },
+    orb: { name: '마력 구체', desc: '구체가 떨어진 자리의 무리를 함께 때린다' },
+    pierce: { name: '꿰뚫기', desc: '한 줄로 날아가 지나는 용사를 꿰뚫는다', ratio: 0.3, max: 4 },
+    boomerang: { name: '부메랑', desc: '갔다가 돌아오며 지나는 용사를 두 번 벤다', ratio: 0.5, max: 2 },
+    stream: { name: '물줄기', desc: '한 줄로 뿜어 맞은 용사를 길 뒤로 밀어낸다', ratio: 0.6, count: 4, width: 0.45, push: 0.3 },
+    puddle: { name: '웅덩이', desc: '맞은 자리에 웅덩이가 남아 용사가 느려지고 방어력이 줄어든다', radius: 0.8, duration: 3, slow: 0.7, armorMul: 0.5 },
+    drop: { name: '낙하', desc: '잠시 뒤 하늘에서 떨어져 그 자리의 용사를 때린다', delay: 0.45, radius: 0.6, count: 1, spread: 0.7, ratio: 1 },
+    beam: { name: '광선', desc: '긴 광선으로 한 줄의 용사를 여러 번 태운다', duration: 0.6, ticks: 3, ratio: 0.4, width: 0.45, extra: 1 },
+    vortex: { name: '소용돌이', desc: '소용돌이가 용사를 가운데로 끌어당기며 계속 피해를 준다', duration: 1.6, ratio: 0.5, tick: 0.4, tickRatio: 0.2, pull: 1.2 },
+    trap: { name: '덫', desc: '길에 덫을 깔고 용사가 밟으면 터진다', max: 3, life: 6, arm: 0.35, trigger: 0.55, radius: 0.9, ratio: 1.3 },
+    zap: { name: '번개', desc: '번개를 곧바로 내리꽂는다' },
+    breath: { name: '숨결', desc: '앞쪽 부채꼴로 숨을 뿜어 안의 용사를 모두 태운다', cos: 0.866 },
+    volley: { name: '흩뿌리기', desc: '여러 발을 흩뿌려 앞선 용사들을 맞힌다', count: 3, ratio: 0.4 },
+    tether: { name: '영혼 흡수', desc: '여러 용사에게 줄을 이어 기운을 빨아들인다', count: 4, duration: 0.9, ticks: 3, ratio: 0.45 },
+    fissure: { name: '땅 가르기', desc: '땅을 갈라 한 줄로 바위 가시를 솟게 한다', extra: 1.5, width: 0.45, speed: 9 },
+    spikes: { name: '솟구침', desc: '대상 발밑에서 가시가 솟는다' },
+    tentacle: { name: '촉수', desc: '대상 발밑에서 촉수가 솟아 때린다' },
+    claw: { name: '할퀴기', desc: '가까운 용사들을 할퀸다' },
+    thrust: { name: '찌르기', desc: '앞으로 길게 찔러 한 줄의 용사를 꿰뚫는다', extra: 0.6, width: 0.4 },
+    slam: { name: '내려찍기', desc: '대상 자리를 내려찍어 둘레의 용사를 함께 때린다', radius: 1 },
+    sweep: { name: '휘두르기', desc: '앞쪽을 크게 휘둘러 부채꼴 안의 용사를 벤다', cos: 0.26 },
+    whirl: { name: '회전 베기', desc: '몸을 한 바퀴 돌려 둘레의 용사를 모두 벤다' },
+    smite: { name: '천벌', desc: '하늘에서 번개 망치가 떨어져 대상과 둘레를 때린다', radius: 0.8, ratio: 0.5 },
+    rewind: { name: '되감기', desc: '용사 발밑에 시계를 띄워 피해를 주고 길 뒤로 되돌린다', delay: 0.4, ratio: 1.15, push: 0.35 },
+    elements: { name: '세 원소', desc: '불, 얼음, 번개 구체를 함께 던진다', ratio: 0.36, splashMul: 0.8 },
+    shockwave: { name: '수정 파동', desc: '몸에서 수정 파동이 퍼져 둘레의 용사를 때린다', speed: 8 }
+};
+
 // stats
 //   hp, damage, interval(공격 간격), range(사거리. 근접은 용사를 붙잡는 거리)
 //   block: 붙잡는 용사 수(막는 몬스터), respawn: 쓰러진 뒤 놓은 칸에서 다시 나오는 시간(막는 몬스터)
@@ -905,6 +958,93 @@ const MONSTERS = {
         art: astArt('god_king', { glow: '255,225,150' })
     }
 };
+
+// 몬스터별 공격 모양(ATTACK_KINDS). 종족과 역할에 맞춰 나눴다. look은 그림(ATTACK_LOOKS)
+const MONSTER_ATTACKS = {
+    // 일반
+    orc_guard: { kind: 'sweep', look: 'steel' },
+    skeleton_archer: { kind: 'arrow' },
+    dark_mage: { kind: 'orb' },
+    goblin_spearman: { kind: 'thrust', look: 'spear' },
+    zombie: { kind: 'slam', look: 'rot' },
+    fire_imp: { kind: 'arrow' },
+    gnoll_hunter: { kind: 'boomerang', look: 'axe' },
+    wisp_acolyte: { kind: 'zap', look: 'wisp' },
+    grave_keeper: { kind: 'spikes', look: 'grave' },
+    goblin_thrower: { kind: 'trap', look: 'bomb', radius: 0.45, ratio: 0.8 },
+    hellhound_warrior: { kind: 'claw', look: 'hellfire' },
+    boar_warrior: { kind: 'slam', look: 'dirt' },
+    rock_spirit: { kind: 'drop', look: 'rock', radius: 0.6, ratio: 1.1 },
+    spider_archer: { kind: 'puddle', look: 'web', armorMul: 1, slow: 0.65 },
+    wind_sylph: { kind: 'pierce', look: 'wind', speed: 1000 },
+    // 희귀
+    orc_berserker: { kind: 'claw', look: 'cross' },
+    curse_shooter: { kind: 'arrow' },
+    werewolf: { kind: 'claw', look: 'beast' },
+    troll: { kind: 'slam', look: 'club' },
+    frost_witch: { kind: 'drop', look: 'ice' },
+    nightmare_jester: { kind: 'boomerang', look: 'jester' },
+    orc_shaman: { kind: 'zap', look: 'totem' },
+    wraith_swordsman: { kind: 'thrust', look: 'ghost' },
+    plague_ghoul: { kind: 'puddle', look: 'toxic' },
+    succubus: { kind: 'volley', look: 'heart', speed: 800 },
+    flame_archer: { kind: 'breath', look: 'fire' },
+    bear_warrior: { kind: 'sweep', look: 'paw' },
+    eagle_hunter: { kind: 'pierce', look: 'feather' },
+    water_spirit: { kind: 'stream', look: 'water', push: 0.15, count: 2 },
+    lightning_spirit: { kind: 'zap', look: 'storm' },
+    // 영웅
+    bone_knight: { kind: 'slam', look: 'bone' },
+    minotaur: { kind: 'thrust', look: 'horn' },
+    vampire: { kind: 'volley', look: 'bat', speed: 650 },
+    flame_demon: { kind: 'drop', look: 'lava' },
+    ancient_treant: { kind: 'spikes', look: 'root' },
+    bone_priest: { kind: 'spikes', look: 'bone' },
+    orc_charger: { kind: 'thrust', look: 'iron' },
+    war_drummer: { kind: 'pierce', look: 'sound', speed: 800 },
+    ogre_crusher: { kind: 'slam', look: 'stone' },
+    executioner: { kind: 'sweep', look: 'doom' },
+    chaos_mage: { kind: 'puddle', look: 'chaos' },
+    saber_warrior: { kind: 'claw', look: 'saber' },
+    hydra_warrior: { kind: 'breath', look: 'acid' },
+    moon_priestess: { kind: 'drop', look: 'moonlight', radius: 0.45 },
+    storm_archer: { kind: 'pierce', look: 'storm' },
+    // 전설: 하나씩 다른 모양
+    death_lord: { kind: 'spikes', look: 'deathlord' },
+    hell_general: { kind: 'sweep', look: 'inferno' },
+    archlich: { kind: 'zap', look: 'necro' },
+    orc_high_chief: { kind: 'thrust', look: 'chief', width: 0.6 },
+    giant_king: { kind: 'slam', look: 'giant' },
+    fallen_angel: { kind: 'pierce', look: 'fallen' },
+    earth_behemoth: { kind: 'fissure', look: 'earth' },
+    phoenix_lord: { kind: 'trap', look: 'ember', ratio: 1.15 },
+    element_sage: { kind: 'elements' },
+    crystal_giant: { kind: 'shockwave', look: 'crystal' },
+    // 신화: 하나씩 다른 모양
+    star_whale: { kind: 'stream', look: 'star', puddle: true, push: 0.45, count: 6 },
+    abyss_dragon_king: { kind: 'vortex', look: 'abyss' },
+    time_witch: { kind: 'rewind', look: 'clock' },
+    soul_devourer: { kind: 'tether', look: 'soul' },
+    bone_dragon: { kind: 'breath', look: 'bonefire' },
+    kraken: { kind: 'tentacle', look: 'kraken' },
+    frost_queen: { kind: 'volley', look: 'frost', count: 5, ratio: 0.22 },
+    frost_drake: { kind: 'drop', look: 'icicle', count: 3, ratio: 0.95 },
+    sun_god: { kind: 'beam', look: 'sun' },
+    moon_god: { kind: 'boomerang', look: 'moon', ratio: 0.6 },
+    death_god: { kind: 'whirl', look: 'scythe' },
+    god_king: { kind: 'smite', look: 'thunder' }
+};
+// 공격 값: 기본값(ATTACK_KINDS) 위에 몬스터 값을 덮는다. 표에 없는 몬스터는 역할로 정한다(근접 claw, 광역 orb, 그 밖 arrow)
+const attackCache = {};
+function monsterAttack(type) {
+    if (attackCache[type]) return attackCache[type];
+    const def = MONSTERS[type];
+    const own = MONSTER_ATTACKS[type] || { kind: MONSTER_ROLES[def.role].melee ? 'claw' : (def.stats.splash ? 'orb' : 'arrow') };
+    const base = Object.assign({}, ATTACK_KINDS[own.kind]);
+    delete base.name;
+    delete base.desc;
+    return (attackCache[type] = Object.assign(base, own));
+}
 
 // 조합식: 두 재료(a, b)를 합치면 result가 나온다. 순서는 상관없다. 등급 합치기보다 먼저 적용한다.
 // aRank, bRank는 재료별 최소 랭크(MONSTER_RANKS의 name, 없으면 조건 없음). 조건이 안 맞으면 그 조합식이 없는 것처럼 판단한다.

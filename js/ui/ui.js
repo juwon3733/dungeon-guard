@@ -2711,9 +2711,15 @@ const UI = {
             sx += 130;
         }
         UIKit.ink(ctx, `${num(stats.interval)}초마다`, sx, sy + 2, 20, T.inkSoft);
+        // 공격 모양(ATTACK_KINDS): 이름과 한 줄 설명. 근접은 한 번에 때리는 수를 붙인다. 길면 글자를 줄인다
         const melee = MONSTER_ROLES[def.role].melee;
-        const line2 = melee ? `한 번에 ${stats.block}명 타격 · 사거리 ${num(stats.range)}칸` : (stats.splash ? `광역 반경 ${stats.splash} · 무리를 함께 공격` : '가장 앞선 용사 하나를 노림');
-        UIKit.ink(ctx, onAltar(f.type, f.col, f.row) ? `${line2} · 강화 제단` : line2, p.x + 22, top + 138 + POPUP_RANK_H + 14, 17, onAltar(f.type, f.col, f.row) ? T.inkWax : T.inkSoft);
+        const atk = ATTACK_KINDS[monsterAttack(p.type).kind];
+        const altar = onAltar(f.type, f.col, f.row);
+        const line2 = `${atk.name} · ${atk.desc}${melee ? `(${stats.block}명까지)` : ''}${altar ? ' · 강화 제단' : ''}`;
+        let lf = 17;
+        ctx.font = `${lf}px ${UI_FONT}`;
+        while (lf > 12 && ctx.measureText(line2).width > p.w - 44) ctx.font = `${--lf}px ${UI_FONT}`;
+        UIKit.ink(ctx, line2, p.x + 22, top + 138 + POPUP_RANK_H + 14, lf, altar ? T.inkWax : T.inkSoft);
 
         // 장비 줄: 칸(마우스를 올리면 설명), 이름과 등급, 효과. 빼기 버튼은 layoutMonsterMenu가 놓는다
         let y = top + 166 + POPUP_RANK_H;

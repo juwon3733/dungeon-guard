@@ -7391,6 +7391,223 @@ console.log('smoke ok: equipment crafting');
         console.log('smoke ok: lord skills');
     }).toString() + ')()', lctx);
 }
+// 공격 모양(2026-11-09): 몬스터마다 공격 모양(MONSTER_ATTACKS), 전설과 신화는 서로 다른 모양, 모든 몬스터가 실제로 맞히고,
+// 그리는 동안 좌표가 NaN이 아니고 그라데이션 없이 도트 칸만 찍는다(가짜 캔버스). 밀치기, 웅덩이, 덫, 소용돌이, 되감기, 낙하, 영혼 흡수.
+// Math.random이 달라도 결과가 같다(입력 재생)
+{
+    const calls = { fill: 0, nan: 0, gradient: 0 };
+    const fakeCtx = () => new Proxy({}, {
+        get(t, k) {
+            if (k in t) return t[k];
+            if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => { calls.gradient++; return { addColorStop() {} }; };
+            if (k === 'measureText') return s => ({ width: String(s).length * 10 });
+            if (k === 'fillRect') return (...a) => { calls.fill++; if (a.some(v => !Number.isFinite(v))) calls.nan++; };
+            return () => {};
+        },
+        set(t, k, v) { t[k] = v; return true; }
+    });
+    const document = { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) };
+    const actx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON, document, calls, fakeCtx,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files.filter(f => !f.startsWith('js/ui/')).concat(['js/data/fx_sheets.js', 'js/game/render.js'])) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const ids = Object.keys(MONSTERS);
+        // 표: 모든 몬스터가 공격 모양을 갖고, 그림 색이 있고, 전설과 신화는 서로 다르다
+        for (const id of ids) {
+            const a = monsterAttack(id);
+            assert(MONSTER_ATTACKS[id] && ATTACK_KINDS[a.kind], id + ' has an attack kind');
+            if (a.look) assert(ATTACK_LOOKS[a.look], id + ' look ' + a.look);
+        }
+        const top = ids.filter(id => ['legendary', 'mythic'].includes(MONSTERS[id].grade)).map(id => monsterAttack(id).kind);
+        assert.strictEqual(top.length, 22, 'ten legendary and twelve mythic');
+        assert.strictEqual(new Set(top).size, top.length, 'legendary and mythic attacks all differ');
+        assert(new Set(ids.map(id => monsterAttack(id).kind)).size >= 20, 'twenty kinds or more in use');
+        assert.strictEqual(monsterAttack('star_whale').kind, 'stream', 'star whale: water stream');
+        assert(monsterAttack('star_whale').puddle, 'star whale leaves a puddle');
+
+        // 몬스터 하나를 길 옆에 세우고 용사 n명을 가장 가까운 길 지점에 붙여 둔다(방어력 0, 체력 1e6)
+        const HP = 1e6;
+        const setup = (type, n, gap) => {
+            Game.reset({ lord: 'bone_queen', relics: [] });
+            Game.state = 'wave';
+            Game.roundTimer = 999;
+            Game.gold = 1e9;
+            Game.heroes.length = 0;
+            Fx.reset();
+            const aim = pathAt(ROUTES[ROUTE_IDS[0]].length * 0.35, ROUTE_IDS[0]);
+            const key = [...BUILD_CELLS].map(k => k.split(',').map(Number)).filter(([c, r]) => Game.canPlace(type, c, r))
+                .sort((a, b) => distance(tileX(a[0]), tileY(a[1]), aim.x, aim.y) - distance(tileX(b[0]), tileY(b[1]), aim.x, aim.y))[0];
+            const placed = Game.place(type, key[0], key[1]);
+            const m = placed && placed.monster ? placed.monster : Game.monsters[Game.monsters.length - 1];
+            m.skillCd = (MONSTERS[type].skills || []).map(() => 999);
+            const near = nearestPathPoint(m.x, m.y);
+            const heroes = [];
+            for (let i = 0; i < (n || 6); i++) {
+                const h = createHero('warrior', 0, 0, false, near.route);
+                Object.assign(h, { waiting: false, delay: 0, d: near.d + (i - ((n || 6) - 1) / 2) * (gap || 14), lane: 0, armor: 0 });
+                h.hp = h.maxHp = HP;
+                Game.heroes.push(h);
+                heroes.push(h);
+            }
+            return { m, heroes, near };
+        };
+        // 공격과 장판만 시간을 돌린다(용사는 서 있고 몬스터는 다시 쏘지 않는다). draw면 매 프레임 가짜 캔버스에 그린다
+        const ctx2d = fakeCtx();
+        const run = (sec, draw) => {
+            for (let i = 0; i < Math.round(sec * 60); i++) {
+                for (const p of Game.projectiles.slice()) updateProjectile(p, 1 / 60);
+                for (const z of Game.hazards.slice()) updateHazard(z, 1 / 60);
+                Game.projectiles = Game.projectiles.filter(p => !p.done);
+                Game.hazards = Game.hazards.filter(z => z.age < z.life);
+                Game.time += 1 / 60;
+                if (draw) {
+                    Render.drawHazards(ctx2d);
+                    for (const p of Game.projectiles) if (p.kind === 'atk' && p.ground) Render.drawAttack(ctx2d, p);
+                    for (const p of Game.projectiles) Render.drawProjectile(ctx2d, p);
+                }
+            }
+        };
+        const fire = (m, target) => fireMonsterShot(m, monsterStats(m), target || foremostHero(m.x, m.y, monsterStats(m).range * TILE));
+        const lost = h => HP - h.hp;
+
+        // 모든 몬스터: 한 번 쏘면 공격 개체가 남고, 3초 안에 용사가 맞고, 그리는 동안 NaN 좌표와 그라데이션이 없다
+        for (const id of ids) {
+            const { m, heroes } = setup(id);
+            const target = foremostHero(m.x, m.y, monsterStats(m).range * TILE);
+            assert(target, id + ' has a target in range');
+            fire(m, target);
+            assert(Game.projectiles.length > 0, id + ' leaves an attack');
+            run(3, true);
+            assert(heroes.some(h => lost(h) > 0), id + ' hits a hero');
+        }
+        assert(calls.fill > 5000, 'attacks draw pixel cells: ' + calls.fill);
+        assert.strictEqual(calls.nan, 0, 'no NaN coordinates while drawing');
+        assert.strictEqual(calls.gradient, 0, 'no smooth gradients in attack effects');
+
+        // 물줄기: 별의 고래는 맞은 용사를 길 뒤로 밀고(보스는 그대로) 그 자리에 웅덩이를 남긴다
+        {
+            const { m, heroes } = setup('star_whale', 3);
+            const boss = createHero('warrior', 0, 0, 'judge', heroes[0].route);
+            Object.assign(boss, { waiting: false, delay: 0, d: heroes[1].d, lane: 0 });
+            Game.heroes.push(boss);
+            const d0 = heroes.map(h => h.d);
+            const b0 = boss.d;
+            fire(m, heroes[2]);
+            assert(heroes.some((h, i) => h.d < d0[i] - TILE * 0.4), 'stream pushes heroes back');
+            assert.strictEqual(boss.d, b0, 'boss is not pushed');
+            assert(Game.hazards.some(z => z.kind === 'puddle'), 'star whale leaves a puddle');
+        }
+        // 웅덩이: 안의 용사는 느려지고 방어력이 줄어 더 아프다. 나가면 풀린다
+        {
+            const { m, heroes } = setup('plague_ghoul', 1);
+            const h = heroes[0];
+            fire(m, h);
+            run(0.7);
+            const z = Game.hazards.find(q => q.kind === 'puddle');
+            assert(z && z.armorMul < 1, 'toxic puddle on the ground');
+            run(0.6);
+            assert(h.slow > 0 && h.slowMul <= z.slow + 1e-9, 'puddle slows');
+            h.armor = 10;
+            h.curse = 0; // 독 구울의 저주는 따로 시험한다
+            let hp0 = h.hp;
+            damageHero(h, 30);
+            assert.strictEqual(hp0 - h.hp, 30 - 10 * z.armorMul, 'armor reduced in the puddle');
+            h.d += TILE * 5;
+            run(1.2);
+            h.curse = 0;
+            hp0 = h.hp;
+            damageHero(h, 30);
+            assert.strictEqual(hp0 - h.hp, 20, 'full armor after leaving');
+        }
+        // 덫: 놓인 뒤 arm초 전에는 터지지 않고, 그 뒤 용사가 밟으면 터지고 사라진다. 몬스터당 max개
+        {
+            const { m, heroes } = setup('goblin_thrower', 1);
+            const a = monsterAttack('goblin_thrower');
+            const h = heroes[0];
+            fire(m, h);
+            for (let i = 0; i < 60 && !Game.hazards.some(z => z.kind === 'trap'); i++) run(1 / 60);
+            const trap = Game.hazards.find(z => z.kind === 'trap');
+            assert(trap && lost(h) === 0, 'trap laid, nothing yet');
+            run(a.arm + 0.05);
+            assert(lost(h) > 0 && !Game.hazards.includes(trap), 'trap went off and is gone');
+            h.d -= TILE * 6; // 덫에서 멀리
+            for (let i = 0; i < a.max + 2; i++) { fire(m, h); run(0.5); }
+            assert(Game.hazards.filter(z => z.kind === 'trap' && z.owner === m && z.age < z.life).length <= a.max, 'at most max traps');
+        }
+        // 소용돌이: 가운데를 지나친 용사를 길 뒤로 끌어당긴다(보스는 그대로)
+        {
+            const { m, heroes } = setup('abyss_dragon_king', 1);
+            const h = heroes[0];
+            fire(m, h);
+            for (let i = 0; i < 90 && !Game.hazards.some(z => z.kind === 'vortex'); i++) run(1 / 60);
+            const z = Game.hazards.find(q => q.kind === 'vortex');
+            assert(z, 'vortex on the ground');
+            h.d += TILE * 0.6;
+            const d0 = h.d;
+            run(0.3);
+            assert(h.d < d0 - 10, 'pulled back toward the centre');
+        }
+        // 되감기: 시간의 마녀의 시계는 delay초 뒤에 때리고 용사를 길 뒤로 되돌린다
+        {
+            const { m, heroes } = setup('time_witch', 1);
+            const h = heroes[0];
+            const a = monsterAttack('time_witch');
+            const d0 = h.d;
+            fire(m, h);
+            run(a.delay - 0.1);
+            assert(lost(h) === 0 && h.d === d0, 'clock waits');
+            run(0.2);
+            assert(lost(h) > 0 && Math.abs(h.d - (d0 - a.push * TILE)) < 1e-6, 'rewound by push tiles');
+        }
+        // 낙하: 떨어지기 전에는 맞지 않는다
+        {
+            const { m, heroes } = setup('rock_spirit', 1);
+            heroes[0].speed = 0;
+            fire(m, heroes[0]);
+            run(monsterAttack('rock_spirit').delay - 0.1);
+            assert.strictEqual(lost(heroes[0]), 0, 'drop not landed yet');
+            run(0.2);
+            assert(lost(heroes[0]) > 0, 'drop landed');
+        }
+        // 영혼 흡수: count명에게 줄을 잇고 ticks번 때린다
+        {
+            const { m, heroes } = setup('soul_devourer', 6);
+            const a = monsterAttack('soul_devourer');
+            fire(m);
+            run(a.duration + 0.3);
+            assert.strictEqual(heroes.filter(h => lost(h) > 0).length, a.count, 'tether hits count heroes');
+        }
+        // 꿰뚫기는 max명까지, 부메랑은 갈 때와 올 때 max명씩
+        {
+            const { m, heroes } = setup('wind_sylph', 8, 8);
+            fire(m);
+            run(1.5);
+            const hit = heroes.filter(h => lost(h) > 0).length;
+            assert(hit >= 2 && hit <= monsterAttack('wind_sylph').max, 'pierce hits several, at most max: ' + hit);
+        }
+        // 근접 모양은 stats.block명까지(가르기 능력과 천벌의 둘레 피해는 따로)
+        for (const id of ids.filter(i => MONSTER_ROLES[MONSTERS[i].role].melee)) {
+            const { m, heroes } = setup(id, 14, 6);
+            fire(m);
+            run(1.5);
+            assert(heroes.filter(h => lost(h) > 0).length <= Math.max(1, MONSTERS[id].stats.block) + (monsterAbility(id, 'cleave') || monsterAttack(id).kind === 'smite' ? 14 : 0), id + ' melee cap'); // 가르기와 천벌은 둘레도
+        }
+        // 입력 재생: Math.random이 달라도(그림 흔들림만 달라진다) 같은 시드면 피해가 같다
+        const old = Math.random;
+        const total = (id, r) => {
+            Math.random = () => r;
+            try {
+                Rng.start('attack-shapes');
+                const { m, heroes } = setup(id);
+                fire(m);
+                run(2.5);
+                return heroes.map(h => Math.round(h.hp * 1000) + ':' + Math.round(h.d * 1000)).join();
+            } finally { Math.random = old; Rng.stop(); }
+        };
+        for (const id of ids) assert.strictEqual(total(id, 0.13), total(id, 0.87), id + ' result does not depend on Math.random');
+        console.log('smoke ok: attack shapes');
+    }).toString() + ')()', actx);
+}
 // 이벤트 라운드(2026-11-09): 시드 일정, 보물 고블린, 축제, 정예 행렬, 저주 라운드(고르기와 입력 재생)
 {
     const ectx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
