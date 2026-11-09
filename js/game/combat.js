@@ -40,7 +40,8 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     // 저주(curseShot)에 걸려 있으면 방어력을 뺀 뒤의 피해가 늘어난다
     const big = hero.boss || hero.elite ? 1 + monsterEquip(attacker, 'bossDmg') : 1; // 장비: 정예와 보스 피해
     const sick = hero.poison > 0;
-    const armor = sick && Game.power('venomPierce') ? 0 : (hero.armor || 0); // 권능 살을 파는 독
+    const shred = hero.shredUntil > Game.time ? hero.shredMul : 1; // 웅덩이(공격 모양 puddle): 방어력이 준다
+    const armor = sick && Game.power('venomPierce') ? 0 : (hero.armor || 0) * shred; // 권능 살을 파는 독
     const base = dot ? amount : Math.max(1, amount * big - armor);
     const rot = sick ? 1 + (Game.power('rotCurse') ? 0.15 : 0) + (Game.power('rotDeep') ? 0.3 : 0) : 1; // 권능 썩은 살, 깊은 부패
     const held = hero.bound > 0 ? 1 + (Game.power('execBound') ? 0.2 : 0) + (Game.power('execDeep') ? 0.4 : 0) : 1; // 권능 형틀, 고문
