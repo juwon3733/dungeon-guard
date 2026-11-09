@@ -24,7 +24,8 @@ const Game = {
     equipBag: [], // 보관함의 장비 id(최대 EQUIP_RULES.slots). 다시 시작하면 비우고 저장하지 않는다
     monsters: [], heroes: [], units: [], corpses: [], projectiles: [], telegraphs: [], pendingStrikes: [],
     hazards: [], // 땅에 남는 장판(불 장판 burnGround): { kind, x, y, radius(px), dps, life, age, tick, owner }
-    skills: { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 },
+    skills: {}, // 스킬마다 남은 재사용 대기(초). 키는 LORD_SKILLS(freshSkills)
+    towers: [], wardT: 0, accelT: 0, // 감속 시계탑, 반사막, 시간 가속(reset에서 다시 채운다)
     mana: 0, // 마력(권능을 찍는다). 판이 끝나면 사라진다
     powers: {}, // 찍은 권능: { 항목 id: true }
     powerSeed: '', // 권능 지도의 시드
@@ -103,7 +104,10 @@ const Game = {
         this.equipBag = [];
         this.runResult = null;
         this.clearField();
-        this.skills = { lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 };
+        this.skills = freshSkills();
+        this.towers = []; // 시계탑의 마왕 감속 시계탑: { x, y, radius(px), life, age }
+        this.wardT = 0; // 거울 마녀 반사막 남은 초
+        this.accelT = 0; // 시계탑의 마왕 시간 가속 남은 초
         this.graves = [];
         this.corpseCount = 0;
         this.poisonKills = 0; // 역병의 군주: 독으로 쓰러뜨린 수(대유행)
@@ -160,13 +164,39 @@ const Game = {
     // 마왕 최대 체력: 기본값에 마왕과 유물의 maxHp를 더한다(1 아래로는 내려가지 않는다)
     maxHp() { return Math.max(1, Math.floor((COMBAT_RULES.maxHp + this.mods.maxHp) * (this.mods.maxHpHalf ? 0.5 : 1))); }, // 저주받은 왕관: 절반
 
-    // 마왕 스킬('lightning' | 'roar') 재사용 대기(초)
+    // 이번 판 마왕의 스킬 1(Q)과 스킬 2(W) 키(LORD_SKILLS). slot 0 | 1
+    lordSkills() { return this.lordDef().skills || ['lightning', 'roar']; },
+    skillKey(slot) { return this.lordSkills()[slot]; },
+    // 이번 판에 쓸 수 있는 스킬인지(마왕의 Q·W, 권능으로 연 E)
+    hasSkill(key) {
+        if (this.lordSkills().includes(key)) return true;
+        const third = this.thirdSkill();
+        return !!third && third.key === key;
+    },
+    // 지금 막힌 스킬인지: 권능 폭주는 스킬 2를 봉인한다. 옛 호통은 체력 조건이 있다
+    skillLocked(key) {
+        if (key === this.skillKey(1) && this.power('frenzy')) return true;
+        return key === 'roar' && !this.mods.roarAnytime && this.hp > COMBAT_RULES.roar.unlockHp;
+    },
+    // 스킬 쓰기(Game.act가 부른다): 이 마왕의 스킬이 아니거나 막혔거나 대기 중이면 실패. 조준 스킬은 (x, y)
+    useSkill(key, x, y) {
+        if (!hasEntry(SKILL_CASTS, key) || !this.hasSkill(key) || this.skillLocked(key) || this.skills[key] > 0) return { ok: false };
+        if (!SKILL_CASTS[key](x, y)) return { ok: false };
+        if (key === this.skillKey(1) && this.power('rally')) this.skills[this.skillKey(0)] = 0; // 권능 맞불
+        return { ok: true };
+    },
+    // 균열 문 대상 수(권능 넓은 문)
+    portalCount() { return portalCount(); },
+
+    // 스킬 재사용 대기(초). 스킬 1(Q)은 유물 폭풍의 병(lightningCooldown)이 줄인다
     skillCooldown(key) {
-        if (key === 'roar' && this.power('bribeRoar')) return COMBAT_RULES.bribeRoar.cooldown;
         let mul = this.mods.skillCooldown;
-        if (key === 'lightning') mul *= this.mods.lightningCooldown * (this.power('quick') || this.power('coinCool') ? 0.85 : 1);
-        if (key === 'roar' && this.power('roarDrill')) mul *= 0.7;
-        if (key === 'raise' && this.power('raiseFast')) mul *= 0.6;
+        if (key === this.skillKey(0)) mul *= this.mods.lightningCooldown;
+        if (key === 'lightning' && this.power('quick')) mul *= 0.85;
+        if (key === this.skillKey(1) && this.power('roarDrill')) mul *= 0.7;
+        if (key === 'goldBomb' && this.power('coinCool')) mul *= 0.85;
+        if (key === 'bribe' && this.power('contract')) mul *= 0.7;
+        if (key === 'graveBlast' && this.power('raiseFast')) mul *= 0.6;
         return COMBAT_RULES[key].cooldown * mul;
     },
 
@@ -202,8 +232,8 @@ const Game = {
         this.volleying = false;
     },
 
-    // 호통을 아직 쓸 수 없는지(체력 조건). 유물 광기의 북이 있으면 언제나 쓴다
-    roarLocked() { return this.power('frenzy') || (!this.mods.roarAnytime && !this.power('bribeRoar') && this.hp > COMBAT_RULES.roar.unlockHp); },
+    // 옛 호통을 아직 쓸 수 없는지(체력 조건, 폭주). 옛 유물 광기의 북이 있으면 언제나 쓴다
+    roarLocked() { return this.skillLocked('roar'); },
 
     // 이번 판 마왕의 권능 갈래 목록(없는 마왕은 빈 목록)
     lordPowers() { return LORD_POWERS[this.lord] || []; },
@@ -396,7 +426,7 @@ const Game = {
         this.mana += whole;
         if (x !== undefined && whole > 0) Fx.number({}, x, y, `+${whole} 마력`, '#c9a6ff', false);
     },
-    lightningRadius() { return COMBAT_RULES.lightning.radius + (this.power('wide') || this.power('coinWide') ? 0.5 : 0); },
+    lightningRadius() { return COMBAT_RULES.lightning.radius + (this.power('wide') ? 0.5 : 0); },
 
     // 유물의 조건부 몬스터 피해 합(비율). 판 상황에 따라 바뀌어 monsterStats가 매번 읽는다
     relicDamage(m) {
@@ -1180,6 +1210,7 @@ const Game = {
     //   { kind: 'summon' } | { kind: 'sell', monster } | { kind: 'sacrifice', monster } | { kind: 'move', monster, col, row }
     act(cmd) {
         if (this.record && !this.replaying && this.inPlay()) this.record.inputs.push(this.encodeInput(cmd));
+        if (hasEntry(SKILL_CASTS, cmd.kind)) return this.useSkill(cmd.kind, cmd.x, cmd.y); // 마왕 스킬(Q, W, E)
         switch (cmd.kind) {
             case 'autoMerge': this.autoMerge = !!cmd.on; return { ok: true };
             case 'pickReward': return this.pickBossReward(cmd.i);
@@ -1188,15 +1219,6 @@ const Game = {
             case 'unequip': return this.unequipMonster(cmd.monster);
             case 'upgrade': return { ok: !!this.upgrade(cmd.monster, cmd.branch) };
             case 'familyUp': return this.upgradeFamily(cmd.family);
-            case 'lightning': return { ok: !!castLightning(cmd.x, cmd.y) };
-            case 'roar': return { ok: !!castRoar() };
-            case 'portal': return { ok: !!castPortal() };
-            case 'raise': return { ok: !!castRaise() };
-            case 'goldBomb': return { ok: !!castGoldBomb() };
-            case 'miasma': return { ok: !!castMiasma() };
-            case 'jail': return { ok: !!castJail() };
-            case 'mirrorClone': return { ok: !!castMirrorClone() };
-            case 'timeStop': return { ok: !!castTimeStop() };
             case 'relicFire': return { ok: !!fireRelic(cmd.id) };
             case 'power': return this.buyPower(cmd.id);
             case 'corrupt': return corruptCorpse(this.corpses[cmd.i]);
@@ -1327,7 +1349,8 @@ const Game = {
         const gain = this.sacrificeGain(m);
         const heal = Math.min(gain.heal, Math.max(0, this.maxHp() - this.hp));
         this.hp += heal;
-        this.skills.lightning = Math.max(0, this.skills.lightning - gain.lightning * (this.power('sacCharge') ? 2 : 1));
+        const q = this.skillKey(0); // 제물은 스킬 1(Q)의 대기를 줄인다
+        this.skills[q] = Math.max(0, this.skills[q] - gain.lightning * (this.power('sacCharge') ? 2 : 1));
         const grade = MONSTERS[m.type].grade;
         const from = { x: m.x, y: m.y };
         this.removeMonster(m);
@@ -1343,7 +1366,7 @@ const Game = {
         }
         if (this.power('sacMana')) this.addMana(1);
         if (this.power('sacGold')) this.gold += this.summonCost() * 2;
-        if (this.power('sacRoar')) this.skills.roar = 0;
+        if (this.power('sacRoar')) this.skills[this.skillKey(1)] = 0; // 여왕의 외침: 스킬 2(W)
         if (this.power('sacSoul')) this.soulVolley(true);
         if (this.power('rotSac')) {
             // 역병 제물: 맵의 모든 용사에게 독
@@ -1504,6 +1527,10 @@ const Game = {
         this.clockSlowT = Math.max(0, this.clockSlowT - dt);
         this.clockHasteT = Math.max(0, this.clockHasteT - dt);
         this.timeStopT = Math.max(0, this.timeStopT - dt);
+        this.wardT = Math.max(0, this.wardT - dt);
+        this.accelT = Math.max(0, this.accelT - dt);
+        for (const t of this.towers) t.age += dt;
+        this.towers = this.towers.filter(t => t.age < t.life);
         if (this.rewinds.length) {
             for (let i = 0; i < this.rewinds.length; i++) this.rewinds[i] -= dt;
             while (this.rewinds.length && this.rewinds[0] <= 0) {
@@ -1579,7 +1606,7 @@ const Game = {
             for (const f of Object.keys(MONSTER_FAMILIES)) if (d.familyLevels && Number.isInteger(d.familyLevels[f]) && d.familyLevels[f] > 0) this.familyLevels[f] = d.familyLevels[f];
             this.equipBag = (d.equipBag || []).filter(id => EQUIPMENT[id]);
             this.bossReward = d.bossReward || null;
-            if (d.skills) this.skills = Object.assign({ lightning: 0, roar: 0, portal: 0, raise: 0, goldBomb: 0, miasma: 0, jail: 0, mirrorClone: 0, timeStop: 0 }, d.skills);
+            if (d.skills) for (const k of Object.keys(this.skills)) if (+d.skills[k] > 0) this.skills[k] = +d.skills[k];
             this.mana = d.mana || 0;
             this.powers = d.powers || {};
             this.awaken = Math.max(0, d.awaken | 0);

@@ -36,6 +36,10 @@ vm.runInContext(`{
     }
     move('s1', 's3', 'bone_queen', 0);
     move('s2', 's5', 'gold_king', 1);
+    // 옛 시험은 세 마왕이 번개(Q)와 호통(W)을 같이 쓰던 때의 표다. 마왕별 스킬은 맨 끝 묶음(smoke-lord-skills)에서 본다
+    for (const id of ['rift', 'bone_queen', 'gold_king']) DEMON_LORDS[id].skills = ['lightning', 'roar'];
+    Object.assign(LORD_EFFECTS.lightningDamage, { name: '번개 피해' });
+    Object.assign(LORD_EFFECTS.lightningCooldown, { name: '번개 재사용' });
     // 옛 시험은 유물 19종 표다: 옛 유물과 옛 해금, 옛 상한, 치명타 없음으로 돌린다(새 유물은 맨 끝에서 따로)
     const OLD = { greedy_vault: ['탐욕의 금주머니', { goldDamage: 0.01 }], legion_banner: ['군단의 깃발', { fieldMax: 3 }], glass_heart: ['유리 심장', { fullHpDamage: 0.1 }],
         usury_ledger: ['고리대금 장부', { interest: 0.03 }], mad_dice: ['미치광이의 주사위', { mergeJump: 0.05 }], dead_horn: ['망자의 뿔피리', { meleeDamage: 0.15 }], sniper_mark: ['저격수의 표식', { range: 0.1 }],
@@ -922,11 +926,11 @@ assert.strictEqual(UI.drag, null);
 UI.onUp(...cellXY(7, 5));
 assert.strictEqual(Game.monsterAt(4, 5), archer);
 assert.strictEqual(Game.monsterAt(7, 5), null);
-assert.strictEqual(UI.targeting, true);
+assert.strictEqual(UI.targeting, 'lightning');
 UI.onKey('KeyQ');
 assert.strictEqual(UI.targeting, false);
 btn('lightning');
-assert.strictEqual(UI.targeting, true);
+assert.strictEqual(UI.targeting, 'lightning');
 worldClick(tileX(4), tileY(5));
 assert.strictEqual(UI.targeting, false);
 assert.strictEqual(Game.skills.lightning, COMBAT_RULES.lightning.cooldown * DEMON_LORDS.rift.effects.skillCooldown);
@@ -5778,16 +5782,17 @@ assert(hp - hs[0].hp > Game.lightningDamage() * 1.9, 'smite doubles on elite');
 fresh(100); buy('wide', 'static', 'echo', 'auto'); hs = arena();
 Game.skills.lightning = 0; Game.update(GAME_TICK);
 assert(Game.skills.lightning > 0 && Game.pendingStrikes.length === 1, 'auto casts by itself');
-// 균열
+// 균열 갈래는 균열 문(W)을 강화한다(2026-11-09 마왕별 스킬). 이 시험 동안만 균열의 군주 W를 균열 문으로 둔다
+DEMON_LORDS.rift.skills = ['lightning', 'portal'];
 fresh(100); buy('tear'); hs = arena(); strikeAt(hs[0]);
-assert(hs[0].stun >= 1 && hs[0].stun < 2 && hs[0].d === 1000, 'tear stuns without moving');
-fresh(100); buy('tear', 'pull'); hs = arena(); strikeAt(hs[0]);
-assert.strictEqual(hs[0].d, 1000 - 2 * TILE, 'pull');
-fresh(100); buy('tear', 'pull', 'longTear', 'exile'); hs = arena(); strikeAt(hs[0]);
-assert.strictEqual(hs[0].stun, 2, 'longTear');
-assert.strictEqual(hs[0].d, 1000 - 4 * TILE, 'exile doubles pull');
-fresh(100); buy('tear', 'pull', 'longTear', 'abyss'); hs = arena(); strikeAt(hs[0]);
-assert(hs[0].curse === 5 && hs[0].curseMul === 1.4, 'abyss');
+assert(!(hs[0].stun > 0) && hs[0].d === 1000, 'lightning no longer stuns with tear');
+fresh(100); buy('tear'); hs = arena(); { const d5 = hs[5].d; assert(Game.act({ kind: 'portal' }).ok); assert(hs[5].stun === 1 && hs[5].d === d5 - COMBAT_RULES.portal.back * TILE, 'tear stuns the pushed'); }
+fresh(100); { const n = Game.portalCount(); buy('tear', 'pull'); assert.strictEqual(Game.portalCount(), n + COMBAT_RULES.portal.pullUp, 'pull widens the gate'); }
+fresh(100); buy('tear', 'pull', 'longTear', 'exile'); hs = arena(); { const d5 = hs[5].d; Game.act({ kind: 'portal' });
+    assert.strictEqual(hs[5].stun, 2, 'longTear');
+    assert.strictEqual(hs[5].d, d5 - 2 * COMBAT_RULES.portal.back * TILE, 'exile doubles the push'); }
+fresh(100); buy('tear', 'pull', 'longTear', 'abyss'); hs = arena(); Game.act({ kind: 'portal' });
+assert(hs[5].curse === 5 && hs[5].curseMul === 1.4, 'abyss');
 // 왕좌 결계와 문전박대
 fresh(100); buy('ward'); hs = arena(); hs[0].d = ROUTES[hs[0].route].length; Game.leak = 0;
 updateHero(hs[0], GAME_TICK);
@@ -5796,18 +5801,27 @@ fresh(100); buy('ward', 'turnback'); hs = arena();
 for (let i = 0; i < 5; i++) { hs[i].d = ROUTES[hs[i].route].length; updateHero(hs[i], GAME_TICK); }
 assert(hs[4].d < 100 && !hs[4].dead, 'fifth arrival goes back to the gate');
 assert(hs[0].dead && hs[3].dead, 'others still arrive');
-// 균열 열기
+// 균열 문(W)과 뇌우(E)
 fresh(100);
-assert(!Game.act({ kind: 'portal' }).ok, 'gate needs the node');
-buy('tear', 'pull', 'gate');
-assert(!Game.act({ kind: 'portal' }).ok, 'gate needs heroes');
+assert(!Game.act({ kind: 'portal' }).ok, 'portal needs heroes');
 hs = arena();
 const near = hs[5].d, far = hs[0].d;
 assert(Game.act({ kind: 'portal' }).ok);
 assert.strictEqual(hs[5].d, near - COMBAT_RULES.portal.back * TILE, 'nearest pushed back');
 assert.strictEqual(Game.skills.portal, Game.skillCooldown('portal'));
-assert(!Game.act({ kind: 'portal' }).ok, 'gate on cooldown');
+assert(!Game.act({ kind: 'portal' }).ok, 'portal on cooldown');
 assert(far >= 0);
+fresh(100);
+assert(!Game.act({ kind: 'thunder' }).ok, 'thunder needs the node');
+buy('tear', 'pull', 'thunder');
+assert(!Game.act({ kind: 'thunder' }).ok, 'thunder needs heroes');
+hs = arena(); Game.pendingStrikes = [];
+assert(Game.act({ kind: 'thunder' }).ok);
+assert(Game.pendingStrikes.length === COMBAT_RULES.thunder.count && Game.pendingStrikes.every(s => s.mul === COMBAT_RULES.thunder.mul), 'thunder queues weak strikes');
+assert.strictEqual(Game.skills.thunder, Game.skillCooldown('thunder'));
+assert(!Game.act({ kind: 'thunder' }).ok, 'thunder on cooldown');
+assert.strictEqual(Game.thirdSkill().key, 'thunder');
+DEMON_LORDS.rift.skills = ['lightning', 'roar'];
 // 과부하
 const killOne = (h) => { h.hp = 1; damageHero(h, 10, 0, 0); assert(h.dead, 'killed'); };
 fresh(100); buy('quick', 'killCharge'); hs = arena(); Game.skills.lightning = 10; killOne(hs[0]);
@@ -5888,17 +5902,17 @@ hs = blast('corpseFrost'); Game.corpseCount = 4; hs[0].hp = 1; damageHero(hs[0],
 assert(hs[1].slow > 0, 'corpseFrost');
 hs = blast('corpseBig'); hs[2].d = hs[0].d + 200; Game.corpseCount = 4; hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
 assert(hs[2].hp < hs[2].maxHp, 'corpseBig reaches further');
-lordFresh('bone_queen', 0); takeNode('raise');
-assert(!Game.act({ kind: 'raise' }).ok, 'raise needs graves');
+lordFresh('bone_queen', 0); takeNode('graveBlast');
+assert(!Game.act({ kind: 'graveBlast' }).ok, 'graveBlast needs graves');
 hs = arena(); hs[1].d = hs[0].d + 20; hs[0].hp = 1; damageHero(hs[0], 10, 0, 0);
 assert.strictEqual(hs[1].hp, hs[1].maxHp);
-assert(Game.act({ kind: 'raise' }).ok);
-assert(hs[1].hp < hs[1].maxHp && Game.graves.length === 0, 'raise explodes graves');
-assert.strictEqual(Game.skills.raise, Game.skillCooldown('raise'));
-const raiseCd = Game.skillCooldown('raise');
+assert(Game.act({ kind: 'graveBlast' }).ok);
+assert(hs[1].hp < hs[1].maxHp && Game.graves.length === 0, 'graveBlast explodes graves');
+assert.strictEqual(Game.skills.graveBlast, Game.skillCooldown('graveBlast'));
+const raiseCd = Game.skillCooldown('graveBlast');
 takeNode('raiseFast');
-assert(Math.abs(Game.skillCooldown('raise') - raiseCd * 0.6) < 1e-9, 'raiseFast');
-assert.strictEqual(Game.thirdSkill().key, 'raise');
+assert(Math.abs(Game.skillCooldown('graveBlast') - raiseCd * 0.6) < 1e-9, 'raiseFast');
+assert.strictEqual(Game.thirdSkill().key, 'graveBlast');
 lordFresh('bone_queen', 0); const rc0 = Game.mods.rankCost, dmg0 = Game.mods.damage; takeNode('xpUp'); takeNode('boneEdge');
 assert(Math.abs(Game.mods.rankCost - rc0 - 0.3) < 1e-9 && Math.abs(Game.mods.damage - dmg0 - 0.08) < 1e-9, 'bone mods');
 // 뼈의 여왕: 제물
@@ -5920,31 +5934,54 @@ assert.strictEqual(Game.mana, POWER_RULES.manaCleanRound + 1, 'goldMana');
 // 황금 마왕: 매수
 lordFresh('gold_king', 0); takeNode('goldWard'); hs = arena(); hs[0].d = ROUTES[hs[0].route].length; Game.leak = 0; updateHero(hs[0], GAME_TICK);
 assert(Math.abs(Game.leak - hs[0].throneDamage * 0.8) < 1e-9, 'goldWard');
-lordFresh('gold_king', 0); { const m = Object.assign({}, Game.mods); ['dropUp', 'heroSlow', 'contract'].forEach(takeNode); assert(Math.abs(Game.mods.eliteDrop - m.eliteDrop - 0.1) < 1e-9 && Math.abs(Game.mods.heroSpeed - m.heroSpeed * 0.93) < 1e-9 && Game.mods.roarAnytime, 'bribe mods'); assert(!Game.roarLocked(), 'contract unlocks roar'); }
-lordFresh('gold_king', 0); takeNode('longRoar'); takeNode('traitor'); Game.hp = 1; hs = arena(); assert(Game.act({ kind: 'roar' }).ok);
-assert(hs[0].stun === COMBAT_RULES.roar.duration + 1 && hs[0].curseMul === 1.3, 'longRoar and traitor');
-lordFresh('gold_king', 0); takeNode('bribeRoar'); hs = arena(); Game.hp = Game.maxHp(); Game.gold = 100;
-assert(!Game.roarLocked(), 'bribeRoar has no hp condition');
-assert(!Game.act({ kind: 'roar' }).ok, 'bribeRoar needs gold');
-Game.gold = 1000; assert(Game.act({ kind: 'roar' }).ok);
-assert(Game.gold === 700 && Game.skills.roar === COMBAT_RULES.bribeRoar.cooldown, 'bribeRoar pays gold');
-takeNode('bribeCheap'); Game.skills.roar = 0; assert(Game.act({ kind: 'roar' }).ok); assert.strictEqual(Game.gold, 550, 'bribeCheap');
-// 황금 마왕: 금화 폭격
-lordFresh('gold_king', 0); { const d = Game.lightningDamage(), cd2 = Game.skillCooldown('lightning'); takeNode('goldFocus'); takeNode('coinCool'); takeNode('coinWide');
-    assert(Math.abs(Game.lightningDamage() - d * 1.25) < 1e-9 && Math.abs(Game.skillCooldown('lightning') - cd2 * 0.85) < 1e-9 && Game.lightningRadius() === COMBAT_RULES.lightning.radius + 0.5, 'bomb number nodes'); }
-lordFresh('gold_king', 0); takeNode('coinRain'); hs = arena(); hs[1].d = hs[0].d + 30; Game.gold = 0; strikeAt(hs[0]); assert.strictEqual(Game.gold, 2, 'coinRain');
-lordFresh('gold_king', 0); hs = arena(); hs[0].hp = 1; hs[0].bounty = 10; Game.gold = 0; Game.goldLeft = 0; strikeAt(hs[0]); { const plain = Game.gold;
-    lordFresh('gold_king', 0); takeNode('coinLoot'); hs = arena(); hs[0].hp = 1; hs[0].bounty = 10; Game.gold = 0; Game.goldLeft = 0; strikeAt(hs[0]); assert.strictEqual(Game.gold, plain * 2, 'coinLoot'); }
-lordFresh('gold_king', 0); takeNode('goldBomb'); Game.gold = 10;
+// 매수 갈래와 금화 폭격 갈래는 매수(W)와 금화 폭격(Q)을 강화한다(2026-11-09 마왕별 스킬). 이 시험 동안만 황금 마왕 스킬을 지금 표로 둔다
+DEMON_LORDS.gold_king.skills = ['goldBomb', 'bribe'];
+const bombNow = Object.assign({}, COMBAT_RULES.goldBomb), bribeNow = COMBAT_RULES.bribe.goldPerHp;
+Object.assign(COMBAT_RULES.goldBomb, { spend: 0.1, richSpend: 0.2, maxSpend: 500, damagePerGold: 0.5, hpRatio: 0 }); // 아래 숫자는 첫 초안 값으로 적혀 있다(지금 값은 smoke-lord-skills)
+COMBAT_RULES.bribe.goldPerHp = 0.2;
+lordFresh('gold_king', 0); { const m = Object.assign({}, Game.mods), cd = Game.skillCooldown('bribe'); ['dropUp', 'heroSlow', 'contract'].forEach(takeNode); assert(Math.abs(Game.mods.eliteDrop - m.eliteDrop - 0.1) < 1e-9 && Math.abs(Game.mods.heroSpeed - m.heroSpeed * 0.93) < 1e-9, 'bribe mods'); assert(Math.abs(Game.skillCooldown('bribe') - cd * 0.7) < 1e-9, 'contract'); }
+const eliteAt = (h) => { h.elite = true; h.hp = 1000; h.bounty = 10; return h; };
+lordFresh('gold_king', 0); hs = arena(); Game.gold = 10000;
+assert(!Game.act({ kind: 'bribe' }).ok, 'bribe needs an elite');
+eliteAt(hs[2]);
+assert.strictEqual(bribeCost(hs[2]), 1000 * COMBAT_RULES.bribe.goldPerHp, 'bribe price follows hp');
+Game.gold = 100; assert(!Game.act({ kind: 'bribe' }).ok, 'bribe needs gold');
+Game.gold = 10000; Game.goldLeft = 0;
+assert(Game.act({ kind: 'bribe' }).ok && hs[2].dead, 'bribe kills the elite');
+const bribeGain = Game.gold - (10000 - 200);
+assert(bribeGain > 0 && Game.skills.bribe === Game.skillCooldown('bribe'), 'bribe pays bounty and waits');
+lordFresh('gold_king', 0); takeNode('longRoar'); hs = arena(); eliteAt(hs[2]); assert.strictEqual(bribeCost(hs[2]), 150, 'longRoar');
+lordFresh('gold_king', 0); takeNode('bribeCheap'); hs = arena(); eliteAt(hs[2]); Game.gold = 10000; Game.goldLeft = 0; Game.act({ kind: 'bribe' }); assert.strictEqual(Game.gold - (10000 - 200), bribeGain * 2, 'bribeCheap');
+lordFresh('gold_king', 0); takeNode('traitor'); takeNode('bribeRoar'); hs = arena(); eliteAt(hs[2]); hs[3].d = hs[2].d + 30; Game.gold = 10000; Game.act({ kind: 'bribe' });
+assert(hs[3].stun === COMBAT_RULES.bribe.stun && hs[0].curseMul === 1.3 && !(hs[0].stun > 0), 'bribeRoar and traitor');
+// 황금 마왕: 금화 폭격(Q)
+lordFresh('gold_king', 0); { const cd2 = Game.skillCooldown('goldBomb'); takeNode('coinCool'); assert(Math.abs(Game.skillCooldown('goldBomb') - cd2 * 0.85) < 1e-9, 'coinCool'); }
+lordFresh('gold_king', 0); takeNode('goldFocus'); hs = arena(); Game.gold = 1000; Game.act({ kind: 'goldBomb' }); assert.strictEqual(hs[5].maxHp - hs[5].hp, 100 * COMBAT_RULES.goldBomb.damagePerGold * 1.25, 'goldFocus');
+lordFresh('gold_king', 0); takeNode('coinRain'); hs = arena(); hs[4].d = hs[5].d - 30; Game.gold = 1000; Game.act({ kind: 'goldBomb' }); assert.strictEqual(Game.gold, 902, 'coinRain');
+lordFresh('gold_king', 0); hs = arena(); hs[5].hp = 1; hs[5].bounty = 10; Game.gold = 1000; Game.goldLeft = 0; Game.act({ kind: 'goldBomb' }); { const plain = Game.gold - 900;
+    lordFresh('gold_king', 0); takeNode('coinLoot'); hs = arena(); hs[5].hp = 1; hs[5].bounty = 10; Game.gold = 1000; Game.goldLeft = 0; Game.act({ kind: 'goldBomb' }); assert(plain > 0 && Game.gold - 900 === plain * 2, 'coinLoot'); }
+lordFresh('gold_king', 0); Game.gold = 10;
 assert(!Game.act({ kind: 'goldBomb' }).ok, 'goldBomb needs heroes and gold');
 hs = arena(); assert(!Game.act({ kind: 'goldBomb' }).ok, 'goldBomb needs gold');
 Game.gold = 1000; assert(Game.act({ kind: 'goldBomb' }).ok);
 assert(Game.gold === 900 && hs[5].maxHp - hs[5].hp === 100 * COMBAT_RULES.goldBomb.damagePerGold, 'goldBomb spends and hits the front');
 assert.strictEqual(hs[0].hp, hs[0].maxHp, 'bomb stays around the front');
-assert.strictEqual(Game.thirdSkill().key, 'goldBomb');
-lordFresh('gold_king', 0); takeNode('goldBomb'); takeNode('bombRich'); takeNode('bombBig'); hs = arena(); hs[3].d = hs[5].d - 380; Game.gold = 1000; assert(Game.act({ kind: 'goldBomb' }).ok);
+lordFresh('gold_king', 0); takeNode('coinWide'); hs = arena(); hs[4].d = hs[5].d - 3.3 * TILE; Game.gold = 1000; Game.act({ kind: 'goldBomb' }); assert(hs[4].hp < hs[4].maxHp, 'coinWide');
+// 황금 손(E): 맨 앞 용사들이 굳고, 굳은 동안 처치하면 골드 두 배
+lordFresh('gold_king', 0); hs = arena();
+assert(!Game.act({ kind: 'midas' }).ok, 'midas needs the node');
+takeNode('midas');
+assert(Game.act({ kind: 'midas' }).ok);
+assert(hs[5].stun === COMBAT_RULES.midas.duration && hs[5].gildT > Game.stats.time && hs[1].stun === COMBAT_RULES.midas.duration && !(hs[0].stun > 0), 'midas gilds the front five');
+assert.strictEqual(Game.thirdSkill().key, 'midas');
+{ hs[1].hp = 1; hs[1].bounty = 10; Game.goldLeft = 0; let g = Game.gold; damageHero(hs[1], 10, 0, 0); const gild = Game.gold - g;
+    hs[5].gildT = 0; hs[5].hp = 1; hs[5].bounty = 10; Game.goldLeft = 0; g = Game.gold; damageHero(hs[5], 10, 0, 0); assert(gild > 0 && gild === (Game.gold - g) * 2, 'midas doubles kill gold'); }
+lordFresh('gold_king', 0); takeNode('bombRich'); takeNode('bombBig'); hs = arena(); hs[3].d = hs[5].d - 380; Game.gold = 1000; assert(Game.act({ kind: 'goldBomb' }).ok);
 assert(Game.gold === 800 && hs[5].maxHp - hs[5].hp === 200 * COMBAT_RULES.goldBomb.damagePerGold * 2, 'bombRich');
 assert(hs[3].hp < hs[3].maxHp, 'bombBig reaches further');
+DEMON_LORDS.gold_king.skills = ['lightning', 'roar'];
+Object.assign(COMBAT_RULES.goldBomb, bombNow);
+COMBAT_RULES.bribe.goldPerHp = bribeNow;
 // 효과표를 다시 만들어도 찍은 항목이 남는다
 lordFresh('gold_king', 0); takeNode('summonCheap'); { const before = Game.mods.summonBase; Game.mods = buildMods('gold_king', []); Game.applyPowerMods(); assert.strictEqual(Game.mods.summonBase, before, 'applyPowerMods'); }
 // 왕좌가 맞지 않은 라운드만 마력을 주고, 마력 회로는 하나 더 준다
@@ -6483,9 +6520,9 @@ console.log('smoke ok: equipment crafting');
         g.hp = 0.1;
         tick(0.55);
         assert.strictEqual(Game.gold - gold0, 15, 'funeral fee');
-        // 역병 구름(E): 새 스킬, 맨 앞 용사 자리에 장판, 안의 용사에게 독
-        start(['miasma']);
-        assert.strictEqual(Game.thirdSkill().key, 'miasma', 'third skill');
+        // 역병 구름(W, 2026-11-09 전에는 권능 E): 맨 앞 용사 자리에 장판, 안의 용사에게 독
+        start([]);
+        assert.strictEqual(Game.skillKey(1), 'miasma', 'plague W');
         const m = hero('warrior', 500);
         assert(Game.act({ kind: 'miasma' }).ok && Game.skills.miasma > 0, 'cast');
         assert(!Game.act({ kind: 'miasma' }).ok, 'cooldown');
@@ -6601,9 +6638,9 @@ console.log('smoke ok: equipment crafting');
         chainOnHit(c1);
         Game.lordPassive('shackle').chance = 0.08;
         assert(c1.bound > 0 && c2.bound > 0, 'a second one is bound');
-        // 사슬 감옥(E)
-        start(['jail', 'dragAll']);
-        assert.strictEqual(Game.thirdSkill().key, 'jail', 'third skill');
+        // 사슬 감옥(W, 2026-11-09 전에는 권능 E)
+        start(['dragAll']);
+        assert.strictEqual(Game.skillKey(1), 'jail', 'chain W');
         const j1 = hero(900), j2 = hero(920), far = hero(100);
         assert(Game.act({ kind: 'jail' }).ok && Game.skills.jail > 0, 'cast');
         assert(j1.bound === 3 && j2.bound === 3 && !(far.bound > 0), 'jail binds around the front');
@@ -6667,9 +6704,9 @@ console.log('smoke ok: equipment crafting');
         const g1 = Game.gold;
         const res = Game.act({ kind: 'merge', src: a, dst: b });
         assert.strictEqual(Game.gold - g1, COMBAT_RULES.mirror.transGold[MONSTERS[res.type].grade], 'silverwork gold');
-        // 거울 분신(E)
-        start(['mirrorClone', 'cloneTwo']);
-        assert.strictEqual(Game.thirdSkill().key, 'mirrorClone', 'third skill');
+        // 거울 분신(W, 2026-11-09 전에는 권능 E)
+        start(['cloneTwo']);
+        assert.strictEqual(Game.skillKey(1), 'mirrorClone', 'mirror W');
         const top = put('hell_general') || put('orc_guard');
         const count = Game.monsters.length;
         assert(Game.act({ kind: 'mirrorClone' }).ok, 'cast');
@@ -6776,10 +6813,10 @@ console.log('smoke ok: equipment crafting');
         damageHero(e, 5000, 0, 0);
         assert(Game.clockHasteT > 0 && Game.clockSlowT > 0, 'elite kill starts both');
         assert(Math.abs(clockHaste() - 0.3) < 1e-9 && Math.abs(clockSlowMul(hero()) - 0.7) < 1e-9, 'haste and slow');
-        // 시간 정지(E)
-        start(['timeStop', 'stopLong', 'timeStopHaste']);
+        // 시간 정지(W, 2026-11-09 전에는 권능 E)
+        start(['stopLong', 'timeStopHaste']);
         const s1 = hero(), sb = hero(400, 'boss');
-        assert.strictEqual(Game.thirdSkill().key, 'timeStop', 'third skill');
+        assert.strictEqual(Game.skillKey(1), 'timeStop', 'clock W');
         assert(Game.act({ kind: 'timeStop' }).ok && Game.skills.timeStop > 0, 'cast');
         assert(s1.stun >= 4.5 && sb.stun >= 1 && sb.stun < 2, 'heroes stopped, boss briefly');
         assert(Math.abs(clockHaste() - 0.5) < 1e-9, 'monsters faster while time stops');
@@ -7142,5 +7179,216 @@ console.log('smoke ok: equipment crafting');
         assert(ROUND_RULES.bosses.length === 8 && ROUND_RULES.bosses.every(b => BOSSES[b]), 'eight bosses rotate');
         console.log('smoke ok: gold shop, merge room, mage slow, boss patterns');
     }).toString() + ')()', gctx);
+}
+// 마왕별 스킬(2026-11-09): 일곱 마왕의 스킬 1(Q)과 스킬 2(W)가 모두 다르고, 권능 스킬(E)과도 겹치지 않는다. 칸, 단축키 표, 시전, 입력 재생
+{
+    const lctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), lctx, { filename: f });
+    vm.runInContext('UI.tutorialOff = true', lctx);
+    vm.runInContext('(' + (() => {
+        Meta.data.cleared = STAGES.map(s => s.id);
+        const lords = Object.keys(DEMON_LORDS);
+        // 표: 14개 스킬이 모두 다르고, 권능 스킬과 겹치지 않는다. 스킬마다 수치, 시전 함수, 이름, 설명이 있다
+        const qw = lords.flatMap(id => DEMON_LORDS[id].skills);
+        assert.strictEqual(qw.length, 14, 'two skills per lord');
+        assert.strictEqual(new Set(qw).size, 14, 'no two lords share a skill');
+        const e = Object.values(POWER_SKILLS).map(s => s.key);
+        assert.strictEqual(new Set(e).size, 7, 'seven power skills');
+        for (const k of e) assert(!qw.includes(k), 'power skill ' + k + ' is not a Q or W');
+        for (const lord of lords) {
+            const owned = LORD_POWERS[lord].flatMap(b => b.tiers.flat()).filter(n => POWER_SKILLS[n.id]);
+            assert.strictEqual(owned.length, 1, lord + ' has one power skill');
+        }
+        Game.reset({ lord: 'rift', relics: [] });
+        for (const k of [...qw, ...e]) {
+            const def = LORD_SKILLS[k];
+            assert(def && def.name && COMBAT_RULES[k].cooldown > 0 && typeof SKILL_CASTS[k] === 'function', 'skill table ' + k);
+            const text = def.desc(Game);
+            assert(text.length > 10 && !/[+×]/.test(text), 'plain description ' + k + ': ' + text);
+            assert(Game.skills[k] === 0, 'cooldown slot ' + k);
+        }
+        assert(!qw.includes('roar'), 'no lord roars any more');
+        // 용사 세우기: d가 클수록 왕좌에 가깝다
+        const hero = (d, kind) => {
+            const h = createHero('warrior', 5, 0, kind === 'boss' ? 'judge' : false, 'north');
+            Object.assign(h, { waiting: false, delay: 0, d, armor: 0, lane: 0 });
+            h.maxHp = h.hp = 1000;
+            if (kind === 'elite') h.elite = true;
+            Game.heroes.push(h);
+            return h;
+        };
+        const start = (lord, powers) => {
+            Game.reset({ lord, relics: [] });
+            Game.state = 'wave';
+            Game.heroes.length = 0;
+            Game.pendingStrikes = [];
+            for (const id of powers || []) Game.powers[id] = true;
+        };
+        const step = s => { for (let i = 0; i < Math.round(s * 30); i++) Game.update(1 / 30); };
+        // 칸과 단축키 표: 마왕 탭의 Q, W 칸이 그 마왕의 스킬이고 이름이 단축키 표에 나온다
+        for (const lord of lords) {
+            start(lord);
+            UI.setTab('demon');
+            UI.layout();
+            const q = UI.buttons.find(b => b.id === 'lightning'), w = UI.buttons.find(b => b.id === 'roar');
+            assert(q.skill === DEMON_LORDS[lord].skills[0] && q.slot === 'Q' && w.skill === DEMON_LORDS[lord].skills[1] && w.slot === 'W', lord + ' skill slots');
+            const keys = battleMenuKeys();
+            assert(keys.some(([k, l]) => k === 'Q' && l === LORD_SKILLS[q.skill].name) && keys.some(([k, l]) => k === 'W' && l === LORD_SKILLS[w.skill].name), lord + ' key table');
+            // 다른 마왕의 스킬은 쓸 수 없다
+            const other = lords.find(id => id !== lord);
+            hero(500);
+            assert(!Game.act({ kind: DEMON_LORDS[other].skills[1], x: 500, y: 500 }).ok, lord + ' cannot cast ' + other + ' W');
+        }
+        // E 칸: 권능 스킬을 찍으면 세 번째 칸과 단축키 표에 나온다
+        start('plague', ['outbreak']);
+        UI.setTab('demon');
+        UI.layout();
+        assert(UI.buttons.some(b => b.skill === 'outbreak' && b.slot === 'E'), 'third slot');
+        assert(battleMenuKeys().some(([k, l]) => k === 'E' && l === '창궐'), 'E in key table');
+
+        // 균열의 군주: Q 낙뢰(조준), W 균열 문
+        start('rift');
+        let a = hero(400), b = hero(900), boss = hero(950, 'boss');
+        UI.onKey('KeyQ');
+        assert.strictEqual(UI.targeting, 'lightning', 'Q aims the lightning');
+        UI.onKey('KeyQ');
+        assert.strictEqual(UI.targeting, false);
+        assert(Game.act({ kind: 'portal' }).ok, 'rift W');
+        assert(b.d === 900 - COMBAT_RULES.portal.back * TILE && a.d === Math.max(0, 400 - COMBAT_RULES.portal.back * TILE) && boss.d === 950, 'gate pushes all but the boss');
+        // 뇌우(E)
+        start('rift', ['thunder']);
+        for (let i = 0; i < 6; i++) hero(300 + i * 100);
+        assert(Game.act({ kind: 'thunder' }).ok && Game.pendingStrikes.length === COMBAT_RULES.thunder.count, 'thunder');
+
+        // 뼈의 여왕: Q 뼈 창은 맨 앞 줄만, W 망령은 시체를 일으킨다
+        start('bone_queen');
+        a = hero(1000); b = hero(1000 - 2 * TILE); const far = hero(1000 - 8 * TILE);
+        assert(Game.act({ kind: 'boneSpear' }).ok, 'bone Q');
+        const spear = skillPower(Game, 'boneSpear') + 1000 * COMBAT_RULES.boneSpear.hpRatio;
+        assert(Math.abs((1000 - a.hp) - spear) < 1e-6 && Math.abs((1000 - b.hp) - spear) < 1e-6 && far.hp === 1000, 'spear pierces the front line only');
+        assert(!Game.act({ kind: 'ghosts' }).ok, 'ghosts need graves');
+        a.hp = 1; damageHero(a, 10, 0, 0); b.hp = 1; damageHero(b, 10, 0, 0);
+        assert(Game.act({ kind: 'ghosts' }).ok && Game.units.length === 2 && Game.units.every(u => u.ghost && u.life === COMBAT_RULES.ghosts.life), 'ghosts rise from graves');
+        step(COMBAT_RULES.ghosts.life + 0.5);
+        assert.strictEqual(Game.units.length, 0, 'ghosts fade');
+        // 무덤 폭발(E)은 시체 자리를 터뜨린다
+        start('bone_queen', ['graveBlast']);
+        a = hero(800); b = hero(810);
+        a.hp = 1; damageHero(a, 10, 0, 0);
+        assert(Game.act({ kind: 'graveBlast' }).ok && b.hp < 1000, 'grave blast');
+
+        // 황금 마왕: Q 금화 폭격, W 매수
+        start('gold_king');
+        a = hero(900);
+        Game.gold = 1000;
+        const spend = Math.floor(1000 * COMBAT_RULES.goldBomb.spend);
+        assert(Game.act({ kind: 'goldBomb' }).ok && Game.gold === 1000 - spend, 'gold Q spends');
+        assert(Math.abs((1000 - a.hp) - (spend * COMBAT_RULES.goldBomb.damagePerGold + 1000 * COMBAT_RULES.goldBomb.hpRatio)) < 1e-6, 'gold Q hits by gold and by max hp');
+        const el = hero(500, 'elite');
+        Game.gold = 1000;
+        assert(Game.act({ kind: 'bribe' }).ok && el.dead && Game.gold >= 1000 - bribeCost({ hp: 1000 }), 'gold W buys an elite');
+
+        // 역병의 군주: Q 독 화살비(조준, 클릭), W 역병 구름, E 창궐
+        start('plague');
+        a = hero(700);
+        UI.setTab('demon');
+        UI.onKey('KeyQ');
+        assert.strictEqual(UI.targeting, 'venomRain', 'plague Q aims');
+        const pa = heroWorld(a);
+        UI.onClick(pa.x * WORLD_ZOOM, pa.y * WORLD_ZOOM);
+        assert(UI.targeting === false && Game.skills.venomRain > 0 && a.poison > 0 && a.hp < 1000, 'venom rain hits and poisons');
+        assert(Game.act({ kind: 'miasma' }).ok && Game.hazards.some(z => z.kind === 'poison'), 'plague W');
+        start('plague', ['outbreak']);
+        a = hero(700);
+        assert(!Game.act({ kind: 'outbreak' }).ok, 'outbreak needs the poisoned');
+        poisonHero(a, 4, 10, null);
+        const left = poisonDps(a) * a.poison * COMBAT_RULES.outbreak.mul;
+        assert(Game.act({ kind: 'outbreak' }).ok && Math.abs((1000 - a.hp) - left) < 1e-6 && a.poison === 0, 'outbreak bursts the poison');
+
+        // 사슬의 군주: Q 사슬 끌기, W 사슬 감옥, E 처형대
+        start('chain');
+        a = hero(900); b = hero(800); const c = hero(100);
+        assert(Game.act({ kind: 'chainPull' }).ok, 'chain Q');
+        assert(a.d === 900 - COMBAT_RULES.chainPull.back * TILE && a.bound > 0 && b.bound > 0 && !(c.bound > 0), 'pulls and binds the front two');
+        start('chain', ['gallows']);
+        a = hero(900); b = hero(500);
+        assert(!Game.act({ kind: 'gallows' }).ok, 'gallows needs the bound');
+        bindHero(a, 2);
+        assert(Game.act({ kind: 'gallows' }).ok && a.hp === 1000 * (1 - COMBAT_RULES.gallows.hpRatio) && b.hp === 1000, 'gallows hurts the bound');
+
+        // 거울 마녀: Q 반사막은 왕좌 피해를 막고 되돌린다, E 깨진 거울
+        start('mirror');
+        a = hero(900);
+        const hp0 = Game.hp;
+        assert(Game.act({ kind: 'mirrorWard' }).ok, 'mirror Q');
+        damageThrone(3);
+        assert(Game.hp === hp0 && a.hp < 1000, 'ward blocks and reflects');
+        step(COMBAT_RULES.mirrorWard.duration + 0.2);
+        damageThrone(1);
+        assert.strictEqual(Game.hp, hp0 - 1, 'ward ends');
+        start('mirror', ['shatter']);
+        a = hero(900); b = hero(500);
+        a.hp = 500;
+        assert(Game.act({ kind: 'shatter' }).ok && a.hp === 500 - 500 * COMBAT_RULES.shatter.ratio && b.hp === 1000, 'shatter hurts the wounded');
+
+        // 시계탑의 마왕: Q 감속 시계탑(조준), W 시간 정지, E 시간 가속
+        start('clock');
+        Game.waveStartTime = -100; // 멈춘 초침(패시브)은 끝난 뒤로
+        a = hero(600); b = hero(100);
+        step(DEMON_LORDS.clock.passive.duration + 1);
+        const m0 = clockSlowMul(a);
+        const pw = heroWorld(a);
+        assert(Game.act({ kind: 'clockTower', x: pw.x, y: pw.y }).ok && Game.towers.length === 1, 'clock Q');
+        assert(Math.abs(clockSlowMul(a) - m0 * COMBAT_RULES.clockTower.slow) < 1e-9 && clockSlowMul(b) === m0, 'tower slows only inside');
+        step(COMBAT_RULES.clockTower.duration + 0.5);
+        assert.strictEqual(Game.towers.length, 0, 'tower falls');
+        assert(Game.act({ kind: 'timeStop' }).ok && a.stun > 0, 'clock W');
+        start('clock', ['accel']);
+        const h0 = clockHaste();
+        assert(Game.act({ kind: 'accel' }).ok && Math.abs(clockHaste() - h0 - COMBAT_RULES.accel.haste) < 1e-9, 'accel');
+
+        // 권능 맞불은 그 마왕의 W를 쓰면 Q를 채우고, 폭주는 W를 봉인한다
+        start('rift', ['rally']);
+        hero(900);
+        Game.skills.lightning = 20;
+        assert(Game.act({ kind: 'portal' }).ok && Game.skills.lightning === 0, 'rally refills Q');
+        start('rift', ['frenzy']);
+        hero(900);
+        assert(Game.skillLocked('portal') && !Game.act({ kind: 'portal' }).ok, 'frenzy seals W');
+        // 제물은 그 마왕의 Q 대기를 줄인다
+        start('plague');
+        Game.state = 'prep';
+        Game.gold = 9999;
+        const cell = [...BUILD_CELLS].map(x => x.split(',').map(Number)).find(([cc, rr]) => Game.canPlace('orc_guard', cc, rr));
+        const sac = Game.place('orc_guard', cell[0], cell[1]);
+        Game.skills.venomRain = 100;
+        const gain = Game.sacrificeGain(sac);
+        assert(Game.sacrifice(sac).ok && Math.abs(Game.skills.venomRain - (100 - gain.lightning)) < 1e-9, 'sacrifice charges Q');
+
+        // 입력 재생: 마왕 스킬(조준 좌표 포함)을 쓴 판을 다시 돌려도 결과가 같다
+        for (const lord of ['bone_queen', 'plague', 'clock']) {
+            Game.reset(null, null, abyssChallenge('lsk-' + lord, lord, []));
+            Game.state = 'prep';
+            let guard = 0;
+            while (Game.inPlay() && Game.waveIndex < 6 && guard++ < 30 * 60 * 10) {
+                if (Game.bossReward) Game.act({ kind: 'pickReward', i: Game.bossReward.cards.findIndex(x => Game.canTakeReward(x)) });
+                if (Game.tick % 20 === 0 && !Game.fieldFull() && Game.canPaySummon()) Game.act({ kind: 'summon' });
+                if (Game.tick % 90 === 0 && Game.state === 'wave') {
+                    const f = Game.heroes.filter(h => !h.dead && !h.waiting).sort((x, y) => remainingDistance(x) - remainingDistance(y))[0];
+                    if (f) { const p = heroWorld(f); for (const k of Game.lordSkills()) Game.act({ kind: k, x: p.x, y: p.y }); }
+                }
+                Game.update(GAME_TICK);
+            }
+            if (Game.inPlay()) Game.act({ kind: 'surrender' });
+            const record = JSON.parse(JSON.stringify(Game.record));
+            const result = Game.challengeResult;
+            const used = record.inputs.filter(i => Game.lordSkills().includes(i.kind)).length;
+            assert(used > 0, lord + ' used its skills');
+            assert.strictEqual(JSON.stringify(replayChallenge(record)), JSON.stringify(result), lord + ' replay with lord skills gives the same result');
+        }
+        Game.reset();
+        console.log('smoke ok: lord skills');
+    }).toString() + ')()', lctx);
 }
 require('./smoke_maps.js');

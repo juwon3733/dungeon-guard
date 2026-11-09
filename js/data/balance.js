@@ -174,19 +174,33 @@ const COMBAT_RULES = {
     corpseTime: 5,
     corruptCostMul: 8,
     corruptMax: 3,
-    lightning: { damage: 48, radius: 1.5, cooldown: 30 },
-    roar: { unlockHp: 10, duration: 3, cooldown: 60 },
-    portal: { cooldown: 35, count: 8, back: 6 }, // 권능 균열 열기
-    raise: { cooldown: 30, count: 8, radius: 1, damageMul: 0.5 }, // 권능 시체 일으키기
-    goldBomb: { cooldown: 25, spend: 0.1, richSpend: 0.2, maxSpend: 500, minGold: 50, radius: 3, bigRadius: 1.5, damagePerGold: 0.5 }, // 권능 금화 폭격
-    bribeRoar: { cost: 300, cooldown: 5 }, // 권능 입막음
-    miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 권능 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
-    mirrorClone: { cooldown: 35, duration: 15 }, // 권능 거울 분신
-    timeStop: { cooldown: 40, duration: 3, bossDuration: 1, longUp: 1.5 }, // 권능 시간 정지
+    // 마왕 스킬(js/data/demonlords.js의 LORD_SKILLS). 마왕마다 스킬 1(Q)과 스킬 2(W)가 다르다. perRound: 라운드마다 피해가 그만큼 늘어난다
+    lightning: { damage: 48, radius: 1.5, cooldown: 30 }, // 균열의 군주 Q 낙뢰
+    roar: { unlockHp: 10, duration: 3, cooldown: 60 }, // 옛 공용 W 호통(쓰는 마왕이 없다)
+    portal: { cooldown: 40, count: 6, back: 5, pullUp: 3 }, // 균열의 군주 W 균열 문
+    boneSpear: { cooldown: 18, damage: 40, perRound: 0.12, hpRatio: 0.1, length: 4 }, // 뼈의 여왕 Q 뼈 창
+    ghosts: { cooldown: 40, count: 4, life: 10, hpPerRound: 0.3, damagePerRound: 0.25 }, // 뼈의 여왕 W 망령 깨우기(타락 유닛 수치에 라운드 배율)
+    goldBomb: { cooldown: 25, spend: 0.05, richSpend: 0.1, maxSpend: 300, minGold: 50, radius: 3, wideUp: 0.5, bigRadius: 1.5, damagePerGold: 1, hpRatio: 0.12 }, // 황금 마왕 Q 금화 폭격(쓴 골드만큼 + 최대 체력 hpRatio)
+    bribe: { cooldown: 45, goldPerHp: 0.15, minCost: 80, stunRadius: 1.5, stun: 2 }, // 황금 마왕 W 매수(비용 = 남은 체력 x goldPerHp)
+    venomRain: { cooldown: 16, radius: 1.75, damage: 25, perRound: 0.12, poison: 4, dps: 6, dpsPerRound: 1.5 }, // 역병의 군주 Q 독 화살비
+    miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 역병의 군주 W 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
+    chainPull: { cooldown: 12, count: 2, back: 3, bind: 1.5, bossBind: 0.5 }, // 사슬의 군주 Q 사슬 끌기
+    mirrorWard: { cooldown: 35, duration: 6 }, // 거울 마녀 Q 반사막(막을 때마다 맨 앞 용사에게 낙뢰 기본 피해)
+    mirrorClone: { cooldown: 35, duration: 15 }, // 거울 마녀 W 거울 분신
+    clockTower: { cooldown: 24, radius: 2, duration: 8, slow: 0.5 }, // 시계탑의 마왕 Q 감속 시계탑
+    timeStop: { cooldown: 40, duration: 3, bossDuration: 1, longUp: 1.5 }, // 시계탑의 마왕 W 시간 정지
+    // 권능 스킬(E)
+    thunder: { cooldown: 35, count: 5, mul: 0.6, gap: 0.15 }, // 균열 뇌우
+    graveBlast: { cooldown: 30, count: 8, radius: 1, damageMul: 0.5 }, // 뼈의 여왕 무덤 폭발(최근 시체 count구까지 기억한다)
+    midas: { cooldown: 35, count: 5, duration: 3, bossDuration: 1 }, // 황금 마왕 황금 손
+    outbreak: { cooldown: 30, mul: 1.5 }, // 역병의 군주 창궐
+    gallows: { cooldown: 30, hpRatio: 0.2, bossRatio: 0.05 }, // 사슬의 군주 처형대
+    shatter: { cooldown: 30, ratio: 0.4, bossRatio: 0.15 }, // 거울 마녀 깨진 거울
+    accel: { cooldown: 35, duration: 6, haste: 0.6 }, // 시계탑의 마왕 시간 가속
     clock: { slowLong: 2, deepCut: 0.55, eliteSlow: 0.7, eliteSlowTime: 2, auraTiles: 3, auraSlow: 0.75, slowHitChance: 0.1, haste: 0.3, hasteStartTime: 6, hasteKillTime: 5,
         overclock: 0.5, overclockEvery: 10, overclockTime: 3, rewindPer: 2, rewindDelay: 3, rewindDeathHp: 5 }, // 시계탑의 마왕 권능 수치
     mirror: { reflectUp: 0.1, reflectCount: 3, transGold: { common: 3, rare: 8, epic: 20, legendary: 45, mythic: 100 } }, // 거울 마녀 권능 수치
-    jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 권능 사슬 감옥
+    jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 사슬의 군주 W 사슬 감옥
     chain: { chanceUp: 0.06, longUp: 0.4, breakDamage: 0.05, pitEvery: 5, lowBelow: 0.15, turnEvery: 8 }, // 사슬의 군주 권능 수치
     plague: { sacDps: 5, sacDpsPerRound: 1.2, burstSeconds: 2, deathBelow: 0.1, pandemicEvery: 10, blastRadius: 1, blastMul: 0.4 }, // 역병의 군주 권능 수치
     corpseBlast: { every: 5, quickEvery: 3, radius: 1.5, damageMul: 0.3, perRound: 0.1 }, // 권능 시체 폭발(피해는 라운드마다 +10%, 시체 일으키기도 같다)

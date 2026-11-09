@@ -1111,6 +1111,44 @@ const PAGE_HELPERS = () => {
     });
 };
 
+// 마왕별 스킬(2026-11-09): 마왕마다 Q와 W를 쓴 직후의 전투 화면. 권능 스킬(E)도 열어 둔다.
+// 스킬 칸 하나(마왕마다 Q, W, E를 돌아가며)에 마우스를 올려 이름과 설명을 띄운다. 장면 이름 skills_<마왕 id>
+['rift', 'bone_queen', 'gold_king', 'plague', 'chain', 'mirror', 'clock'].forEach((lord, i) => {
+    SCENES[`skills_${lord}`] = {
+        arg: { lord, slot: ['lightning', 'roar', 'third'][i % 3] },
+        setup: ({ lord: id, slot }) => {
+            unlockAll();
+            UI.openSelect(null);
+            pressButton(`lord_${id}`);
+            pressButton('begin');
+            Game.gold = 5000;
+            for (const t of ['orc_guard', 'skeleton_archer', 'dark_mage', 'minotaur', 'succubus', 'troll']) {
+                const key = [...BUILD_CELLS].find(k => { const [c, r] = k.split(',').map(Number); return Game.canPlace(t, c, r); });
+                if (key) { const [c, r] = key.split(',').map(Number); Game.place(t, c, r); }
+            }
+            const node = LORD_POWERS[id].flatMap(b => b.tiers.flat()).find(n => POWER_SKILLS[n.id]);
+            Game.powers[node.id] = true;
+            Game.waveIndex = 6;
+            Game.startWave();
+            Fx.reset();
+            advance(9);
+            pressButton('tab_demon');
+            const f = frontHeroes(1)[0];
+            if (f) {
+                f.elite = true; // 황금 마왕 매수에 쓸 정예
+                const p = heroWorld(f);
+                Game.act({ kind: Game.skillKey(1), x: p.x, y: p.y });
+                Game.act({ kind: Game.skillKey(0), x: p.x, y: p.y });
+            }
+            advance(0.35);
+            UI.update(0);
+            const b = UI.buttons.find(x => x.id === (slot === 'third' ? Game.thirdSkill().key : slot));
+            UI.onMove(b.x + 20, b.y + 20);
+        },
+        settleMs: 150
+    };
+});
+
 function freePort() {
     return new Promise((resolve, reject) => {
         const s = net.createServer();
@@ -1165,7 +1203,7 @@ async function captureScene(browser, url, name, problems) {
     await page.waitForFunction(() => typeof ready !== 'undefined' && ready === true, null, { timeout: 30000 });
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate(PAGE_HELPERS);
-    await page.evaluate(scene.setup);
+    await page.evaluate(scene.setup, scene.arg);
     const fps = await page.evaluate(s => measureFps(s), FPS_SECONDS);
     if (scene.settleMs) await page.waitForTimeout(scene.settleMs);
     if (scene.freeze !== false) await page.evaluate(() => freezeScene());

@@ -84,11 +84,19 @@ function play(bot, stageId, daily) {
         }
         // 발동형 유물(학살의 종, 영혼 수확 낫): 채워지면 바로
         if (bot.skill && G.state === 'wave') for (const id of G.relics) if (relicCharge(id) >= 1) G.act({ kind: 'relicFire', id });
+        // 마왕 스킬: 3번째 스킬(E)은 준비되면 바로. 스킬 1(Q)·2(W)는 맨 앞 용사가 길의 60%를 넘어오면(조준 스킬은 그 용사 자리에)
         const third = G.thirdSkill();
         if (bot.skill && third && G.state === 'wave' && G.skills[third.key] <= 0) G.act({ kind: third.key });
-        if (bot.skill && G.skills.lightning === 0 && G.state === 'wave') {
-            const h = G.heroes.filter(x => !x.waiting).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
-            if (h && remainingDistance(h) < ROUTES.north.length * 0.6) { const p = heroWorld(h); castLightning(p.x, p.y); }
+        if (bot.skill && G.state === 'wave') {
+            const h = G.heroes.filter(x => !x.waiting && !x.dead).sort((a, b) => remainingDistance(a) - remainingDistance(b))[0];
+            if (h && remainingDistance(h) < ROUTES.north.length * 0.6) {
+                const p = heroWorld(h);
+                for (const key of G.lordSkills()) {
+                    if (G.skills[key] > 0 || G.skillLocked(key)) continue;
+                    if (key === 'bribe' && (!bribeTarget() || bribeCost(bribeTarget()) > G.gold * 0.25)) continue; // 매수는 골드의 1/4 이하일 때만
+                    G.act({ kind: key, x: p.x, y: p.y });
+                }
+            }
         }
         for (const m of G.monsters) {
             const g = GRADE_ORDER.indexOf(MONSTERS[m.type].grade);
@@ -113,7 +121,7 @@ const BOTS = {
     '아무것도 안 함': '{}',
     '소환만': '{summon:true}',
     '소환+합치기': '{summon:true,merge:true}',
-    '합치기+강화+장비+번개': '{summon:true,merge:true,upgrade:true,equip:true,skill:true}'
+    '합치기+강화+장비+번개': '{summon:true,merge:true,upgrade:true,equip:true,skill:true}' // 번개: 마왕 스킬(이름은 예전 그대로)
 };
 const avg = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
 const R = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;

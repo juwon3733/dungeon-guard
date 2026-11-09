@@ -453,6 +453,13 @@ const Render = {
             this.pixelDisc(ctx, p.x, p.y - (h.boss ? 120 : 40), h.boss ? 110 : 50, h.boss ? 130 : 60, '#ffe08a', { k: 4 });
             ctx.restore();
         }
+        if (h.gildT > Game.stats.time) {
+            // 황금 마왕 황금 손: 굳은 용사를 금빛으로 덮는다
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            this.pixelDisc(ctx, p.x, p.y - (h.boss ? 120 : 40), h.boss ? 100 : 44, h.boss ? 120 : 54, '#ffd34d', { k: 4, hard: true });
+            ctx.restore();
+        }
         if (h.stun > 0 && !(h.bound > 0)) this.drawLoopSheet(ctx, 'fx_stunned', p.x, headY + (h.boss ? 40 : 30), h.boss ? 100 : 56, h.lane * 0.1); // 머리 바로 위에 작게. 묶인 용사는 별 대신 사슬
         if (clockSlowMul(h) < 1) this.pixelRing(ctx, p.x, p.y + 10, 18, 6, '#ffcf6b', { k: 2 }); // 시계탑: 감속 받는 용사 발밑 호박색 고리
         if (h.bound > 0) this.chainShackle(ctx, p.x, p.y + 10, h.boss ? 2 : 1, h.bound, h.elite || h.boss);
@@ -1735,6 +1742,21 @@ const Render = {
             ctx.restore();
             this.drawLoopSheet(ctx, poison ? 'fx_poison_cloud' : 'fx_fire_ground', z.x, z.y, z.radius * (poison ? 2.2 : 2), z.x * 0.01, a);
         }
+        // 시계탑의 마왕 감속 시계탑: 호박색 바닥 고리와 가운데 시계판(바늘이 돈다)
+        for (const t of Game.towers) {
+            const a = clamp((t.life - t.age) / 0.5, 0, 1) * clamp(t.age / 0.15, 0, 1);
+            ctx.save();
+            ctx.globalAlpha = 0.18 * a;
+            this.pixelDisc(ctx, t.x, t.y, t.radius, t.radius * 0.55, '#ffcf6b', { k: 4 });
+            ctx.globalAlpha = 0.8 * a;
+            this.pixelRing(ctx, t.x, t.y, t.radius, t.radius * 0.55, '#ffcf6b', { k: 4 });
+            this.pixelDisc(ctx, t.x, t.y - 70, 36, 36, '#3a2a14', { k: 4, hard: true });
+            this.pixelRing(ctx, t.x, t.y - 70, 36, 36, '#ffcf6b', { k: 4 });
+            const ang = Game.time * 4;
+            ctx.fillStyle = '#ffe9b8';
+            for (let i = 0; i < 6; i++) ctx.fillRect(Math.round(t.x + Math.cos(ang) * i * 5) - 2, Math.round(t.y - 70 + Math.sin(ang) * i * 5) - 2, 5, 5);
+            ctx.restore();
+        }
     },
 
     // 지원 몬스터 발밑의 오라 고리(오라 종류 색). 작고 흐리게 그려 맵을 덮지 않는다. 범위 원은 고를 때만 UI가 그린다
@@ -1931,11 +1953,21 @@ const Render = {
         }
 
         if (UI.targeting) {
-            const rule = COMBAT_RULES.lightning;
-            this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, Game.lightningRadius() * TILE, 'rgba(160,220,255,1)');
+            const def = LORD_SKILLS[UI.targeting === true ? Game.skillKey(0) : UI.targeting];
+            const color = { venomRain: 'rgba(150,235,80,1)', clockTower: 'rgba(255,207,107,1)' }[UI.targeting] || 'rgba(160,220,255,1)';
+            if (def && def.radius) this.rangeRing(ctx, UI.mouse.x / WORLD_ZOOM, UI.mouse.y / WORLD_ZOOM, def.radius(Game) * TILE, color);
         }
 
         this.drawHazards(ctx);
+        // 거울 마녀 반사막: 왕좌를 감싸는 은빛 고리(깜빡인다)
+        if (Game.wardT > 0) {
+            ctx.save();
+            ctx.globalAlpha = (0.55 + Math.sin(Game.time * 8) * 0.2) * Math.min(1, Game.wardT / 0.5);
+            this.pixelRing(ctx, tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 40, 190, 120, '#bff6ff', { k: 4 });
+            ctx.globalAlpha *= 0.3;
+            this.pixelDisc(ctx, tileX(THRONE_TILE.col), tileY(THRONE_TILE.row) - 40, 190, 120, '#bff6ff', { k: 4 });
+            ctx.restore();
+        }
         // 시계탑의 마왕 시간 정지: 바닥을 호박색으로 얇게 덮는다(끝나기 0.5초 전부터 흐려진다)
         if (Game.timeStopT > 0) {
             ctx.save();

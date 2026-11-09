@@ -1,8 +1,13 @@
 // 전투 메뉴(Esc 또는 오른쪽 위 톱니): 판을 멈추고 계속, 설정, 본부로(스토리: 마지막 라운드부터 이어하기), 항복
 // 항복은 입력(Game.act 'surrender')이라 도전 기록 재생에도 남는다. 두 번 눌러야 한다
 const BATTLE_MENU = { w: 640, h: 720 };
-const BATTLE_MENU_KEYS = [['S', '소환'], ['Q', '번개'], ['W', '호통'], ['G', '강화'], ['A', '자동 합치기'], ['Space', '다음 라운드'],
-    ['F', '배속'], ['P', '일시정지'], ['Tab', '탭 바꾸기']];
+// 단축키 표. Q, W, E는 이번 판 마왕의 스킬 이름이다(E는 권능으로 열렸을 때만)
+function battleMenuKeys() {
+    const skill = slot => LORD_SKILLS[Game.skillKey(slot)].name;
+    const third = Game.thirdSkill();
+    return [['S', '소환'], ['Q', skill(0)], ['W', skill(1)], ...(third ? [['E', LORD_SKILLS[third.key].name]] : []), ['G', '강화'], ['A', '자동 합치기'], ['Space', '다음 라운드'],
+        ['F', '배속'], ['P', '일시정지'], ['Tab', '탭 바꾸기']];
+}
 
 Object.assign(UI, {
     battleMenu: false,
@@ -107,7 +112,7 @@ Object.assign(UI, {
         const ky0 = last + 28;
         ctx.fillStyle = T.parchmentDark;
         ctx.fillRect(R.x + 50, ky0 - 14, R.w - 100, 2);
-        BATTLE_MENU_KEYS.forEach(([key, label], i) => {
+        battleMenuKeys().forEach(([key, label], i) => {
             const kx = R.x + 50 + (i % 3) * 182;
             const ky = ky0 + Math.floor(i / 3) * 46;
             const kw = this.drawKeyCap(ctx, key, kx, ky + 2, 18);

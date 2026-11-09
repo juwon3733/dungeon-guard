@@ -49,6 +49,16 @@ function damageUnit(u, amount, attacker) {
 }
 
 function updateUnit(u, dt) {
+    // 뼈의 여왕 망령: 시간이 다 되면 사라진다
+    if (u.life !== undefined) {
+        u.life -= dt;
+        if (u.life <= 0) {
+            u.removed = true;
+            for (const h of Game.heroes) if (h.blocker === u) h.blocker = null;
+            Fx.rise(u.x, u.y, '#c9a6ff', 10, 24, 0.6);
+            return;
+        }
+    }
     u.flash = Math.max(0, u.flash - dt);
     u.atkPose = Math.max(0, u.atkPose - dt);
     u.anim += dt * 5;

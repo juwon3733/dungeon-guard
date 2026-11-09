@@ -13,7 +13,7 @@ const LORD_EFFECTS = {
     startGold: { name: '시작 골드', mode: 'add', unit: 'G' },
     maxHp: { name: '최대 체력', mode: 'add' },
     skillCooldown: { name: '스킬 재사용', mode: 'mul', low: true },
-    lightningDamage: { name: '번개 피해', mode: 'mul', pct: true },
+    lightningDamage: { name: '낙뢰 피해', mode: 'mul', pct: true },
     heroSpeed: { name: '용사 이동 속도', mode: 'mul', low: true },
     damage: { name: '몬스터 피해', mode: 'ratio' },
     hp: { name: '몬스터 체력', mode: 'ratio' },
@@ -39,8 +39,8 @@ const LORD_EFFECTS = {
     monsterArmor: { name: '몬스터 받는 피해 감소', mode: 'ratio' },
     altarDamage: { name: '제물당 몬스터 피해', mode: 'ratio', note: '최대 15%' },
     earlyAttackSpeed: { name: '일찍 부른 라운드 공격 속도', mode: 'ratio' },
-    lightningCooldown: { name: '번개 재사용', mode: 'mul', low: true },
-    roarAnytime: { name: '호통', mode: 'add', text: () => '체력 조건 없이 호통' },
+    lightningCooldown: { name: '첫 번째 스킬 재사용', mode: 'mul', low: true }, // 마왕 스킬 1(Q). 키 이름은 번개를 같이 쓰던 때 그대로
+    roarAnytime: { name: '호통', mode: 'add', text: () => '체력 조건 없이 호통' }, // 호통을 쓰는 마왕이 없다(옛 유물 시험만)
     equipUp: { name: '돌아오는 장비 등급 상승 확률', mode: 'ratio' },
     equipPower: { name: '장비 효과', mode: 'ratio' },
     twinSummon: { name: '소환 1마리 더 나올 확률', mode: 'ratio' },
@@ -112,23 +112,23 @@ const LORD_EFFECTS = {
 const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1, awakenCost: 4, awakenStep: 2, awakenDamage: 0.05 }; // 각성 값은 4, 6, 8...
 const LORD_POWERS = {
     rift: [
-        { id: 'storm', name: '폭풍', desc: '번개 강화', tiers: [
-            [{ id: 'wide', name: '넓은 낙뢰', desc: '번개 범위 +0.5칸' }, { id: 'focus', name: '벼락 집중', desc: '번개 피해 +30%' }],
-            [{ id: 'markLong', name: '깊은 낙인', desc: '감전 낙인 +3초' }, { id: 'static', name: '정전기', desc: '번개 맞은 용사 3초간 이동 -30%' }],
-            [{ id: 'chain', name: '연쇄 낙뢰', desc: '주변 용사 3명에게 연쇄 번개' }, { id: 'echo', name: '메아리', desc: '1초 뒤 같은 자리에 번개 한 번 더(피해 50%)' }],
-            [{ id: 'smite', name: '천벌', desc: '정예·보스에게 번개 피해 2배' }, { id: 'auto', name: '폭풍의 눈', desc: '번개 자동 시전(선두 용사)' }]
+        { id: 'storm', name: '폭풍', desc: '낙뢰 강화', tiers: [
+            [{ id: 'wide', name: '넓은 낙뢰', desc: '낙뢰 범위 +0.5칸' }, { id: 'focus', name: '벼락 집중', desc: '낙뢰 피해 +30%' }],
+            [{ id: 'markLong', name: '깊은 낙인', desc: '감전 낙인 +3초' }, { id: 'static', name: '정전기', desc: '낙뢰 맞은 용사 3초간 이동 -30%' }],
+            [{ id: 'chain', name: '연쇄 낙뢰', desc: '주변 용사 3명에게 연쇄 낙뢰' }, { id: 'echo', name: '메아리', desc: '1초 뒤 같은 자리에 낙뢰 한 번 더(피해 50%)' }],
+            [{ id: 'smite', name: '천벌', desc: '정예·보스에게 낙뢰 피해 2배' }, { id: 'auto', name: '폭풍의 눈', desc: '낙뢰 자동 시전(선두 용사)' }]
         ] },
         { id: 'portal', name: '균열', desc: '후퇴', tiers: [
-            [{ id: 'tear', name: '찢긴 틈', desc: '번개 맞은 용사 1초 정지' }, { id: 'ward', name: '왕좌 결계', desc: '일반 용사의 왕좌 피해 -20%' }],
-            [{ id: 'pull', name: '끌어당김', desc: '번개 맞은 용사 2칸 후퇴(보스 제외)' }, { id: 'turnback', name: '문전박대', desc: '왕좌 도달 일반 용사 5명마다 1명 입구로' }],
-            [{ id: 'gate', name: '균열 열기', desc: '새 스킬(E): 선두 용사 8명 6칸 후퇴' }, { id: 'longTear', name: '긴 틈', desc: '번개 맞은 용사 2초 정지' }],
-            [{ id: 'abyss', name: '심연의 손길', desc: '번개·균열 맞은 용사 5초간 받는 피해 +40%' }, { id: 'exile', name: '먼 추방', desc: '후퇴 거리 2배' }]
+            [{ id: 'tear', name: '찢긴 틈', desc: '균열 문에 밀린 용사 1초 정지' }, { id: 'ward', name: '왕좌 결계', desc: '일반 용사의 왕좌 피해 -20%' }],
+            [{ id: 'pull', name: '넓은 문', desc: '균열 문 대상 3명 증가' }, { id: 'turnback', name: '문전박대', desc: '왕좌 도달 일반 용사 5명마다 1명 입구로' }],
+            [{ id: 'thunder', name: '뇌우', desc: '새 스킬(E): 뇌우' }, { id: 'longTear', name: '긴 틈', desc: '균열 문에 밀린 용사 2초 정지' }],
+            [{ id: 'abyss', name: '심연의 손길', desc: '낙뢰·균열 문에 맞은 용사 5초간 받는 피해 +40%' }, { id: 'exile', name: '먼 추방', desc: '균열 문 후퇴 거리 2배' }]
         ] },
         { id: 'overload', name: '과부하', desc: '스킬 회전', tiers: [
-            [{ id: 'quick', name: '빠른 충전', desc: '번개 재사용 -15%' }, { id: 'roarDrill', name: '호통 단련', desc: '호통 재사용 -30%' }],
-            [{ id: 'killCharge', name: '처치 충전', desc: '일반 용사 처치마다 번개 재사용 -0.1초' }, { id: 'sacCharge', name: '제물 충전', desc: '제물의 번개 충전 2배' }],
-            [{ id: 'eliteCharge', name: '사냥 충전', desc: '정예 처치 시 번개 즉시 충전' }, { id: 'circuit', name: '마력 회로', desc: '무피해 라운드 마력 +1' }],
-            [{ id: 'frenzy', name: '폭주', desc: '처치마다 번개 재사용 -0.3초, 호통 봉인' }, { id: 'rally', name: '맞불', desc: '호통 사용 시 번개 즉시 충전' }]
+            [{ id: 'quick', name: '빠른 충전', desc: '낙뢰 재사용 -15%' }, { id: 'roarDrill', name: '문 단련', desc: '균열 문 재사용 -30%' }],
+            [{ id: 'killCharge', name: '처치 충전', desc: '일반 용사 처치마다 낙뢰 재사용 -0.1초' }, { id: 'sacCharge', name: '제물 충전', desc: '제물의 낙뢰 충전 2배' }],
+            [{ id: 'eliteCharge', name: '사냥 충전', desc: '정예 처치 시 낙뢰 즉시 충전' }, { id: 'circuit', name: '마력 회로', desc: '무피해 라운드 마력 +1' }],
+            [{ id: 'frenzy', name: '폭주', desc: '처치마다 낙뢰 재사용 -0.3초, 균열 문 봉인' }, { id: 'rally', name: '맞불', desc: '균열 문 사용 시 낙뢰 즉시 충전' }]
         ] }
     ],
     bone_queen: [
@@ -141,14 +141,14 @@ const LORD_POWERS = {
         { id: 'corpse', name: '시체', desc: '시체 폭발', tiers: [
             [{ id: 'corpseBlast', name: '시체 폭발', desc: '일반 용사 5명 처치마다 시체 폭발' }, { id: 'xpUp', name: '죽음의 교훈', desc: '랭크 돌리기 비용 -30%', mods: { rankCost: 0.3 } }],
             [{ id: 'corpseFrost', name: '썩은 안개', desc: '폭발에 맞은 용사 2초간 이동 -30%' }, { id: 'boneEdge', name: '뼈 칼날', desc: '몬스터 피해 +8%', mods: { damage: 0.08 } }],
-            [{ id: 'raise', name: '시체 일으키기', desc: '새 스킬(E): 최근 시체 8구 동시 폭발' }, { id: 'corpseQuick', name: '썩은 살', desc: '시체 폭발 주기 3명' }],
-            [{ id: 'raiseFast', name: '끝없는 무덤', desc: '시체 일으키기 재사용 -40%' }, { id: 'corpseBig', name: '큰 폭발', desc: '폭발 범위 2배' }]
+            [{ id: 'graveBlast', name: '무덤 폭발', desc: '새 스킬(E): 무덤 폭발' }, { id: 'corpseQuick', name: '썩은 살', desc: '시체 폭발 주기 3명' }],
+            [{ id: 'raiseFast', name: '끝없는 무덤', desc: '무덤 폭발 재사용 -40%' }, { id: 'corpseBig', name: '큰 폭발', desc: '폭발 범위 2배' }]
         ] },
         { id: 'offering', name: '제물', desc: '제물 강화', tiers: [
             [{ id: 'sacBoost', name: '달콤한 제물', desc: '제물 효과 +50%', mods: { sacrifice: 1.5 } }, { id: 'sacSell', name: '뼈값', desc: '판매 환불 +30%', mods: { refund: 1.3 } }],
             [{ id: 'sacRage', name: '피의 환호', desc: '제물 시 몬스터 8초간 공격 속도 +25%' }, { id: 'altar', name: '쌓이는 제단', desc: '제물당 몬스터 피해 +2%(최대 15%)', mods: { altarDamage: 0.02 } }],
             [{ id: 'sacMana', name: '영혼 추출', desc: '제물 시 마력 +1' }, { id: 'sacGold', name: '헌금', desc: '제물 시 소환 비용 2배만큼 골드' }],
-            [{ id: 'sacRoar', name: '여왕의 외침', desc: '제물 시 호통 즉시 충전' }, { id: 'sacSoul', name: '혼의 일제 사격', desc: '제물 시 일제 사격 발동' }]
+            [{ id: 'sacRoar', name: '여왕의 외침', desc: '제물 시 망령 즉시 충전' }, { id: 'sacSoul', name: '혼의 일제 사격', desc: '제물 시 일제 사격 발동' }]
         ] }
     ],
     gold_king: [
@@ -160,14 +160,14 @@ const LORD_POWERS = {
         ] },
         { id: 'bribe', name: '매수', desc: '골드 방어', tiers: [
             [{ id: 'goldWard', name: '왕좌 보험', desc: '일반 용사의 왕좌 피해 -20%' }, { id: 'dropUp', name: '장물아비', desc: '정예 장비 드롭 +10%', mods: { eliteDrop: 0.1 } }],
-            [{ id: 'heroSlow', name: '통행세', desc: '새로 오는 용사 이동 -7%', mods: { heroSpeed: 0.93 } }, { id: 'longRoar', name: '긴 협상', desc: '호통 정지 +1초' }],
-            [{ id: 'bribeRoar', name: '입막음', desc: '호통을 300G로 사용(체력 조건 없음, 대기 5초)' }, { id: 'contract', name: '상시 계약', desc: '체력 조건 없이 호통', mods: { roarAnytime: 1 } }],
-            [{ id: 'bribeCheap', name: '단골', desc: '입막음 비용 절반' }, { id: 'traitor', name: '배신 유도', desc: '호통 맞은 용사 3초간 받는 피해 +30%' }]
+            [{ id: 'heroSlow', name: '통행세', desc: '새로 오는 용사 이동 -7%', mods: { heroSpeed: 0.93 } }, { id: 'longRoar', name: '긴 협상', desc: '매수 비용 -25%' }],
+            [{ id: 'bribeRoar', name: '입막음', desc: '매수한 정예 둘레 1.5칸 용사 2초 정지' }, { id: 'contract', name: '상시 계약', desc: '매수 재사용 -30%' }],
+            [{ id: 'bribeCheap', name: '단골', desc: '매수한 정예 처치 골드 2배' }, { id: 'traitor', name: '배신 유도', desc: '매수 시 모든 용사 3초간 받는 피해 +30%' }]
         ] },
         { id: 'bomb', name: '금화 폭격', desc: '골드 공격', tiers: [
-            [{ id: 'goldFocus', name: '금빛 번개', desc: '번개 피해 +25%', mods: { lightningDamage: 1.25 } }, { id: 'coinWide', name: '넓은 금맥', desc: '번개 범위 +0.5칸' }],
-            [{ id: 'coinCool', name: '선불', desc: '번개 재사용 -15%' }, { id: 'coinLoot', name: '전리품', desc: '번개 처치 골드 2배' }],
-            [{ id: 'goldBomb', name: '금화 폭격', desc: '새 스킬(E): 골드 10% 소모, 선두 넓게 폭격' }, { id: 'coinRain', name: '금화 비', desc: '번개 맞은 용사 1명당 +1G' }],
+            [{ id: 'goldFocus', name: '순금 포탄', desc: '금화 폭격 피해 +25%' }, { id: 'coinWide', name: '넓은 금맥', desc: '금화 폭격 범위 +0.5칸' }],
+            [{ id: 'coinCool', name: '선불', desc: '금화 폭격 재사용 -15%' }, { id: 'coinLoot', name: '전리품', desc: '금화 폭격 처치 골드 2배' }],
+            [{ id: 'midas', name: '황금 손', desc: '새 스킬(E): 황금 손' }, { id: 'coinRain', name: '금화 비', desc: '금화 폭격 맞은 용사 1명당 +1G' }],
             [{ id: 'bombBig', name: '대규모 폭격', desc: '폭격 범위 +1.5칸' }, { id: 'bombRich', name: '재벌의 분노', desc: '폭격 소모 골드 20%, 피해 2배' }]
         ] }
     ],
@@ -181,7 +181,7 @@ const LORD_POWERS = {
         { id: 'contagion', name: '전염', desc: '전염 강화', tiers: [
             [{ id: 'spreadWide', name: '넓은 전염', desc: '전염 범위 +1칸' }, { id: 'spreadStrong', name: '변이', desc: '전염된 독 피해 +50%' }],
             [{ id: 'spreadElite', name: '고열', desc: '정예도 전염' }, { id: 'spreadGold', name: '장례비', desc: '독 처치 골드 +50%' }],
-            [{ id: 'miasma', name: '역병 구름', desc: '새 스킬(E): 선두에 6초 독 구름' }, { id: 'spreadChain', name: '열병', desc: '전염 시 2초간 이동 -30%' }],
+            [{ id: 'outbreak', name: '창궐', desc: '새 스킬(E): 창궐' }, { id: 'spreadChain', name: '열병', desc: '전염 시 2초간 이동 -30%' }],
             [{ id: 'cloudBig', name: '짙은 구름', desc: '구름 범위 2배, 시간 +3초' }, { id: 'pandemic', name: '대유행', desc: '독 처치 10명마다 모든 중독 시간 초기화' }]
         ] },
         { id: 'rot', name: '부패', desc: '약화', tiers: [
@@ -195,7 +195,7 @@ const LORD_POWERS = {
         { id: 'shackle', name: '족쇄', desc: '속박 강화', tiers: [
             [{ id: 'shackleChance', name: '촘촘한 사슬', desc: '속박 확률 +6%' }, { id: 'shackleLong', name: '굵은 사슬', desc: '속박 시간 +0.4초' }],
             [{ id: 'shackleElite', name: '무거운 족쇄', desc: '정예 속박 확률 감소 없음' }, { id: 'shackleChain', name: '사슬 엮기', desc: '속박 시 1칸 안 1명 추가 속박' }],
-            [{ id: 'jail', name: '사슬 감옥', desc: '새 스킬(E): 선두 주변 1.5칸 3초 속박(보스 1초)' }, { id: 'shackleBreak', name: '찢기는 사슬', desc: '속박 해제 시 최대 체력 5% 피해' }],
+            [{ id: 'gallows', name: '처형대', desc: '새 스킬(E): 처형대' }, { id: 'shackleBreak', name: '찢기는 사슬', desc: '속박 해제 시 최대 체력 5% 피해' }],
             [{ id: 'jailBig', name: '큰 감옥', desc: '감옥 범위 +1칸, 시간 +1초' }, { id: 'shackleLock', name: '단단한 자물쇠', desc: '재속박 시간 1.5배' }]
         ] },
         { id: 'drag', name: '끌기', desc: '후퇴', tiers: [
@@ -215,12 +215,12 @@ const LORD_POWERS = {
         { id: 'copy', name: '복제', desc: '복제', tiers: [
             [{ id: 'reflectUp', name: '맑은 거울', desc: '보존 확률 +10%' }, { id: 'twinUp', name: '쌍둥이', desc: '소환 때 8% 확률로 1마리 더', mods: { twinSummon: 0.08 } }],
             [{ id: 'copyRank', name: '닮은 꼴', desc: '보존된 재료 랭크 유지' }, { id: 'copyGold', name: '거울 값', desc: '재료 보존 시 소환 비용만큼 골드' }],
-            [{ id: 'mirrorClone', name: '거울 분신', desc: '새 스킬(E): 최고 등급 몬스터 분신 15초' }, { id: 'copyHigh', name: '큰 거울', desc: '영웅 이상 보존 확률 2배' }],
+            [{ id: 'shatter', name: '깨진 거울', desc: '새 스킬(E): 깨진 거울' }, { id: 'copyHigh', name: '큰 거울', desc: '영웅 이상 보존 확률 2배' }],
             [{ id: 'cloneLong', name: '오래가는 분신', desc: '분신 시간 2배' }, { id: 'cloneTwo', name: '분신 둘', desc: '분신 2마리' }]
         ] },
         { id: 'reflect', name: '반사', desc: '왕좌 반격', tiers: [
             [{ id: 'shardArmor', name: '거울 갑옷', desc: '몬스터 받는 피해 -10%', mods: { monsterArmor: 0.1 } }, { id: 'reflectWard', name: '거울벽', desc: '일반 용사의 왕좌 피해 -20%' }],
-            [{ id: 'reflectThrone', name: '되비침', desc: '왕좌 피격 시 선두 3명에게 번개(피해 50%)' }, { id: 'reflectRoar', name: '날 선 목소리', desc: '왕좌 피격 시 호통 재사용 -10초' }],
+            [{ id: 'reflectThrone', name: '되비침', desc: '왕좌 피격 시 선두 3명에게 반격(피해 50%)' }, { id: 'reflectRoar', name: '날 선 거울', desc: '왕좌 피격 시 반사막 재사용 -10초' }],
             [{ id: 'mirrorShield', name: '거울 방패', desc: '라운드당 왕좌 피해 1회 무효' }, { id: 'reflectCurse', name: '저주받은 거울', desc: '왕좌 피격 시 모든 용사 2초간 받는 피해 +20%' }],
             [{ id: 'shieldBig', name: '큰 방패', desc: '왕좌 피해 무효 2회' }, { id: 'reflectAll', name: '전신 거울', desc: '되비침 피해 100%' }]
         ] },
@@ -235,7 +235,7 @@ const LORD_POWERS = {
         { id: 'slow', name: '감속', desc: '용사 감속', tiers: [
             [{ id: 'slowLong', name: '느린 초침', desc: '멈춘 초침 +2초' }, { id: 'slowDeep', name: '무거운 초침', desc: '멈춘 초침 감속 -55%' }],
             [{ id: 'slowElite', name: '늦춰진 시간', desc: '정예 처치 시 모든 용사 2초간 이동 -30%' }, { id: 'slowHit', name: '모래 바람', desc: '적중 시 10% 확률로 1.5초간 이동 -30%' }],
-            [{ id: 'timeStop', name: '시간 정지', desc: '새 스킬(E): 모든 용사 3초 정지(보스 1초)' }, { id: 'slowAura', name: '시계 소리', desc: '감속 중인 용사 받는 피해 +15%' }],
+            [{ id: 'accel', name: '시간 가속', desc: '새 스킬(E): 시간 가속' }, { id: 'slowAura', name: '시계 소리', desc: '감속 중인 용사 받는 피해 +15%' }],
             [{ id: 'stopLong', name: '긴 정지', desc: '시간 정지 +1.5초' }, { id: 'slowBoss', name: '태엽 감기', desc: '보스도 멈춘 초침 감속 그대로' }]
         ] },
         { id: 'haste', name: '가속', desc: '몬스터 가속', tiers: [
@@ -253,16 +253,60 @@ const LORD_POWERS = {
     ]
 };
 
-// 권능으로 열리는 3번째 스킬. 항목 id: 스킬 키(Game.skills와 COMBAT_RULES의 키), 칸 이름, 설명 제목, 아이콘
-const POWER_SKILLS = {
-    gate: { key: 'portal', name: '균열', title: '균열 열기', icon: 'wave' },
-    raise: { key: 'raise', name: '시체', title: '시체 일으키기', icon: 'soul' },
-    goldBomb: { key: 'goldBomb', name: '폭격', title: '금화 폭격', icon: 'gold' },
-    miasma: { key: 'miasma', name: '구름', title: '역병 구름', icon: 'soul' },
-    jail: { key: 'jail', name: '감옥', title: '사슬 감옥', icon: 'lock' },
-    mirrorClone: { key: 'mirrorClone', name: '분신', title: '거울 분신', icon: 'summon' },
-    timeStop: { key: 'timeStop', name: '정지', title: '시간 정지', icon: 'pause' }
+// 마왕 스킬. 마왕마다 스킬 1(Q)과 스킬 2(W)가 다르고(DEMON_LORDS[].skills), 권능으로 3번째 스킬(E, POWER_SKILLS)이 열린다.
+//   키는 Game.skills, COMBAT_RULES, Game.act의 kind와 같다. name: 칸 이름, icon: 칸 아이콘(uiicon_, 없으면 마왕 초상)
+//   aim: 땅을 눌러 쓰는 스킬(radius(G): 조준 원 반경 칸). desc(G): 툴팁 설명(재사용 시간은 화면이 붙인다)
+const LORD_SKILLS = {
+    lightning: { name: '낙뢰', icon: 'bolt', aim: true, radius: G => G.lightningRadius(),
+        desc: G => `고른 자리 둘레 ${G.lightningRadius()}칸에 ${Math.round(G.lightningDamage())}의 피해를 준다` + (G.lordPassive('lightningCurse') ? '. 맞은 용사는 최대 체력 15%만큼 더 다치고 감전 낙인이 붙는다' : '') },
+    roar: { name: '호통', desc: () => `모든 용사가 ${COMBAT_RULES.roar.duration}초 멈춘다. 마왕 체력이 ${COMBAT_RULES.roar.unlockHp} 이하일 때만 쓴다` }, // 옛 공용 스킬(지금은 쓰는 마왕이 없다)
+    portal: { name: '균열 문', icon: 'wave', desc: G => `왕좌에 가장 가까운 용사 ${G.portalCount()}명이 ${COMBAT_RULES.portal.back * (G.power('exile') ? 2 : 1)}칸 뒤로 밀려난다(보스 제외)` },
+    boneSpear: { name: '뼈 창', icon: 'attack', desc: G => `맨 앞 용사와 그 뒤 ${COMBAT_RULES.boneSpear.length}칸 안의 용사를 모두 꿰뚫어 ${Math.round(skillPower(G, 'boneSpear'))}의 피해와 최대 체력 ${Math.round(COMBAT_RULES.boneSpear.hpRatio * 100)}%만큼의 피해를 준다` },
+    ghosts: { name: '망령', icon: 'soul', desc: () => `최근 쓰러진 용사 ${COMBAT_RULES.ghosts.count}명이 망령으로 일어나 ${COMBAT_RULES.ghosts.life}초 동안 마왕 편에서 싸운다` },
+    goldBomb: { name: '금화 폭격', icon: 'gold', desc: () => `골드 ${Math.round(COMBAT_RULES.goldBomb.spend * 100)}%(최대 ${COMBAT_RULES.goldBomb.maxSpend}G)를 써서 맨 앞 용사 둘레 ${COMBAT_RULES.goldBomb.radius}칸에 쓴 골드만큼, 그리고 최대 체력 ${Math.round(COMBAT_RULES.goldBomb.hpRatio * 100)}%만큼 피해를 준다` },
+    bribe: { name: '매수', icon: 'bag', desc: () => { const t = bribeTarget(); return '가장 앞선 정예를 골드를 내고 바로 처치한다(보스 제외)' + (t ? `. 지금 ${bribeCost(t)}G` : ''); } },
+    venomRain: { name: '독 화살비', icon: 'attack', aim: true, radius: () => COMBAT_RULES.venomRain.radius,
+        desc: G => `고른 자리 둘레 ${COMBAT_RULES.venomRain.radius}칸에 ${Math.round(skillPower(G, 'venomRain'))}의 피해를 주고 ${COMBAT_RULES.venomRain.poison}초 동안 중독시킨다` },
+    miasma: { name: '역병 구름', icon: 'soul', desc: () => `맨 앞 용사 자리에 ${COMBAT_RULES.miasma.duration}초 동안 독 구름이 남는다` },
+    chainPull: { name: '사슬 끌기', icon: 'retry', desc: () => `맨 앞 용사 ${COMBAT_RULES.chainPull.count}명을 ${COMBAT_RULES.chainPull.back}칸 끌어당기고 ${COMBAT_RULES.chainPull.bind}초 묶는다(보스는 묶기만)` },
+    jail: { name: '사슬 감옥', icon: 'lock', desc: () => `맨 앞 용사 둘레 ${COMBAT_RULES.jail.radius}칸의 용사를 ${COMBAT_RULES.jail.duration}초 묶는다(보스 ${COMBAT_RULES.jail.bossDuration}초)` },
+    mirrorWard: { name: '반사막', icon: 'lord', desc: () => `${COMBAT_RULES.mirrorWard.duration}초 동안 왕좌가 받는 피해를 막고, 막을 때마다 맨 앞 용사에게 피해를 되돌린다` },
+    mirrorClone: { name: '거울 분신', icon: 'summon', desc: () => `가장 높은 등급 몬스터의 분신이 ${COMBAT_RULES.mirrorClone.duration}초 동안 함께 싸운다` },
+    clockTower: { name: '시계탑', icon: 'gear', aim: true, radius: () => COMBAT_RULES.clockTower.radius,
+        desc: () => `고른 자리에 ${COMBAT_RULES.clockTower.duration}초 동안 시계탑이 서서 둘레 ${COMBAT_RULES.clockTower.radius}칸 용사의 이동 속도가 절반으로 줄어든다` },
+    timeStop: { name: '시간 정지', icon: 'pause', desc: () => `모든 용사가 ${COMBAT_RULES.timeStop.duration}초 멈춘다(보스 ${COMBAT_RULES.timeStop.bossDuration}초)` },
+    // 권능 스킬(E)
+    thunder: { name: '뇌우', icon: 'fast', desc: () => `맨 앞 용사 ${COMBAT_RULES.thunder.count}명에게 차례로 낙뢰가 떨어진다(피해 ${Math.round(COMBAT_RULES.thunder.mul * 100)}%)` },
+    graveBlast: { name: '무덤 폭발', icon: 'wave', desc: () => `최근 쓰러진 용사 ${COMBAT_RULES.graveBlast.count}명의 자리가 한꺼번에 터진다` },
+    midas: { name: '황금 손', icon: 'lord', desc: () => `맨 앞 용사 ${COMBAT_RULES.midas.count}명이 ${COMBAT_RULES.midas.duration}초 동안 황금으로 굳는다. 굳은 용사를 처치하면 골드를 두 배로 받는다` },
+    outbreak: { name: '창궐', icon: 'wave', desc: () => `중독된 모든 용사가 남은 독 피해의 ${COMBAT_RULES.outbreak.mul}배를 한 번에 받는다` },
+    gallows: { name: '처형대', icon: 'attack', desc: () => `묶인 모든 용사가 최대 체력 ${Math.round(COMBAT_RULES.gallows.hpRatio * 100)}%만큼 피해를 받는다(보스 ${Math.round(COMBAT_RULES.gallows.bossRatio * 100)}%)` },
+    shatter: { name: '깨진 거울', icon: 'retry', desc: () => `모든 용사가 잃은 체력의 ${Math.round(COMBAT_RULES.shatter.ratio * 100)}%만큼 피해를 받는다(보스 ${Math.round(COMBAT_RULES.shatter.bossRatio * 100)}%)` },
+    accel: { name: '시간 가속', icon: 'fast', desc: () => `${COMBAT_RULES.accel.duration}초 동안 모든 몬스터의 공격 속도가 ${Math.round(COMBAT_RULES.accel.haste * 100)}% 증가한다` }
 };
+
+// 권능으로 열리는 3번째 스킬(E). 항목 id: { key: 스킬 키(LORD_SKILLS) }. 지금은 항목 id와 스킬 키가 같다
+const POWER_SKILLS = {
+    thunder: { key: 'thunder' },
+    graveBlast: { key: 'graveBlast' },
+    midas: { key: 'midas' },
+    outbreak: { key: 'outbreak' },
+    gallows: { key: 'gallows' },
+    shatter: { key: 'shatter' },
+    accel: { key: 'accel' }
+};
+
+// 마왕 스킬 한 줄(고르기 화면, 본부): "스킬 · 낙뢰(Q) · 균열 문(W)"
+function lordSkillLine(lord) {
+    return '스킬 · ' + (lord.skills || []).map((k, i) => `${LORD_SKILLS[k].name}(${'QW'[i]})`).join(' · ');
+}
+
+// 모든 스킬의 재사용 대기를 0으로 둔 표(Game.skills)
+function freshSkills() {
+    const s = {};
+    for (const k of Object.keys(LORD_SKILLS)) s[k] = 0;
+    return s;
+}
 
 // 갈래가 놓이는 방향(도)과 색. LORD_POWERS의 갈래 순서와 같다
 const POWER_SECTORS = [{ angle: 205, color: '#7fd8ff' }, { angle: 335, color: '#c98bff' }, { angle: 90, color: '#ff9a4d' }];
@@ -313,18 +357,18 @@ function buildPowerMap(lordId, seed) {
 // 유물 효과의 상한과 기준 수
 const RELIC_LIMITS = { goldStep: 100, goldDamageMax: 0.3, altarDamageMax: 0.15, interestMax: 15, fewCount: 6, perMonsterMax: 0.45, gaugeMax: 1000, soulMax: 5 };
 
-// 마왕. 스킬은 셋 다 번개와 호통이다(전용 몬스터는 다음 단계).
+// 마왕. skills: 스킬 1(Q)과 스킬 2(W)의 키(LORD_SKILLS). 마왕마다 다르다
 //   sprite: 왕좌의 대기 그림, cast: 주문 그림(없으면 sprite를 쓰고 빛 효과로 구분), footPx: 128px 캔버스 안의 발끝 높이
 //   portrait: 마왕 탭 초상. crop이 있으면 sprite에서 [x, y, 크기]를 잘라 쓴다(머리 부분)
 //   speech: SPEECH에 더해 이 마왕만 하는 대사
 //   passive: 마왕 고유 패시브. kind로 동작한다(Game.lordPassive). lightningCurse 번개 맞은 용사 저주, soulVolley 처치 수마다 망령 타격, goldTouch 소환 강화 할인과 정예 골드
 const DEMON_LORDS = {
     rift: {
-        id: 'rift', name: '균열의 군주', desc: '번개 특화',
-        sprite: 'lord_rift', footPx: 120,
+        id: 'rift', name: '균열의 군주', desc: '낙뢰 특화',
+        sprite: 'lord_rift', footPx: 120, skills: ['lightning', 'portal'],
         portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '번개가 최대 체력 15% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.15 },
+        passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '낙뢰가 최대 체력 15% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.15 },
         speech: {
             waveStart: ['오늘 전기세는 너희가 낸다.'],
             throneHit: ['찌릿하게 해 줄까?'],
@@ -333,7 +377,7 @@ const DEMON_LORDS = {
     },
     bone_queen: {
         id: 'bone_queen', name: '뼈의 여왕', desc: '성장·제물 특화',
-        sprite: 'lord_bone_queen', footPx: 119,
+        sprite: 'lord_bone_queen', footPx: 119, skills: ['boneSpear', 'ghosts'],
         portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'soulVolley', name: '망령 일제 사격', desc: '용사 25명 처치마다 망령이 선두 6명 공격', every: 25, count: 6, base: 30, perRound: 8 },
@@ -345,7 +389,7 @@ const DEMON_LORDS = {
     },
     gold_king: {
         id: 'gold_king', name: '황금 마왕', desc: '골드 특화',
-        sprite: 'lord_gold_king', footPx: 120,
+        sprite: 'lord_gold_king', footPx: 120, skills: ['goldBomb', 'bribe'],
         portrait: { sprite: 'lord_gold_king', crop: [40, 6, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'goldTouch', name: '황금 수완', desc: '소환 강화 비용 -25%, 정예·보스 처치 골드 2배', upgradeMul: 0.75, eliteGold: 2 },
@@ -357,7 +401,7 @@ const DEMON_LORDS = {
     },
     plague: {
         id: 'plague', name: '역병의 군주', desc: '독·전염 특화',
-        sprite: 'lord_plague', footPx: 119,
+        sprite: 'lord_plague', footPx: 119, skills: ['venomRain', 'miasma'],
         portrait: { sprite: 'lord_plague', crop: [42, 8, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'plague', name: '역병', desc: '적중 시 3초 중독(초당 공격력 15%), 중독 상태로 쓰러지면 1.5칸 전염', duration: 3, ratio: 0.15, radius: 1.5 },
@@ -369,7 +413,7 @@ const DEMON_LORDS = {
     },
     chain: {
         id: 'chain', name: '사슬의 군주', desc: '속박·제어 특화',
-        sprite: 'lord_chain', footPx: 120,
+        sprite: 'lord_chain', footPx: 120, skills: ['chainPull', 'jail'],
         portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 14% 확률로 0.6초 속박(정예·보스 절반)', chance: 0.14, duration: 0.6 },
@@ -381,7 +425,7 @@ const DEMON_LORDS = {
     },
     mirror: {
         id: 'mirror', name: '거울 마녀', desc: '합치기·복제 특화',
-        sprite: 'lord_mirror', footPx: 119,
+        sprite: 'lord_mirror', footPx: 119, skills: ['mirrorWard', 'mirrorClone'],
         portrait: { sprite: 'lord_mirror', crop: [42, 8, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 12% 확률로 재료 1마리 보존', chance: 0.12 },
@@ -393,7 +437,7 @@ const DEMON_LORDS = {
     },
     clock: {
         id: 'clock', name: '시계탑의 마왕', desc: '감속·시간 특화',
-        sprite: 'lord_clock', footPx: 119,
+        sprite: 'lord_clock', footPx: 119, skills: ['clockTower', 'timeStop'],
         portrait: { sprite: 'lord_clock', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'stopwatch', name: '멈춘 초침', desc: '라운드 시작 6초간 용사 이동 -40%(보스 절반)', duration: 6, cut: 0.4 },
@@ -431,7 +475,7 @@ const RELICS = {
     firecracker: { id: 'firecracker', name: '폭죽 상자', effects: { killBlast: 0.1 }, desc: '일반 용사를 처치하면 10% 확률로 그 자리가 폭발한다' },
     hellfire_seal: { id: 'hellfire_seal', name: '지옥불 인장', effects: { demonOdds: 1, demonBurn: 0.2 }, desc: '소환 시 악마가 나올 확률이 100% 증가하고, 악마의 공격이 3초 동안 적을 불태운다' },
     hunter_horn: { id: 'hunter_horn', name: '사냥꾼의 뿔', effects: { beastOdds: 1, beastFrenzy: 0.5 }, desc: '소환 시 야수가 나올 확률이 100% 증가하고, 야수가 적을 처치하면 3초 동안 공격 속도가 50% 증가한다' },
-    storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.8 }, desc: '번개의 재사용 시간이 20% 감소한다' },
+    storm_bottle: { id: 'storm_bottle', name: '폭풍의 병', effects: { lightningCooldown: 0.8 }, desc: '마왕의 첫 번째 스킬(Q) 재사용 시간이 20% 감소한다' },
     smith_hammer: { id: 'smith_hammer', name: '대장장이의 망치', effects: { equipUp: 0.1 }, desc: '장비 등급이 오를 확률이 10% 증가한다' },
     hunt_mark: { id: 'hunt_mark', name: '사냥 표식', effects: { eliteCrit: 0.25 }, desc: '정예와 보스에게 치명타 확률이 25% 증가한다' },
     march_drum: { id: 'march_drum', name: '진군의 북', effects: { perMonsterDamage: 0.03 }, desc: '내 맵의 몬스터 한 마리당 피해가 3% 증가한다(최대 45%)' },

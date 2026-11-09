@@ -99,7 +99,7 @@ const UI = {
     goldShown: null, // 화면에 보이는 골드(굴러 올라간다)
     bossTrail: null, // 보스 체력 잔상
     hpShown: null, // 왼쪽 아래 체력 막대에 보이는 체력. 제물로 오를 때는 천천히 차오르고, 깎일 때는 바로 줄어든다
-    targeting: false,
+    targeting: false, // 조준 중인 스킬 키(LORD_SKILLS의 aim 스킬) 또는 false
     toast: null,
     corruptHintShown: false,
     pressed: null,
@@ -219,9 +219,10 @@ const UI = {
             const relicW = this.barRelicWidth();
             const third = G.thirdSkill(); // 권능으로 3번째 스킬 칸이 열린다
             const skillW = Math.floor((DEMON_TAB_END - BAR_SLOT_X - relicW - (third ? 30 : 20)) / (third ? 3 : 2));
-            this.button('lightning', BAR_SLOT_X, slotY, skillW, 104, { skill: 'lightning', onClick: () => this.toggleLightning() });
-            this.button('roar', BAR_SLOT_X + skillW + 10, slotY, skillW, 104, { skill: 'roar', onClick: () => this.useRoar() });
-            if (third) this.button(third.key, BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: third.key, third, onClick: () => this.useThirdSkill() });
+            // 칸 id는 자리 이름이다(Q 칸 'lightning', W 칸 'roar': 번개와 호통을 같이 쓰던 때의 이름). 스킬은 마왕마다 다르다
+            this.button('lightning', BAR_SLOT_X, slotY, skillW, 104, { skill: G.skillKey(0), slot: 'Q', onClick: () => this.useSkillSlot(0) });
+            this.button('roar', BAR_SLOT_X + skillW + 10, slotY, skillW, 104, { skill: G.skillKey(1), slot: 'W', onClick: () => this.useSkillSlot(1) });
+            if (third) this.button(third.key, BAR_SLOT_X + (skillW + 10) * 2, slotY, skillW, 104, { skill: third.key, slot: 'E', onClick: () => this.useThirdSkill() });
             for (let i = 0; i < Meta.relicSlots(); i++) {
                 const r = this.barRelicRect(i);
                 const rid = G.relics[i];
@@ -862,7 +863,7 @@ const UI = {
         this.popupEquipRect = null;
     },
 
-    // 우클릭과 Esc: 끌기, 번개 조준, 몬스터 선택을 모두 끈다
+    // 우클릭과 Esc: 끌기, 스킬 조준, 몬스터 선택을 모두 끈다
     cancel() {
         this.clearSelection();
         this.cancelDrag();
@@ -1173,25 +1174,46 @@ const UI = {
         return { x: loc.monster.homeX * WORLD_ZOOM, y: (loc.monster.homeY + MONSTER_FOOT) * WORLD_ZOOM };
     },
 
-    toggleLightning() {
+    // 스킬 칸 누르기(Q는 slot 0, W는 slot 1). 조준 스킬은 조준을 켜고 끈다
+    useSkillSlot(slot) {
         this.setTab('demon');
-        if (Game.skills.lightning > 0) {
-            this.showToast(`번개 재사용까지 ${Math.ceil(Game.skills.lightning)}초`);
+        const key = Game.skillKey(slot);
+        const def = LORD_SKILLS[key];
+        if (def.aim && Game.skills[key] <= 0 && !Game.skillLocked(key)) {
+            this.targeting = this.targeting === key ? false : key;
+            this.clearSelection();
             return;
         }
-        this.targeting = !this.targeting;
-        this.clearSelection();
+        if (!def.aim && Game.act({ kind: key }).ok) return;
+        this.showToast(this.skillFailText(key));
     },
+    toggleLightning() { this.useSkillSlot(0); },
+    useRoar() { this.useSkillSlot(1); },
 
     useThirdSkill() {
         const third = Game.thirdSkill();
         if (!third) return;
         this.setTab('demon');
         if (Game.act({ kind: third.key }).ok) return;
-        const left = Game.skills[third.key];
-        if (left > 0) this.showToast(`${third.name} 재사용까지 ${Math.ceil(left)}초`);
-        else if (third.key === 'goldBomb' && Game.gold < COMBAT_RULES.goldBomb.minGold) this.showToast('골드 부족');
-        else this.showToast('지금 못 씀');
+        this.showToast(this.skillFailText(third.key));
+    },
+
+    // 스킬을 못 쓴 까닭(짧은 알림)
+    skillFailText(key) {
+        const G = Game;
+        const name = LORD_SKILLS[key].name;
+        const left = G.skills[key];
+        if (left > 0) return `${name} 재사용까지 ${Math.ceil(left)}초`;
+        if (key === 'roar' && G.skillLocked(key) && !G.power('frenzy')) return `체력 ${COMBAT_RULES.roar.unlockHp} 이하 전용`;
+        if (G.skillLocked(key)) return `${name} 봉인`;
+        if (key === 'goldBomb' && G.gold < COMBAT_RULES.goldBomb.minGold) return '골드 부족';
+        if (key === 'bribe') return bribeTarget() ? '골드 부족' : '매수할 정예 없음';
+        if ((key === 'ghosts' || key === 'graveBlast') && !G.graves.length) return '시체 없음';
+        if (key === 'outbreak') return '중독된 용사 없음';
+        if (key === 'gallows') return '묶인 용사 없음';
+        if (key === 'shatter') return '다친 용사 없음';
+        if (key === 'mirrorClone') return '분신 설 자리 없음';
+        return '용사 없음';
     },
 
     // 종족 강화 창: 판은 멈추지 않는다
@@ -1264,17 +1286,6 @@ const UI = {
         }
     },
 
-    useRoar() {
-        this.setTab('demon');
-        if (Game.roarLocked()) {
-            this.showToast(`체력 ${COMBAT_RULES.roar.unlockHp} 이하 전용`);
-            return;
-        }
-        if (Game.power('bribeRoar') && Game.skills.roar <= 0 && !Game.act({ kind: 'roar' }).ok) { this.showToast('입막음에 쓸 골드 부족'); return; }
-        if (Game.power('bribeRoar')) return;
-        if (!Game.act({ kind: 'roar' }).ok) this.showToast(`호통 재사용까지 ${Math.ceil(Game.skills.roar)}초`);
-    },
-
     // 타락이 꺼져 있으면 시체는 누를 수 없는 장식이라 클릭과 끌기를 가로막지 않는다
     corpseAt(x, y) {
         if (!CORRUPTION_ENABLED) return null;
@@ -1338,7 +1349,7 @@ const UI = {
         this.hoverCell =this.dropTarget && this.dropTarget.cell && this.dropTarget.cell.col >= 0 && this.dropTarget.cell.row >= 0 ? this.dropTarget.cell : null;
     },
 
-    // 버튼, 번개 조준, 타락, 빈 곳 누르기. 몬스터를 누르고 끄는 것은 onDown과 onUp이 맡는다
+    // 버튼, 스킬 조준, 타락, 빈 곳 누르기. 몬스터를 누르고 끄는 것은 onDown과 onUp이 맡는다
     onClick(x, y) {
         Sfx.unlock();
         this.layout();
@@ -1355,7 +1366,8 @@ const UI = {
         const wx = x / WORLD_ZOOM;
         const wy = y / WORLD_ZOOM;
         if (this.targeting) {
-            if (Game.act({ kind: 'lightning', x: wx, y: wy }).ok) this.targeting = false;
+            const key = this.targeting === true ? Game.skillKey(0) : this.targeting;
+            if (Game.act({ kind: key, x: wx, y: wy }).ok) this.targeting = false;
             return;
         }
         const col = Math.floor(wx / TILE);
@@ -1491,7 +1503,7 @@ const UI = {
             Fx.notice = null;
         }
         if (this.selectedMonster && !Game.monsters.includes(this.selectedMonster)) this.clearSelection();
-        // 보상 카드가 뜨면 끌기, 선택, 번개 조준을 끈다
+        // 보상 카드가 뜨면 끌기, 선택, 스킬 조준을 끈다
         if (Game.bossReward && (this.drag || this.press || this.equipDrag || this.equipPress || this.selectedMonster || this.targeting)) this.cancel();
         // 끄는 장비가 보관함에서 사라지거나 판이 끝나면 끌기를 그만둔다
         const ed = this.equipDrag || this.equipPress;
@@ -1837,7 +1849,7 @@ const UI = {
         UIKit.icon(ctx, 'pause', cx - 150, y + 36);
         UIKit.text(ctx, '일시정지', cx + 24, y + 62, 52, T.gold, 'center', 'bold');
         UIKit.ink(ctx, `멈춘 채로 소환, 배치, 합치기${CORRUPTION_ENABLED ? ', 타락' : ''} 가능`, cx, y + 114, 21, T.inkSoft, 'center');
-        const keys = [['S', '소환'], ['Tab', '탭 바꾸기'], ['Space', '다음 라운드'], ['Q', '번개'], ['W', '호통'], ['F', '배속'],
+        const keys = [['S', '소환'], ['Tab', '탭 바꾸기'], ['Space', '다음 라운드'], ['Q', LORD_SKILLS[Game.skillKey(0)].name], ['W', LORD_SKILLS[Game.skillKey(1)].name], ['F', '배속'],
             ['P', '일시정지'], ['M', '소리'], ['Esc', '취소']];
         keys.forEach(([key, label], i) => {
             const kx = x + 60 + (i % 3) * 246;
@@ -2126,7 +2138,9 @@ const UI = {
         // 효과(가운데 왼쪽 열), 패시브(오른쪽 넓은 열), 권능 갈래(맨 아래 줄)
         UIKit.ink(ctx, `패시브 · ${lord.passive.name}`, D.x + 440, D.y + 52, 22, T.inkWax, 'left', 'bold');
         ctx.font = `20px ${UI_FONT}`;
-        this.wrapLines(ctx, lord.passive.desc, D.w - 500).slice(0, 2).forEach((line, i) => UIKit.ink(ctx, line, D.x + 440, D.y + 92 + i * 28, 20, T.ink, 'left'));
+        const passive = this.wrapLines(ctx, lord.passive.desc, D.w - 500).slice(0, 2);
+        passive.forEach((line, i) => UIKit.ink(ctx, line, D.x + 440, D.y + 92 + i * 28, 20, T.ink, 'left'));
+        if (open) UIKit.ink(ctx, lordSkillLine(lord), D.x + 440, D.y + 96 + passive.length * 28, 20, T.inkWax, 'left', 'bold'); // 마왕마다 다른 Q, W
         const branches = (LORD_POWERS[id] || []).map(br => br.name).join(' · ');
         if (branches) UIKit.ink(ctx, `권능 · ${branches}`, D.x + 56, D.y + 136, 20, T.inkSoft, 'left');
     },
@@ -2986,16 +3000,15 @@ const UI = {
         }
     },
 
-    // 마왕 탭 스킬 칸: 금테 네모 칸(번개 아이콘 또는 마왕 초상, 왼쪽 위 단축키, 재사용 대기는 아래에서 차오르는 어둠과 큰 숫자),
+    // 마왕 탭 스킬 칸: 금테 네모 칸(스킬 아이콘 또는 마왕 초상, 왼쪽 위 단축키, 재사용 대기는 아래에서 차오르는 어둠과 큰 숫자),
     // 오른쪽에 이름과 상태. 조준 중이면 칸 둘레가 빛난다
     drawSkillButton(ctx, b, st) {
         const T = UI_THEME;
-        const lightning = b.skill === 'lightning';
-        const third = b.third;
+        const def = LORD_SKILLS[b.skill];
         const cd = Game.skills[b.skill];
         const max = Game.skillCooldown(b.skill);
-        const locked = b.skill === 'roar' && Game.roarLocked();
-        const active = lightning && this.targeting;
+        const locked = Game.skillLocked(b.skill);
+        const active = def.aim && (this.targeting === b.skill || (this.targeting === true && b.slot === 'Q'));
         const dy = st.pressed ? 2 : 0;
         const ss = b.h;
         const sx = b.x;
@@ -3007,8 +3020,7 @@ const UI = {
             ctx.restore();
         }
         UIKit.slot(ctx, sx, sy, ss, ss, cd > 0 || locked ? 'iron' : 'gold', st.hover && !st.pressed ? 'hover' : null);
-        if (lightning) UIKit.icon(ctx, 'bolt', sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
-        else if (third) UIKit.icon(ctx, third.icon, sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
+        if (def.icon) UIKit.icon(ctx, def.icon, sx + (ss - 96) / 2, sy + (ss - 96) / 2, 2);
         else this.drawLordPortrait(ctx, Game.lordDef(), sx + 10, sy + 10, ss - 20);
         if (cd > 0 || locked) {
             const ratio = locked ? 1 : cd / max;
@@ -3017,22 +3029,33 @@ const UI = {
             if (locked) UIKit.icon(ctx, 'lock', sx + (ss - 48) / 2, sy + (ss - 48) / 2);
             else UIKit.bigText(ctx, String(Math.ceil(cd)), sx + ss / 2, sy + ss / 2, 40, '#ffffff', 'center');
         }
-        this.drawKeyCap(ctx, lightning ? 'Q' : (third ? 'E' : 'W'), sx + 6, sy + 6, 16);
+        this.drawKeyCap(ctx, b.slot, sx + 6, sy + 6, 16);
         const tx = sx + ss + 14;
-        const name = lightning ? '번개' : (third ? third.name : '호통');
+        const name = def.name;
+        if (b.w - ss < 110) {
+            // 좁은 칸(스킬 셋에 유물 칸이 많을 때): 이름을 네모 칸 아래쪽 띠에 적고 상태 글자는 뺀다(대기는 칸 안 숫자로 보인다)
+            ctx.fillStyle = 'rgba(5,9,24,0.78)';
+            ctx.fillRect(sx + 8, sy + ss - 34, ss - 16, 26);
+            UIKit.text(ctx, active ? '조준 중' : name, sx + ss / 2, sy + ss - 21, 17, active ? '#9fe0ff' : (locked ? T.creamSoft : T.cream), 'center', 'bold');
+        } else this.drawSkillLabel(ctx, b, st, { tx, dy, name, locked, active, cd, T });
+        if (st.hover) {
+            const desc = `${def.desc(Game)}. 재사용 ${Math.round(max * 10) / 10}초`;
+            ctx.font = `18px ${UI_FONT}`;
+            const h = 58 + this.wrapLines(ctx, desc, 390).length * 24;
+            this.drawTooltip(ctx, b.x, b.y - h - 12, `${def.name} (${b.slot})`, desc); // 칸 바로 위(옆 칸에 가리지 않게)
+        }
+    },
+
+    // 넓은 스킬 칸 오른쪽의 이름과 상태(준비됨, 조준 중, 남은 초)
+    drawSkillLabel(ctx, b, st, o) {
+        const { tx, dy, name, locked, active, cd, T } = o;
         UIKit.text(ctx, name, tx, b.y + 34 + dy, 26, locked ? T.creamSoft : T.cream, 'left', 'bold');
         let status = '준비됨';
         let color = T.good;
         if (active) { status = '조준 중'; color = '#9fe0ff'; }
-        else if (locked) { status = Game.power('frenzy') ? '폭주 중' : (b.w < 250 ? `${COMBAT_RULES.roar.unlockHp} 이하` : `체력 ${COMBAT_RULES.roar.unlockHp} 이하`); color = T.creamSoft; }
+        else if (locked) { status = Game.power('frenzy') ? '폭주 중' : (b.w < 250 ? `${COMBAT_RULES.roar.unlockHp} 이하` : `체력 ${COMBAT_RULES.roar.unlockHp} 이하`); color = T.creamSoft; } // 폭주(권능) 또는 옛 호통
         else if (cd > 0) { status = `${Math.ceil(cd)}초`; color = T.bad; }
         UIKit.text(ctx, status, tx, b.y + 74 + dy, 20, color, 'left', 'bold');
-        if (st.hover) {
-            const title = lightning ? '마왕의 번개' : (third ? third.title : '마왕의 호통');
-            const desc = third ? `${Game.powerNode(Object.keys(POWER_SKILLS).find(k => POWER_SKILLS[k] === third)).node.desc.replace('새 스킬(E): ', '')}, 재사용 ${Math.round(max * 10) / 10}초` : lightning ? `범위 피해 ${Math.round(Game.lightningDamage())}, 재사용 ${Math.round(max * 10) / 10}초`
-                : `모든 용사 ${COMBAT_RULES.roar.duration}초 정지, 체력 ${COMBAT_RULES.roar.unlockHp} 이하, 재사용 ${Math.round(max * 10) / 10}초`;
-            this.drawTooltip(ctx, b.x, b.y - 100, title, desc);
-        }
     },
 
     // 권능 지도의 화면 자리
@@ -3242,14 +3265,14 @@ const UI = {
         const G = Game;
         if (this.tut) return null; // 튜토리얼이 대신 안내한다
         if (G.bossReward) return null;
-        if (this.targeting) return { key: 'target', text: '번개 위치 선택 · Esc 취소' };
+        if (this.targeting) return { key: 'target', text: `${LORD_SKILLS[this.targeting === true ? G.skillKey(0) : this.targeting].name} 위치 선택 · Esc 취소` };
         if (this.drag) return { key: 'drag', text: '빈 칸 이동 · 몬스터 합치기 · 왕좌 제물' };
         if (this.equipDrag) return { key: 'equipDrag', text: '몬스터 위에 놓기' };
         if (G.equipBag.length && G.monsters.length && !G.monsters.some(m => m.equip)) return { key: 'bag', text: '장비를 몬스터 위로' };
         if (G.waveIndex === 0 && G.state === 'prep' && G.monsters.length === 0) return { key: 'summon', text: `소환(S) ${G.summonCost()}G` };
         if (G.waveIndex === 0 && G.state === 'prep' && G.stats.merged === 0 && G.monsters.length >= 2) return { key: 'merge', text: `같은 등급끼리 겹치면 합치기` };
         if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '왕좌로 끌면 제물' };
-        if (G.state === 'wave' && G.waveIndex === 0 && G.skills.lightning <= 0) return { key: 'lightning', text: '번개(Q)' };
+        if (G.state === 'wave' && G.waveIndex === 0 && G.skills[G.skillKey(0)] <= 0) return { key: 'lightning', text: `${LORD_SKILLS[G.skillKey(0)].name}(Q)` };
         if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사 누르기' };
         return null;
     },
