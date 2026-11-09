@@ -269,7 +269,7 @@ const Game = {
     },
     // 각성: 고른 갈래를 모두 찍은 뒤 마력으로 몬스터 피해를 계속 올린다. { ok, cost, reason: 'branch' | 'mana' }
     awakenCheck() {
-        const cost = POWER_RULES.awakenCost;
+        const cost = POWER_RULES.awakenCost + POWER_RULES.awakenStep * this.awaken;
         const full = this.lordPowers().some(b => b.tiers.every(t => t.every(n => this.power(n.id))));
         if (!full) return { ok: false, cost, reason: 'branch' };
         return { ok: this.mana >= cost, cost, reason: this.mana >= cost ? null : 'mana' };

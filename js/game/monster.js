@@ -64,6 +64,7 @@ function monsterStats(m) {
     }
     // 격분: 처치 뒤 잠시 빨라진다
     if (m.frenzyT > 0) stats.interval *= m.frenzyMul;
+    if (m.slowT > 0) stats.interval *= m.slowMul || 1; // 마법사 감속
     // 유물: 근접 몬스터
     if (MONSTER_ROLES[def.role].melee) {
         stats.damage *= 1 + mods.meleeDamage;
@@ -518,6 +519,7 @@ function updateMonster(m, dt) {
     m.thornsFx = Math.max(0, (m.thornsFx || 0) - dt);
     m.buffT = Math.max(0, (m.buffT || 0) - dt);
     m.frenzyT = Math.max(0, (m.frenzyT || 0) - dt);
+    m.slowT = Math.max(0, (m.slowT || 0) - dt);
     if (m.down > 0) {
         m.stun = 0; // 쓰러진 동안 걸린 정지가 다시 나온 뒤까지 남지 않게 한다
         m.down -= dt;

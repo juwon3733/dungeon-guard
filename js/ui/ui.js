@@ -3098,7 +3098,7 @@ const UI = {
         if (awaken) {
             const kind = awaken.disabled ? 'off' : 'primary';
             const dy = UIKit.button(ctx, awaken.x, awaken.y, awaken.w, awaken.h, kind, this.btnState(awaken));
-            UIKit.text(ctx, `각성 ${G.awaken} · 마력 ${POWER_RULES.awakenCost}`, awaken.x + awaken.w / 2, awaken.y + awaken.h / 2 + dy, 22, UIKit.buttonInk(kind), 'center', 'bold');
+            UIKit.text(ctx, `각성 ${G.awaken} · 마력 ${G.awakenCheck().cost}`, awaken.x + awaken.w / 2, awaken.y + awaken.h / 2 + dy, 22, UIKit.buttonInk(kind), 'center', 'bold');
             if (this.btnState(awaken).hover) this.drawTooltip(ctx, awaken.x, awaken.y + 64, '마왕 각성', awaken.tip);
         }
         const map = G.powerMap();

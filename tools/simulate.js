@@ -30,7 +30,7 @@ function play(bot, stageId, daily) {
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
-    let guard = 0, thinkMerge = 0;
+    let guard = 0, thinkMerge = 0, spendThink = 0;
     while ((G.state === 'prep' || G.state === 'wave') && guard++ < 400000) {
         if (G.bossReward) {
             const c = G.bossReward.cards;
@@ -38,7 +38,7 @@ function play(bot, stageId, daily) {
             if (i < 0) i = c.findIndex(x => G.canTakeReward(x));
             G.pickBossReward(i);
         }
-        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= 18)) {
+        if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= (bot.spend ? G.maxField() * 0.75 : 18))) {
             thinkMerge = 15; // 사람처럼 0.5초에 한 번만
             const p = mergePair(G);
             if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
@@ -47,7 +47,9 @@ function play(bot, stageId, daily) {
             const cost = G.summonUpgradeCost();
             if (cost !== null && G.gold >= cost && G.monsters.length >= 6 && G.upgradeSummon().ok) s.ups++;
         }
-        if (bot.summon && !G.fieldFull() && G.gold >= G.summonCost() && G.summon().ok) s.summons++;
+        // spend 봇은 사람처럼 소환 강화 값을 먼저 모은다(몬스터가 8마리 넘으면)
+        const saving = bot.spend && G.summonUpgradeCost() !== null && G.monsters.length >= G.maxField() * 0.85;
+        if (bot.summon && !saving && !G.fieldFull() && G.gold >= G.summonCost() && G.summon().ok) s.summons++;
         if (bot.equip && G.equipBag.length) {
             const m = G.monsters.filter(x => !x.equip && !x.removed).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
             if (m) G.equipMonster(m, 0);
@@ -57,6 +59,24 @@ function play(bot, stageId, daily) {
             const br = G.lordPowers()[bot.branch || 0];
             const node = br && br.tiers.flat().find(n => G.powerCheck(n.id).ok);
             if (node) G.act({ kind: 'power', id: node.id });
+        }
+        // 남는 골드 쓰기(bot.spend): 맵이 차면 칸 넓히기, 높은 등급부터 랭크 돌리기(S 이상이면 멈춤), 종족 강화, 마력 사기와 각성
+        if (bot.spend && G.inPlay() && !G.bossReward && spendThink-- <= 0) {
+            spendThink = 15;
+            if (G.awakenCheck().ok) G.act({ kind: 'awaken' });
+            if (G.fieldFull()) {
+                const fc = G.fieldCost();
+                const ms = G.monsters.filter(m => !m.removed && !m.clone);
+                const roll = ms.filter(m => (m.rank || 0) < rankIndex('S') && G.rankRollCost(m) !== null)
+                    .sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade))[0];
+                const fams = {};
+                for (const m of ms) fams[MONSTERS[m.type].family] = (fams[MONSTERS[m.type].family] || 0) + GRADE_ORDER.indexOf(MONSTERS[m.type].grade) + 1;
+                const fam = Object.keys(fams).sort((a, b) => fams[b] - fams[a])[0];
+                if (fc !== null && G.gold >= fc) G.act({ kind: 'buyField' });
+                else if (roll && G.gold >= G.rankRollCost(roll) * 2) G.act({ kind: 'rollRank', monster: roll });
+                else if (fam && G.gold >= familyUpgradeCost(G.familyLevel(fam)) * 1.5) G.act({ kind: 'familyUp', family: fam });
+                else if (G.lordPowers().length && !G.powerReady() && G.gold >= G.manaCost() * 2) G.act({ kind: 'buyMana' });
+            }
         }
         // 발동형 유물(학살의 종, 영혼 수확 낫): 채워지면 바로
         if (bot.skill && G.state === 'wave') for (const id of G.relics) if (relicCharge(id) >= 1) G.act({ kind: 'relicFire', id });
@@ -77,7 +97,7 @@ function play(bot, stageId, daily) {
         // 골드 흐름 기록(bot.trace): 10라운드마다 번 골드, 남은 골드, 소환 비용, 맵 몬스터 수
         if (bot.trace && G.waveIndex + 1 !== s.lastRound) {
             s.lastRound = G.waveIndex + 1;
-            if (s.lastRound % 10 === 0) TRACE.push({ round: s.lastRound, earned: Math.round(s.earned || 0), gold: Math.round(G.gold), cost: G.summonCost(), n: G.monsters.length, level: G.summonLevel + 1, top: GRADE_ORDER[s.top] });
+            if (s.lastRound % 10 === 0) TRACE.push({ round: s.lastRound, earned: Math.round(s.earned || 0), gold: Math.round(G.gold), cost: G.summonCost(), n: G.monsters.length, level: G.summonLevel + 1, top: GRADE_ORDER[s.top], field: G.maxField(), fam: Object.values(G.familyLevels).reduce((a, b) => a + b, 0), awaken: G.awaken, ranks: G.monsters.filter(m => (m.rank || 0) >= 4).length });
         }
     }
     return { tier: G.raidTier, score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
@@ -126,7 +146,7 @@ if (process.argv[4] === 'lords') {
     for (const lord of lords) {
         for (let b = 0; b < 3; b++) {
             const rs = [];
-            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
+            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
             const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
             console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
         }
@@ -152,9 +172,9 @@ if (process.argv[4] === 'economy') {
     const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
     for (let i = 1; i <= N; i++) {
         vm.runInContext('TRACE.length = 0', context);
-        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:0,lord:'bone_queen',level:${level},trace:true}, null, 'abyss${i}'))`, context));
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:0,lord:'bone_queen',level:${level},trace:true}, null, 'abyss${i}'))`, context));
         console.log(`시드 ${i}: ${r.wave}층에서 끝`);
-        for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}마리 | 소환 강화 ${t.level} | 최고 ${t.top}`);
+        for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}/${t.field}마리 | 소환 강화 ${t.level} | 최고 ${t.top} | 종족 Lv합 ${t.fam} | 각성 ${t.awaken} | S이상 ${t.ranks}`);
     }
 }
 if (process.argv[4] === 'raid') {

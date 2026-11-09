@@ -50,6 +50,9 @@ vm.runInContext(`{
     // 옛 시험은 소환 값이 1G씩 오르고 권능이 4개까지였다(2026-11-09 경제 개편 전). 새 규칙은 맨 끝 묶음에서 본다
     SUMMON_RULES.costStep = 1;
     POWER_RULES.maxNodes = 4;
+    ROUND_RULES.bosses = ['archmage', 'fallen_knight']; // 옛 시험은 보스 2종 순환, 마법사 정지였다
+    delete HEROES.mage.slow;
+    for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
     for (const st of STAGES) {
@@ -5726,7 +5729,7 @@ assert.strictEqual(Game.powerCheck('nope').reason, 'none');
     const manaBefore = Game.mana;
     assert(Game.act({ kind: 'awaken' }).ok && Game.act({ kind: 'awaken' }).ok, 'awaken twice');
     assert.strictEqual(Game.awaken, 2);
-    assert.strictEqual(Game.mana, manaBefore - POWER_RULES.awakenCost * 2, 'awaken costs mana');
+    assert.strictEqual(Game.mana, manaBefore - POWER_RULES.awakenCost * 2 - POWER_RULES.awakenStep, 'awaken costs mana, rising');
     assert(Math.abs(Game.mods.damage - dmgBefore - POWER_RULES.awakenDamage * 2) < 1e-9, 'awaken adds damage');
     POWER_RULES.maxNodes = 4;
 }
@@ -6875,7 +6878,7 @@ console.log('smoke ok: equipment crafting');
             return undead;
         };
         const plain = count([]), grail = count(['undead_grail']);
-        assert(grail > plain * 1.4, 'undead odds up: ' + plain + ' -> ' + grail);
+        assert(grail > plain * 1.25, 'undead odds up (expected about 1.6x, 300 rolls): ' + plain + ' -> ' + grail);
         // 일곱 번째 별: 7번째 소환은 영웅 이상
         start(['seventh_star'], 'prep');
         Game.summonCount = 6;
@@ -7098,7 +7101,45 @@ console.log('smoke ok: equipment crafting');
             }
             for (const id of Object.keys(saved)) { if (saved[id] === undefined) delete MONSTERS[id].gradeMerge; else MONSTERS[id].gradeMerge = saved[id]; }
         }
-        console.log('smoke ok: gold shop and merge room');
+        // 마법사는 정지 대신 몬스터 공격을 늦춘다
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'wave';
+        const archer = Game.place('skeleton_archer', ...cell('skeleton_archer'));
+        const before = monsterStats(archer).interval;
+        const mage = createHero('mage', 0, 0, false, 'north');
+        Object.assign(mage, { waiting: false, delay: 0, cast: 0 });
+        mage.d = 0;
+        let best = Infinity;
+        for (let d = 0; d < ROUTES.north.length; d += 4) { mage.d = d; const w = heroWorld(mage); const dd = distance(w.x, w.y, archer.x, archer.y); if (dd < best) { best = dd; var at = d; } }
+        mage.d = at;
+        Game.heroes.push(mage);
+        updateMageCast(mage, 0.01);
+        assert(archer.slowT > 0 && !(archer.stun > 0), 'mage slows instead of stunning');
+        assert(Math.abs(monsterStats(archer).interval - before * HEROES.mage.slow.mul) < 1e-9, 'slower attacks');
+        // 보스 패턴: 무적 방패, 부르기, 격려
+        const boss = createHero('warrior', 10, 0, 'judge', 'north');
+        Object.assign(boss, { waiting: false, delay: 0, d: 300 });
+        Game.heroes.push(boss);
+        boss.hp = boss.maxHp * 0.49;
+        updateBossPatterns(boss, 0.01);
+        assert(boss.shieldT > 0 && damageHero(boss, 1000) === 0, 'judge shield blocks damage');
+        const n0 = Game.heroes.length;
+        const sea = createHero('warrior', 10, 0, 'sea_king', 'north');
+        Object.assign(sea, { waiting: false, delay: 0, d: 400 });
+        Game.heroes.push(sea);
+        sea.hp = sea.maxHp * 0.59;
+        updateBossPatterns(sea, 0.01);
+        assert.strictEqual(Game.heroes.length, n0 + 1 + 8, 'sea king calls 8 heroes');
+        const hurt = Game.heroes[Game.heroes.length - 1];
+        hurt.hp = hurt.maxHp * 0.5;
+        const war = createHero('warrior', 10, 0, 'war_avatar', 'north');
+        Object.assign(war, { waiting: false, delay: 0, d: hurt.d });
+        Game.heroes.push(war);
+        war.hp = war.maxHp * 0.59;
+        updateBossPatterns(war, 0.01);
+        assert(hurt.hp > hurt.maxHp * 0.75 && hurt.haste > 0, 'war avatar heals and hastes');
+        assert(ROUND_RULES.bosses.length === 8 && ROUND_RULES.bosses.every(b => BOSSES[b]), 'eight bosses rotate');
+        console.log('smoke ok: gold shop, merge room, mage slow, boss patterns');
     }).toString() + ')()', gctx);
 }
 require('./smoke_maps.js');

@@ -51,8 +51,9 @@ const HEROES = {
         },
         atkTime: 0.45, // 주문 동작 표시 시간(초). 근접 공격 동작(0.4)보다 조금 길다
         name: '마법사', sprite: 'pl_hero_mage', scale: SWARM_RULES.scale, barY: 70, hp: 14, speed: 1.0, bounty: 3, damage: 3, interval: 1.0,
-        stunEvery: 6, stunRange: 3, stunTime: 2,
-        counter: '몬스터 정지, 먼저 처치'
+        // 2026-11-09: 정지 대신 감속(몬스터 공격 간격 slow.mul배, slow.time초). 정예 뇌술사는 그대로 범위 정지
+        stunEvery: 6, stunRange: 3, stunTime: 2, slow: { mul: 1.6, time: 3 },
+        counter: '몬스터 공격 감속, 먼저 처치'
     }
 };
 
@@ -216,7 +217,7 @@ const ROUND_RULES = {
     mix: [{ warrior: 1 }, { warrior: 0.7, rogue: 0.3 }, { rogue: 1 }, { warrior: 0.6, mage: 0.4 }, { warrior: 0.5, rogue: 0.3, mage: 0.2 }],
     eliteEvery: 5, eliteBase: 1, elitePer: 15,              // 5라운드마다 정예: 1명 + 15라운드마다 1명
     elites: ['elite_tamer', 'elite_swordsman', 'elite_stormcaller', 'elite_rhapsodist'],
-    bosses: ['archmage', 'fallen_knight'],                  // 10라운드마다 번갈아
+    bosses: ['archmage', 'fallen_knight', 'war_avatar', 'sea_king', 'judge', 'gatekeeper', 'golden_boar', 'star_herald'], // 10라운드마다 차례로(Asteria 보스 8종)
 };
 // r번째 라운드(1부터). 무한 라운드도 이 함수로 끝없이 만든다
 function buildRound(r) {

@@ -109,7 +109,7 @@ const LORD_EFFECTS = {
 // 그래서 한 판의 빌드는 갈래 하나와 겹마다 고른 4개다. 마력은 판이 끝나면 사라진다(오래 한 사람이 랭킹에서 유리해지지 않게).
 // 수치는 플레이 후 고칠 초안이다.
 // 권능: 갈래 하나를 고르면 그 갈래 8개를 모두 찍을 수 있다(이어진 곳부터). 다 찍으면 남는 마력으로 각성(몬스터 피해 +awakenDamage, 횟수 제한 없음)
-const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1, awakenCost: 4, awakenDamage: 0.05 };
+const POWER_RULES = { maxNodes: 8, tierCost: [1, 2, 3, 5], manaElite: 1, manaBoss: 3, manaCleanRound: 1, awakenCost: 4, awakenStep: 2, awakenDamage: 0.05 }; // 각성 값은 4, 6, 8...
 const LORD_POWERS = {
     rift: [
         { id: 'storm', name: '폭풍', desc: '번개 강화', tiers: [

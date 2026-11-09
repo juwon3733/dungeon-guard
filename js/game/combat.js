@@ -13,6 +13,12 @@ const KILL_POWER = [
 
 function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     if (hero.dead) return 0;
+    // 보스 패턴 무적 방패: 막는 동안 피해 없음
+    if (hero.shieldT > 0) {
+        const p = heroWorld(hero);
+        if (!dot && !Fx.noNumbers) Fx.number(hero, p.x, p.y - 300, '막음', '#ffe08a', true);
+        return 0;
+    }
     // 유물과 치명타(몬스터의 직접 공격만). 지속 피해와 튀김은 치명타가 없다
     const base0 = amount;
     let crit = false;
@@ -53,11 +59,13 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
         hero.kickX = kx / len;
         hero.kickY = ky / len;
     }
+    // 피해 숫자(2026-11-09): 치명타는 크고 주황 "N!", 보통 공격은 작은 흰 숫자(모든 용사), 지속 피해는 그 색(독 초록, 화상 주황)으로
+    //   정예와 보스의 숫자만 크다. 떼로 오는 일반 용사의 지속 피해 숫자는 띄우지 않는다. 설정에서 끌 수 있다(Fx.noNumbers)
+    const numY = p.y - (hero.boss ? 300 : hero.elite ? 180 : 110);
     if (crit) {
-        // 치명타: 큰 노란 숫자와 섬광(떼로 오는 일반 용사도 치명타 숫자는 띄운다)
-        Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), `${Math.round(dealt)}!`, '#ffd23d', true);
+        if (!Fx.noNumbers) Fx.number(hero, p.x, numY, `${Math.round(dealt)}!`, '#ff8a2a', true);
         Fx.anim('fx_hit_crit', p.x, p.y - (hero.boss ? 140 : 46), hero.boss ? 260 : 170, 0.26);
-    } else if (!small) Fx.number(hero, p.x, p.y - (hero.boss ? 300 : hero.elite ? 180 : 110), Math.round(dealt), color || '#ffe36b', dealt >= 30);
+    } else if (!Fx.noNumbers && !(dot && small)) Fx.number(hero, p.x, numY, Math.round(dealt), dot ? (color || '#b6f07a') : '#ffffff', !small);
     if (!dot && small) {
         hero.flash = 0.09;
         Fx.burst(p.x, p.y - 22, color || '#ffd26a', 2, 200, 0.25, 4);
