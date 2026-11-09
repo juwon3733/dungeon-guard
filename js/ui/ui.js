@@ -264,6 +264,22 @@ const UI = {
             });
         }
 
+        // 저주 라운드: 들어갈지 고르는 두 버튼. 준비 중에는 안내 칸 아래쪽, 라운드 중에는 한 줄 안내 칸 오른쪽. 고른 쪽이 금색
+        const info = this.eventInfo();
+        if (info && info.ev.choice && !G.bossReward) {
+            const bw = info.prep ? (info.w - 36) / 2 : 80;
+            const bh = info.prep ? 38 : 40;
+            const bx = info.prep ? info.x + 12 : info.x + info.w - 18 - bw * 2 - 8;
+            const by = info.prep ? info.y + info.h - 46 : info.y + 7;
+            const gap = info.prep ? 12 : 8;
+            this.button('curseYes', bx, by, bw, bh, {
+                label: '수락', size: 19, theme: info.accepted ? 'gold' : undefined, onClick: () => G.act({ kind: 'curse', accept: true })
+            });
+            this.button('curseNo', bx + bw + gap, by, bw, bh, {
+                label: '거절', size: 19, theme: info.accepted ? undefined : 'gold', onClick: () => G.act({ kind: 'curse', accept: false })
+            });
+        }
+
         if (this.selectedMonster) this.layoutMonsterMenu();
     },
 
@@ -2406,6 +2422,10 @@ const UI = {
             const def = HEROES[type];
             return { portrait: this.heroPortrait(type), name: def.name, note: def.counter, count, elite };
         });
+        if (wave.goblins) {
+            const def = HEROES.gold_goblin;
+            items.push({ portrait: this.heroPortrait('gold_goblin'), name: def.name, note: def.counter, count: wave.goblins, elite: true });
+        }
         if (wave.boss) {
             const def = BOSSES[wave.boss];
             items.push({ portrait: def.portrait, name: def.name, note: `${def.note} · ${ROUTE_NAMES[G.bossEntry(wave.boss)]}쪽 입구`, count: 1, boss: true });
@@ -2417,8 +2437,40 @@ const UI = {
             const left = PARTY_X + PARTY_W - 18 - items.length * cw;
             return items.map((c, i) => Object.assign(c, { x: left + i * cw, y: 8 + 16, w: cw - 4, h: PARTY_ROW + 2 }));
         }
-        const top = 8 + 88;
+        const info = this.eventInfo();
+        const top = info ? info.y + info.h + 8 : 8 + 88;
         return items.map((c, i) => Object.assign(c, { x: PARTY_X + 22, y: top + i * PARTY_ROW, w: PARTY_W - 44, h: PARTY_ROW - 2 }));
+    },
+
+    // 다가오는 이벤트 라운드(ROUND_EVENTS)의 안내 칸. 준비 중에는 파티 창 안 이름 아래(설명 두 줄, 저주는 버튼 줄만큼 크다),
+    // 라운드 중에는 맵을 덜 가리게 파티 줄 아래 한 줄(설명은 마우스를 올릴 때). 없으면 null
+    eventInfo() {
+        const G = Game;
+        if (!G.inPlay() || !G.challenge) return null;
+        const i = G.state === 'prep' ? G.waveIndex : G.waveIndex + 1;
+        const w = G.waves[i];
+        if (!w || !w.event || w.boss) return null;
+        const ev = ROUND_EVENTS[w.event];
+        const prep = G.state === 'prep';
+        const h = prep ? 80 + (ev.choice ? 48 : 0) : 54;
+        // 라운드 중에는 버튼 자리만큼 왼쪽으로 넓힌다
+        return { id: w.event, ev, round: i + 1, prep, accepted: !!G.curseAccept[i + 1],
+            x: prep ? PARTY_X + 14 : PARTY_X - 100, y: prep ? 8 + 84 : 80, w: prep ? PARTY_W - 28 : PARTY_W + 100, h };
+    },
+
+    // 이벤트 안내 칸: 준비 중에는 이름과 설명 두 줄, 라운드 중에는 '다음:'을 붙인 이름 한 줄
+    drawEventInfo(ctx, info) {
+        const T = UI_THEME;
+        const color = info.id === 'curse' ? '#d6a8ff' : T.gold;
+        if (!info.prep) {
+            UIKit.hudFrame(ctx, 'hud_panel', info.x, info.y, info.w, info.h, 20);
+            UIKit.text(ctx, `다음: ${info.ev.name}`, info.x + 20, info.y + info.h / 2 + 1, 19, color, 'left', 'bold');
+            return;
+        }
+        UIKit.slot(ctx, info.x, info.y, info.w, info.h, 'gold');
+        UIKit.text(ctx, info.ev.name, info.x + 14, info.y + 22, 20, color, 'left', 'bold');
+        ctx.font = `16px ${UI_FONT}`;
+        this.wrapLines(ctx, info.ev.note, info.w - 28).slice(0, 2).forEach((line, i) => UIKit.text(ctx, line, info.x + 14, info.y + 46 + i * 20, 16, T.cream, 'left'));
     },
 
     // 파티 창. 준비 중에는 다음 파티의 이름과 입구별 인원, 종류마다 얼굴과 이름과 수.
@@ -2432,6 +2484,7 @@ const UI = {
             UIKit.slot(ctx, c.x, c.y + 1, box, box, c.elite ? 'gold' : 'iron');
             this.drawPortrait(ctx, c.portrait, c.x + 3, c.y + 4, box - 6);
         };
+        const info = this.eventInfo();
         if (G.state === 'wave') {
             const x = cells[0].x - 18;
             UIKit.hudFrame(ctx, 'hud_panel', x, 8, PARTY_X + PARTY_W - x, 68, 26);
@@ -2439,6 +2492,7 @@ const UI = {
                 portrait(c, c.h - 2);
                 UIKit.text(ctx, c.boss ? '보스' : `${c.count}`, c.x + c.h + 2, c.y + c.h / 2 + 1, c.boss ? 16 : 20, c.boss ? '#ff9a8a' : (c.elite ? T.gold : '#ffffff'), 'left', 'bold');
             }
+            if (info) this.drawEventInfo(ctx, info);
             return;
         }
         const x = PARTY_X;
@@ -2449,6 +2503,7 @@ const UI = {
         const counts = G.entryCounts(wave);
         UIKit.text(ctx, ROUTE_IDS.map(id => `${ROUTE_NAMES[id]} ${counts[id]}`).join(' · '), x + PARTY_W - 28, y + 32, 18, T.creamSoft, 'right');
         UIKit.text(ctx, wave.party, x + 28, y + 64, 24, T.cream, 'left', 'bold');
+        if (info) this.drawEventInfo(ctx, info);
         for (const c of cells) {
             const box = c.h - 2;
             portrait(c, box);
@@ -2462,15 +2517,21 @@ const UI = {
     drawPartyTip(ctx) {
         if (!Game.inPlay() || Game.bossReward) return;
         const m = this.mouse;
+        const info = this.eventInfo();
+        if (info && !info.prep && m.x >= info.x && m.x <= info.x + info.w && m.y >= info.y && m.y <= info.y + info.h) {
+            this.drawTooltip(ctx, clamp(info.x - 100, 12, GAME_WIDTH - 442), info.y + info.h + 8, `다음 라운드 · ${info.ev.name}`, info.ev.note);
+            return;
+        }
         const c = this.partyCells().find(c => m.x >= c.x && m.x <= c.x + c.w && m.y >= c.y && m.y <= c.y + c.h);
         if (c) this.drawTooltip(ctx, clamp(c.x - 200, 12, GAME_WIDTH - 442), c.y + c.h + 8, `${c.name}${c.elite ? ' · 정예' : ''}${c.boss ? '' : ` x${c.count}`}`, c.note);
     },
 
     // 용사 초상: 서 있는 그림(정예 64px, 일반 48px)의 머리 쪽. 그림 위쪽 가운데에서 잘라 쓴다
     heroPortrait(type) {
-        const img = Assets.get(Render.heroStandName(type));
+        const name = HEROES[type].skinSprite ? `${HEROES[type].skinSprite}/rotations/south` : Render.heroStandName(type); // 보물 고블린은 입은 그림
+        const img = Assets.get(name);
         const w = img ? img.width : 48;
-        return { sprite: Render.heroStandName(type), crop: [w / 2 - 12, w > 48 ? 6 : 2, 24] };
+        return { sprite: name, crop: [w / 2 - 12, w > 48 ? 6 : 2, 24] };
     },
 
     // 준비 시간: 각 입구 문 위에 이번에 올 인원을 작은 남색 표지로 띄운다(보스가 오는 입구는 빨강)

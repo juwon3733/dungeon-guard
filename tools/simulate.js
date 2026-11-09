@@ -82,6 +82,8 @@ function play(bot, stageId, daily) {
                 else if (G.lordPowers().length && !G.powerReady() && G.gold >= G.manaCost() * 2) G.act({ kind: 'buyMana' });
             }
         }
+        // 저주 라운드(bot.curse): 나오면 늘 받아들인다
+        if (bot.curse && G.curseRound() && !G.curseAccept[G.curseRound()]) G.act({ kind: 'curse', accept: true });
         // 발동형 유물(학살의 종, 영혼 수확 낫): 채워지면 바로
         if (bot.skill && G.state === 'wave') for (const id of G.relics) if (relicCharge(id) >= 1) G.act({ kind: 'relicFire', id });
         // 마왕 스킬: 3번째 스킬(E)은 준비되면 바로. 스킬 1(Q)·2(W)는 맨 앞 용사가 길의 60%를 넘어오면(조준 스킬은 그 용사 자리에)
@@ -149,7 +151,7 @@ if (process.argv[4] === 'abyss') {
         console.log(`심연 ${d} | ${r.wave}층 | ${R(r.time / 60)}분 | 점수 ${r.score.toLocaleString()} | 소환 ${r.summons} 합치기 ${r.merges} | 최고 ${GRADES[r.top]}`);
     }
 }
-// 마왕 비교: 마왕 x 갈래마다 심연을 같은 시드로(난이도는 5번째 값, 기본 노말)
+// 마왕 비교: 마왕 x 갈래마다 심연을 같은 시드로(난이도는 5번째 값, 기본 노말). CURSE=1이면 저주 라운드를 늘 받아들인다
 if (process.argv[4] === 'lords') {
     vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
     const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
@@ -158,7 +160,7 @@ if (process.argv[4] === 'lords') {
     for (const lord of lords) {
         for (let b = 0; b < 3; b++) {
             const rs = [];
-            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${b},lord:'${lord}',level:${level}}, null, 'abyss${i}'))`, context)));
+            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${b},lord:'${lord}',level:${level},curse:${process.env.CURSE ? 'true' : 'false'}}, null, 'abyss${i}'))`, context)));
             const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
             console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
         }
