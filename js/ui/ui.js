@@ -14,7 +14,7 @@ const UPGRADE_BTN_W = 150; // 소환 강화 칸
 const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
-const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 420, w: 640, h: 400 }; // 종족 강화 창(오른쪽 버튼 줄 왼쪽)
+const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 560, w: 640, h: 540 }; // 강화 창(종족 강화, 칸 넓히기, 마력 사기. 오른쪽 버튼 줄 왼쪽)
 const TOP_BTN = 60; // 오른쪽 위 아이콘 버튼
 const ABILITY_INK = '#e8a6ff'; // 능력 이름 글자(남색 창 위)
 const HINT_SHOWS = 3; // 화면 가운데 안내 쪽지는 종류마다 이만큼만 나온다(이번 창에서)
@@ -244,7 +244,7 @@ const UI = {
             label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
         });
         this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 116, NEXT_BTN_W, 50, {
-            label: '종족 강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
+            label: '강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
         });
         if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
         if (G.state === 'prep') {
@@ -697,6 +697,7 @@ const UI = {
         const g = MONSTER_GRADES[MONSTERS[type].grade];
         const target = plan.grade ? MONSTER_GRADES[plan.grade] : null;
         if (plan.reason === 'top') return `${g.name} 최고 등급`;
+        if (plan.reason === 'room') return '결과 몬스터가 설 자리 없음';
         if (plan.reason === 'mismatch') return '합칠 수 없음';
         if (plan.reason === 'count') return `같은 ${g.name} ${plan.count}마리 필요 (지금 ${plan.have}마리)`;
         if (plan.reason === 'unique' && plan.sameKind) return '같은 신화는 1마리만';
@@ -739,6 +740,19 @@ const UI = {
         if (this.popupFor !== f) {
             this.popupFor = f;
             this.popupAge = 0;
+        }
+        // 랭크 돌리기: 랭크 줄 오른쪽
+        const rr = Game.rankRollCost(f);
+        if (rr !== null) {
+            this.button('rollRank', o.x + w - 176, o.y + POPUP_TOP + 108 - 24, 160, 46, {
+                label: `돌리기 ${rr}G`, size: 20, disabled: Game.gold < rr, tip: 'D~S+ 무작위(내려갈 수도 있다)',
+                onClick: () => {
+                    const res = Game.act({ kind: 'rollRank', monster: f });
+                    if (!res.ok) { this.showToast(res.reason === 'gold' ? `돌리기 ${rr}G` : '지금 못 씀'); Sfx.play('mergeFail'); return; }
+                    const name = MONSTER_RANKS[res.rank].name;
+                    this.showToast(res.rank > res.before ? `랭크 ${name}` : res.rank < res.before ? `랭크 ${name}로 내려감` : `랭크 ${name} 그대로`);
+                }
+            });
         }
         // 장비 줄의 빼기 버튼(낀 장비가 있을 때). 자리는 drawPopup의 장비 줄과 같다
         if (f.equip) {
@@ -797,8 +811,21 @@ const UI = {
             }
         });
         y += POPUP_MERGE_H;
-        this.button('sell', o.x + 12, y, w - 24, 52, {
-            label: `판매 +${Game.sellValue(type)}`, icon: 'gold', theme: 'danger', size: 24,
+        // 바꾸기(같은 등급 다른 몬스터, 골드)와 판매를 반씩
+        const rc = Game.rerollCost(f);
+        const half = (w - 24 - 8) / 2;
+        this.button('reroll', o.x + 12, y, half, 52, {
+            label: rc === null ? '바꾸기 없음' : `바꾸기 ${rc}G`, size: 22, disabled: rc === null || Game.gold < rc,
+            tip: '같은 등급의 다른 몬스터로(랭크·장비 유지)',
+            onClick: () => {
+                const res = Game.act({ kind: 'reroll', monster: f });
+                if (res.ok) { this.selectedMonster = res.monster; return; }
+                this.showToast(res.reason === 'gold' ? `바꾸기 ${rc}G` : res.reason === 'room' ? '바꿀 몬스터가 설 자리 없음' : '바꿀 수 없음');
+                Sfx.play('mergeFail');
+            }
+        });
+        this.button('sell', o.x + 12 + half + 8, y, half, 52, {
+            label: `판매 +${Game.sellValue(type)}`, icon: 'gold', theme: 'danger', size: 22,
             onClick: () => {
                 Game.act({ kind: 'sell', monster: f });
                 this.clearSelection();
@@ -1183,6 +1210,29 @@ const UI = {
                 famRow: f, label: `${cost}G`, disabled: Game.gold < cost, onClick: () => this.doFamilyUp(f)
             });
         });
+        // 맵이 찬 뒤 골드 쓸 곳: 칸 넓히기, 마력 사기
+        const rowY = i => P.y + 74 + i * 64 + 16;
+        const field = Game.fieldCost();
+        this.button('shop_field', P.x + P.w - 190, rowY(5), 170, 54, {
+            famRow: 'field', label: field === null ? '최대' : `${field}G`, disabled: field === null || Game.gold < field,
+            onClick: () => this.doShop({ kind: 'buyField' }, field)
+        });
+        const mana = Game.manaCost();
+        const sealed = !Game.lordPowers().length || Game.mods.powerSeal;
+        this.button('shop_mana', P.x + P.w - 190, rowY(6), 170, 54, {
+            famRow: 'mana', label: sealed ? '봉인' : `${mana}G`, disabled: sealed || Game.gold < mana,
+            onClick: () => this.doShop({ kind: 'buyMana' }, mana)
+        });
+    },
+
+    doShop(cmd, cost) {
+        const res = Game.act(cmd);
+        if (res.ok) {
+            this.showToast(cmd.kind === 'buyField' ? `맵 몬스터 ${Game.maxField()}마리까지` : `마력 ${Game.mana}`);
+            return;
+        }
+        this.showToast(res.reason === 'gold' ? `${cost}G 필요` : res.reason === 'max' ? '더 넓힐 수 없음' : '지금 못 씀');
+        Sfx.play('mergeFail');
     },
 
     doFamilyUp(family) {
@@ -1729,13 +1779,24 @@ const UI = {
         const T = UI_THEME;
         const P = FAMILY_PANEL;
         UIKit.hudFrame(ctx, 'hud_panel', P.x, P.y, P.w, P.h, 26);
-        UIKit.text(ctx, '종족 강화', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
+        UIKit.text(ctx, '강화', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
         UIKit.text(ctx, `레벨당 피해 +${Math.round(FAMILY_UPGRADE.damagePer * 100)}%`, P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
         for (const b of this.buttons) {
             if (!b.famRow) continue;
             const f = b.famRow;
-            const level = Game.familyLevel(f);
             const y = b.y + b.h / 2;
+            if (f === 'field' || f === 'mana') {
+                // 골드 상점 줄: 이름, 지금 값, 버튼
+                if (f === 'field') { ctx.fillStyle = T.goldLine; ctx.fillRect(P.x + 28, b.y - 14, P.w - 56, 2); }
+                UIKit.text(ctx, f === 'field' ? '칸 넓히기' : '마력 사기', P.x + 28, y + 1, 26, T.cream, 'left', 'bold');
+                UIKit.text(ctx, f === 'field' ? `맵 ${Game.maxField()}마리` : `마력 ${Game.mana}`, P.x + 200, y + 1, 21, T.good, 'left');
+                const st = this.btnState(b);
+                const kind = b.disabled ? 'off' : 'primary';
+                const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
+                UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2 + dy + 1, 24, UIKit.buttonInk(kind), 'center');
+                continue;
+            }
+            const level = Game.familyLevel(f);
             const chance = Math.round(familyUpgradeChance(level) * 100);
             UIKit.text(ctx, MONSTER_FAMILIES[f], P.x + 28, y + 1, 26, T.cream, 'left', 'bold');
             UIKit.text(ctx, `Lv${level}`, P.x + 120, y + 1, 26, level ? T.gold : T.creamSoft, 'left', 'bold');
@@ -2554,13 +2615,12 @@ const UI = {
         UIKit.ink(ctx, `${MONSTER_ROLES[def.role].name} · ${MONSTER_FAMILIES[def.family]}`, p.x + 110 + cw, top + 69, 18, T.inkSoft);
         const stats = monsterStats(f);
         const num = v => Math.round(v * 100) / 100; // 장비로 0.8695...처럼 되는 값을 소수 둘째 자리까지
-        // 랭크: 글자는 랭크 색(외곽선), 옆에 다음 랭크까지 남은 처치 수(정예 3, 보스 10으로 센다)
+        // 랭크: 글자는 랭크 색(외곽선)과 피해 배율, 옆에 처치 수. 돌리기 버튼은 layoutMonsterMenu
         const rank = f.rank || 0;
         const rankDef = MONSTER_RANKS[rank];
-        const nextRank = MONSTER_RANKS[rank + 1];
         UIKit.ink(ctx, '랭크', p.x + 22, top + 108, 18, T.inkSoft);
         UIKit.text(ctx, rankDef.name, p.x + 72, top + 108, 26, rankDef.color, 'left', 'bold');
-        UIKit.ink(ctx, nextRank ? `다음 ${nextRank.name}까지 ${monsterXpToNext(f)}처치` : '최고 랭크', p.x + 104, top + 109, 17, nextRank ? T.ink : T.inkWax);
+        UIKit.ink(ctx, `피해 ${rankDef.mul}배 · 처치 ${f.kills || 0}`, p.x + 116, top + 109, 17, T.ink);
         // 수치: 공격 아이콘과 피해, 막는 몬스터는 하트와 체력, 공격 간격과 사거리
         const sy = top + 108 + POPUP_RANK_H + 10;
         UIKit.icon(ctx, 'attack', p.x + 16, sy - 24);
@@ -2637,7 +2697,7 @@ const UI = {
 
     drawButtons(ctx) {
         for (const b of this.buttons) {
-            if (b.powerNode || b.powerClose) continue; // 권능 창은 drawPowers가 그린다
+            if (b.powerNode || b.powerClose || b.powerAwaken) continue; // 권능 창은 drawPowers가 그린다
             if (b.reward) continue; // 보상 카드는 어둡게 깐 화면 위에 drawBossReward가 그린다
             if (b.bagSlot !== undefined) continue; // 보관함 칸은 drawBag이 그린다
             if (b.barRelic !== undefined) continue; // 마왕 탭 유물 칸은 drawBarRelics가 그린다
@@ -2988,6 +3048,13 @@ const UI = {
             this.button(`power_${n.id}`, p.x - 30, p.y - 30, 60, 60, { powerNode: n, disabled: !G.powerCheck(n.id).ok, onClick: () => { G.act({ kind: 'power', id: n.id }); } });
         }
         this.button('powerClose', POWER_WIN.x + POWER_WIN.w - 196, POWER_WIN.y + 24, 160, 52, { powerClose: true, onClick: () => this.togglePowers() });
+        // 각성: 갈래를 다 찍은 뒤 남는 마력으로 몬스터 피해를 계속 올린다
+        const aw = G.awakenCheck();
+        this.button('powerAwaken', POWER_WIN.x + POWER_WIN.w - 196 - 300, POWER_WIN.y + 24, 284, 52, {
+            powerAwaken: true, disabled: !aw.ok,
+            tip: aw.reason === 'branch' ? '갈래 하나를 모두 찍으면 열린다' : `몬스터 피해 ${Math.round(POWER_RULES.awakenDamage * 100)}% 증가`,
+            onClick: () => { if (!G.act({ kind: 'awaken' }).ok) Sfx.play('mergeFail'); }
+        });
     },
 
     // 도트 마름모 하나(화면 2px 단위)
@@ -3026,6 +3093,13 @@ const UI = {
         if (close) {
             const dy = UIKit.button(ctx, close.x, close.y, close.w, close.h, 'silver', this.btnState(close));
             UIKit.text(ctx, '닫기 (R)', close.x + close.w / 2, close.y + close.h / 2 + dy, 22, T.cream, 'center', 'bold');
+        }
+        const awaken = this.buttons.find(b => b.powerAwaken);
+        if (awaken) {
+            const kind = awaken.disabled ? 'off' : 'primary';
+            const dy = UIKit.button(ctx, awaken.x, awaken.y, awaken.w, awaken.h, kind, this.btnState(awaken));
+            UIKit.text(ctx, `각성 ${G.awaken} · 마력 ${POWER_RULES.awakenCost}`, awaken.x + awaken.w / 2, awaken.y + awaken.h / 2 + dy, 22, UIKit.buttonInk(kind), 'center', 'bold');
+            if (this.btnState(awaken).hover) this.drawTooltip(ctx, awaken.x, awaken.y + 64, '마왕 각성', awaken.tip);
         }
         const map = G.powerMap();
         const pointOf = id => (id === 'core' ? { x: M.cx, y: M.cy } : this.powerPoint(map.nodes.find(n => n.id === id)));

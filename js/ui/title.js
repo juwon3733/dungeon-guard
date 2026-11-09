@@ -16,7 +16,7 @@ const TITLE_START = { x: 110, y: 566, w: 440, h: 104 };
 const TITLE_SMALL_W = 196; // 오른쪽 아래 작은 버튼 너비
 const TITLE_ART_PX = 5; // ill_title 1px가 화면 5px(불씨도 이 칸에 맞춘다)
 const TITLE_EMBERS = 90;
-const LOADING_TIPS = ['같은 몬스터 둘 → 한 등급 위', '왕좌로 끌면 제물 · 마왕 체력 회복', '번개(Q) · 급한 자리부터', '종족 강화(G) · 골드가 남을 때', '심연 · 난이도별 최고 층', '보스 처치 · 유물 하나'];
+const LOADING_TIPS = ['같은 몬스터 둘 → 한 등급 위', '왕좌로 끌면 제물 · 마왕 체력 회복', '번개(Q) · 급한 자리부터', '강화(G) · 종족 강화, 칸 넓히기, 마력 사기', '심연 · 난이도별 최고 층', '보스 처치 · 유물 하나'];
 
 // 0~1 사이의 고정 난수(불씨 i의 성질 j)
 function titleHash(i, j) {

@@ -1182,7 +1182,7 @@ const Render = {
     rankMark(ctx, m, footY) {
         const rank = m.rank || 0;
         const r = MONSTER_RANKS[rank];
-        const top = rank === MONSTER_RANKS.length - 1;
+        const top = rank >= rankIndex('S');
         const up = m.rankUp > 0 ? m.rankUp / 1.2 : 0;
         if (rank > 0) {
             const x = m.x + 22;

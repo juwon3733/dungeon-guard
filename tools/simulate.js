@@ -24,8 +24,9 @@ function mergePair(G) {
     }
     return best;
 }
+const TRACE = [];
 function play(bot, stageId, daily) {
-    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
+    if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', bot.relics || [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
     const G = Game, DT = 1 / 30;
     const s = { summons: 0, merges: 0, ups: 0, top: 0, legendWave: 0 };
@@ -57,6 +58,8 @@ function play(bot, stageId, daily) {
             const node = br && br.tiers.flat().find(n => G.powerCheck(n.id).ok);
             if (node) G.act({ kind: 'power', id: node.id });
         }
+        // 발동형 유물(학살의 종, 영혼 수확 낫): 채워지면 바로
+        if (bot.skill && G.state === 'wave') for (const id of G.relics) if (relicCharge(id) >= 1) G.act({ kind: 'relicFire', id });
         const third = G.thirdSkill();
         if (bot.skill && third && G.state === 'wave' && G.skills[third.key] <= 0) G.act({ kind: third.key });
         if (bot.skill && G.skills.lightning === 0 && G.state === 'wave') {
@@ -68,7 +71,14 @@ function play(bot, stageId, daily) {
             if (g > s.top) s.top = g;
             if (g >= 3 && !s.legendWave) s.legendWave = G.waveIndex + 1;
         }
+        const before = G.gold;
         G.update(DT);
+        if (G.gold > before) s.earned = (s.earned || 0) + G.gold - before;
+        // 골드 흐름 기록(bot.trace): 10라운드마다 번 골드, 남은 골드, 소환 비용, 맵 몬스터 수
+        if (bot.trace && G.waveIndex + 1 !== s.lastRound) {
+            s.lastRound = G.waveIndex + 1;
+            if (s.lastRound % 10 === 0) TRACE.push({ round: s.lastRound, earned: Math.round(s.earned || 0), gold: Math.round(G.gold), cost: G.summonCost(), n: G.monsters.length, level: G.summonLevel + 1, top: GRADE_ORDER[s.top] });
+        }
     }
     return { tier: G.raidTier, score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
         n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
@@ -120,6 +130,31 @@ if (process.argv[4] === 'lords') {
             const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
             console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
         }
+    }
+}
+// 유물 비교: 마왕 하나(기본 뼈의 여왕, 첫 갈래)에 유물 하나씩 들려 심연을 같은 시드로. 5번째 값 난이도, 6번째 유물(쉼표, 없으면 전부, '없음'은 유물 없이)
+if (process.argv[4] === 'relics') {
+    vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
+    const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
+    const lord = process.argv[7] || 'bone_queen';
+    const ids = process.argv[6] ? process.argv[6].split(',') : vm.runInContext('Object.keys(RELICS)', context);
+    for (const id of ids) {
+        const relics = id === '없음' ? '[]' : `['${id}']`;
+        const rs = [];
+        for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:0,lord:'${lord}',level:${level},relics:${relics}}, null, 'abyss${i}'))`, context)));
+        const name = id === '없음' ? '없음' : vm.runInContext(`RELICS['${id}'].name`, context);
+        console.log(`${id} ${name} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')})`);
+    }
+}
+// 골드 흐름: 노말 심연을 한 판 돌며 10라운드마다 번 골드와 남은 골드(봇은 남는 골드를 쓰지 못한다)
+if (process.argv[4] === 'economy') {
+    vm.runInContext('Meta.data.cleared = STAGES.map(s => s.id)', context);
+    const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
+    for (let i = 1; i <= N; i++) {
+        vm.runInContext('TRACE.length = 0', context);
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,branch:0,lord:'bone_queen',level:${level},trace:true}, null, 'abyss${i}'))`, context));
+        console.log(`시드 ${i}: ${r.wave}층에서 끝`);
+        for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}마리 | 소환 강화 ${t.level} | 최고 ${t.top}`);
     }
 }
 if (process.argv[4] === 'raid') {
