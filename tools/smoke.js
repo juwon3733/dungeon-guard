@@ -52,6 +52,7 @@ vm.runInContext(`{
     POWER_RULES.maxNodes = 4;
     ROUND_RULES.bosses = ['archmage', 'fallen_knight']; // 옛 시험은 보스 2종 순환, 마법사 정지였다
     delete HEROES.mage.slow;
+    MONSTER_GRADES.mythic.fieldMax = 3; // 옛 시험은 신화 맵 제한(서로 다른 3마리, 같은 종 1마리)이 있었다
     for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };

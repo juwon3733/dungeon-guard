@@ -1035,8 +1035,8 @@ const Game = {
         }
         const grade = MONSTERS[recipe.result].grade;
         const others = this.monsters.filter(o => !o.removed && !used.includes(o));
-        if (others.some(o => o.type === recipe.result)) return { kind: 'none', reason: 'unique', grade, sameKind: true, recipe };
         const max = MONSTER_GRADES[grade].fieldMax;
+        if (max !== undefined && others.some(o => o.type === recipe.result)) return { kind: 'none', reason: 'unique', grade, sameKind: true, recipe };
         if (max !== undefined && others.filter(o => MONSTERS[o.type].grade === grade).length >= max) return { kind: 'none', reason: 'unique', grade, recipe };
         return { kind: 'recipe', recipe, result: recipe.result, src: b[0], dst: m, extra };
     },
