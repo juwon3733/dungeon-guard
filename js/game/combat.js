@@ -121,9 +121,10 @@ function killHero(hero, pos, attacker) {
     }
     if (attacker) monsterKilledHero(attacker, hero);
     const G = Game;
+    if (hero.event) G.eventHeroGone(hero, false);
     // 처치 골드(마왕과 유물의 bounty 포함). 일반 용사는 1보다 작아 모아서 준다
     const goldTouch = hero.elite || hero.boss ? G.lordPassive('goldTouch') : null;
-    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + monsterEquip(attacker, 'gold'));
+    G.goldLeft = (G.goldLeft || 0) + hero.bounty * (byPoison && G.power('spreadGold') ? 1.5 : 1) * (hero.bound > 0 && G.power('execGold') ? 1.5 : 1) * G.mods.bounty * (goldTouch ? goldTouch.eliteGold : 1) * (G.striking && G.power('coinLoot') ? 2 : 1) * (1 + monsterEquip(attacker, 'gold')) * (hero.goldMul || 1);
     const bounty = Math.floor(G.goldLeft + 1e-9);
     G.goldLeft -= bounty;
     G.gold += bounty;
@@ -131,6 +132,13 @@ function killHero(hero, pos, attacker) {
     G.scoreKill(hero);
     G.soulVolley();
     if (hero.elite) G.eliteDrop(pos.x, pos.y - 60); // 정예는 장비를 떨어뜨릴 수 있다(EQUIP_RULES)
+    if (hero.type === 'gold_goblin') {
+        // 보물 고블린: 금화가 크게 터진다
+        Fx.anim('fx_coin_blast', pos.x, pos.y - 40, 128 * 2 / WORLD_ZOOM, 0.6);
+        Fx.burst(pos.x, pos.y - 30, '#ffd34d', 20, 320, 0.6, 7);
+        Fx.number({}, pos.x, pos.y - 160, `+${bounty}G`, '#ffd34d', true);
+        Fx.addShake(6);
+    }
     if (!hero.boss && !hero.elite) {
         // 떼로 터지는 일반 용사: 작은 폭발과 파편만. 많이 터져도 화면과 속도를 버티게 가볍게 그린다
         const y = pos.y - 24;

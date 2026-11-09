@@ -503,7 +503,10 @@ const Render = {
             } else {
                 this.shadow(ctx, p.x, p.y + 6, 15, 5);
             }
-            const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : Assets.get(name);
+            // 저주받은 용사는 보랏빛으로 물든다. 보물 고블린은 아래에서 금빛을 덧칠한다
+            const img = h.flash > 0 ? Assets.tinted(name, '#ffffff', 0.85) : (h.cursed ? Assets.tinted(name, '#9a4dff', 0.3) : Assets.get(name));
+            const goblin = h.type === 'gold_goblin';
+            if (goblin) this.pixelRing(ctx, p.x, p.y + 9, 20, 7, '#ffe08a', { k: 2 });
             // 맞으면 잠깐 밀리고, 일반 용사는 걸음마다 2px씩 들썩인다
             const push = h.kick > 0 ? h.kick / HERO_KICK_TIME * (h.elite ? 8 : 14) : 0;
             const hop = !h.elite && !h.stun && !h.blocker ? Math.round(Math.abs(Math.sin(h.anim * Math.PI / 3)) * 2) * ART_SCALE : 0;
@@ -511,9 +514,18 @@ const Render = {
             const by = p.y + 10 + (h.kickY || 0) * push - hop;
             if (skin) this.plSprite(ctx, img, skin, skin.anim.walk, h.dir, bx, by);
             else this.heroSprite(ctx, img, def, h.atkPose, h.dir, bx, by);
+            if (goblin && skin) {
+                // 보물 고블린: 그림 모양 그대로 금빛이 반짝인다(음영은 남는다)
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = 0.4 + Math.sin(Game.time * 6 + h.lane) * 0.15;
+                this.plSprite(ctx, Assets.tinted(name, '#ffb81c', 1), skin, skin.anim.walk, h.dir, bx, by);
+                ctx.restore();
+            }
             if (h.shield || h.revive) this.pactMarks(ctx, h, bx, by);
             // 일반 용사는 다쳤을 때만 작은 체력바를 그린다
             if (h.elite) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W, '#ff5a5a');
+            else if (h.type === 'gold_goblin') this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W * 0.75, '#ffd34d');
             else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');
         }
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);

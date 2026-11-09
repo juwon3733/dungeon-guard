@@ -153,6 +153,83 @@ const SCENES = {
         }
     },
 
+    // 이벤트 라운드: 보물 고블린 라운드 시작(배너와 금빛 고블린)
+    eventGoblin: {
+        setup: () => {
+            UI.startDaily();
+            Game.gold = 3000;
+            for (let i = 0; i < 12; i++) Game.act({ kind: 'summon' });
+            let r = 1;
+            while (roundEventAt(Game.challenge.seed, r) !== 'goblin') r++;
+            Game.waveIndex = r - 1;
+            Game.extendRounds();
+            Game.act({ kind: 'startWave' });
+            advance(0.8);
+            freezeScene();
+        }
+    },
+    // 보물 고블린이 달리는 중(금빛 고블린과 체력바)
+    eventGoblinRun: {
+        setup: () => {
+            UI.startDaily();
+            Game.gold = 3000;
+            let r = 1;
+            while (roundEventAt(Game.challenge.seed, r) !== 'goblin') r++;
+            Game.waveIndex = r - 1;
+            Game.extendRounds();
+            Game.act({ kind: 'startWave' });
+            advance(7);
+        }
+    },
+    // 저주 라운드 앞 준비 시간: 다음 파티 창의 이벤트 칸과 고르는 버튼
+    eventCurse: {
+        setup: () => {
+            UI.startDaily();
+            Game.gold = 3000;
+            for (let i = 0; i < 12; i++) Game.act({ kind: 'summon' });
+            let r = 1;
+            while (roundEventAt(Game.challenge.seed, r) !== 'curse') r++;
+            Game.waveIndex = r - 1;
+            Game.extendRounds();
+            Game.prepTimer = 20;
+            advance(0.3);
+        }
+    },
+    // 라운드 중 다음 라운드가 저주: 파티 줄 아래 안내 칸(받아들인 상태)
+    eventNext: {
+        setup: () => {
+            UI.startDaily();
+            Game.gold = 3000;
+            for (let i = 0; i < 12; i++) Game.act({ kind: 'summon' });
+            let r = 1;
+            while (roundEventAt(Game.challenge.seed, r) !== 'curse') r++;
+            Game.waveIndex = r - 2;
+            Game.extendRounds();
+            Game.act({ kind: 'startWave' });
+            Game.act({ kind: 'curse', accept: true });
+            advance(4);
+        }
+    },
+    // 받아들인 저주 라운드 전투(보랏빛 용사)
+    eventCursed: {
+        setup: () => {
+            UI.startDaily();
+            Game.gold = 3000;
+            for (let i = 0; i < 12; i++) Game.act({ kind: 'summon' });
+            let r = 1;
+            while (roundEventAt(Game.challenge.seed, r) !== 'curse') r++;
+            Game.waveIndex = r - 2;
+            Game.extendRounds();
+            Game.state = 'wave';
+            Game.act({ kind: 'curse', accept: true });
+            Game.state = 'prep';
+            Game.waveIndex = r - 1;
+            Game.act({ kind: 'startWave' });
+            advance(2.4);
+            freezeScene();
+        }
+    },
+
     // 일일 도전 전투와 결과
     dailyPlay: {
         setup: () => {
