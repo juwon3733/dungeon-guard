@@ -8,7 +8,8 @@ const KILL_POWER = [
     { size: 130, sparks: 4, shake: 0 },
     { size: 160, sparks: 6, shake: 2 },
     { size: 210, sparks: 8, shake: 4 },
-    { size: 260, sparks: 10, shake: 6 } // 신화
+    { size: 260, sparks: 10, shake: 6 }, // 신화
+    { size: 300, sparks: 12, shake: 7 } // 초월
 ];
 
 function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {

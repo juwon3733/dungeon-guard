@@ -8,7 +8,8 @@ const GRADE_FX = {
     rare: { pop: 0.95, rays: 10, sparks: 34, shake: 7, sheet: 'fx_blastViolet', size: 240 },
     epic: { pop: 1.5, rays: 18, sparks: 60, shake: 14, sheet: 'fx_hit_crit', size: 320 },
     legendary: { pop: 2.2, rays: 30, sparks: 96, shake: 22, sheet: 'fx_hit_crit', size: 420 },
-    mythic: { pop: 3.0, rays: 44, sparks: 150, shake: 30, sheet: 'fx_hit_crit', size: 540 }
+    mythic: { pop: 3.0, rays: 44, sparks: 150, shake: 30, sheet: 'fx_hit_crit', size: 540 },
+    transcendent: { pop: 3.4, rays: 56, sparks: 200, shake: 36, sheet: 'fx_hit_crit', size: 620 }
 };
 
 const Fx = {
