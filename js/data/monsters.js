@@ -976,7 +976,7 @@ const MONSTERS = {
     mushroom_king: {
         id: 'mushroom_king', name: '버섯 왕', role: 'area', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.mushroom_king.sprite, cost: 300, summon: false, gradeMerge: false,
-        stats: { hp: 120, damage: 46, interval: 1.6, range: 4, splash: 1.6 },
+        stats: { hp: 120, damage: 54, interval: 1.6, range: 4, splash: 1.6 },
         abilities: [{ kind: 'slowShot', name: '포자', speedMul: 0.7, duration: 2.5 }], unlock: 'start',
         desc: '히든. 포자 웅덩이로 용사를 느리게 하고 방어를 무르게 한다.',
         art: astArt('mushroom_king', { glow: '255,120,120' })
@@ -984,15 +984,15 @@ const MONSTERS = {
     slime_monarch: {
         id: 'slime_monarch', name: '슬라임 군주', role: 'area', family: 'undead', grade: 'epic',
         sprite: ASTERIA_ART.slime_monarch.sprite, cost: 300, summon: false, gradeMerge: false,
-        stats: { hp: 140, damage: 40, interval: 1.4, range: 3.5, splash: 1.8 },
-        abilities: [{ kind: 'burnGround', name: '산성 점액', radius: 1.2, dps: 14, duration: 4 }], unlock: 'start',
+        stats: { hp: 140, damage: 26, interval: 1.4, range: 3.5, splash: 1.8 },
+        abilities: [{ kind: 'burnGround', name: '산성 점액', radius: 1.2, dps: 9, duration: 4 }], unlock: 'start',
         desc: '히든. 삼킨 용사의 뼈가 몸 안에 떠 있다. 산성 점액을 뿌린다.',
         art: astArt('slime_monarch', { glow: '150,255,90' })
     },
     ghost_captain: {
         id: 'ghost_captain', name: '유령 선장', role: 'ranged', family: 'undead', grade: 'legendary',
         sprite: ASTERIA_ART.ghost_captain.sprite, cost: 600, summon: false, gradeMerge: false,
-        stats: { hp: 200, damage: 120, interval: 0.9, range: 5.5 },
+        stats: { hp: 200, damage: 70, interval: 0.9, range: 5.5 },
         abilities: [{ kind: 'goldOnKill', gold: 8 }], unlock: 'start',
         skills: [{ kind: 'barrage', name: '유령선 일제 사격', cooldown: 12, count: 10, mul: 1.1, reach: 'map' }],
         desc: '히든. 가라앉은 배의 선원들이 함께 쏜다.',
@@ -1020,8 +1020,8 @@ const MONSTERS = {
     ferry_reaper: {
         id: 'ferry_reaper', name: '저승 뱃사공', role: 'melee', family: 'undead', grade: 'transcendent',
         sprite: ASTERIA_ART.ferry_reaper.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 4200, damage: 460, interval: 0.8, range: 2.6, block: 10, respawn: 4 },
-        abilities: [{ kind: 'cleave', radius: 2.6, ratio: 0.6 }], unlock: 'start',
+        stats: { hp: 4200, damage: 760, interval: 0.8, range: 2.6, block: 10, respawn: 4 },
+        abilities: [{ kind: 'cleave', radius: 2.6, ratio: 0.45 }], unlock: 'start',
         skills: [{ kind: 'harvest', name: '저승 노', cooldown: 8, reach: 'map', below: 0.45, gold: 3 }, { kind: 'timeStop', name: '망각의 강', cooldown: 24, duration: 3 }],
         desc: '초월. 강을 건너는 이는 돌아오지 못한다.',
         art: astArt('ferry_reaper', { glow: '150,140,255' })
@@ -1029,7 +1029,7 @@ const MONSTERS = {
     abyss_crown: {
         id: 'abyss_crown', name: '공허의 군주', role: 'area', family: 'demon', grade: 'transcendent',
         sprite: ASTERIA_ART.abyss_crown.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 600, damage: 520, interval: 1.3, range: 6.5, splash: 2.8 },
+        stats: { hp: 600, damage: 440, interval: 1.3, range: 6.5, splash: 2.8 },
         abilities: [{ kind: 'burnGround', name: '공허의 불', radius: 1.6, dps: 80, duration: 4 }], unlock: 'start',
         skills: [{ kind: 'nova', name: '공허 붕괴', cooldown: 14, radius: 'map', mul: 3, burn: 5 }, { kind: 'buff', name: '어둠의 왕관', cooldown: 20, duration: 10, damage: 0.4 }],
         desc: '초월. 왕관이 빛을 삼키면 맵 전체가 무너진다.',
@@ -1038,8 +1038,8 @@ const MONSTERS = {
     void_eye: {
         id: 'void_eye', name: '공허의 눈', role: 'ranged', family: 'spirit', grade: 'transcendent',
         sprite: ASTERIA_ART.void_eye.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 560, damage: 700, interval: 0.9, range: 7 },
-        abilities: [{ kind: 'chain', count: 5, ratio: 0.7, jump: 3 }], unlock: 'start',
+        stats: { hp: 560, damage: 430, interval: 0.9, range: 7 },
+        abilities: [{ kind: 'chain', count: 5, ratio: 0.5, jump: 3 }], unlock: 'start',
         skills: [{ kind: 'timeStop', name: '응시', cooldown: 20, duration: 4 }, { kind: 'barrage', name: '천 개의 눈', cooldown: 10, count: 20, mul: 1.2, reach: 'map' }],
         desc: '초월. 눈이 마주친 용사는 그 자리에 굳는다.',
         art: astArt('void_eye', { glow: '200,90,255', shot: 'bolt' })
