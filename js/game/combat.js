@@ -47,7 +47,8 @@ function damageHero(hero, amount, fromX, fromY, color, attacker, dot) {
     const rot = sick ? 1 + (Game.power('rotCurse') ? 0.15 : 0) + (Game.power('rotDeep') ? 0.3 : 0) : 1; // 권능 썩은 살, 깊은 부패
     const held = hero.bound > 0 ? 1 + (Game.power('execBound') ? 0.2 : 0) + (Game.power('execDeep') ? 0.4 : 0) : 1; // 권능 형틀, 고문
     const ring = Game.power('slowAura') && clockSlowMul(hero) < 1 ? 1.15 : 1; // 권능 시계 소리: 감속 중인 용사
-    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot * held * ring;
+    const guarded = guardReduce(hero); // 방패병 둘레
+    const dealt = base * (hero.curse > 0 ? hero.curseMul : 1) * rot * held * ring * guarded;
     hero.hp -= dealt;
     if (hero.boss) Game.scoreBossDamage(Math.min(dealt, Math.max(0, hero.hp + dealt)));
     const p = heroWorld(hero);

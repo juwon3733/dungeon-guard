@@ -23,7 +23,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         name: src.name,
         route: route || 'north',
         // 일반 용사의 생김새(연출만, 판 결과와 무관). 같은 그림이 줄지어 보이지 않게 섞는다
-        skin: def.skinSprite ? heroSkinOf(def.skinSprite) : (swarm && ASTERIA_HERO_SKINS[type] ? randItem(ASTERIA_HERO_SKINS[type]) : null),
+        skin: def.skinSprite ? heroSkinOf(def.skinSprite) : (swarm && ASTERIA_HERO_SKINS[type] ? randItem(ASTERIA_HERO_SKINS[type].filter(s => !RESERVED_HERO_SKINS.has(s.sprite))) : null),
         d: 0, // route 길 위에서 입구로부터 이동한 거리
         lane: bossDef ? 0 : rngRange('spawn', -34, 34), // 넓게 퍼져 무리로 보이게 한다
         hp, maxHp: hp,
@@ -50,6 +50,7 @@ function createHero(type, waveIndex, delay, bossKey, route) {
         poison: 0, poisonDps: 0, poisonTick: 0, poisonStacks: 0, poisonSpread: false, poisonOwner: null, // 역병의 독: 남은 초, 초당 피해(배율 전), 다음 피해까지, 겹친 수, 옮은 독인지, 건 몬스터
         cast: !bossDef && def.stunEvery ? rngRange('spawn', 1.5, def.stunEvery) : 0,
         song: !bossDef && def.song ? rngRange('spawn', 1, def.song.every) : 0,
+        healT: !bossDef && def.heal ? rngRange('spawn', 1, def.heal.every) : 0,
         haste: 0, hasteMul: 1, // 음유시인 노래로 받은 가속: 남은 초와 배율
         blockTime: 0, // 지금 막힌 채로 지난 초(검사 돌파)
         slip: 0, // 남은 초 동안 막히지 않는다(검사 돌파 직후)
@@ -93,6 +94,12 @@ function updateHero(h, dt) {
         if (h.delay <= 0) {
             h.waiting = false;
             Sfx.play('spawn');
+            // 능력 있는 새 직업(방패병, 성직자)이 판에서 처음 나오면 이름과 능력을 한 번 알린다
+            const d = HEROES[h.type];
+            if ((d.guard || d.heal) && !h.boss && !(G.seenHeroTypes || (G.seenHeroTypes = {}))[h.type]) {
+                G.seenHeroTypes[h.type] = true;
+                Fx.banner = { name: `새 용사 · ${d.name}`, sub: d.guard ? `둘레 용사가 받는 피해가 ${Math.round(d.guard.reduce * 100)}% 줄어든다` : `${d.heal.every}초마다 둘레 용사를 회복한다`, age: 0, life: 2.2, small: true };
+            }
             if (h.elite && Math.random() < 0.5) {
                 const w = heroWorld(h);
                 Fx.say(w.x, w.y - 240, randItem(SPEECH.elite), 1.4);
@@ -157,6 +164,7 @@ function updateHero(h, dt) {
 
     const def = HEROES[h.type];
     if (def.song && !h.boss) updateSong(h, dt);
+    if (def.heal && !h.boss) updateHeal(h, dt);
 
     if (h.blocker && (h.blocker.hp <= 0 || h.blocker.removed)) h.blocker = null;
     if (h.blocker) {
@@ -258,6 +266,41 @@ function updateMageCast(h, dt) {
 }
 
 // 음유시인의 노래: 반경 안 용사(자신 포함)에게 가속을 건다. 곁에 다른 용사가 없으면 아껴 둔다
+// 성직자: every초마다 둘레 용사(자신 포함)를 회복한다. 다친 용사가 없으면 아껴 둔다
+function updateHeal(h, dt) {
+    const rule = HEROES[h.type].heal;
+    h.healT -= dt;
+    if (h.healT > 0) return;
+    const w = heroWorld(h);
+    const near = Game.heroes.filter(o => !o.dead && !o.waiting && o.hp < o.maxHp && distance(w.x, w.y, heroWorld(o).x, heroWorld(o).y) <= rule.radius * TILE);
+    if (!near.length) { h.healT = 0.4; return; }
+    h.healT = rule.every;
+    h.atkPose = h.atkPoseMax = 0.5;
+    for (const o of near) {
+        const gain = Math.min(o.maxHp - o.hp, o.maxHp * rule.ratio);
+        o.hp += gain;
+        const q = heroWorld(o);
+        if (!Fx.noNumbers && (o.elite || o.boss)) Fx.number(o, q.x, q.y - 120, `+${Math.round(gain)}`, '#7dff9a', false);
+    }
+    Fx.ring(w.x, w.y, rule.radius * TILE, '#7dff9a', 0.4);
+    Fx.rise(w.x, w.y - 60, '#b8ffcf', 10, 40, 0.6);
+    if (Math.random() < 0.25) Fx.say(w.x, w.y - 150, '치유의 빛!', 0.9);
+}
+
+// 방패병: 둘레의 다른 용사가 받는 피해를 줄인다. damageHero가 묻는다(방패병 목록은 Game.update가 프레임마다 채운다)
+function guardReduce(hero) {
+    const list = Game.guardians;
+    if (!list || !list.length) return 1;
+    const w = heroWorld(hero);
+    for (const g of list) {
+        if (g === hero || g.dead) continue;
+        const rule = HEROES[g.type].guard;
+        const q = heroWorld(g);
+        if (distance(w.x, w.y, q.x, q.y) <= rule.radius * TILE) return 1 - rule.reduce;
+    }
+    return 1;
+}
+
 function updateSong(h, dt) {
     const rule = HEROES[h.type].song;
     h.song -= dt;

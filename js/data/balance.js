@@ -54,8 +54,34 @@ const HEROES = {
         // 2026-11-09: 정지 대신 감속(몬스터 공격 간격 slow.mul배, slow.time초). 정예 뇌술사는 그대로 범위 정지
         stunEvery: 6, stunRange: 3, stunTime: 2, slow: { mul: 1.6, time: 3 },
         counter: '몬스터 공격 감속, 먼저 처치'
+    },
+    // 2026-11-11: 능력이 보이는 일반 용사. 그림은 Asteria(수호 기사, 정령 주술사)이고 다른 직업의 무작위 겉모습에서는 뺀다
+    //   guard: 둘레 radius칸 안의 다른 용사가 받는 피해를 reduce만큼 줄인다(발밑 푸른 방패 고리)
+    //   heal: every초마다 둘레 radius칸 안 용사(자신 포함)의 체력을 최대 체력 ratio만큼 채운다(초록 고리와 숫자)
+    guardian: {
+        anim: {
+            walk: { folder: 'walking', frames: 6, footPx: 54 },
+            attack: { folder: 'slash', frames: 6, footPx: 53 },
+            death: { folder: 'falling_backward', frames: 7, footPx: 55 }
+        },
+        name: '방패병', sprite: 'pl_hero_warrior', skinSprite: 'ast_hero_guardianKnight', scale: SWARM_RULES.scale, barY: 70, hp: 40, speed: 0.65, bounty: 5, damage: 4, interval: 1.2, armor: 4,
+        guard: { radius: 1.6, reduce: 0.3 },
+        counter: '둘레 용사가 받는 피해 감소, 먼저 처치'
+    },
+    priest: {
+        anim: {
+            walk: { folder: 'walking', frames: 6, dirs: PL_DIRS, footPx: { south: 54, east: 53, north: 52 } },
+            attack: { folder: 'slash', frames: 6, dirs: PL_DIRS, footPx: { south: 53, east: 53, north: 50 } },
+            death: { folder: 'falling_backward', frames: 6, dirs: ['south'], footPx: 53 }
+        },
+        atkTime: 0.45,
+        name: '성직자', sprite: 'pl_hero_mage', skinSprite: 'ast_hero_spiritShaman', scale: SWARM_RULES.scale, barY: 70, hp: 16, speed: 0.9, bounty: 4, damage: 2, interval: 1.2,
+        heal: { every: 4, radius: 2.5, ratio: 0.12 },
+        counter: '둘레 용사 회복, 먼저 처치'
     }
 };
+// 새 직업 전용 겉모습: 전사·마법사의 무작위 겉모습에서 뺀다
+const RESERVED_HERO_SKINS = new Set(['ast_hero_guardianKnight', 'ast_hero_guardianKnight_female', 'ast_hero_spiritShaman']);
 
 // 정예 용사: 같은 직업(base)의 능력치를 물려받고 여기 적은 값만 바꾼다. 수치는 플레이 후 고칠 초안이다.
 // 그림은 PixelLab 동작 그림(64px 캐릭터)이다. 캔버스가 동작과 방향마다 달라(84, 96 등) footPx를 방향별로 적는다.
@@ -228,7 +254,8 @@ const ENDLESS_RULES = { maxCount: 270, maxElites: 8, hpFrom: 30, hpGrowth: 1.06 
 const ROUND_RULES = {
     count: r => Math.round((8 + r * 1.1) * SWARM_RULES.countMul),                     // 일반 용사 수(r은 1부터)
     // 구성 순환: 전사 위주, 도적 무리, 혼성, 마법사 많음
-    mix: [{ warrior: 1 }, { warrior: 0.7, rogue: 0.3 }, { rogue: 1 }, { warrior: 0.6, mage: 0.4 }, { warrior: 0.5, rogue: 0.3, mage: 0.2 }],
+    mix: [{ warrior: 1 }, { warrior: 0.7, rogue: 0.3 }, { rogue: 1 }, { warrior: 0.6, mage: 0.4 }, { warrior: 0.5, rogue: 0.3, mage: 0.2 },
+        { warrior: 0.5, guardian: 0.2, mage: 0.3 }, { warrior: 0.4, rogue: 0.3, priest: 0.15, guardian: 0.15 }], // 방패병·성직자는 6, 7라운드부터
     eliteEvery: 5, eliteBase: 1, elitePer: 15,              // 5라운드마다 정예: 1명 + 15라운드마다 1명
     elites: ['elite_tamer', 'elite_swordsman', 'elite_stormcaller', 'elite_rhapsodist'],
     bosses: ['archmage', 'fallen_knight', 'war_avatar', 'sea_king', 'judge', 'gatekeeper', 'golden_boar', 'star_herald'], // 10라운드마다 차례로(Asteria 보스 8종)
