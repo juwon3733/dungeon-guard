@@ -13,9 +13,12 @@ const SUMMON_BTN_H = 132;
 const UPGRADE_BTN_W = 150; // 소환 강화 칸
 const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
+// 다음 라운드 버튼: 하단 바 골드 칸 오른쪽(2026-11-10 사용자 요청). 골드 칸은 너비를 GOLD_BOX_W로 고정한다
+const GOLD_BOX_W = 250;
+const ROUND_BTN = { x: 1490 - 42 + GOLD_BOX_W + 8, y: GAME_HEIGHT - 108, w: GAME_WIDTH - (1490 - 42 + GOLD_BOX_W + 8) - 8, h: 104 };
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
-const ALTAR_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 360, w: 640, h: 340 }; // 조합 제단 창(강화 창과 같은 자리, 번갈아 연다)
-const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 560, w: 640, h: 540 }; // 강화 창(종족 강화, 칸 넓히기, 마력 사기. 오른쪽 버튼 줄 왼쪽)
+const ALTAR_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 260, w: 640, h: 340 }; // 조합 제단 창(강화 창과 같은 자리, 번갈아 연다)
+const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 460, w: 640, h: 540 }; // 강화 창(종족 강화, 칸 넓히기, 마력 사기. 오른쪽 버튼 줄 왼쪽)
 const TOP_BTN = 60; // 오른쪽 위 아이콘 버튼
 const ABILITY_INK = '#e8a6ff'; // 능력 이름 글자(남색 창 위)
 const HINT_SHOWS = 3; // 화면 가운데 안내 쪽지는 종류마다 이만큼만 나온다(이번 창에서)
@@ -242,29 +245,29 @@ const UI = {
                 label: `권능 · 마력 ${G.mana} (R)`, size: 22, theme: ready ? 'gold' : undefined, onClick: () => this.togglePowers()
             });
         }
-        this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y - 58, NEXT_BTN_W, 50, {
+        this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y + 42, NEXT_BTN_W, 50, {
             label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
         });
-        this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 116, NEXT_BTN_W, 50, {
+        this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 16, NEXT_BTN_W, 50, {
             label: '강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
         });
-        this.button('altarToggle', NEXT_BTN_X, NEXT_BTN_Y - 174, NEXT_BTN_W, 50, {
+        this.button('altarToggle', NEXT_BTN_X, NEXT_BTN_Y - 74, NEXT_BTN_W, 50, {
             label: '조합 제단 (H)', size: 22, theme: this.altarOpen ? 'gold' : undefined, onClick: () => this.toggleAltar()
         });
         if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
         if (this.altarOpen && !this.focus()) this.layoutAltar();
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
-            this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
-                label: G.waveIndex === 0 ? '첫 라운드' : '다음 라운드', icon: 'wave', theme: 'gold', size: 30,
-                sub: `${bonus > 0 ? `+${bonus}G · ` : ''}${Math.ceil(Math.max(0, G.prepTimer))}초 뒤 자동`,
+            this.button('next', ROUND_BTN.x, ROUND_BTN.y, ROUND_BTN.w, ROUND_BTN.h, {
+                label: G.waveIndex === 0 ? '첫 라운드' : '다음 라운드', theme: 'gold', size: 28,
+                sub: `${bonus > 0 ? `+${bonus}G · ` : ''}${Math.ceil(Math.max(0, G.prepTimer))}초`,
                 onClick: () => { G.act({ kind: 'startWave' }); this.clearSelection(); }
             });
         } else if (G.state === 'wave' && G.waveIndex + 1 < G.waves.length) {
             // 라운드 중에도 다음 라운드를 불러 남은 시간만큼 골드를 받는다
-            this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
-                label: '다음 라운드', icon: 'wave', size: 30, disabled: G.nextRoundLocked(),
-                sub: `+${Math.floor(G.roundTimer * COMBAT_RULES.earlyGoldPerSecond)}G · ${Math.ceil(G.roundTimer)}초 뒤 자동`,
+            this.button('next', ROUND_BTN.x, ROUND_BTN.y, ROUND_BTN.w, ROUND_BTN.h, {
+                label: '다음 라운드', size: 28, disabled: G.nextRoundLocked(),
+                sub: `+${Math.floor(G.roundTimer * COMBAT_RULES.earlyGoldPerSecond)}G · ${Math.ceil(G.roundTimer)}초`,
                 onClick: () => { G.act({ kind: 'nextRound' }); }
             });
         }
@@ -688,7 +691,7 @@ const UI = {
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
         let y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
         // 다음 라운드 버튼을 가리지 않는다: 위로 올리고, 자리가 없으면 왼쪽에 연다
-        const nextTop = NEXT_BTN_Y - 174; // 자동 합치기, 강화, 조합 제단 버튼까지
+        const nextTop = NEXT_BTN_Y - 74; // 자동 합치기, 강화, 조합 제단 버튼까지
         if (x + w > NEXT_BTN_X && y + h > nextTop) {
             if (nextTop - 8 - h >= 80) y = nextTop - 8 - h;
             // 키가 커서 올릴 자리가 없으면 버튼 왼쪽으로 옮긴다(칸 왼쪽에 열어도 버튼에 걸칠 수 있다)
@@ -2363,7 +2366,7 @@ const UI = {
         const shown = this.goldShown === null ? G.gold : this.goldShown;
         const goldText = Math.round(shown).toLocaleString('en-US');
         ctx.font = `bold 34px ${UI_FONT}`;
-        const goldW = Math.min(GAME_WIDTH - HUD_GOLD.x + 42 - 8, Math.max(220, Math.ceil(ctx.measureText(goldText).width) + 116));
+        const goldW = GOLD_BOX_W; // 오른쪽에 다음 라운드 버튼이 붙어 너비를 고정한다
         UIKit.hudFrame(ctx, 'hud_panel', BAR_NAME_X - 26, groupY, 240, groupH, 26);
         UIKit.hudFrame(ctx, 'hud_panel', HUD_GOLD.x - 42, groupY, goldW, groupH, 26);
         this.drawBarFrame(ctx);
@@ -2376,7 +2379,7 @@ const UI = {
         const pulse = 1 + Fx.goldPulse * 0.14;
         const coin = Assets.get('hud_gold');
         if (coin) ctx.drawImage(coin, HUD_GOLD.x - Math.round(coin.width / 2), HUD_GOLD.y - Math.round(coin.height / 2));
-        UIKit.bigText(ctx, goldText, HUD_GOLD.x + 42, HUD_GOLD.y, Math.round(34 * pulse), T.gold, 'left');
+        UIKit.bigText(ctx, goldText, HUD_GOLD.x + 42, HUD_GOLD.y, Math.round((goldText.length > 7 ? 26 : 34) * pulse), T.gold, 'left'); // 백만 넘으면 글자를 줄여 칸 안에
         this.drawBag(ctx);
         this.drawBarRelics(ctx);
     },
