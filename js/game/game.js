@@ -1040,6 +1040,21 @@ const Game = {
         return plan;
     },
 
+    // 조합 제단: 올린 몬스터들(2~5마리)이 히든 조합식과 맞으면 합친다. 결과는 핵심 재료(조합식 a) 자리에 선다.
+    // 틀리면 재료는 그대로 두고 { ok: false, reason: 'mismatch', hint: { match, need } }
+    altarFuse(list) {
+        if (!this.inPlay() || this.bossReward) return { ok: false, reason: 'state' };
+        const ms = (list || []).filter((m, i, a) => m && !m.removed && !m.clone && this.monsters.includes(m) && a.indexOf(m) === i);
+        if (ms.length < 2 || ms.length !== (list || []).length) return { ok: false, reason: 'count' };
+        if (ms.length > ALTAR_RULES.slots) return { ok: false, reason: 'count' };
+        const found = altarRecipe(ms);
+        if (!found) return { ok: false, reason: 'mismatch', hint: altarHint(ms) };
+        const r = found.recipe;
+        const order = found.pick.map(i => ms[i]); // 조합식 재료 순서(a, b, parts...)
+        const plan = { kind: 'recipe', recipe: r, result: r.result, src: order[1], dst: order[0], extra: order.slice(2) };
+        return this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
+    },
+
     // 재료가 여럿인 히든 조합식(recipe.parts): m이 S랭크 핵심 재료(a)일 때 맵에서 나머지 재료를 고른다.
     // 랭크가 낮고 장비가 없는 몬스터를 먼저 쓴다. 조합식이 없거나 재료가 모자라면 { kind: 'none', reason: 'none' | 'rank' | 'count' }
     // 맵 제한에 걸리면 { kind: 'none', reason: 'unique', ... }. 합칠 수 있으면 merge에 그대로 넘기는 계획이다(dst가 m, src가 b)
@@ -1263,7 +1278,7 @@ const Game = {
         const out = { t: this.tick };
         for (const [k, v] of Object.entries(cmd)) {
             if (k === 'monster' || k === 'src' || k === 'dst') out[k] = v ? v.uid : null;
-            else if (k === 'extra') out[k] = v ? v.map(m => m.uid) : v;
+            else if (k === 'extra' || k === 'list') out[k] = v ? v.map(m => m.uid) : v;
             else out[k] = v;
         }
         return out;
@@ -1279,6 +1294,7 @@ const Game = {
                 cmd[k] = byUid(v);
                 if (!cmd[k]) return { ok: false, reason: 'missing' };
             } else if (k === 'extra') cmd[k] = v ? v.map(byUid).filter(Boolean) : v;
+            else if (k === 'list') { cmd[k] = v ? v.map(byUid) : v; if (cmd[k] && cmd[k].some(m => !m)) return { ok: false, reason: 'missing' }; }
             else cmd[k] = v;
         }
         return this.act(cmd);
@@ -1327,6 +1343,7 @@ const Game = {
                 return this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
             }
             case 'summon': return this.summon();
+            case 'altar': return this.altarFuse(cmd.list);
             case 'buyField': return this.buyField();
             case 'buyMana': return this.buyMana();
             case 'awaken': return this.buyAwaken();

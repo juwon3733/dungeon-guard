@@ -5,7 +5,7 @@ const BATTLE_MENU = { w: 640, h: 720 };
 function battleMenuKeys() {
     const skill = slot => LORD_SKILLS[Game.skillKey(slot)].name;
     const third = Game.thirdSkill();
-    return [['S', '소환'], ['Q', skill(0)], ['W', skill(1)], ...(third ? [['E', LORD_SKILLS[third.key].name]] : []), ['G', '강화'], ['A', '자동 합치기'], ['Space', '다음 라운드'],
+    return [['S', '소환'], ['Q', skill(0)], ['W', skill(1)], ...(third ? [['E', LORD_SKILLS[third.key].name]] : []), ['G', '강화'], ['H', '조합 제단'], ['A', '자동 합치기'], ['Space', '다음 라운드'],
         ['F', '배속'], ['P', '일시정지'], ['Tab', '탭 바꾸기']];
 }
 

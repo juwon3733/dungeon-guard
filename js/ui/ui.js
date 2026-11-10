@@ -14,6 +14,7 @@ const UPGRADE_BTN_W = 150; // 소환 강화 칸
 const NEXT_BTN_X = 1560; // 다음 라운드 버튼(금색): 하단 바 오른쪽 위, 건설 칸이 없는 섬 아래 가장자리
 const NEXT_BTN_W = 340;
 const NEXT_BTN_Y = GAME_HEIGHT - BAR_H - 104;
+const ALTAR_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 360, w: 640, h: 340 }; // 조합 제단 창(강화 창과 같은 자리, 번갈아 연다)
 const FAMILY_PANEL = { x: NEXT_BTN_X - 660, y: NEXT_BTN_Y - 560, w: 640, h: 540 }; // 강화 창(종족 강화, 칸 넓히기, 마력 사기. 오른쪽 버튼 줄 왼쪽)
 const TOP_BTN = 60; // 오른쪽 위 아이콘 버튼
 const ABILITY_INK = '#e8a6ff'; // 능력 이름 글자(남색 창 위)
@@ -247,7 +248,11 @@ const UI = {
         this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 116, NEXT_BTN_W, 50, {
             label: '강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
         });
+        this.button('altarToggle', NEXT_BTN_X, NEXT_BTN_Y - 174, NEXT_BTN_W, 50, {
+            label: '조합 제단 (H)', size: 22, theme: this.altarOpen ? 'gold' : undefined, onClick: () => this.toggleAltar()
+        });
         if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
+        if (this.altarOpen && !this.focus()) this.layoutAltar();
         if (G.state === 'prep') {
             const bonus = G.waveIndex > 0 ? Math.floor(Math.max(0, G.prepTimer)) : 0;
             this.button('next', NEXT_BTN_X, NEXT_BTN_Y, NEXT_BTN_W, 92, {
@@ -683,7 +688,7 @@ const UI = {
         if (x + w > GAME_WIDTH - 12) x = cx - 64 - w;
         let y = clamp(cy - h / 2, 80, GAME_HEIGHT - 130 - h);
         // 다음 라운드 버튼을 가리지 않는다: 위로 올리고, 자리가 없으면 왼쪽에 연다
-        const nextTop = NEXT_BTN_Y - 116; // 자동 합치기와 종족 강화 버튼까지
+        const nextTop = NEXT_BTN_Y - 174; // 자동 합치기, 강화, 조합 제단 버튼까지
         if (x + w > NEXT_BTN_X && y + h > nextTop) {
             if (nextTop - 8 - h >= 80) y = nextTop - 8 - h;
             // 키가 커서 올릴 자리가 없으면 버튼 왼쪽으로 옮긴다(칸 왼쪽에 열어도 버튼에 걸칠 수 있다)
@@ -749,7 +754,7 @@ const UI = {
         const w = 460;
         // 재료가 모이면 S랭크 전설의 창에만 뜨는 히든 조합 버튼. 찾기 전에는 이름을 숨긴다
         const full = Game.fullRecipePlan(f);
-        const showFull = full.kind === 'recipe' || full.reason === 'unique';
+        const showFull = false; // 히든 조합식은 조합 제단(H)으로만 만든다(2026-11-10)
         const h = (showFull ? POPUP_MERGE_H : 0) + POPUP_TOP + 166 + POPUP_RANK_H + POPUP_EQUIP_H + def.abilities.length * POPUP_ABILITY_H + (def.skills || []).length * POPUP_SKILL_H + 34 + recipes.length * 50 + upgrades * 88 + POPUP_MERGE_H + 64;
         const o = this.popupOrigin(f.x, f.y, w, h);
         this.popup = { x: o.x, y: o.y, w, h, type, monster: f, recipes };
@@ -1149,7 +1154,8 @@ const UI = {
             return;
         }
         if (!press) return;
-        // 끌지 않고 뗐다: 누른 몬스터를 고른다. 같은 몬스터를 다시 누르면 닫는다
+        // 끌지 않고 뗐다: 누른 몬스터를 고른다. 같은 몬스터를 다시 누르면 닫는다. 조합 제단이 열려 있으면 제단에 올리고 내린다
+        if (this.altarOpen && press.src.monster) { this.altarToggleMonster(press.src.monster); return; }
         Sfx.play('click');
         const m = press.src.monster;
         const again = this.selectedMonster === m;
@@ -1232,9 +1238,86 @@ const UI = {
         return '용사 없음';
     },
 
+    // 조합 제단: 창을 연 채 맵의 몬스터를 누르면 제단에 올리고 내린다(최대 ALTAR_RULES.slots마리). 판은 멈추지 않는다
+    toggleAltar() {
+        this.altarOpen = !this.altarOpen;
+        if (this.altarOpen) { this.familyOpen = false; this.clearSelection(); }
+        this.altarList = [];
+        this.altarHint = null;
+        Sfx.play('click');
+    },
+    altarToggleMonster(m) {
+        const list = this.altarList || (this.altarList = []);
+        const i = list.indexOf(m);
+        if (i >= 0) list.splice(i, 1);
+        else if (list.length >= ALTAR_RULES.slots) { this.showToast(`제단은 ${ALTAR_RULES.slots}마리까지`); return; }
+        else if (m.clone) { this.showToast('분신은 올릴 수 없음'); return; }
+        else list.push(m);
+        this.altarHint = null;
+        Sfx.play('click');
+    },
+    layoutAltar() {
+        const P = ALTAR_PANEL;
+        this.altarList = (this.altarList || []).filter(m => !m.removed && Game.monsters.includes(m));
+        this.button('altarPanel', P.x, P.y, P.w, P.h, { altarPanel: true, onClick: () => {} });
+        for (let i = 0; i < ALTAR_RULES.slots; i++) {
+            this.button(`altarSlot${i}`, P.x + 28 + i * 118, P.y + 76, 106, 106, {
+                altarSlot: i, onClick: () => { const m = this.altarList[i]; if (m) this.altarToggleMonster(m); }
+            });
+        }
+        this.button('altarFuse', P.x + P.w - 228, P.y + P.h - 76, 200, 56, {
+            altarPanel: true, label: '조합', disabled: this.altarList.length < 2, onClick: () => this.doAltar()
+        });
+        this.button('altarClear', P.x + P.w - 400, P.y + P.h - 76, 160, 56, {
+            altarPanel: true, label: '비우기', disabled: !this.altarList.length, onClick: () => { this.altarList = []; this.altarHint = null; }
+        });
+    },
+    doAltar() {
+        const res = Game.act({ kind: 'altar', list: this.altarList.slice() });
+        if (res.ok) { this.altarList = []; this.altarHint = null; this.altarOpen = false; return; } // 발견 연출을 가리지 않게 닫는다
+        Sfx.play('mergeFail');
+        if (res.reason === 'mismatch') {
+            const h = res.hint || { match: 0 };
+            this.altarHint = h.match >= 2 ? `맞는 조합식 없음 · 재료 ${h.match}개가 겹치는 조합식이 있다` : '맞는 조합식 없음';
+        } else if (res.reason === 'room') this.altarHint = '결과 몬스터가 설 자리 없음';
+        else this.altarHint = '재료 2마리 이상';
+    },
+    // 조합 제단 창: 칸 다섯 개(올린 몬스터 그림과 랭크), 힌트 한 줄, 비우기·조합 버튼. 맵의 올린 몬스터 위에 순서 번호
+    drawAltar(ctx) {
+        const T = UI_THEME;
+        const P = ALTAR_PANEL;
+        UIKit.hudFrame(ctx, 'hud_panel', P.x, P.y, P.w, P.h, 26);
+        UIKit.text(ctx, '조합 제단', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
+        UIKit.text(ctx, '맵의 몬스터를 눌러 올린다', P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
+        for (const b of this.buttons) {
+            if (b.altarSlot === undefined) continue;
+            const m = this.altarList[b.altarSlot];
+            UIKit.slot(ctx, b.x, b.y, b.w, b.h, m ? 'gold' : 'iron', this.btnState(b).hover && m ? 'hover' : null);
+            if (!m) continue;
+            this.drawMonsterIcon(ctx, m.type, b.x + 13, b.y + 9, 80);
+            const r = MONSTER_RANKS[m.rank || 0];
+            UIKit.text(ctx, r.name, b.x + b.w - 10, b.y + b.h - 14, 22, r.color, 'right', 'bold');
+        }
+        UIKit.text(ctx, this.altarHint || '히든 조합식의 재료를 2~5마리 올리고 조합', P.x + 28, P.y + 216, 20, this.altarHint ? '#ffb49a' : T.creamSoft, 'left');
+        for (const b of this.buttons) {
+            if (b.id !== 'altarFuse' && b.id !== 'altarClear') continue;
+            const kind = b.disabled ? 'off' : (b.id === 'altarFuse' ? 'primary' : 'silver');
+            const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, this.btnState(b));
+            UIKit.text(ctx, b.label, b.x + b.w / 2, b.y + b.h / 2 + dy + 1, 24, UIKit.buttonInk(kind), 'center', 'bold');
+        }
+        // 맵: 올린 몬스터 머리 위 순서 번호
+        this.altarList.forEach((m, i) => {
+            const p = this.locScreen({ monster: m });
+            const by = Math.max(84, p.y - 170); // 맨 윗줄 몬스터도 위쪽 표지판에 가리지 않게
+            UIKit.hudFrame(ctx, 'hud_slot', p.x - 20, by, 40, 40, 8);
+            UIKit.text(ctx, String(i + 1), p.x, by + 20, 22, T.gold, 'center', 'bold');
+        });
+    },
+
     // 종족 강화 창: 판은 멈추지 않는다
     toggleFamily() {
         this.familyOpen = !this.familyOpen;
+        if (this.familyOpen) this.altarOpen = false;
         Sfx.play('click');
     },
 
@@ -1477,7 +1560,9 @@ const UI = {
         }
         if (code === 'KeyR') { this.togglePowers(); return; }
         if (code === 'KeyG') { this.toggleFamily(); return; }
+        if (code === 'KeyH') { this.toggleAltar(); return; }
         if (code === 'Escape' && this.familyOpen) { this.familyOpen = false; return; }
+        if (code === 'Escape' && this.altarOpen) { this.toggleAltar(); return; }
         if (code === 'KeyE') { this.useThirdSkill(); return; }
         if (code === 'Space') { G.act({ kind: G.state === 'wave' ? 'nextRound' : 'startWave' }); this.clearSelection(); }
         else if (code === 'KeyS') this.doSummon();
@@ -1780,6 +1865,7 @@ const UI = {
         if (G.bossReward) this.drawBossReward(ctx);
         this.drawPartyTip(ctx);
         if (this.familyOpen && G.inPlay() && !this.powerOpen && !this.focus()) this.drawFamily(ctx);
+        if (this.altarOpen && G.inPlay() && !this.powerOpen && !this.focus()) this.drawAltar(ctx);
         this.drawTopTip(ctx);
         this.drawToast(ctx);
         if (this.dialogue) {
@@ -2788,6 +2874,7 @@ const UI = {
             if (b.facility || b.content) continue; // 본부 시설과 도전의 문 콘텐츠는 drawHQ가 그린다
             if (b.abyssLevel !== undefined) continue; // 심연 계약서의 난이도 줄은 drawAbyssPanel이 그린다
             if (b.famPanel || b.famRow) continue; // 종족 강화 창은 drawFamily가 그린다
+            if (b.altarPanel || b.altarSlot !== undefined) continue; // 조합 제단 창은 drawAltar가 그린다
             const st = this.btnState(b);
             if (b.skill) this.drawSkillButton(ctx, b, st);
             else if (b.summonBtn) this.drawSummonButton(ctx, b, st);
