@@ -39,6 +39,9 @@ const SUMMON_RULES = {
 
 // 합치기: 등급 합치기는 같은 등급 아무 gradeCount마리를 상위 등급 무작위 1마리로 바꾼다.
 // 조합식과 히든 조합식은 정해진 재료 2마리이고, 조합식이 맞으면 조합식이 먼저다
+// 조합 제단: 히든 조합식의 재료를 올리는 칸 수
+const ALTAR_RULES = { slots: 5, dragHidden: false }; // dragHidden: 옛 시험용(끌어 합치기로도 히든을 만든다)
+
 const MERGE_RULES = {
     gradeCount: 3
 };
@@ -1130,9 +1133,60 @@ function recipeSideOk(input, type, need) {
 function findRecipe(a, b) {
     const A = mergeInput(a);
     const B = mergeInput(b);
-    return MONSTER_RECIPES.find(r => !r.parts && (
+    return MONSTER_RECIPES.find(r => !r.parts && (!r.hidden || ALTAR_RULES.dragHidden) && ( // 히든 조합식은 조합 제단(altarRecipe)으로만
         (recipeSideOk(A, r.a, r.aRank) && recipeSideOk(B, r.b, r.bRank)) ||
         (recipeSideOk(B, r.a, r.aRank) && recipeSideOk(A, r.b, r.bRank)))) || null;
+}
+
+// 조합 제단(2026-11-10): 히든 조합식은 끌어 합치기가 아니라 제단에 재료를 올려 만든다.
+// 조합식의 재료 목록 [{ type, rank }](a, b와 parts를 펼친다). rank는 최소 랭크 번호(조건 없으면 0)
+function recipeMaterials(r) {
+    const out = [{ type: r.a, rank: r.aRank ? rankIndex(r.aRank) : 0 }, { type: r.b, rank: r.bRank ? rankIndex(r.bRank) : 0 }];
+    for (const p of r.parts || []) for (let i = 0; i < p.count; i++) out.push({ type: p.type, rank: 0 });
+    return out;
+}
+// 재료(inputs: { type, rank }들)를 조합식 재료에 하나씩 짝지을 수 있으면 짝(조합식 재료 순서의 inputs 번호), 없으면 null
+function matchMaterials(inputs, need) {
+    if (inputs.length !== need.length) return null;
+    const used = new Array(inputs.length).fill(false);
+    const pick = [];
+    const go = i => {
+        if (i === need.length) return true;
+        for (let j = 0; j < inputs.length; j++) {
+            if (used[j] || inputs[j].type !== need[i].type || (inputs[j].rank || 0) < need[i].rank) continue;
+            used[j] = true;
+            pick[i] = j;
+            if (go(i + 1)) return true;
+            used[j] = false;
+        }
+        return false;
+    };
+    return go(0) ? pick.slice() : null;
+}
+// 제단에 올린 재료로 만들 수 있는 히든 조합식과 짝. 없으면 null
+function altarRecipe(inputs) {
+    const list = inputs.map(mergeInput);
+    for (const r of MONSTER_RECIPES) {
+        if (!r.hidden) continue;
+        const pick = matchMaterials(list, recipeMaterials(r));
+        if (pick) return { recipe: r, pick };
+    }
+    return null;
+}
+// 틀렸을 때 힌트: 히든 조합식 중 올린 재료와 종류가 가장 많이 겹치는 수(랭크는 보지 않는다)와 그 조합식의 재료 수
+function altarHint(inputs) {
+    let best = { match: 0, need: 0 };
+    for (const r of MONSTER_RECIPES) {
+        if (!r.hidden) continue;
+        const need = recipeMaterials(r).map(x => x.type);
+        let match = 0;
+        for (const x of inputs) {
+            const i = need.indexOf(x.type);
+            if (i >= 0) { match++; need.splice(i, 1); }
+        }
+        if (match > best.match) best = { match, need: recipeMaterials(r).length };
+    }
+    return best;
 }
 
 // 등급 합치기 결과 등급. 다음 등급에 합치기 후보가 없으면(최고 등급) null

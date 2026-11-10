@@ -57,6 +57,7 @@ vm.runInContext(`{
     ROUND_RULES.bosses = ['archmage', 'fallen_knight']; // 옛 시험은 보스 2종 순환, 마법사 정지였다
     delete HEROES.mage.slow;
     MONSTER_GRADES.mythic.fieldMax = 3; // 옛 시험은 신화 맵 제한(서로 다른 3마리, 같은 종 1마리)이 있었다
+    ALTAR_RULES.dragHidden = true; // 옛 시험은 히든 조합식도 끌어 합쳤다(조합 제단은 맨 끝 묶음에서)
     for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
@@ -4861,10 +4862,10 @@ assert(plan.reason === 'unique' && plan.sameKind, 'same mythic refused');
 // 3마리를 채우면 더 못 만든다
 put1('kraken');
 assert.strictEqual(Game.fullRecipePlan(s3).reason, 'unique', 'three mythics max');
-// 정보 창: 재료가 모인 S랭크 전설에만 버튼이 뜬다
+// 정보 창: 히든 조합 버튼은 없다(2026-11-10부터 조합 제단으로만)
 UI.selectedMonster = s3;
 UI.layout();
-assert(UI.buttons.some(b => b.id === 'fullRecipe'), 'button on the legendary');
+assert(!UI.buttons.some(b => b.id === 'fullRecipe'), 'no hidden button on the legendary');
 UI.selectedMonster = Game.monsters.find(x => x.type === 'kraken');
 UI.layout();
 assert(!UI.buttons.some(b => b.id === 'fullRecipe'), 'no button elsewhere');
@@ -7749,5 +7750,51 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(JSON.stringify({ gold: Game.gold, score: Game.score, hp: Game.hp, kills: Game.stats.kills, wave: Game.waveIndex, mana: Game.mana }), want, 'replay with curse matches');
         console.log('smoke ok: round events (schedule, goblin, festival, parade, curse, replay)');
     }).toString() + ')()', ectx);
+}
+// 조합 제단(2026-11-10): 히든 조합식은 끌어 합치기로 안 되고 제단에 재료를 올려 만든다
+{
+    const actx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files.filter(f => !f.startsWith('js/ui/'))) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), actx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const cell = t => [...BUILD_CELLS].map(k => k.split(',').map(Number)).find(([c, r]) => Game.canPlace(t, c, r));
+        const fresh = () => { Game.reset({ lord: 'bone_queen', relics: [] }, null, { kind: 'test', id: 't', seed: 'altar', lord: 'bone_queen', relics: [], cards: [], map: 'merge', zone: 'ember' }); Game.state = 'prep'; Game.gold = 1e6; };
+        const put = (t, rank) => { const m = Game.place(t, ...cell(t)); if (rank) setMonsterRank(m, rank); return m; };
+        // 2마리 히든: 끌어 합치면 조합식이 아니라 등급 합치기 판단으로 간다
+        fresh();
+        const a = put('orc_berserker'), b = put('skeleton_archer');
+        const drag = Game.mergePlanFor(a, b);
+        assert(drag.kind !== 'recipe', 'hidden recipe not by drag: ' + drag.kind);
+        const res = Game.act({ kind: 'altar', list: [b, a] });
+        assert(res.ok && res.type === 'bone_knight' && res.hidden, 'altar makes the hidden result');
+        assert(!Game.monsters.includes(a) && !Game.monsters.includes(b), 'materials used');
+        // 틀린 조합: 재료는 그대로, 힌트
+        fresh();
+        const x = put('orc_berserker'), y = put('zombie'), z = put('fire_imp');
+        const bad = Game.act({ kind: 'altar', list: [x, y, z] });
+        assert(!bad.ok && bad.reason === 'mismatch' && bad.hint.match >= 1, 'mismatch with hint');
+        assert([x, y, z].every(m => Game.monsters.includes(m)), 'materials kept on mismatch');
+        assert.strictEqual(Game.act({ kind: 'altar', list: [x] }).reason, 'count', 'needs two');
+        // 랭크 조건: A 미만이면 안 되고 A면 된다
+        fresh();
+        const k1 = put('bone_knight', 2), c1 = put('curse_shooter', 3);
+        assert.strictEqual(Game.act({ kind: 'altar', list: [k1, c1] }).reason, 'mismatch', 'rank B is not enough');
+        setMonsterRank(k1, 3);
+        const r2 = Game.act({ kind: 'altar', list: [k1, c1] });
+        assert(r2.ok && r2.type === 'death_lord', 'rank A makes death lord');
+        // 5마리 히든 신화(순서 상관없음)
+        fresh();
+        const parts = [put('grave_keeper'), put('vampire'), put('grave_keeper'), put('death_lord', 4)];
+        const r3 = Game.act({ kind: 'altar', list: parts });
+        assert(r3.ok && r3.type === 'death_god', 'four-material hidden mythic on the altar');
+        // 입력 기록: list는 개체 번호로 남는다
+        fresh();
+        Game.record = { inputs: [] };
+        const p = put('orc_berserker'), q = put('skeleton_archer');
+        Game.act({ kind: 'altar', list: [p, q] });
+        const rec = Game.record.inputs[Game.record.inputs.length - 1];
+        assert(rec.kind === 'altar' && rec.list.join() === [p.uid, q.uid].join(), 'altar input recorded by uid');
+        console.log('smoke ok: hidden altar');
+    }).toString() + ')()', actx);
 }
 require('./smoke_maps.js');
