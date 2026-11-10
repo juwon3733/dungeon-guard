@@ -22,7 +22,10 @@ const MONSTER_GRADES = {
     epic: { name: '영웅', color: '#b45cff', glow: '190,100,255', light: '#e2b0ff', ink: '#d39bff', fx: 1 },
     legendary: { name: '전설', color: '#ffc63d', glow: '255,200,70', light: '#ffe08a', ink: '#ffd25a', summon: false, secret: true, fx: 2 },
     mythic: { name: '신화', color: '#ff2d55', glow: '255,60,90', light: '#ff9cb0', ink: '#ff7a92', summon: false, secret: true, fx: 3, // 2026-11-09: 맵 제한 없음(같은 신화도 여럿)
-        rainbow: ['#ff2d55', '#ff7a1a', '#ffd23d', '#ff3dd2', '#ff2d55'] }
+        rainbow: ['#ff2d55', '#ff7a1a', '#ffd23d', '#ff3dd2', '#ff2d55'] },
+    // 초월(2026-11-10): 히든 신화 위. 조합 제단으로만 만든다(등급 합치기 결과 없음)
+    transcendent: { name: '초월', color: '#9ff6ff', glow: '160,240,255', light: '#e6fdff', ink: '#b8f8ff', summon: false, secret: true, fx: 3,
+        rainbow: ['#9ff6ff', '#ffffff', '#c9a6ff', '#ffe08a', '#9ff6ff'] }
 };
 const GRADE_ORDER = Object.keys(MONSTER_GRADES);
 
@@ -34,7 +37,7 @@ const SUMMON_RULES = {
     maxField: 24,   // 맵에 둘 수 있는 몬스터 수. 넘으면 합쳐서 자리를 만든다
     blockerSpacing: 1, // 막는 몬스터 자동 배치: 길 지점이 이 칸 수 안으로 겹치지 않는 칸을 먼저 고른다
     // 등급별 확률은 SUMMON_LEVELS(소환 강화 레벨)에 있다
-    refund: { common: 20, rare: 60, epic: 150, legendary: 300, mythic: 800 } // 판매 환불(등급별 고정)
+    refund: { common: 20, rare: 60, epic: 150, legendary: 300, mythic: 800, transcendent: 2000 } // 판매 환불(등급별 고정)
 };
 
 // 합치기: 등급 합치기는 같은 등급 아무 gradeCount마리를 상위 등급 무작위 1마리로 바꾼다.
@@ -173,7 +176,7 @@ const MONSTER_RANKS = [
     { name: 'S', xp: 0, mul: 2.1, color: '#ffd23d', odds: 0.05 },
     { name: 'S+', xp: 0, mul: 2.6, color: '#ff7a3d', odds: 0.01 }
 ];
-const RANK_ROLL = { cost: { common: 40, rare: 100, epic: 250, legendary: 600, mythic: 1500 } };
+const RANK_ROLL = { cost: { common: 40, rare: 100, epic: 250, legendary: 600, mythic: 1500, transcendent: 3000 } };
 
 // 제물: 맵의 몬스터를 끌어 왕좌의 마왕 위에 놓으면 몬스터가 사라지고 마왕이 힘을 얻는다(웨이브 중에도, 준비 중에도). 판매 환불은 없다.
 //   heal: 마왕 체력 회복(최대 체력 Game.maxHp()를 넘지 않는다), lightning: 번개 재사용 대기 감소(초, 0 아래로 내려가지 않는다)
@@ -183,7 +186,8 @@ const SACRIFICE_RULES = {
     rare: { heal: 2, lightning: 5 },
     epic: { heal: 5, lightning: 10 },
     legendary: { heal: 10, lightning: 30 },
-    mythic: { heal: 20, lightning: 60 }
+    mythic: { heal: 20, lightning: 60 },
+    transcendent: { heal: 30, lightning: 90 }
 };
 
 // 강화(3단계 갈래)는 등급 합치기로 대신해 꺼 둔다. true로 바꾸면 팝업에 강화 버튼이 다시 나온다(branches가 있는 몬스터만)
@@ -959,6 +963,95 @@ const MONSTERS = {
         skills: [{ kind: 'buff', name: '신왕의 칙령', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }, { kind: 'barrage', name: '천벌', cooldown: 15, count: 14, mul: 1.1, reach: 'map' }],
         desc: '히든 신화. 맵의 모든 몬스터를 강하게 하고 하늘의 벌을 내린다.',
         art: astArt('god_king', { glow: '255,225,150' })
+    },
+    // ----- 히든 전용(조합 제단으로만 나온다. 소환과 등급 합치기에는 없다, 2026-11-10) -----
+    gem_mimic: {
+        id: 'gem_mimic', name: '보석 미믹', role: 'melee', family: 'beast', grade: 'epic',
+        sprite: ASTERIA_ART.gem_mimic.sprite, cost: 300, summon: false, gradeMerge: false,
+        stats: { hp: 400, damage: 52, interval: 1.0, range: 2.2, block: 3, respawn: 6 },
+        abilities: [{ kind: 'goldOnKill', gold: 6 }], unlock: 'start',
+        desc: '히든. 보물 상자인 척하다 문다. 처치할 때마다 보석을 흘린다.',
+        art: astArt('gem_mimic', { glow: '255,210,120' })
+    },
+    mushroom_king: {
+        id: 'mushroom_king', name: '버섯 왕', role: 'area', family: 'spirit', grade: 'epic',
+        sprite: ASTERIA_ART.mushroom_king.sprite, cost: 300, summon: false, gradeMerge: false,
+        stats: { hp: 120, damage: 46, interval: 1.6, range: 4, splash: 1.6 },
+        abilities: [{ kind: 'slowShot', name: '포자', speedMul: 0.7, duration: 2.5 }], unlock: 'start',
+        desc: '히든. 포자 웅덩이로 용사를 느리게 하고 방어를 무르게 한다.',
+        art: astArt('mushroom_king', { glow: '255,120,120' })
+    },
+    slime_monarch: {
+        id: 'slime_monarch', name: '슬라임 군주', role: 'area', family: 'undead', grade: 'epic',
+        sprite: ASTERIA_ART.slime_monarch.sprite, cost: 300, summon: false, gradeMerge: false,
+        stats: { hp: 140, damage: 40, interval: 1.4, range: 3.5, splash: 1.8 },
+        abilities: [{ kind: 'burnGround', name: '산성 점액', radius: 1.2, dps: 14, duration: 4 }], unlock: 'start',
+        desc: '히든. 삼킨 용사의 뼈가 몸 안에 떠 있다. 산성 점액을 뿌린다.',
+        art: astArt('slime_monarch', { glow: '150,255,90' })
+    },
+    ghost_captain: {
+        id: 'ghost_captain', name: '유령 선장', role: 'ranged', family: 'undead', grade: 'legendary',
+        sprite: ASTERIA_ART.ghost_captain.sprite, cost: 600, summon: false, gradeMerge: false,
+        stats: { hp: 200, damage: 120, interval: 0.9, range: 5.5 },
+        abilities: [{ kind: 'goldOnKill', gold: 8 }], unlock: 'start',
+        skills: [{ kind: 'barrage', name: '유령선 일제 사격', cooldown: 12, count: 10, mul: 1.1, reach: 'map' }],
+        desc: '히든. 가라앉은 배의 선원들이 함께 쏜다.',
+        art: astArt('ghost_captain', { glow: '120,255,220', shot: 'bolt' })
+    },
+    frost_mammoth: {
+        id: 'frost_mammoth', name: '서리 매머드', role: 'tank', family: 'beast', grade: 'legendary',
+        sprite: ASTERIA_ART.frost_mammoth.sprite, cost: 600, summon: false, gradeMerge: false,
+        stats: { hp: 1800, damage: 90, interval: 1.2, range: 2.2, block: 10, respawn: 6 },
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.6 }, { kind: 'slowShot', name: '얼음 엄니', speedMul: 0.6, duration: 2 }], unlock: 'start',
+        skills: [{ kind: 'nova', name: '빙하 짓밟기', cooldown: 14, radius: 3.5, mul: 2, slow: 3 }],
+        desc: '히든. 짓밟은 땅이 얼어붙는다.',
+        art: astArt('frost_mammoth', { glow: '170,220,255' })
+    },
+    magma_tortoise: {
+        id: 'magma_tortoise', name: '용암 거북', role: 'tank', family: 'orc', grade: 'legendary',
+        sprite: ASTERIA_ART.magma_tortoise.sprite, cost: 600, summon: false, gradeMerge: false,
+        stats: { hp: 2000, damage: 85, interval: 1.3, range: 2.2, block: 10, respawn: 6 },
+        abilities: [{ kind: 'cleave', radius: 2, ratio: 0.6 }, { kind: 'burnGround', name: '용암 등껍질', radius: 1.5, dps: 30, duration: 4 }], unlock: 'start',
+        skills: [{ kind: 'meteor', name: '분화', cooldown: 12, reach: 5, radius: 2, mul: 2.5, burn: 4 }],
+        desc: '히든. 등의 화산이 터지면 둘레가 불바다가 된다.',
+        art: astArt('magma_tortoise', { glow: '255,120,40' })
+    },
+    // ----- 초월(히든 신화 위 등급, 조합 제단으로만) -----
+    ferry_reaper: {
+        id: 'ferry_reaper', name: '저승 뱃사공', role: 'melee', family: 'undead', grade: 'transcendent',
+        sprite: ASTERIA_ART.ferry_reaper.sprite, cost: 2000, summon: false, gradeMerge: false,
+        stats: { hp: 4200, damage: 460, interval: 0.8, range: 2.6, block: 10, respawn: 4 },
+        abilities: [{ kind: 'cleave', radius: 2.6, ratio: 0.6 }], unlock: 'start',
+        skills: [{ kind: 'harvest', name: '저승 노', cooldown: 8, reach: 'map', below: 0.45, gold: 3 }, { kind: 'timeStop', name: '망각의 강', cooldown: 24, duration: 3 }],
+        desc: '초월. 강을 건너는 이는 돌아오지 못한다.',
+        art: astArt('ferry_reaper', { glow: '150,140,255' })
+    },
+    abyss_crown: {
+        id: 'abyss_crown', name: '공허의 군주', role: 'area', family: 'demon', grade: 'transcendent',
+        sprite: ASTERIA_ART.abyss_crown.sprite, cost: 2000, summon: false, gradeMerge: false,
+        stats: { hp: 600, damage: 520, interval: 1.3, range: 6.5, splash: 2.8 },
+        abilities: [{ kind: 'burnGround', name: '공허의 불', radius: 1.6, dps: 80, duration: 4 }], unlock: 'start',
+        skills: [{ kind: 'nova', name: '공허 붕괴', cooldown: 14, radius: 'map', mul: 3, burn: 5 }, { kind: 'buff', name: '어둠의 왕관', cooldown: 20, duration: 10, damage: 0.4 }],
+        desc: '초월. 왕관이 빛을 삼키면 맵 전체가 무너진다.',
+        art: astArt('abyss_crown', { glow: '170,90,255', shot: 'bolt' })
+    },
+    void_eye: {
+        id: 'void_eye', name: '공허의 눈', role: 'ranged', family: 'spirit', grade: 'transcendent',
+        sprite: ASTERIA_ART.void_eye.sprite, cost: 2000, summon: false, gradeMerge: false,
+        stats: { hp: 560, damage: 700, interval: 0.9, range: 7 },
+        abilities: [{ kind: 'chain', count: 5, ratio: 0.7, jump: 3 }], unlock: 'start',
+        skills: [{ kind: 'timeStop', name: '응시', cooldown: 20, duration: 4 }, { kind: 'barrage', name: '천 개의 눈', cooldown: 10, count: 20, mul: 1.2, reach: 'map' }],
+        desc: '초월. 눈이 마주친 용사는 그 자리에 굳는다.',
+        art: astArt('void_eye', { glow: '200,90,255', shot: 'bolt' })
+    },
+    rift_sovereign: {
+        id: 'rift_sovereign', name: '차원 군주', role: 'ranged', family: 'spirit', grade: 'transcendent',
+        sprite: ASTERIA_ART.rift_sovereign.sprite, cost: 2000, summon: false, gradeMerge: false,
+        stats: { hp: 600, damage: 620, interval: 1.0, range: 7 },
+        abilities: [{ kind: 'aura', stat: 'damage', radius: 6, value: 0.4 }], unlock: 'start',
+        skills: [{ kind: 'push', name: '차원 균열', cooldown: 16, radius: 6, mul: 1.5, tiles: 3 }, { kind: 'buff', name: '별의 계약', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }],
+        desc: '초월. 둘레 몬스터의 힘을 끌어올리고 용사를 차원 밖으로 밀어낸다.',
+        art: astArt('rift_sovereign', { glow: '200,120,255', shot: 'bolt' })
     }
 };
 
@@ -1035,7 +1128,17 @@ const MONSTER_ATTACKS = {
     sun_god: { kind: 'beam', look: 'sun' },
     moon_god: { kind: 'boomerang', look: 'moon', ratio: 0.6 },
     death_god: { kind: 'whirl', look: 'scythe' },
-    god_king: { kind: 'smite', look: 'thunder' }
+    god_king: { kind: 'smite', look: 'thunder' },
+    gem_mimic: { kind: 'claw' },
+    mushroom_king: { kind: 'puddle' },
+    slime_monarch: { kind: 'puddle' },
+    ghost_captain: { kind: 'volley' },
+    frost_mammoth: { kind: 'slam' },
+    magma_tortoise: { kind: 'fissure' },
+    ferry_reaper: { kind: 'whirl', look: 'scythe' },
+    abyss_crown: { kind: 'vortex', look: 'abyss' },
+    void_eye: { kind: 'beam' },
+    rift_sovereign: { kind: 'zap' }
 };
 // 공격 값: 기본값(ATTACK_KINDS) 위에 몬스터 값을 덮는다. 표에 없는 몬스터는 역할로 정한다(근접 claw, 광역 orb, 그 밖 arrow)
 const attackCache = {};
@@ -1091,7 +1194,25 @@ const MONSTER_RECIPES = [
     { a: 'phoenix_lord', aRank: 'S', b: 'flame_demon', parts: [{ type: 'fire_imp', count: 2 }], result: 'sun_god', hidden: true },
     { a: 'element_sage', aRank: 'S', b: 'moon_priestess', parts: [{ type: 'wisp_acolyte', count: 2 }], result: 'moon_god', hidden: true },
     { a: 'death_lord', aRank: 'S', b: 'vampire', parts: [{ type: 'grave_keeper', count: 2 }], result: 'death_god', hidden: true },
-    { a: 'giant_king', aRank: 'S', b: 'war_drummer', parts: [{ type: 'orc_guard', count: 2 }], result: 'god_king', hidden: true }
+    { a: 'giant_king', aRank: 'S', b: 'war_drummer', parts: [{ type: 'orc_guard', count: 2 }], result: 'god_king', hidden: true },
+    // 조합 제단 히든 14개 더(2026-11-10). 재료 3~5마리, 순서는 상관없다
+    // 히든 전용
+    { a: 'werewolf', b: 'goblin_spearman', parts: [{ type: 'gnoll_hunter', count: 1 }], result: 'gem_mimic', hidden: true },
+    { a: 'ancient_treant', b: 'wisp_acolyte', parts: [{ type: 'zombie', count: 1 }], result: 'mushroom_king', hidden: true },
+    { a: 'plague_ghoul', b: 'zombie', parts: [{ type: 'zombie', count: 1 }], result: 'slime_monarch', hidden: true },
+    { a: 'vampire', aRank: 'A', b: 'wraith_swordsman', parts: [{ type: 'curse_shooter', count: 1 }, { type: 'grave_keeper', count: 1 }], result: 'ghost_captain', hidden: true },
+    { a: 'bear_warrior', aRank: 'A', b: 'frost_witch', parts: [{ type: 'saber_warrior', count: 1 }], result: 'frost_mammoth', hidden: true },
+    { a: 'flame_demon', aRank: 'A', b: 'troll', parts: [{ type: 'rock_spirit', count: 1 }], result: 'magma_tortoise', hidden: true },
+    // 다른 길로 만드는 전설·신화
+    { a: 'kraken', b: 'water_spirit', parts: [{ type: 'storm_archer', count: 1 }], result: 'star_whale', hidden: true },
+    { a: 'frost_witch', aRank: 'A', b: 'moon_priestess', bRank: 'A', parts: [{ type: 'ancient_treant', count: 1 }], result: 'frost_queen', hidden: true },
+    { a: 'flame_archer', b: 'eagle_hunter', parts: [{ type: 'fire_imp', count: 2 }], result: 'phoenix_lord', hidden: true },
+    { a: 'orc_berserker', b: 'war_drummer', parts: [{ type: 'orc_berserker', count: 1 }, { type: 'goblin_spearman', count: 1 }], result: 'orc_high_chief', hidden: true },
+    // 초월: 히든 신화(S 이상)와 높은 등급 재료
+    { a: 'death_god', aRank: 'S', b: 'soul_devourer', parts: [{ type: 'ghost_captain', count: 1 }], result: 'ferry_reaper', hidden: true },
+    { a: 'sun_god', aRank: 'S', b: 'fallen_angel', bRank: 'S', parts: [{ type: 'hell_general', count: 1 }, { type: 'chaos_mage', count: 1 }], result: 'abyss_crown', hidden: true },
+    { a: 'moon_god', aRank: 'S', b: 'time_witch', parts: [{ type: 'abyss_dragon_king', count: 1 }], result: 'void_eye', hidden: true },
+    { a: 'god_king', aRank: 'S', b: 'giant_king', bRank: 'S', parts: [{ type: 'element_sage', count: 1 }, { type: 'crystal_giant', count: 1 }, { type: 'war_drummer', count: 1 }], result: 'rift_sovereign', hidden: true }
 ];
 
 // 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'
@@ -1103,7 +1224,8 @@ function recipeKey(r) {
 // 등급별 소환 후보(소환, 보스 보상). 등급 표의 summon과 몬스터의 summon이 false가 아닌 것. 표 순서를 따른다
 // 소환 강화 레벨로 소환될 때의 후보. 전설은 summon: false여도 나온다(소환 강화 높은 단계)
 function summonPool(grade) {
-    return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && (grade === 'legendary' || MONSTERS[id].summon !== false));
+    // 히든 전용(gradeMerge: false)은 어느 등급이든 소환되지 않는다(조합 제단으로만)
+    return Object.keys(MONSTERS).filter(id => MONSTERS[id].grade === grade && MONSTERS[id].gradeMerge !== false && (grade === 'legendary' || MONSTERS[id].summon !== false));
 }
 
 function gradePool(grade) {
@@ -1300,5 +1422,5 @@ const ORBITER_ART = {
 const FLYING_MONSTERS = new Set(['phoenix_lord', 'bone_dragon', 'frost_drake', 'abyss_dragon_king', 'storm_archer', 'fallen_angel', 'wisp_acolyte', 'wind_sylph', 'lightning_spirit', 'star_whale', 'soul_devourer', 'time_witch', 'water_spirit', 'eagle_hunter', 'sun_god', 'moon_god']);
 
 // <palettes> tools/monster_palettes.py가 만든 표: 몬스터 그림에서 뽑은 [어두운, 중간, 밝은, 강조] 색(주변 효과에 쓴다)
-const MONSTER_PALETTES = {"orc_guard":["#4b291f","#6d432a","#814d2d","#caca67"],"skeleton_archer":["#683c3a","#825646","#b6896c","#654668"],"dark_mage":["#704c45","#804c42","#b07974","#ddacfc"],"orc_berserker":["#644d48","#83472d","#b87543","#7a1012"],"curse_shooter":["#4a2d11","#741a14","#ab2a14","#fdedbd"],"bone_knight":["#29073e","#4c096a","#d70ee8","#ff63ff"],"death_lord":["#330b3a","#451748","#5d4176","#ffcb9b"],"goblin_spearman":["#502b22","#72422b","#957a61","#dbc8a1"],"zombie":["#433122","#654226","#ac391b","#f9e40a"],"fire_imp":["#941c03","#ce3102","#f85b00","#ffa307"],"gnoll_hunter":["#653327","#823833","#a17c62","#e3c89d"],"wisp_acolyte":["#3d9ceb","#a5ddf9","#93d0fc","#b5d8fc"],"werewolf":["#292635","#292635","#292635","#d9a275"],"troll":["#384917","#415316","#677d1c","#a6825f"],"frost_witch":["#3c4158","#033392","#8da4d3","#17c4ff"],"nightmare_jester":["#311446","#592a75","#9a5cb2","#758eab"],"orc_shaman":["#6e4339","#875b39","#a0856c","#f4dfa3"],"minotaur":["#877159","#987f5f","#b1a083","#f4ccb4"],"vampire":["#40040a","#5b0518","#8f101d","#ed5743"],"flame_demon":["#4c211c","#731804","#e16133","#ffc804"],"ancient_treant":["#46281b","#663e28","#a16a39","#fff482"],"hell_general":["#a50200","#f20401","#fc5c01","#ffdc25"],"archlich":["#2a0d40","#461577","#d47cfa","#790cff"],"grave_keeper":["#2e243d","#3c2e4d","#69597b","#dcbb7b"],"wraith_swordsman":["#2a2e3d","#252c52","#595b7b","#bd95eb"],"plague_ghoul":["#362955","#6e6199","#713bbc","#d9abf9"],"bone_priest":["#4f541b","#749b36","#a2c944","#ffefbb"],"goblin_thrower":["#512e2b","#63392d","#98663f","#dfc98d"],"orc_charger":["#552c1b","#885239","#f43402","#fefca6"],"war_drummer":["#5a4a28","#9f9441","#c4af8e","#be7a3d"],"ogre_crusher":["#502e24","#772823","#9e683f","#a06e75"],"orc_high_chief":["#49251a","#743700","#bb2914","#ffde70"],"giant_king":["#442923","#612d20","#98694b","#ff9607"],"hellhound_warrior":["#702d2a","#c11102","#f66600","#ffcc14"],"succubus":["#502a4e","#621948","#ed59dc","#f075af"],"flame_archer":["#821715","#b41c04","#f36d01","#ad2a2c"],"executioner":["#331451","#7f4b9d","#d44bfb","#7a27ce"],"chaos_mage":["#271a3e","#3c2262","#5919aa","#e88cff"],"fallen_angel":["#7a450e","#c88938","#fcd97f","#ffddbf"],"boar_warrior":["#993110","#d15414","#f57319","#f2d4b5"],"spider_archer":["#025fa9","#089cca","#5de0e8","#0659b5"],"bear_warrior":["#425374","#4a71ad","#99b9e4","#c4a48b"],"eagle_hunter":["#a44561","#e16d73","#fa8588","#ffaaa3"],"saber_warrior":["#bb7a21","#dd9c35","#f8ca63","#e9cbad"],"hydra_warrior":["#4a480b","#726c1c","#c19a55","#ffff53"],"earth_behemoth":["#730120","#b90630","#fb1225","#94a329"],"phoenix_lord":["#ac1306","#e42d02","#fc7900","#ffd742"],"rock_spirit":["#4b3221","#72533b","#936c4b","#9da12a"],"wind_sylph":["#031b4d","#07236c","#8abcfb","#bee8ff"],"water_spirit":["#003d6e","#1797c8","#a4d9fa","#b3fefd"],"lightning_spirit":["#110349","#160a6d","#3627db","#bbbcff"],"moon_priestess":["#212543","#24356b","#a0b3e6","#7d7ba5"],"storm_archer":["#2b446f","#87a7cf","#b3d4fc","#73bbff"],"element_sage":["#7d470d","#cf9f65","#fce0bc","#ffba9e"],"crystal_giant":["#404bcf","#95a2fa","#5689fe","#5553ff"],"abyss_dragon_king":["#01384c","#003a6e","#8ac8ed","#a9feed"],"time_witch":["#4a3e2e","#744f23","#b98a46","#a38467"],"soul_devourer":["#300340","#3e115f","#a46ca9","#e0ff62"],"bone_dragon":["#5a543a","#867458","#cbb48d","#86ff8a"],"kraken":["#2b2660","#4c3983","#6558ac","#b2f6ff"],"frost_queen":["#041255","#6a7990","#76aae2","#66c0ff"],"star_whale":["#10194b","#122173","#3c3ed3","#8576ff"],"frost_drake":["#799bb7","#b1def2","#68e0ff","#459af1"],"sun_god":["#751606","#b85907","#fe6e04","#ffd26c"],"moon_god":["#2e3e77","#748ac7","#a8b6e8","#918dbe"],"death_god":["#413754","#684c8b","#8c74a8","#e4baff"],"god_king":["#e19415","#fbc74a","#ffc065","#ffd5b4"]};
+const MONSTER_PALETTES = {"orc_guard":["#4b291f","#6d432a","#814d2d","#caca67"],"skeleton_archer":["#683c3a","#825646","#b6896c","#654668"],"dark_mage":["#704c45","#804c42","#b07974","#ddacfc"],"orc_berserker":["#644d48","#83472d","#b87543","#7a1012"],"curse_shooter":["#4a2d11","#741a14","#ab2a14","#fdedbd"],"bone_knight":["#29073e","#4c096a","#d70ee8","#ff63ff"],"death_lord":["#330b3a","#451748","#5d4176","#ffcb9b"],"goblin_spearman":["#502b22","#72422b","#957a61","#dbc8a1"],"zombie":["#433122","#654226","#ac391b","#f9e40a"],"fire_imp":["#941c03","#ce3102","#f85b00","#ffa307"],"gnoll_hunter":["#653327","#823833","#a17c62","#e3c89d"],"wisp_acolyte":["#3d9ceb","#a5ddf9","#93d0fc","#b5d8fc"],"werewolf":["#292635","#292635","#292635","#d9a275"],"troll":["#384917","#415316","#677d1c","#a6825f"],"frost_witch":["#3c4158","#033392","#8da4d3","#17c4ff"],"nightmare_jester":["#311446","#592a75","#9a5cb2","#758eab"],"orc_shaman":["#6e4339","#875b39","#a0856c","#f4dfa3"],"minotaur":["#877159","#987f5f","#b1a083","#f4ccb4"],"vampire":["#40040a","#5b0518","#8f101d","#ed5743"],"flame_demon":["#4c211c","#731804","#e16133","#ffc804"],"ancient_treant":["#46281b","#663e28","#a16a39","#fff482"],"hell_general":["#a40200","#f22901","#fc7104","#ffdc25"],"archlich":["#372d3f","#3b066a","#a74df4","#9b38ff"],"grave_keeper":["#2e243d","#3c2e4d","#69597b","#dcbb7b"],"wraith_swordsman":["#2a2e3d","#252c52","#595b7b","#bd95eb"],"plague_ghoul":["#362955","#6e6199","#713bbc","#d9abf9"],"bone_priest":["#4f541b","#749b36","#a2c944","#ffefbb"],"goblin_thrower":["#512e2b","#63392d","#98663f","#dfc98d"],"orc_charger":["#552c1b","#885239","#f43402","#fefca6"],"war_drummer":["#5a4a28","#9f9441","#c4af8e","#be7a3d"],"ogre_crusher":["#502e24","#772823","#9e683f","#a06e75"],"orc_high_chief":["#48261b","#733601","#bb7132","#ffde70"],"giant_king":["#44251e","#603d31","#974524","#ffca2d"],"hellhound_warrior":["#702d2a","#c11102","#f66600","#ffcc14"],"succubus":["#502a4e","#621948","#ed59dc","#f075af"],"flame_archer":["#821715","#b41c04","#f36d01","#ad2a2c"],"executioner":["#331451","#7f4b9d","#d44bfb","#7a27ce"],"chaos_mage":["#271a3e","#3c2262","#5919aa","#e88cff"],"fallen_angel":["#704b1e","#baac72","#f9c162","#f7d3b8"],"boar_warrior":["#993110","#d15414","#f57319","#f2d4b5"],"spider_archer":["#025fa9","#089cca","#5de0e8","#0659b5"],"bear_warrior":["#425374","#4a71ad","#99b9e4","#c4a48b"],"eagle_hunter":["#a44561","#e16d73","#fa8588","#ffaaa3"],"saber_warrior":["#bb7a21","#dd9c35","#f8ca63","#e9cbad"],"hydra_warrior":["#4a480b","#726c1c","#c19a55","#ffff53"],"earth_behemoth":["#730120","#b90630","#fb1225","#94a329"],"phoenix_lord":["#b11002","#e93200","#fd6501","#ff9704"],"rock_spirit":["#4b3221","#72533b","#936c4b","#9da12a"],"wind_sylph":["#031b4d","#07236c","#8abcfb","#bee8ff"],"water_spirit":["#003d6e","#1797c8","#a4d9fa","#b3fefd"],"lightning_spirit":["#110349","#160a6d","#3627db","#bbbcff"],"moon_priestess":["#212543","#24356b","#a0b3e6","#7d7ba5"],"storm_archer":["#2b446f","#87a7cf","#b3d4fc","#73bbff"],"element_sage":["#7d470d","#cf9f65","#fce0bc","#ffba9e"],"crystal_giant":["#3e4fc8","#7887fa","#7eb2ff","#5348ff"],"abyss_dragon_king":["#03344f","#0a6571","#7dc4ea","#b2fff1"],"time_witch":["#453317","#6b552c","#a87e41","#927d6b"],"soul_devourer":["#301d40","#48335a","#692498","#d4ff61"],"bone_dragon":["#5a4c39","#867253","#cab48a","#86ff8a"],"kraken":["#26235f","#5e4883","#5953ac","#b2f6ff"],"frost_queen":["#172a55","#2a4f8f","#66a0e2","#66c0ff"],"star_whale":["#0d134a","#132673","#344fd3","#967eff"],"frost_drake":["#3c7bb3","#a0cce3","#75dbff","#85b5e9"],"sun_god":["#69130a","#ad2803","#fd7709","#fff9b8"],"moon_god":["#263975","#6f84c3","#a6b5e8","#8583b2"],"death_god":["#362554","#6a578b","#805da9","#dbacff"],"god_king":["#d99e4e","#fbf1a1","#ffda4b","#ff8f2b"],"gem_mimic":["#aa5e08","#d8910a","#fac145","#ffaca4"],"mushroom_king":["#6f3f2d","#a97952","#ee4229","#ffd440"],"slime_monarch":["#90a13a","#8abc1d","#b2de34","#68b41e"],"ghost_captain":["#037a71","#0fa6a0","#54e2d5","#34e5f8"],"frost_mammoth":["#213159","#4e699a","#3086dd","#b4e4ff"],"magma_tortoise":["#6a1d19","#a1462e","#f77e0f","#ffeb90"],"ferry_reaper":["#2c1d4c","#3d2d78","#9a78e7","#6db4ff"],"abyss_crown":["#1a0e40","#2c0f6c","#6127d7","#dcb2ff"],"void_eye":["#18014a","#210264","#4a0cab","#9324f8"],"rift_sovereign":["#221747","#2f2870","#3e2cad","#ff33ff"]};
 // </palettes>

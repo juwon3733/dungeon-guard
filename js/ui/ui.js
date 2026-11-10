@@ -3658,7 +3658,7 @@ const UI = {
             // 재료가 여럿인 조합식: 일반 x2 + 영웅 + S랭크 전설
             const p = d.parts[0];
             icon(p.type, null, cx - 560, 96);
-            UIKit.bigText(ctx, `x${p.count}`, cx - 492, ry + 30, 34, T.gold, 'left');
+            if (p.count > 1) UIKit.bigText(ctx, `x${p.count}`, cx - 492, ry + 30, 34, T.gold, 'left');
             UIKit.bigText(ctx, '+', cx - 395, ry, 48, T.cream, 'center');
             icon(d.b, d.bRank, cx - 280, 96);
             UIKit.bigText(ctx, '+', cx - 165, ry, 48, T.cream, 'center');
@@ -4174,20 +4174,23 @@ const UI = {
                 UIKit.text(ctx, label, x + 84, cy, 19, show ? T.cream : T.creamSoft);
             };
             if (r.parts) {
-                // 재료가 여럿인 히든 조합식: 본 몬스터는 찾기 전에도 재료 칸이 하나씩 드러난다
-                const slot = (type, label, x, count) => {
-                    const show = open || Meta.hasSeen(type);
-                    if (show) this.drawMonsterIcon(ctx, type, x, c.y + 14, 72);
+                // 재료가 여럿인 히든 조합식(조합 제단): 재료를 종류별 칸(최대 5칸)으로. 본 몬스터는 찾기 전에도 칸이 드러난다.
+                // 칸 오른쪽 아래에 마리 수, 왼쪽 위에 랭크 조건
+                const groups = [];
+                for (const mat of recipeMaterials(r)) {
+                    const g = groups.find(x => x.type === mat.type && x.rank === mat.rank);
+                    if (g) g.count++;
+                    else groups.push({ type: mat.type, rank: mat.rank, count: 1 });
+                }
+                groups.forEach((g, i) => {
+                    const x = c.x + 12 + i * 112;
+                    const show = open || Meta.hasSeen(g.type);
+                    if (show) this.drawMonsterIcon(ctx, g.type, x, c.y + 14, 72);
                     else unknownBox(x);
-                    if (count) UIKit.text(ctx, `x${count}`, x + 68, c.y + 74, 22, T.gold, 'right', 'bold');
-                    UIKit.text(ctx, show ? label : '???', x + 80, cy, 16, show ? T.cream : T.creamSoft);
-                };
-                const p = r.parts[0];
-                slot(p.type, MONSTERS[p.type].name, c.x + 12, p.count);
-                UIKit.text(ctx, '+', c.x + 204, cy, 24, T.cream, 'center');
-                slot(r.b, MONSTERS[r.b].name, c.x + 216);
-                UIKit.text(ctx, '+', c.x + 394, cy, 24, T.cream, 'center');
-                slot(r.a, `${MONSTERS[r.a].name} ${r.aRank}`, c.x + 404);
+                    if (g.count > 1) UIKit.text(ctx, `x${g.count}`, x + 70, c.y + 76, 20, T.gold, 'right', 'bold');
+                    if (g.rank) UIKit.text(ctx, MONSTER_RANKS[g.rank].name, x + 6, c.y + 26, 18, MONSTER_RANKS[g.rank].color, 'left', 'bold');
+                    if (i < groups.length - 1) UIKit.text(ctx, '+', x + 92, cy, 22, T.cream, 'center');
+                });
             } else {
                 side(r.a, r.aRank, c.x + 16, open);
                 UIKit.text(ctx, '+', c.x + 284, cy, 30, T.cream, 'center');

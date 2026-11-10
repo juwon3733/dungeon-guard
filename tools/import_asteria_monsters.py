@@ -39,13 +39,19 @@ ART = {
     'star_whale': ('b:mid_starWhale', 3, 2), 'frost_drake': ('b:frost_drake', 3, 2),
     # 히든 신화
     'sun_god': ('b:sunGod', 2, 3), 'moon_god': ('b:moonGod', 3, 3), 'death_god': ('b:deathGod', 2, 3), 'god_king': ('b:godKing', 3, 3),
+    # 히든 전용(조합 제단으로만, 2026-11-10)
+    'gem_mimic': ('b:mid_gemMimic', 2, 2), 'mushroom_king': ('b:mid_mushroomKing', 2, 2), 'slime_monarch': ('b:mid_slimeMonarch', 2, 2),
+    'ghost_captain': ('b:mid_ghostCaptain', 2, 2), 'frost_mammoth': ('b:mid_frostMammoth', 2, 2), 'magma_tortoise': ('b:mid_magmaTortoise', 2, 2),
+    # 초월(히든 신화 위, 조합 제단으로만)
+    'ferry_reaper': ('b:fb_ferryReaper', 2, 2), 'abyss_crown': ('b:abyssCrown', 2, 2), 'void_eye': ('b:mid_voidBeholder', 2, 2), 'rift_sovereign': ('b:rift_lord', 2, 2),
 }
 # 1칸을 차지하지만 일반보다 조금 크게 그리는 영웅(화면 px)
 EPIC_BOX = {k: 140 for k in ('bone_knight', 'vampire', 'flame_demon', 'executioner', 'hydra_warrior', 'ancient_treant', 'storm_archer')}
 current = None
 RANGED = {'curse_shooter', 'bone_priest', 'vampire', 'archlich', 'fire_imp', 'chaos_mage', 'fallen_angel', 'spider_archer', 'eagle_hunter', 'hydra_warrior',
           'phoenix_lord', 'wisp_acolyte', 'wind_sylph', 'frost_witch', 'water_spirit', 'lightning_spirit', 'moon_priestess', 'storm_archer', 'element_sage',
-          'time_witch', 'abyss_dragon_king', 'soul_devourer', 'bone_dragon', 'frost_queen', 'star_whale', 'frost_drake', 'sun_god', 'moon_god'}
+          'time_witch', 'abyss_dragon_king', 'soul_devourer', 'bone_dragon', 'frost_queen', 'star_whale', 'frost_drake', 'sun_god', 'moon_god',
+          'mushroom_king', 'slime_monarch', 'ghost_captain', 'abyss_crown', 'void_eye', 'rift_sovereign'}
 
 html = open(os.path.join(WWW, 'index.html'), encoding='utf8', errors='replace').read()
 i = html.index('var PLAY_ATLAS = '); j = k = html.index('[', i); depth = 0; instr = False

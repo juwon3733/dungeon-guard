@@ -199,7 +199,7 @@ const COMBAT_RULES = {
     accel: { cooldown: 35, duration: 6, haste: 0.6 }, // 시계탑의 마왕 시간 가속
     clock: { slowLong: 2, deepCut: 0.55, eliteSlow: 0.7, eliteSlowTime: 2, auraTiles: 3, auraSlow: 0.75, slowHitChance: 0.1, haste: 0.3, hasteStartTime: 6, hasteKillTime: 5,
         overclock: 0.5, overclockEvery: 10, overclockTime: 3, rewindPer: 2, rewindDelay: 3, rewindDeathHp: 5 }, // 시계탑의 마왕 권능 수치
-    mirror: { reflectUp: 0.1, reflectCount: 3, transGold: { common: 3, rare: 8, epic: 20, legendary: 45, mythic: 100 } }, // 거울 마녀 권능 수치
+    mirror: { reflectUp: 0.1, reflectCount: 3, transGold: { common: 3, rare: 8, epic: 20, legendary: 45, mythic: 100, transcendent: 200 } }, // 거울 마녀 권능 수치
     jail: { cooldown: 30, radius: 1.5, duration: 3, bossDuration: 1 }, // 사슬의 군주 W 사슬 감옥
     chain: { chanceUp: 0.06, longUp: 0.4, breakDamage: 0.05, pitEvery: 5, lowBelow: 0.15, turnEvery: 8 }, // 사슬의 군주 권능 수치
     plague: { sacDps: 5, sacDpsPerRound: 1.2, burstSeconds: 2, deathBelow: 0.1, pandemicEvery: 10, blastRadius: 1, blastMul: 0.4 }, // 역병의 군주 권능 수치

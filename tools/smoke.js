@@ -58,6 +58,14 @@ vm.runInContext(`{
     delete HEROES.mage.slow;
     MONSTER_GRADES.mythic.fieldMax = 3; // 옛 시험은 신화 맵 제한(서로 다른 3마리, 같은 종 1마리)이 있었다
     ALTAR_RULES.dragHidden = true; // 옛 시험은 히든 조합식도 끌어 합쳤다(조합 제단은 맨 끝 묶음에서)
+    // 옛 시험은 등급 5단계, 몬스터 55종 + 신화 12종이었다: 초월 등급과 히든 전용 몬스터, 그 조합식을 빼고 본다(새 것은 맨 끝 묶음에서)
+    {
+        const NEW_IDS = ['gem_mimic', 'mushroom_king', 'slime_monarch', 'ghost_captain', 'frost_mammoth', 'magma_tortoise', 'ferry_reaper', 'abyss_crown', 'void_eye', 'rift_sovereign'];
+        for (let i = MONSTER_RECIPES.length - 1; i >= 0; i--) if (MONSTER_RECIPES[i].parts && MONSTER_RECIPES[i].parts.length && !['sun_god', 'moon_god', 'death_god', 'god_king'].includes(MONSTER_RECIPES[i].result) || NEW_IDS.includes(MONSTER_RECIPES[i].result) || NEW_IDS.some(id => [MONSTER_RECIPES[i].a, MONSTER_RECIPES[i].b].includes(id))) MONSTER_RECIPES.splice(i, 1);
+        for (const id of NEW_IDS) delete MONSTERS[id];
+        delete MONSTER_GRADES.transcendent;
+        GRADE_ORDER.splice(GRADE_ORDER.indexOf('transcendent'), 1);
+    }
     for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
@@ -112,7 +120,10 @@ vm.runInContext(`{
     // 몬스터 그림: 표의 동작마다 방향(PL_DIRS) 폴더에 프레임 수만큼 그림이 있고(더 많지도 않다), 불러오기 목록에 들어 있다.
     // 그림은 PixelLab(pl_) 또는 Asteria(ast_mon_). 폴더 구조는 같다
     const monsters = vm.runInContext('MONSTERS', actx);
-    assert.strictEqual(Object.values(monsters).filter(m => m.grade !== 'mythic').length, 55, 'fifty-five monsters');
+    // 소환·합치기 55종 + 히든 전용 6종(2026-11-10), 신화 12종, 초월 4종
+    assert.strictEqual(Object.values(monsters).filter(m => !['mythic', 'transcendent'].includes(m.grade) && m.gradeMerge !== false).length, 55, 'fifty-five monsters');
+    assert.strictEqual(Object.values(monsters).filter(m => !['mythic', 'transcendent'].includes(m.grade) && m.gradeMerge === false).length, 6, 'six hidden-only');
+    assert.strictEqual(Object.values(monsters).filter(m => m.grade === 'transcendent').length, 4, 'four transcendents');
     assert.strictEqual(Object.values(monsters).filter(m => m.grade === 'mythic').length, 12, 'twelve mythics');
     for (const def of Object.values(monsters)) {
         assert(fs.existsSync(path.join(root, 'assets/sprites', def.sprite, 'rotations/south.png')), def.id + ' rotation');
@@ -352,7 +363,7 @@ assert.strictEqual(Game.monsters.length, 0);
 assert(UI.toast && UI.toast.text.includes('소환'), 'empty cell hint');
 
 // 몬스터 표와 확률 데이터: 23종, 일반 70% 희귀 25% 영웅 5%. 전설(죽음의 군주, 지옥 대장군, 대리치)은 조합식으로만 나와 소환 후보가 비어 있다
-for (const fam of Object.keys(MONSTER_FAMILIES)) for (const [g, n] of [['common', 3], ['rare', 3], ['epic', 3], ['legendary', 2]]) assert.strictEqual(Object.values(MONSTERS).filter(m => m.family === fam && m.grade === g).length, n, fam + ' ' + g);
+for (const fam of Object.keys(MONSTER_FAMILIES)) for (const [g, n] of [['common', 3], ['rare', 3], ['epic', 3], ['legendary', 2]]) assert.strictEqual(Object.values(MONSTERS).filter(m => m.family === fam && m.grade === g && m.gradeMerge !== false).length, n, fam + ' ' + g);
 assert.strictEqual(SUMMON_RULES.odds.common, 0.70);
 assert.strictEqual(SUMMON_RULES.odds.rare, 0.25);
 assert.strictEqual(SUMMON_RULES.odds.epic, 0.05);
@@ -6913,11 +6924,11 @@ console.log('smoke ok: equipment crafting');
         const count = relics => {
             start(relics, 'prep');
             let undead = 0;
-            for (let i = 0; i < 300; i++) if (MONSTERS[Game.rollSummon()].family === 'undead') undead++;
+            for (let i = 0; i < 2000; i++) if (MONSTERS[Game.rollSummon()].family === 'undead') undead++;
             return undead;
         };
         const plain = count([]), grail = count(['undead_grail']);
-        assert(grail > plain * 1.25, 'undead odds up (expected about 1.6x, 300 rolls): ' + plain + ' -> ' + grail);
+        assert(grail > plain * 1.3, 'undead odds up (expected about 1.6x, 2000 rolls): ' + plain + ' -> ' + grail);
         // 일곱 번째 별: 7번째 소환은 영웅 이상
         start(['seventh_star'], 'prep');
         Game.summonCount = 6;
@@ -7055,7 +7066,8 @@ console.log('smoke ok: equipment crafting');
         Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
     for (const f of [...files.filter(f => !f.startsWith('js/ui/')), 'js/data/fx_sheets.js', 'js/ui/uikit.js', 'js/game/render.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sctx, { filename: f });
     vm.runInContext('(' + (() => {
-        const mythic = Object.keys(MONSTERS).filter(k => ['mythic', 'legendary'].includes(MONSTERS[k].grade) && (MONSTERS[k].skills || []).length && ASTERIA_ART[k]);
+        // 기술 동작 그림이 있는 몬스터만(히든 전용과 초월은 기술 동작 그림 없이 공격 동작을 쓴다)
+        const mythic = Object.keys(MONSTERS).filter(k => ['mythic', 'legendary'].includes(MONSTERS[k].grade) && (MONSTERS[k].skills || []).length && ASTERIA_ART[k] && MONSTERS[k].gradeMerge !== false || MONSTERS[k].hiddenMythic);
         for (const k of mythic) MONSTERS[k].skills.forEach((s, i) => assert(MONSTERS[k].art.anim['skill' + i] && MONSTERS[k].art.anim['skill' + i].frames === 8, k + ' skill motion ' + i));
         const m = { type: 'time_witch', atkPose: 0.5, atkPoseMax: 0.75, dir: 'down', skillPose: 1 };
         assert.strictEqual(Render.monsterFrame(MONSTERS.time_witch, m).clip.folder, 'skill1', 'skill motion picked');
@@ -7115,8 +7127,8 @@ console.log('smoke ok: equipment crafting');
         // 합치기 결과가 어디에도 서지 못하면 합치지 않는다(겹쳐 서지 않는다)
         Game.reset({ lord: 'bone_queen', relics: [] });
         Game.state = 'prep';
-        const big = Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'rare' && monsterCells(id).join() === '2,2') ||
-            Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'epic' && monsterCells(id).join() === '2,2');
+        const big = Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'rare' && monsterCells(id).join() === '2,2' && MONSTERS[id].gradeMerge !== false) ||
+            Object.keys(MONSTERS).find(id => MONSTERS[id].grade === 'epic' && monsterCells(id).join() === '2,2' && MONSTERS[id].gradeMerge !== false);
         if (big) {
             const grade = MONSTERS[big].grade;
             const lower = GRADE_ORDER[GRADE_ORDER.indexOf(grade) - 1];
@@ -7419,7 +7431,8 @@ console.log('smoke ok: equipment crafting');
             assert(MONSTER_ATTACKS[id] && ATTACK_KINDS[a.kind], id + ' has an attack kind');
             if (a.look) assert(ATTACK_LOOKS[a.look], id + ' look ' + a.look);
         }
-        const top = ids.filter(id => ['legendary', 'mythic'].includes(MONSTERS[id].grade)).map(id => monsterAttack(id).kind);
+        // 소환·합치기로 나오는 전설 10종과 신화 12종(히든 전용 전설은 기존 공격 모양을 같이 쓴다)
+        const top = ids.filter(id => ['legendary', 'mythic'].includes(MONSTERS[id].grade) && (MONSTERS[id].gradeMerge !== false || MONSTERS[id].hiddenMythic)).map(id => monsterAttack(id).kind);
         assert.strictEqual(top.length, 22, 'ten legendary and twelve mythic');
         assert.strictEqual(new Set(top).size, top.length, 'legendary and mythic attacks all differ');
         assert(new Set(ids.map(id => monsterAttack(id).kind)).size >= 20, 'twenty kinds or more in use');
@@ -7794,6 +7807,21 @@ console.log('smoke ok: equipment crafting');
         Game.act({ kind: 'altar', list: [p, q] });
         const rec = Game.record.inputs[Game.record.inputs.length - 1];
         assert(rec.kind === 'altar' && rec.list.join() === [p.uid, q.uid].join(), 'altar input recorded by uid');
+        // 히든 30개, 초월 4종: 초월은 등급 합치기로 나오지 않고 제단으로만
+        assert.strictEqual(MONSTER_RECIPES.filter(r => r.hidden).length, 30, 'thirty hidden recipes');
+        assert.strictEqual(nextGrade('mythic'), null, 'no grade merge into transcendent');
+        fresh();
+        const tr = [put('soul_devourer'), put('ghost_captain'), put('death_god', 4)];
+        const r4 = Game.act({ kind: 'altar', list: tr });
+        assert(r4.ok && r4.type === 'ferry_reaper' && MONSTERS[r4.type].grade === 'transcendent', 'altar makes a transcendent');
+        // 히든 전용 몬스터는 소환과 등급 합치기 후보가 아니다
+        for (const id of ['gem_mimic', 'mushroom_king', 'slime_monarch', 'ghost_captain', 'frost_mammoth', 'magma_tortoise']) {
+            const g = MONSTERS[id].grade;
+            assert(!summonPool(g).includes(id) && !mergePool(g).includes(id), id + ' only from the altar');
+        }
+        // 재료가 같은 히든 조합식은 없다
+        const keys = MONSTER_RECIPES.filter(r => r.hidden).map(r => recipeMaterials(r).map(m => m.type).sort().join('+'));
+        assert.strictEqual(new Set(keys).size, keys.length, 'hidden recipes differ');
         console.log('smoke ok: hidden altar');
     }).toString() + ')()', actx);
 }
