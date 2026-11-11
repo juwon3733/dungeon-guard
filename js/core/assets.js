@@ -8,7 +8,8 @@ const UI_SHEETS = ['ui_window', 'ui_button', 'ui_buttonHover', 'ui_closeButton',
 const ZONE_ART = ['void', 'island', 'bridgedeck'];
 // 본부(js/ui/hq.js): 물건 그림(64px)과 바닥 타일셋(tileset_hq, 칸 정보는 hq.js의 WANG_TILES)
 const HQ_SPRITES = ['hq_wartable', 'hq_bookshelf', 'hq_relic_case', 'hq_portal', 'hq_weapon_rack', 'hq_dummy', 'hq_vault', 'hq_throne', 'hq_fireplace',
-    'hq_notice_board', 'hq_plant', 'hq_window', 'hq_wall_banner', 'hq_crates', 'hq_tea_table', 'hq_goblin_desk', 'tileset_hq'];
+    'hq_notice_board', 'hq_plant', 'hq_window', 'hq_wall_banner', 'hq_crates', 'hq_tea_table', 'hq_goblin_desk', 'tileset_hq',
+    'prop2_brazier', 'prop2_pillar', 'prop2_obelisk', 'prop2_chest', 'prop2_cauldron', 'prop2_bones', 'prop2_mushrooms', 'prop2_crystal']; // 본부 소품(맵 소품 그림을 함께 쓴다)
 // 그림 이름의 파일 경로. 효과 시트는 assets/fx, 지역 그림은 webp
 function assetPath(name) {
     if (name.startsWith('pfx_')) return `assets/fx/${name}.png`;

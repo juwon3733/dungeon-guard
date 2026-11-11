@@ -176,9 +176,9 @@ vm.runInContext(`{
         if (def.art.impact) assert(sheets[def.art.impact], def.id + ' impact sheet');
     }
 
-    // 본부 그림: 물건 16장(64px)과 바닥 타일셋(128px, 32px 타일 16칸)이 있고 불러오기 목록에 들어 있다. 타일 좌표 JSON은 코드(WANG_TILES)로 옮겨 지웠다
+    // 본부 그림: 물건 16장과 맵 소품 8장(64px), 바닥 타일셋(128px, 32px 타일 16칸)이 있고 불러오기 목록에 들어 있다. 타일 좌표 JSON은 코드(WANG_TILES)로 옮겨 지웠다
     const hqSprites = vm.runInContext('HQ_SPRITES', actx);
-    assert.strictEqual(hqSprites.length, 17, 'sixteen hq pictures and the tileset');
+    assert.strictEqual(hqSprites.length, 25, 'sixteen hq pictures, the tileset and eight map props');
     for (const name of hqSprites) {
         assert(names.includes(name), name + ' in Assets.names()');
         assert.deepStrictEqual(pngSize(name), name === 'tileset_hq' ? [128, 128] : [64, 64], name + ' size');

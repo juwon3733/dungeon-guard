@@ -3737,24 +3737,46 @@ const UI = {
         const t = Math.round(G.stats.time);
         const rows = [
             ['남은 마왕 체력', `${G.hp} / ${G.maxHp()}`],
-            ['처치한 용사', `${G.stats.kills}명`],
+            ['처치한 용사', `${G.stats.kills.toLocaleString()}명`],
             CORRUPTION_ENABLED && ['타락시킨 용사', `${G.stats.corrupted}명`],
             ['소환 / 합치기', `${G.stats.summoned} / ${G.stats.merged}`],
+            G.stats.altars && ['조합 제단 히든', `${G.stats.altars}번`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ].filter(Boolean);
         if (!win) rows.splice(0, 1, abyss ? ['내려간 층', `${G.waveIndex}층`] : ['막아 낸 라운드', G.challenge ? `${G.waveIndex}라운드` : `${G.waveIndex} / ${G.waves.length}`]);
+        const rowH = rows.length > 5 ? 36 : 40;
         rows.forEach(([k, v], i) => {
-            UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
-            UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');
+            UIKit.ink(ctx, k, cx - 100, 292 + i * rowH, 22, T.inkSoft);
+            UIKit.ink(ctx, v, cx + 390, 292 + i * rowH, 30, T.ink, 'right', 'bold');
         });
+        // 이번 판 주력: 끝났을 때 맵의 가장 강한 몬스터 다섯(등급, 랭크 순). 등급 테두리와 랭크 글자
+        const top = G.monsters.filter(m => !m.removed && !m.clone)
+            .sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade) || (b.rank || 0) - (a.rank || 0)).slice(0, 5);
+        if (top.length) {
+            UIKit.ink(ctx, '이번 판 주력', cx - 100, 488, 20, T.inkSoft);
+            top.forEach((m, i) => {
+                const x = cx - 100 + i * 66;
+                const g = MONSTER_GRADES[MONSTERS[m.type].grade];
+                UIKit.gradeFrame(ctx, x, 504, 60, 60, UIKit.gradeFill(ctx, g.color, x, 504, 60, 60), 3);
+                this.drawMonsterIcon(ctx, m.type, x + 4, 508, 52, true);
+                const r = MONSTER_RANKS[m.rank || 0];
+                if (m.rank) UIKit.text(ctx, r.name, x + 56, 556, 18, r.color, 'right', 'bold');
+            });
+        }
         // 도전 결과: 점수와 오늘 최고 기록
         if (G.challengeResult) {
             const best = G.challengeBest;
             ctx.fillStyle = T.parchmentDark;
             ctx.fillRect(cx - 390, 588, 780, 3);
             if (abyss) UIKit.bigText(ctx, abyssLevelOf(G.challenge.level).name, cx, 650, 56, T.gold, 'center', '#fff4c0');
-            else UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '이번 주 가장 깊은 기록!' : `이번 주 최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            else {
+                // 점수는 억·만 단위로 줄여 크게, 정확한 값은 아래 작게
+                const sc = G.challengeResult.score;
+                const short = sc >= 1e8 ? `${(Math.floor(sc / 1e7) / 10).toLocaleString()}억` : sc >= 1e4 ? `${(Math.floor(sc / 1e3) / 10).toLocaleString()}만` : sc.toLocaleString();
+                UIKit.bigText(ctx, `${short}점`, cx, 640, 64, T.gold, 'center', '#fff4c0');
+                if (sc >= 1e4) UIKit.ink(ctx, `${sc.toLocaleString()}점`, cx, 690, 20, T.inkSoft, 'center');
+            }
+            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '이번 주 가장 깊은 기록!' : `이번 주 최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 728, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
             return;
         }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내

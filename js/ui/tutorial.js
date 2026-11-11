@@ -29,7 +29,8 @@ Object.assign(UI, {
         const t = this.tut;
         if (!t) return;
         if (t.kind === 'battle' && this.tutStep() === 'end') return;
-        this.button('tut_skip', GAME_WIDTH / 2 - 150, 14, 300, 60, { label: '튜토리얼 건너뛰기', size: 22, onClick: () => this.finishTutorial() });
+        this.button('tut_skip', GAME_WIDTH - 348, GAME_HEIGHT - 360, 320, 50, { label: '튜토리얼 건너뛰기', size: 20, // 위쪽 표지판을 가리지 않게 오른쪽 버튼 줄 위로
+            onClick: () => this.finishTutorial() });
     },
 
     updateTutorial() {
