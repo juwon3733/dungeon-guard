@@ -242,17 +242,18 @@ const UI = {
         if (G.lordPowers().length) {
             const ready = G.powerReady();
             this.button('powers', GAME_WIDTH - 270, 80, 258, 50, {
-                label: `권능 · 마력 ${G.mana} (R)`, size: 22, theme: ready ? 'gold' : undefined, onClick: () => this.togglePowers()
+                label: '권능', sideBtn: { icon: 'mana', accent: '#8f7bff', key: 'R', right: `마력 ${G.mana}`, on: ready }, onClick: () => this.togglePowers()
             });
         }
+        // 오른쪽 버튼 줄: 버튼마다 아이콘과 색 띠(2026-11-11 사용자: 글자만 있고 다 똑같이 생겨서 별로)
         this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y + 42, NEXT_BTN_W, 50, {
-            label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
+            label: '자동 합치기', sideBtn: { icon: 'merge', accent: '#4fd1c5', key: 'A', right: G.autoMerge ? '켜짐' : '꺼짐', on: G.autoMerge }, onClick: () => this.toggleAutoMerge()
         });
         this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 16, NEXT_BTN_W, 50, {
-            label: '강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
+            label: '강화', sideBtn: { icon: 'forge', accent: '#ff9a3d', key: 'G', right: '종족 · 칸 · 마력', on: this.familyOpen }, onClick: () => this.toggleFamily()
         });
         this.button('altarToggle', NEXT_BTN_X, NEXT_BTN_Y - 74, NEXT_BTN_W, 50, {
-            label: '조합 제단 (H)', size: 22, theme: this.altarOpen ? 'gold' : undefined, onClick: () => this.toggleAltar()
+            label: '조합 제단', sideBtn: { icon: 'altar', accent: '#c46bff', key: 'H', right: '히든', on: this.altarOpen }, onClick: () => this.toggleAltar()
         });
         if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
         if (this.altarOpen && !this.focus()) this.layoutAltar();
@@ -2886,6 +2887,7 @@ const UI = {
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, st);
             else if (b.arrow) this.drawArrowButton(ctx, b, st);
             else if (b.iconOnly) this.drawIconButton(ctx, b, st);
+            else if (b.sideBtn) this.drawSideButton(ctx, b, st);
             else {
                 const kind = b.disabled ? 'off' : (b.theme === 'gold' ? 'primary' : (b.theme === 'danger' ? 'danger' : 'silver'));
                 const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
@@ -2904,6 +2906,34 @@ const UI = {
                 UIKit.text(ctx, b.label, lx + iw, ly + 1, size, UIKit.buttonInk(kind));
                 if (b.sub) UIKit.text(ctx, b.sub, lx + iw, ly + 30, 18, b.disabled ? UI_THEME.bad : UI_THEME.creamSoft);
             }
+        }
+    },
+
+    // 오른쪽 버튼 줄(권능, 조합 제단, 강화, 자동 합치기): 왼쪽 색 띠와 아이콘, 이름, 단축키, 오른쪽에 지금 상태. 켜지면 띠 색으로 테두리가 빛난다
+    drawSideButton(ctx, b, st) {
+        const o = b.sideBtn;
+        const kind = o.on ? 'primary' : 'silver';
+        const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
+        const y = b.y + dy;
+        // 왼쪽 색 띠(도트 4px)와 아이콘 칸
+        ctx.fillStyle = o.accent;
+        ctx.fillRect(b.x + 8, y + 8, 4, b.h - 16);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(b.x + 16, y + 5, 44, b.h - 10);
+        ctx.save();
+        if (b.disabled) ctx.globalAlpha = 0.55;
+        const img = Assets.get(`uiicon_${o.icon}`);
+        if (img) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img, b.x + 14, y + 1, 48, 48); }
+        ctx.restore();
+        UIKit.text(ctx, b.label, b.x + 70, y + b.h / 2 + 1, 22, UIKit.buttonInk(kind), 'left', 'bold');
+        // 오른쪽: 상태 글자와 단축키
+        const kw = 26;
+        if (o.key) this.drawKeyCap(ctx, o.key, b.x + b.w - kw - 10, y + 12, 16);
+        if (o.right) UIKit.text(ctx, o.right, b.x + b.w - kw - 18, y + b.h / 2 + 1, 18, o.on ? o.accent : UI_THEME.creamSoft, 'right', 'bold');
+        if (o.on) {
+            ctx.fillStyle = o.accent;
+            ctx.fillRect(b.x + 4, y + 2, b.w - 8, 2);
+            ctx.fillRect(b.x + 4, y + b.h - 4, b.w - 8, 2);
         }
     },
 
@@ -3737,24 +3767,46 @@ const UI = {
         const t = Math.round(G.stats.time);
         const rows = [
             ['남은 마왕 체력', `${G.hp} / ${G.maxHp()}`],
-            ['처치한 용사', `${G.stats.kills}명`],
+            ['처치한 용사', `${G.stats.kills.toLocaleString()}명`],
             CORRUPTION_ENABLED && ['타락시킨 용사', `${G.stats.corrupted}명`],
             ['소환 / 합치기', `${G.stats.summoned} / ${G.stats.merged}`],
+            G.stats.altars && ['조합 제단 히든', `${G.stats.altars}번`],
             ['걸린 시간', `${Math.floor(t / 60)}분 ${t % 60}초`]
         ].filter(Boolean);
         if (!win) rows.splice(0, 1, abyss ? ['내려간 층', `${G.waveIndex}층`] : ['막아 낸 라운드', G.challenge ? `${G.waveIndex}라운드` : `${G.waveIndex} / ${G.waves.length}`]);
+        const rowH = rows.length > 5 ? 36 : 40;
         rows.forEach(([k, v], i) => {
-            UIKit.ink(ctx, k, cx - 100, 310 + i * 52, 24, T.inkSoft);
-            UIKit.ink(ctx, v, cx + 390, 310 + i * 52, 34, T.ink, 'right', 'bold');
+            UIKit.ink(ctx, k, cx - 100, 292 + i * rowH, 22, T.inkSoft);
+            UIKit.ink(ctx, v, cx + 390, 292 + i * rowH, 30, T.ink, 'right', 'bold');
         });
+        // 이번 판 주력: 끝났을 때 맵의 가장 강한 몬스터 다섯(등급, 랭크 순). 등급 테두리와 랭크 글자
+        const top = G.monsters.filter(m => !m.removed && !m.clone)
+            .sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.type].grade) - GRADE_ORDER.indexOf(MONSTERS[a.type].grade) || (b.rank || 0) - (a.rank || 0)).slice(0, 5);
+        if (top.length) {
+            UIKit.ink(ctx, '이번 판 주력', cx - 100, 488, 20, T.inkSoft);
+            top.forEach((m, i) => {
+                const x = cx - 100 + i * 66;
+                const g = MONSTER_GRADES[MONSTERS[m.type].grade];
+                UIKit.gradeFrame(ctx, x, 504, 60, 60, UIKit.gradeFill(ctx, g.color, x, 504, 60, 60), 3);
+                this.drawMonsterIcon(ctx, m.type, x + 4, 508, 52, true);
+                const r = MONSTER_RANKS[m.rank || 0];
+                if (m.rank) UIKit.text(ctx, r.name, x + 56, 556, 18, r.color, 'right', 'bold');
+            });
+        }
         // 도전 결과: 점수와 오늘 최고 기록
         if (G.challengeResult) {
             const best = G.challengeBest;
             ctx.fillStyle = T.parchmentDark;
             ctx.fillRect(cx - 390, 588, 780, 3);
             if (abyss) UIKit.bigText(ctx, abyssLevelOf(G.challenge.level).name, cx, 650, 56, T.gold, 'center', '#fff4c0');
-            else UIKit.bigText(ctx, `${G.challengeResult.score.toLocaleString()}점`, cx, 650, 64, T.gold, 'center', '#fff4c0');
-            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '이번 주 가장 깊은 기록!' : `이번 주 최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 716, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
+            else {
+                // 점수는 억·만 단위로 줄여 크게, 정확한 값은 아래 작게
+                const sc = G.challengeResult.score;
+                const short = sc >= 1e8 ? `${(Math.floor(sc / 1e7) / 10).toLocaleString()}억` : sc >= 1e4 ? `${(Math.floor(sc / 1e3) / 10).toLocaleString()}만` : sc.toLocaleString();
+                UIKit.bigText(ctx, `${short}점`, cx, 640, 64, T.gold, 'center', '#fff4c0');
+                if (sc >= 1e4) UIKit.ink(ctx, `${sc.toLocaleString()}점`, cx, 690, 20, T.inkSoft, 'center');
+            }
+            UIKit.ink(ctx, raid ? (best && best.isBest ? '이번 주 최고 기록!' : `이번 주 최고 ${best ? best.best : 0}단계`) : abyss ? (best && best.isBest ? '이번 주 가장 깊은 기록!' : `이번 주 최고 ${best ? best.best : 0}층`) : (best && best.isBest ? '오늘 최고 기록!' : `오늘 최고 ${best ? best.best.toLocaleString() : 0}점`), cx, 728, 26, best && best.isBest ? T.inkWax : T.inkSoft, 'center', 'bold');
             return;
         }
         // 스테이지 결과: 처음 깼으면 풀린 것, 다시 깼으면 해금은 처음 한 번뿐이라는 안내, 지면 다시 도전 안내

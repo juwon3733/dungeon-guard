@@ -36,7 +36,20 @@ const HQ_ROOM = {
         { sprite: 'hq_tea_table', x: 560, y: 880, scale: 2 },
         { sprite: 'hq_fireplace', x: 150, y: 100, scale: 2, unlockStage: 2 },
         { sprite: 'hq_dummy', x: 1720, y: 480, scale: 2, unlockStage: 4 },
-        { sprite: 'hq_vault', x: 90, y: 590, scale: 2, unlockStage: 6 }
+        { sprite: 'hq_vault', x: 90, y: 590, scale: 2, unlockStage: 6 },
+        // 2026-11-11 품질: 빈 바닥을 채우는 소품(맵 소품 그림)과 빛을 내는 화로
+        { sprite: 'prop2_brazier', x: 676, y: 548, scale: 2, light: '255,150,60' },
+        { sprite: 'prop2_brazier', x: 1116, y: 548, scale: 2, light: '255,150,60' },
+        { sprite: 'prop2_brazier', x: 676, y: 196, scale: 2, light: '255,150,60' },
+        { sprite: 'prop2_brazier', x: 1200, y: 196, scale: 2, light: '255,150,60' },
+        { sprite: 'prop2_pillar', x: 20, y: 250, scale: 2 },
+        { sprite: 'prop2_pillar', x: 1772, y: 250, scale: 2 },
+        { sprite: 'prop2_obelisk', x: 150, y: 400, scale: 2, light: '170,110,255' },
+        { sprite: 'prop2_chest', x: 1210, y: 880, scale: 2 },
+        { sprite: 'prop2_cauldron', x: 1730, y: 860, scale: 2, light: '120,255,140' },
+        { sprite: 'prop2_bones', x: 820, y: 900, scale: 2 },
+        { sprite: 'prop2_mushrooms', x: 330, y: 930, scale: 2 },
+        { sprite: 'prop2_crystal', x: 1760, y: 560, scale: 2, light: '120,220,255' }
     ]
 };
 
@@ -362,6 +375,22 @@ Object.assign(UI, {
             const f = b.facility;
             items.push({ foot: f.y + 64 * f.scale, draw: () => this.drawFacility(ctx, b) });
         }
+        // 빛 웅덩이: 화로·수정 둘레 바닥이 숨 쉬듯 밝아진다(도트 타원 세 겹, 더하기 섞기)
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const d of R.decor) {
+            if (!d.light) continue;
+            const st = d.unlockStage && STAGES.find(s => s.no === d.unlockStage);
+            if (d.unlockStage && !(st && Meta.isCleared(st.id))) continue;
+            const cx = d.x + 64 * d.scale / 2;
+            const cy = d.y + 64 * d.scale - 10;
+            const a = 0.07 + Math.sin(Game.time * 2.4 + d.x * 0.01) * 0.02;
+            for (const [k, al] of [[1, a], [0.66, a * 1.3], [0.36, a * 1.6]]) {
+                ctx.fillStyle = `rgba(${d.light},${al})`;
+                UIKit.pixelEllipse(ctx, cx, cy, 190 * k, 70 * k, 6);
+            }
+        }
+        ctx.restore();
         items.sort((a, b) => a.foot - b.foot);
         for (const it of items) it.draw();
         // 이름표와 느낌표, 설명은 물건 위에
@@ -404,10 +433,10 @@ Object.assign(UI, {
         g.fillRect(0, HQ_WALL_H + 4, GAME_WIDTH, 10);
         // 바닥과 벽의 채도와 밝기를 눌러 시설과 글자가 앞으로 나오게 한다
         g.globalCompositeOperation = 'saturation';
-        g.fillStyle = 'rgba(128,128,128,0.55)';
+        g.fillStyle = 'rgba(128,128,128,0.35)';
         g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         g.globalCompositeOperation = 'multiply';
-        g.fillStyle = '#5e5258';
+        g.fillStyle = '#8a7a80'; // 2026-11-11: 너무 어두워 방이 비어 보였다(#5e5258에서 밝힘)
         g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         g.globalCompositeOperation = 'source-over';
         if (tiles && Assets.get(HQ_ROOM.wall[0])) this.hqBg = c; // 그림이 모두 있을 때만 남겨 둔다

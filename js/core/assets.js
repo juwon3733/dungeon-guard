@@ -1,6 +1,6 @@
 // 그림 불러오기와 색 입힌 사본 캐시. 색 입히기는 픽셀을 읽지 않아 index.html을 바로 열어도 동작한다.
 // UI 아이콘(uiicon_<이름>, 48px)과 UI 재질 그림(48px 9칸 원본: js/ui/uikit.js의 UI_SLICES가 잘라 쓴다)
-const UI_ICONS = ['summon', 'lord', 'attack', 'gold', 'soul', 'lock', 'book', 'bag', 'close', 'fast', 'pause', 'sound', 'gear', 'wave', 'retry', 'bolt'];
+const UI_ICONS = ['summon', 'lord', 'attack', 'gold', 'soul', 'lock', 'book', 'bag', 'close', 'fast', 'pause', 'sound', 'gear', 'wave', 'retry', 'bolt', 'altar', 'forge', 'mana', 'merge'];
 const HUD_SPRITES = ['hud_vessel', 'hud_bossbar', 'hud_panel', 'hud_slab', 'hud_slot', 'hud_gold', 'decal_altar', 'decal_cursed']; // 전투 UI 재질과 맵 기믹(tools/import_hud.py)
 const MENU_ILLUSTS = ['ill_title', 'ill_worldmap', 'ill_select', 'ill_moonGarden', 'ill_coast', 'ill_frost', 'ill_skySea', 'ill_sunForge', 'ill_warTemple', 'ill_starChoir', 'ill_ember', 'ill_daily', 'ill_abyss', 'ill_raid']; // 메뉴 바탕(tools/import_menu_art.py)
 const UI_SHEETS = ['ui_window', 'ui_button', 'ui_buttonHover', 'ui_closeButton', 'ui_itemSlot', 'ui_skillSlot'];
@@ -8,7 +8,8 @@ const UI_SHEETS = ['ui_window', 'ui_button', 'ui_buttonHover', 'ui_closeButton',
 const ZONE_ART = ['void', 'island', 'bridgedeck'];
 // 본부(js/ui/hq.js): 물건 그림(64px)과 바닥 타일셋(tileset_hq, 칸 정보는 hq.js의 WANG_TILES)
 const HQ_SPRITES = ['hq_wartable', 'hq_bookshelf', 'hq_relic_case', 'hq_portal', 'hq_weapon_rack', 'hq_dummy', 'hq_vault', 'hq_throne', 'hq_fireplace',
-    'hq_notice_board', 'hq_plant', 'hq_window', 'hq_wall_banner', 'hq_crates', 'hq_tea_table', 'hq_goblin_desk', 'tileset_hq'];
+    'hq_notice_board', 'hq_plant', 'hq_window', 'hq_wall_banner', 'hq_crates', 'hq_tea_table', 'hq_goblin_desk', 'tileset_hq',
+    'prop2_brazier', 'prop2_pillar', 'prop2_obelisk', 'prop2_chest', 'prop2_cauldron', 'prop2_bones', 'prop2_mushrooms', 'prop2_crystal']; // 본부 소품(맵 소품 그림을 함께 쓴다)
 // 그림 이름의 파일 경로. 효과 시트는 assets/fx, 지역 그림은 webp
 function assetPath(name) {
     if (name.startsWith('pfx_')) return `assets/fx/${name}.png`;
