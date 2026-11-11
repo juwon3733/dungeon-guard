@@ -7825,7 +7825,10 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(MONSTER_RECIPES.filter(r => r.hidden).length, 30, 'thirty hidden recipes');
         assert.strictEqual(nextGrade('mythic'), null, 'no grade merge into transcendent');
         fresh();
-        const tr = [put('soul_devourer'), put('ghost_captain'), put('death_god', 4)];
+        // 초월은 히든 신화 S+와 S 재료까지 5마리. S로는 안 되고 S+여야 한다
+        const tr = [put('soul_devourer', 4), put('ghost_captain'), put('bone_dragon'), put('archlich'), put('death_god', 4)];
+        assert.strictEqual(Game.act({ kind: 'altar', list: tr }).reason, 'mismatch', 'S is not enough for a transcendent');
+        setMonsterRank(tr[4], 5);
         const r4 = Game.act({ kind: 'altar', list: tr });
         assert(r4.ok && r4.type === 'ferry_reaper' && MONSTERS[r4.type].grade === 'transcendent', 'altar makes a transcendent');
         // 히든 전용 몬스터는 소환과 등급 합치기 후보가 아니다
