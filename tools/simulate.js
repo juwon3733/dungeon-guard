@@ -212,6 +212,15 @@ if (process.argv[4] === 'economy') {
         for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 체력 ${t.hp}/${t.maxHp} | 신화 ${t.myth} 전설 ${t.leg} | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}/${t.field}마리 | 소환 강화 ${t.level} | 최고 ${t.top} | 종족 Lv합 ${t.fam} | 각성 ${t.awaken} | S이상 ${t.ranks}`);
     }
 }
+// 스토리 6스테이지: 사람처럼 쓰는 봇(남는 골드, 조합 제단, 권능, 스킬)으로 스테이지마다 승패와 남은 체력
+if (process.argv[4] === 'story') {
+    const ids = vm.runInContext('STAGES.map(s => s.id)', context);
+    for (const st of ids) {
+        const rs = [];
+        for (let i = 0; i < N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,altar:true}, '${st}'))`, context)));
+        console.log(`스토리 ${st} | 승 ${rs.filter(r => r.win).length}/${N} | 라운드 ${R(avg(rs.map(r => r.wave)))}/${rs[0].total} | 체력 ${R(avg(rs.map(r => r.hp)))} | ${R(avg(rs.map(r => r.time)) / 60)}분 | 최고 ${rs.map(r => r.topGrade).join(',')}`);
+    }
+}
 if (process.argv[4] === 'raid') {
     for (const d of ['raid1', 'raid2', 'raid3', 'raid4']) {
         const r = JSON.parse(vm.runInContext(`JSON.stringify(play(${BOTS['합치기+강화+장비+번개']}, null, '${d}'))`, context));

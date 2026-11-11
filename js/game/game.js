@@ -374,6 +374,7 @@ const Game = {
             rank = i;
         }
         const before = m.rank || 0;
+        this.stats.rankRolls = (this.stats.rankRolls || 0) + 1;
         setMonsterRank(m, rank);
         showRankChange(m, before);
         if (rank < before) Sfx.play('mergeFail');
@@ -1053,7 +1054,9 @@ const Game = {
         const r = found.recipe;
         const order = found.pick.map(i => ms[i]); // 조합식 재료 순서(a, b, parts...)
         const plan = { kind: 'recipe', recipe: r, result: r.result, src: order[1], dst: order[0], extra: order.slice(2) };
-        return this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
+        const res = this.merge({ monster: plan.src }, { monster: plan.dst }, null, false, plan);
+        if (res.ok) this.stats.altars = (this.stats.altars || 0) + 1;
+        return res;
     },
 
     // 재료가 여럿인 히든 조합식(recipe.parts): m이 S랭크 핵심 재료(a)일 때 맵에서 나머지 재료를 고른다.

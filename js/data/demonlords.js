@@ -416,7 +416,7 @@ const DEMON_LORDS = {
         sprite: 'lord_chain', footPx: 120, skills: ['chainPull', 'jail'],
         portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
-        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 14% 확률로 0.6초 속박(정예는 확률 절반, 보스는 확률 5분의 1과 시간 절반)', chance: 0.14, duration: 0.6 },
+        passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 18% 확률로 0.6초 속박(정예는 확률 절반, 보스는 확률 5분의 1과 시간 절반)', chance: 0.18, duration: 0.6 },
         speech: {
             waveStart: ['줄 맞춰 들어와라.'],
             throneHit: ['감히 간수를 쳐?'],

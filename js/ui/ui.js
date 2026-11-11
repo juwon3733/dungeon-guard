@@ -3431,6 +3431,12 @@ const UI = {
         if (G.state === 'prep' && G.hp < G.maxHp() && G.stats.sacrificed === 0 && G.monsters.length > 0) return { key: 'sacrifice', text: '왕좌로 끌면 제물' };
         if (G.state === 'wave' && G.waveIndex === 0 && G.skills[G.skillKey(0)] <= 0) return { key: 'lightning', text: `${LORD_SKILLS[G.skillKey(0)].name}(Q)` };
         if (CORRUPTION_ENABLED && G.corpses.length > 0 && !this.corruptHintShown) return { key: 'corrupt', text: '쓰러진 용사 누르기' };
+        // 새 시스템 안내(2026-11-11): 처음 쓸 만해진 때 한 줄씩
+        if (G.lordPowers().length && G.awakenCheck().ok) return { key: 'awaken', text: '권능(R) · 남는 마력으로 각성' };
+        const fc = G.fieldCost();
+        if (G.fieldFull() && fc !== null && G.gold >= fc && !G.fieldBought) return { key: 'field', text: '맵이 가득 참 · 강화(G)에서 칸 넓히기' };
+        if (G.waveIndex >= 4 && !G.stats.altars && G.monsters.filter(m => GRADE_ORDER.indexOf(MONSTERS[m.type].grade) >= 1).length >= 6) return { key: 'altar', text: '조합 제단(H) · 여러 마리를 올려 히든 조합' };
+        if (G.waveIndex >= 6 && !G.stats.rankRolls && G.gold >= 400) return { key: 'rank', text: '몬스터를 눌러 랭크 돌리기 · 피해 증가' };
         return null;
     },
 
