@@ -212,7 +212,7 @@ const COMBAT_RULES = {
     miasma: { cooldown: 28, radius: 2, duration: 6, dps: 6, dpsPerRound: 1.5, bigDuration: 3 }, // 역병의 군주 W 역병 구름(초당 피해 = dps + 라운드 x dpsPerRound)
     chainPull: { cooldown: 12, count: 2, back: 3, bind: 1.5, bossBind: 0.5 }, // 사슬의 군주 Q 사슬 끌기
     mirrorWard: { cooldown: 35, duration: 6 }, // 거울 마녀 Q 반사막(막을 때마다 맨 앞 용사에게 낙뢰 기본 피해)
-    mirrorClone: { cooldown: 35, duration: 10 }, // 거울 마녀 W 거울 분신
+    mirrorClone: { cooldown: 35, duration: 7 }, // 거울 마녀 W 거울 분신
     clockTower: { cooldown: 24, radius: 2, duration: 8, slow: 0.5 }, // 시계탑의 마왕 Q 감속 시계탑
     timeStop: { cooldown: 40, duration: 3, bossDuration: 1, longUp: 1.5 }, // 시계탑의 마왕 W 시간 정지
     // 권능 스킬(E)
