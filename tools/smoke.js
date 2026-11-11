@@ -6915,12 +6915,12 @@ console.log('smoke ok: equipment crafting');
         Game.mods.critChance = 0; // 피의 잔의 치명타 확률 15%도 뺀다(난수 운에 기대지 않게)
         { const dd = damageHero(h, 100, 0, 0, null, imp2); assert(Math.abs(dd - 100) < 1e-6, 'no crit: ' + dd); }
         assert(Math.abs(damageHero(h, 100, 0, 0) - 100) < 1e-6, 'no attacker, no crit');
-        // 고문 도구: 상태 이상이면 +20%
+        // 고문 도구: 상태 이상이면 표의 값만큼
         start(['torture_kit']);
         const imp3 = put(ofFamily('demon'));
         h = hero();
         h.slow = 2; h.slowMul = 0.9;
-        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp3) - 120) < 1e-6, 'torture kit');
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp3) - 100 * (1 + RELICS.torture_kit.effects.statusDamage)) < 1e-6, 'torture kit');
         // 종족 확률: 망자의 성배면 같은 등급에서 언데드가 더 자주
         const count = relics => {
             start(relics, 'prep');
@@ -6946,7 +6946,7 @@ console.log('smoke ok: equipment crafting');
         start(['march_drum', 'pure_crown']);
         const o1 = put(ofFamily('orc'));
         put(ofFamily('orc'));
-        assert(Math.abs(Game.relicDamage(o1) - (0.06 + 0.4)) < 1e-9, 'drum and pure crown');
+        assert(Math.abs(Game.relicDamage(o1) - (2 * RELICS.march_drum.effects.perMonsterDamage + 0.4)) < 1e-9, 'drum and pure crown');
         start(['balance_scale']);
         const fams = Object.keys(MONSTER_FAMILIES).map(f => put(ofFamily(f)));
         assert(Math.abs(Game.relicDamage(fams[0]) - 0.25) < 1e-9, 'balance scale');
