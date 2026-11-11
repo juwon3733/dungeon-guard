@@ -378,6 +378,7 @@ const Game = {
         setMonsterRank(m, rank);
         showRankChange(m, before);
         if (rank < before) Sfx.play('mergeFail');
+        if (rank === MONSTER_RANKS.length - 1) this.stats.splus = (this.stats.splus || 0) + 1; // 업적: S+
         return { ok: true, rank, before, cost };
     },
 
@@ -1397,6 +1398,10 @@ const Game = {
         // 결과가 더 크면 재료가 비운 자리를 포함해 가장 가까운 빈 곳에 선다
         const spot = this.nearestFit(type, old.col, old.row, materials);
         const monster = createMonster(type, spot.col, spot.row);
+        // 업적·임무 기록(js/game/progress.js): 이번 판에 세운 신화와 초월
+        const made = MONSTERS[type].grade;
+        if (made === 'mythic') this.stats.mythics = (this.stats.mythics || 0) + 1;
+        if (made === 'transcendent') { this.stats.transcendents = (this.stats.transcendents || 0) + 1; (this.stats.transKinds = this.stats.transKinds || []).includes(type) || this.stats.transKinds.push(type); }
         // 랭크는 재료 중 가장 낮은 값을 이어받는다(합치기로 랭크가 오르지는 않는다)
         // 재료가 여럿인 히든 조합식은 핵심 재료(놓은 쪽)의 랭크를 잇는다
         setMonsterRank(monster, fullPlan ? (old.rank || 0) : Math.min(...materials.map(m => m.rank || 0)));
@@ -1597,6 +1602,21 @@ const Game = {
     finish(victory) {
         if (this.state === 'victory' || this.state === 'defeat') return;
         this.state = victory ? 'victory' : 'defeat';
+        // 판 밖 목표(업적, 숙련도, 임무). 판의 세기와 상관없는 기록이라 재생 중에는 남기지 않는다
+        this.progressResult = null;
+        if (!this.replaying && typeof Progress !== 'undefined') {
+            const st = this.stats;
+            this.progressResult = Progress.recordRun({
+                kind: this.challenge ? this.challenge.kind : 'story', lord: this.lord, rounds: this.waveIndex, kills: st.kills,
+                altars: st.altars || 0, rankRolls: st.rankRolls || 0, splus: st.splus || 0, mythics: st.mythics || 0,
+                transcendents: st.transcendents || 0, transKinds: st.transKinds || [], abyssLevel: this.challenge ? this.challenge.level : 0,
+                fieldRun: this.maxField(), awakenRun: this.awaken || 0, raidTier: this.raidTier || 0
+            });
+            // 새 업적이나 임무가 있으면 결과 화면 위에 알림
+            const pr = this.progressResult;
+            const names = pr.achievements.map(a => a.name).concat(pr.missions);
+            if (names.length || pr.levelUp) Fx.banner = { name: pr.achievements.length ? '업적 달성' : (pr.missions.length ? '임무 완료' : `숙련도 ${pr.levelUp}`), sub: names.slice(0, 2).join(' · ') || `${this.lordDef().name} 숙련도 ${pr.levelUp}레벨`, age: 0, life: 3, small: true, keep: true };
+        }
         if (this.challenge) {
             // 도전은 스토리 저장을 건드리지 않고 최고 기록만 남긴다
             const c = this.challenge;
