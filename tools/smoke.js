@@ -66,6 +66,7 @@ vm.runInContext(`{
         delete MONSTER_GRADES.transcendent;
         GRADE_ORDER.splice(GRADE_ORDER.indexOf('transcendent'), 1);
     }
+    ROUND_RULES.mix.length = 5; // 옛 시험은 직업 셋(방패병·성직자 이전)
     for (let i = 0; i < WAVES.length; i++) WAVES[i] = buildRound(i + 1);
     const OLD_UNLOCK = { s1: ['greedy_vault', 'legion_banner', 'glass_heart'], s2: ['usury_ledger', 'mad_dice', 'dead_horn', 'sniper_mark'], s3: ['iron_oath', 'blood_altar', 'broken_hourglass'],
         s4: ['storm_bottle', 'mad_drum', 'smith_hammer'], s5: ['equip_eater', 'mirror_twin', 'lone_crown'], s6: ['pauper_helm', 'blood_contract', 'shaky_bridge'] };
@@ -6914,12 +6915,12 @@ console.log('smoke ok: equipment crafting');
         Game.mods.critChance = 0; // 피의 잔의 치명타 확률 15%도 뺀다(난수 운에 기대지 않게)
         { const dd = damageHero(h, 100, 0, 0, null, imp2); assert(Math.abs(dd - 100) < 1e-6, 'no crit: ' + dd); }
         assert(Math.abs(damageHero(h, 100, 0, 0) - 100) < 1e-6, 'no attacker, no crit');
-        // 고문 도구: 상태 이상이면 +20%
+        // 고문 도구: 상태 이상이면 표의 값만큼
         start(['torture_kit']);
         const imp3 = put(ofFamily('demon'));
         h = hero();
         h.slow = 2; h.slowMul = 0.9;
-        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp3) - 120) < 1e-6, 'torture kit');
+        assert(Math.abs(damageHero(h, 100, 0, 0, null, imp3) - 100 * (1 + RELICS.torture_kit.effects.statusDamage)) < 1e-6, 'torture kit');
         // 종족 확률: 망자의 성배면 같은 등급에서 언데드가 더 자주
         const count = relics => {
             start(relics, 'prep');
@@ -6945,7 +6946,7 @@ console.log('smoke ok: equipment crafting');
         start(['march_drum', 'pure_crown']);
         const o1 = put(ofFamily('orc'));
         put(ofFamily('orc'));
-        assert(Math.abs(Game.relicDamage(o1) - (0.06 + 0.4)) < 1e-9, 'drum and pure crown');
+        assert(Math.abs(Game.relicDamage(o1) - (2 * RELICS.march_drum.effects.perMonsterDamage + 0.4)) < 1e-9, 'drum and pure crown');
         start(['balance_scale']);
         const fams = Object.keys(MONSTER_FAMILIES).map(f => put(ofFamily(f)));
         assert(Math.abs(Game.relicDamage(fams[0]) - 0.25) < 1e-9, 'balance scale');
@@ -7190,6 +7191,19 @@ console.log('smoke ok: equipment crafting');
         updateBossPatterns(war, 0.01);
         assert(hurt.hp > hurt.maxHp * 0.75 && hurt.haste > 0, 'war avatar heals and hastes');
         assert(ROUND_RULES.bosses.length === 8 && ROUND_RULES.bosses.every(b => BOSSES[b]), 'eight bosses rotate');
+        // 방패병: 둘레 다른 용사가 받는 피해 감소. 성직자: 둘레 용사 회복
+        Game.reset({ lord: 'bone_queen', relics: [] });
+        Game.state = 'wave';
+        const mk = (t, d) => { const h = createHero(t, 0, 0, false, 'north'); Object.assign(h, { waiting: false, delay: 0, d, hp: 1000, maxHp: 1000, armor: 0 }); Game.heroes.push(h); return h; };
+        const gd = mk('guardian', 300), near = mk('warrior', 310), far = mk('warrior', 900);
+        Game.guardians = Game.heroes.filter(h => HEROES[h.type].guard);
+        damageHero(near, 100, 0, 0, null, null, true); damageHero(far, 100, 0, 0, null, null, true);
+        assert(Math.abs((1000 - near.hp) - 100 * (1 - HEROES.guardian.guard.reduce)) < 1e-6 && far.hp === 900, 'guardian protects nearby');
+        const pr = mk('priest', 320);
+        pr.healT = 0;
+        updateHeal(pr, 0.01);
+        assert(near.hp > 1000 - 70 + 1 && far.hp === 900, 'priest heals nearby only');
+        assert(ROUND_RULES.mix.some(m => m.guardian) && ROUND_RULES.mix.some(m => m.priest), 'new classes appear in rounds');
         console.log('smoke ok: gold shop, merge room, mage slow, boss patterns');
     }).toString() + ')()', gctx);
 }
@@ -7811,7 +7825,10 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(MONSTER_RECIPES.filter(r => r.hidden).length, 30, 'thirty hidden recipes');
         assert.strictEqual(nextGrade('mythic'), null, 'no grade merge into transcendent');
         fresh();
-        const tr = [put('soul_devourer'), put('ghost_captain'), put('death_god', 4)];
+        // 초월은 히든 신화 S+와 S 재료까지 5마리. S로는 안 되고 S+여야 한다
+        const tr = [put('soul_devourer', 4), put('ghost_captain'), put('bone_dragon'), put('archlich'), put('death_god', 4)];
+        assert.strictEqual(Game.act({ kind: 'altar', list: tr }).reason, 'mismatch', 'S is not enough for a transcendent');
+        setMonsterRank(tr[4], 5);
         const r4 = Game.act({ kind: 'altar', list: tr });
         assert(r4.ok && r4.type === 'ferry_reaper' && MONSTERS[r4.type].grade === 'transcendent', 'altar makes a transcendent');
         // 히든 전용 몬스터는 소환과 등급 합치기 후보가 아니다

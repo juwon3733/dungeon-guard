@@ -131,6 +131,7 @@ const Game = {
         this.mana = 0;
         this.powers = {};
         this.awaken = 0; // 각성 횟수
+        this.seenHeroTypes = {}; // 이번 판에 처음 본 새 직업(안내를 한 번만)
         this.fieldBought = 0; // 골드로 넓힌 칸 수
         this.manaBought = 0; // 골드로 산 마력 수
         // 도전은 모두 같은 지도, 스토리는 판마다 다른 지도
@@ -1667,6 +1668,7 @@ const Game = {
             }
         }
         for (const u of this.units) updateUnit(u, dt);
+        this.guardians = this.heroes.filter(h => !h.dead && !h.waiting && HEROES[h.type].guard); // 방패병(guardReduce)
         for (const h of this.heroes) if (!h.dead) updateHero(h, dt);
         for (const p of this.projectiles) updateProjectile(p, dt);
         for (const z of this.hazards) updateHazard(z, dt);

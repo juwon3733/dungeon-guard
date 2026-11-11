@@ -25,6 +25,22 @@ function mergePair(G) {
     return best;
 }
 const TRACE = [];
+// 조합 제단: 맵의 몬스터로 만들 수 있는 히든 조합식(결과 등급이 높은 것부터). 재료는 조건을 채우는 가장 낮은 랭크부터. 없으면 null
+function altarPick(G) {
+    const order = MONSTER_RECIPES.filter(r => r.hidden).sort((a, b) => GRADE_ORDER.indexOf(MONSTERS[b.result].grade) - GRADE_ORDER.indexOf(MONSTERS[a.result].grade));
+    for (const r of order) {
+        const used = [];
+        let ok = true;
+        for (const need of recipeMaterials(r)) {
+            const m = G.monsters.filter(x => !x.removed && !x.clone && !used.includes(x) && x.type === need.type && (x.rank || 0) >= need.rank)
+                .sort((a, b) => (a.rank || 0) - (b.rank || 0))[0];
+            if (!m) { ok = false; break; }
+            used.push(m);
+        }
+        if (ok) return used;
+    }
+    return null;
+}
 function play(bot, stageId, daily) {
     if (daily) { Game.reset(null, null, daily.startsWith('raid') ? raidChallenge(daily) : daily.startsWith('abyss') ? abyssChallenge(daily, bot.lord || 'rift', bot.relics || [], bot.level === undefined ? DEFAULT_ABYSS_LEVEL : bot.level) : dailyChallenge(daily)); Game.state = 'prep'; }
     else Game.reset(stageId ? { lord: 'rift', relics: [] } : undefined, stageId);
@@ -40,8 +56,13 @@ function play(bot, stageId, daily) {
         }
         if (bot.merge && thinkMerge-- <= 0 && (G.fieldFull() || G.monsters.length >= (bot.spend ? G.maxField() * 0.85 : 18))) {
             thinkMerge = 15; // 사람처럼 0.5초에 한 번만
-            const p = mergePair(G);
-            if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
+            // 조합 제단(bot.altar): 만들 수 있는 히든이 있으면 먼저
+            const al = bot.altar ? altarPick(G) : null;
+            if (al && G.act({ kind: 'altar', list: al }).ok) s.altars = (s.altars || 0) + 1;
+            else {
+                const p = mergePair(G);
+                if (p && G.merge({ monster: p.a }, { monster: p.b }).ok) s.merges++;
+            }
         }
         if (bot.upgrade) {
             const cost = G.summonUpgradeCost();
@@ -115,7 +136,7 @@ function play(bot, stageId, daily) {
         }
     }
     return { tier: G.raidTier, score: G.score, win: G.state === 'victory', wave: Math.min(G.waveIndex + 1, G.waves.length), total: G.waves.length, hp: G.hp, time: G.stats.time, kills: G.stats.kills, gold: G.gold,
-        n: G.monsters.length, summons: s.summons, merges: s.merges, ups: s.ups, top: s.top, legendWave: s.legendWave };
+        n: G.monsters.length, summons: s.summons, merges: s.merges, altars: s.altars || 0, topGrade: GRADE_ORDER[s.top], ups: s.ups, top: s.top, legendWave: s.legendWave };
 }
 `, context);
 
@@ -160,9 +181,9 @@ if (process.argv[4] === 'lords') {
     for (const lord of lords) {
         for (let b = 0; b < 3; b++) {
             const rs = [];
-            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${b},lord:'${lord}',level:${level},curse:${process.env.CURSE ? 'true' : 'false'}}, null, 'abyss${i}'))`, context)));
+            for (let i = 1; i <= N; i++) rs.push(JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,altar:true,branch:${b},lord:'${lord}',level:${level},curse:${process.env.CURSE ? 'true' : 'false'}}, null, 'abyss${i}'))`, context)));
             const br = vm.runInContext(`LORD_POWERS['${lord}'][${b}].name`, context);
-            console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분`);
+            console.log(`${lord} ${br} | 층 ${R(avg(rs.map(r => r.wave)))} (${rs.map(r => r.wave).join(',')}) | ${R(avg(rs.map(r => r.time)) / 60)}분 | 제단 ${R(avg(rs.map(r => r.altars)))} | 최고 ${rs.map(r => r.topGrade).join(',')}`);
         }
     }
 }
@@ -186,7 +207,7 @@ if (process.argv[4] === 'economy') {
     const level = process.argv[5] === undefined ? vm.runInContext('DEFAULT_ABYSS_LEVEL', context) : +process.argv[5];
     for (let i = 1; i <= N; i++) {
         vm.runInContext('TRACE.length = 0', context);
-        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,branch:${+(process.env.BRANCH || 0)},lord:'${process.env.LORD || 'bone_queen'}',level:${level},trace:true,every:${+(process.env.EVERY || 10)}}, null, 'abyss${i}'))`, context));
+        const r = JSON.parse(vm.runInContext(`JSON.stringify(play({summon:true,merge:true,upgrade:true,equip:true,skill:true,powers:true,spend:true,altar:true,branch:${+(process.env.BRANCH || 0)},lord:'${process.env.LORD || 'bone_queen'}',level:${level},trace:true,every:${+(process.env.EVERY || 10)}}, null, 'abyss${i}'))`, context));
         console.log(`시드 ${i}: ${r.wave}층에서 끝`);
         for (const t of JSON.parse(vm.runInContext('JSON.stringify(TRACE)', context))) console.log(`  ${t.round}라운드 | 체력 ${t.hp}/${t.maxHp} | 신화 ${t.myth} 전설 ${t.leg} | 번 골드 ${t.earned} | 남은 ${t.gold} | 소환 ${t.cost}G | 맵 ${t.n}/${t.field}마리 | 소환 강화 ${t.level} | 최고 ${t.top} | 종족 Lv합 ${t.fam} | 각성 ${t.awaken} | S이상 ${t.ranks}`);
     }

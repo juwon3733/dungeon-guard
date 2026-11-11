@@ -976,7 +976,7 @@ const MONSTERS = {
     mushroom_king: {
         id: 'mushroom_king', name: '버섯 왕', role: 'area', family: 'spirit', grade: 'epic',
         sprite: ASTERIA_ART.mushroom_king.sprite, cost: 300, summon: false, gradeMerge: false,
-        stats: { hp: 120, damage: 46, interval: 1.6, range: 4, splash: 1.6 },
+        stats: { hp: 120, damage: 54, interval: 1.6, range: 4, splash: 1.6 },
         abilities: [{ kind: 'slowShot', name: '포자', speedMul: 0.7, duration: 2.5 }], unlock: 'start',
         desc: '히든. 포자 웅덩이로 용사를 느리게 하고 방어를 무르게 한다.',
         art: astArt('mushroom_king', { glow: '255,120,120' })
@@ -984,15 +984,15 @@ const MONSTERS = {
     slime_monarch: {
         id: 'slime_monarch', name: '슬라임 군주', role: 'area', family: 'undead', grade: 'epic',
         sprite: ASTERIA_ART.slime_monarch.sprite, cost: 300, summon: false, gradeMerge: false,
-        stats: { hp: 140, damage: 40, interval: 1.4, range: 3.5, splash: 1.8 },
-        abilities: [{ kind: 'burnGround', name: '산성 점액', radius: 1.2, dps: 14, duration: 4 }], unlock: 'start',
+        stats: { hp: 140, damage: 26, interval: 1.4, range: 3.5, splash: 1.8 },
+        abilities: [{ kind: 'burnGround', name: '산성 점액', radius: 1.2, dps: 9, duration: 4 }], unlock: 'start',
         desc: '히든. 삼킨 용사의 뼈가 몸 안에 떠 있다. 산성 점액을 뿌린다.',
         art: astArt('slime_monarch', { glow: '150,255,90' })
     },
     ghost_captain: {
         id: 'ghost_captain', name: '유령 선장', role: 'ranged', family: 'undead', grade: 'legendary',
         sprite: ASTERIA_ART.ghost_captain.sprite, cost: 600, summon: false, gradeMerge: false,
-        stats: { hp: 200, damage: 120, interval: 0.9, range: 5.5 },
+        stats: { hp: 200, damage: 70, interval: 0.9, range: 5.5 },
         abilities: [{ kind: 'goldOnKill', gold: 8 }], unlock: 'start',
         skills: [{ kind: 'barrage', name: '유령선 일제 사격', cooldown: 12, count: 10, mul: 1.1, reach: 'map' }],
         desc: '히든. 가라앉은 배의 선원들이 함께 쏜다.',
@@ -1020,36 +1020,36 @@ const MONSTERS = {
     ferry_reaper: {
         id: 'ferry_reaper', name: '저승 뱃사공', role: 'melee', family: 'undead', grade: 'transcendent',
         sprite: ASTERIA_ART.ferry_reaper.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 4200, damage: 460, interval: 0.8, range: 2.6, block: 10, respawn: 4 },
-        abilities: [{ kind: 'cleave', radius: 2.6, ratio: 0.6 }], unlock: 'start',
-        skills: [{ kind: 'harvest', name: '저승 노', cooldown: 8, reach: 'map', below: 0.45, gold: 3 }, { kind: 'timeStop', name: '망각의 강', cooldown: 24, duration: 3 }],
+        stats: { hp: 8400, damage: 1500, interval: 0.75, range: 2.8, block: 14, respawn: 3 },
+        abilities: [{ kind: 'cleave', radius: 2.6, ratio: 0.45 }], unlock: 'start',
+        skills: [{ kind: 'harvest', name: '저승 노', cooldown: 6, reach: 'map', below: 0.55, gold: 4 }, { kind: 'timeStop', name: '망각의 강', cooldown: 20, duration: 4 }],
         desc: '초월. 강을 건너는 이는 돌아오지 못한다.',
         art: astArt('ferry_reaper', { glow: '150,140,255' })
     },
     abyss_crown: {
         id: 'abyss_crown', name: '공허의 군주', role: 'area', family: 'demon', grade: 'transcendent',
         sprite: ASTERIA_ART.abyss_crown.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 600, damage: 520, interval: 1.3, range: 6.5, splash: 2.8 },
-        abilities: [{ kind: 'burnGround', name: '공허의 불', radius: 1.6, dps: 80, duration: 4 }], unlock: 'start',
-        skills: [{ kind: 'nova', name: '공허 붕괴', cooldown: 14, radius: 'map', mul: 3, burn: 5 }, { kind: 'buff', name: '어둠의 왕관', cooldown: 20, duration: 10, damage: 0.4 }],
+        stats: { hp: 1200, damage: 900, interval: 1.2, range: 7, splash: 3 },
+        abilities: [{ kind: 'burnGround', name: '공허의 불', radius: 1.8, dps: 200, duration: 5 }], unlock: 'start',
+        skills: [{ kind: 'nova', name: '공허 붕괴', cooldown: 12, radius: 'map', mul: 5, burn: 6 }, { kind: 'buff', name: '어둠의 왕관', cooldown: 18, duration: 12, damage: 0.6 }],
         desc: '초월. 왕관이 빛을 삼키면 맵 전체가 무너진다.',
         art: astArt('abyss_crown', { glow: '170,90,255', shot: 'bolt' })
     },
     void_eye: {
         id: 'void_eye', name: '공허의 눈', role: 'ranged', family: 'spirit', grade: 'transcendent',
         sprite: ASTERIA_ART.void_eye.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 560, damage: 700, interval: 0.9, range: 7 },
-        abilities: [{ kind: 'chain', count: 5, ratio: 0.7, jump: 3 }], unlock: 'start',
-        skills: [{ kind: 'timeStop', name: '응시', cooldown: 20, duration: 4 }, { kind: 'barrage', name: '천 개의 눈', cooldown: 10, count: 20, mul: 1.2, reach: 'map' }],
+        stats: { hp: 1100, damage: 880, interval: 0.85, range: 7.5 },
+        abilities: [{ kind: 'chain', count: 5, ratio: 0.5, jump: 3 }], unlock: 'start',
+        skills: [{ kind: 'timeStop', name: '응시', cooldown: 18, duration: 5 }, { kind: 'barrage', name: '천 개의 눈', cooldown: 8, count: 30, mul: 1.6, reach: 'map' }],
         desc: '초월. 눈이 마주친 용사는 그 자리에 굳는다.',
         art: astArt('void_eye', { glow: '200,90,255', shot: 'bolt' })
     },
     rift_sovereign: {
         id: 'rift_sovereign', name: '차원 군주', role: 'ranged', family: 'spirit', grade: 'transcendent',
         sprite: ASTERIA_ART.rift_sovereign.sprite, cost: 2000, summon: false, gradeMerge: false,
-        stats: { hp: 600, damage: 620, interval: 1.0, range: 7 },
-        abilities: [{ kind: 'aura', stat: 'damage', radius: 6, value: 0.4 }], unlock: 'start',
-        skills: [{ kind: 'push', name: '차원 균열', cooldown: 16, radius: 6, mul: 1.5, tiles: 3 }, { kind: 'buff', name: '별의 계약', cooldown: 20, duration: 10, damage: 0.5, speed: 0.3 }],
+        stats: { hp: 1200, damage: 1200, interval: 0.9, range: 7.5 },
+        abilities: [{ kind: 'aura', stat: 'damage', radius: 7, value: 0.6 }], unlock: 'start',
+        skills: [{ kind: 'push', name: '차원 균열', cooldown: 14, radius: 7, mul: 3, tiles: 4 }, { kind: 'buff', name: '별의 계약', cooldown: 18, duration: 12, damage: 0.8, speed: 0.4 }],
         desc: '초월. 둘레 몬스터의 힘을 끌어올리고 용사를 차원 밖으로 밀어낸다.',
         art: astArt('rift_sovereign', { glow: '200,120,255', shot: 'bolt' })
     }
@@ -1208,11 +1208,11 @@ const MONSTER_RECIPES = [
     { a: 'frost_witch', aRank: 'A', b: 'moon_priestess', bRank: 'A', parts: [{ type: 'ancient_treant', count: 1 }], result: 'frost_queen', hidden: true },
     { a: 'flame_archer', b: 'eagle_hunter', parts: [{ type: 'fire_imp', count: 2 }], result: 'phoenix_lord', hidden: true },
     { a: 'orc_berserker', b: 'war_drummer', parts: [{ type: 'orc_berserker', count: 1 }, { type: 'goblin_spearman', count: 1 }], result: 'orc_high_chief', hidden: true },
-    // 초월: 히든 신화(S 이상)와 높은 등급 재료
-    { a: 'death_god', aRank: 'S', b: 'soul_devourer', parts: [{ type: 'ghost_captain', count: 1 }], result: 'ferry_reaper', hidden: true },
-    { a: 'sun_god', aRank: 'S', b: 'fallen_angel', bRank: 'S', parts: [{ type: 'hell_general', count: 1 }, { type: 'chaos_mage', count: 1 }], result: 'abyss_crown', hidden: true },
-    { a: 'moon_god', aRank: 'S', b: 'time_witch', parts: [{ type: 'abyss_dragon_king', count: 1 }], result: 'void_eye', hidden: true },
-    { a: 'god_king', aRank: 'S', b: 'giant_king', bRank: 'S', parts: [{ type: 'element_sage', count: 1 }, { type: 'crystal_giant', count: 1 }, { type: 'war_drummer', count: 1 }], result: 'rift_sovereign', hidden: true }
+    // 초월(2026-11-11 사용자: 훨씬 어렵게): 재료 5마리, 히든 신화 S+, 주요 재료 S 이상
+    { a: 'death_god', aRank: 'S+', b: 'soul_devourer', bRank: 'S', parts: [{ type: 'ghost_captain', count: 1 }, { type: 'bone_dragon', count: 1 }, { type: 'archlich', count: 1 }], result: 'ferry_reaper', hidden: true },
+    { a: 'sun_god', aRank: 'S+', b: 'fallen_angel', bRank: 'S', parts: [{ type: 'hell_general', count: 1 }, { type: 'phoenix_lord', count: 1 }, { type: 'executioner', count: 1 }], result: 'abyss_crown', hidden: true },
+    { a: 'moon_god', aRank: 'S+', b: 'time_witch', bRank: 'S', parts: [{ type: 'abyss_dragon_king', count: 1 }, { type: 'frost_queen', count: 1 }, { type: 'element_sage', count: 1 }], result: 'void_eye', hidden: true },
+    { a: 'god_king', aRank: 'S+', b: 'star_whale', bRank: 'S', parts: [{ type: 'giant_king', count: 1 }, { type: 'crystal_giant', count: 1 }, { type: 'orc_high_chief', count: 1 }], result: 'rift_sovereign', hidden: true }
 ];
 
 // 조합식 하나의 기록 열쇠: 재료(랭크 조건 포함)를 정렬해 잇는다. 예: 'bone_knight:A+curse_shooter:A'

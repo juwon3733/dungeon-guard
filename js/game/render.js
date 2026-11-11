@@ -529,6 +529,13 @@ const Render = {
             else if (h.hp < h.maxHp) this.healthBar(ctx, p.x, p.y - def.barY, h.hp / h.maxHp, HP_BAR_W / 2, '#ff5a5a');
         }
         if (h.haste > 0) this.hasteNotes(ctx, p.x, p.y + 9, h.d * 0.01, h.boss || h.elite ? 2 : 1.5);
+        if (HEROES[h.type].guard && !h.waiting) {
+            // 방패병: 발밑 푸른 방패 고리(둘레 용사 보호)
+            ctx.save();
+            ctx.globalAlpha = 0.35;
+            this.pixelDisc(ctx, p.x, p.y + 4, 40, 13, '#7fb8ff', { k: 3 });
+            ctx.restore();
+        }
         const headY = p.y - (h.boss ? BOSSES[h.bossKey].starY : HEROES[h.type].barY + 12);
         // 기절은 머리 위를 도는 별과 새(pixelfx), 화상은 몸에 붙은 불꽃, 빙결은 몸에 덮인 서리 빛
         if (h.shieldT > 0) {
