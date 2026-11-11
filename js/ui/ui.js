@@ -242,17 +242,18 @@ const UI = {
         if (G.lordPowers().length) {
             const ready = G.powerReady();
             this.button('powers', GAME_WIDTH - 270, 80, 258, 50, {
-                label: `권능 · 마력 ${G.mana} (R)`, size: 22, theme: ready ? 'gold' : undefined, onClick: () => this.togglePowers()
+                label: '권능', sideBtn: { icon: 'mana', accent: '#8f7bff', key: 'R', right: `마력 ${G.mana}`, on: ready }, onClick: () => this.togglePowers()
             });
         }
+        // 오른쪽 버튼 줄: 버튼마다 아이콘과 색 띠(2026-11-11 사용자: 글자만 있고 다 똑같이 생겨서 별로)
         this.button('autoMerge', NEXT_BTN_X, NEXT_BTN_Y + 42, NEXT_BTN_W, 50, {
-            label: `자동 합치기 ${G.autoMerge ? '켜짐' : '꺼짐'} (A)`, size: 22, theme: G.autoMerge ? 'gold' : undefined, onClick: () => this.toggleAutoMerge()
+            label: '자동 합치기', sideBtn: { icon: 'merge', accent: '#4fd1c5', key: 'A', right: G.autoMerge ? '켜짐' : '꺼짐', on: G.autoMerge }, onClick: () => this.toggleAutoMerge()
         });
         this.button('familyToggle', NEXT_BTN_X, NEXT_BTN_Y - 16, NEXT_BTN_W, 50, {
-            label: '강화 (G)', size: 22, theme: this.familyOpen ? 'gold' : undefined, onClick: () => this.toggleFamily()
+            label: '강화', sideBtn: { icon: 'forge', accent: '#ff9a3d', key: 'G', right: '종족 · 칸 · 마력', on: this.familyOpen }, onClick: () => this.toggleFamily()
         });
         this.button('altarToggle', NEXT_BTN_X, NEXT_BTN_Y - 74, NEXT_BTN_W, 50, {
-            label: '조합 제단 (H)', size: 22, theme: this.altarOpen ? 'gold' : undefined, onClick: () => this.toggleAltar()
+            label: '조합 제단', sideBtn: { icon: 'altar', accent: '#c46bff', key: 'H', right: '히든', on: this.altarOpen }, onClick: () => this.toggleAltar()
         });
         if (this.familyOpen && !this.focus()) this.layoutFamily(); // 몬스터를 고르거나 끄는 동안은 정보 창에 자리를 내준다
         if (this.altarOpen && !this.focus()) this.layoutAltar();
@@ -2886,6 +2887,7 @@ const UI = {
             else if (b.upgrade) this.drawUpgradeButton(ctx, b, st);
             else if (b.arrow) this.drawArrowButton(ctx, b, st);
             else if (b.iconOnly) this.drawIconButton(ctx, b, st);
+            else if (b.sideBtn) this.drawSideButton(ctx, b, st);
             else {
                 const kind = b.disabled ? 'off' : (b.theme === 'gold' ? 'primary' : (b.theme === 'danger' ? 'danger' : 'silver'));
                 const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
@@ -2904,6 +2906,34 @@ const UI = {
                 UIKit.text(ctx, b.label, lx + iw, ly + 1, size, UIKit.buttonInk(kind));
                 if (b.sub) UIKit.text(ctx, b.sub, lx + iw, ly + 30, 18, b.disabled ? UI_THEME.bad : UI_THEME.creamSoft);
             }
+        }
+    },
+
+    // 오른쪽 버튼 줄(권능, 조합 제단, 강화, 자동 합치기): 왼쪽 색 띠와 아이콘, 이름, 단축키, 오른쪽에 지금 상태. 켜지면 띠 색으로 테두리가 빛난다
+    drawSideButton(ctx, b, st) {
+        const o = b.sideBtn;
+        const kind = o.on ? 'primary' : 'silver';
+        const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
+        const y = b.y + dy;
+        // 왼쪽 색 띠(도트 4px)와 아이콘 칸
+        ctx.fillStyle = o.accent;
+        ctx.fillRect(b.x + 8, y + 8, 4, b.h - 16);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(b.x + 16, y + 5, 44, b.h - 10);
+        ctx.save();
+        if (b.disabled) ctx.globalAlpha = 0.55;
+        const img = Assets.get(`uiicon_${o.icon}`);
+        if (img) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img, b.x + 14, y + 1, 48, 48); }
+        ctx.restore();
+        UIKit.text(ctx, b.label, b.x + 70, y + b.h / 2 + 1, 22, UIKit.buttonInk(kind), 'left', 'bold');
+        // 오른쪽: 상태 글자와 단축키
+        const kw = 26;
+        if (o.key) this.drawKeyCap(ctx, o.key, b.x + b.w - kw - 10, y + 12, 16);
+        if (o.right) UIKit.text(ctx, o.right, b.x + b.w - kw - 18, y + b.h / 2 + 1, 18, o.on ? o.accent : UI_THEME.creamSoft, 'right', 'bold');
+        if (o.on) {
+            ctx.fillStyle = o.accent;
+            ctx.fillRect(b.x + 4, y + 2, b.w - 8, 2);
+            ctx.fillRect(b.x + 4, y + b.h - 4, b.w - 8, 2);
         }
     },
 
