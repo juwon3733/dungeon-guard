@@ -5206,7 +5206,7 @@ Game.reset();
 assert(!Rng.on && !Game.record && !Game.challenge, 'story run has no seed');
 // 점수: 뒤 라운드일수록 커진다. 처치와 라운드 완료로 쌓인다
 assert(scoreMul(50) > scoreMul(10) * 20, 'score grows fast');
-assert.strictEqual(scoreMul(1), 1.04);
+assert.strictEqual(scoreMul(1), SCORE_RULES.roundGrowth);
 Game.reset(null, null, c);
 Game.state = 'wave';
 const gHero = createHero('warrior', 0, 0, null, 'north');
@@ -5214,11 +5214,11 @@ gHero.waiting = false;
 Game.heroes.push(gHero);
 const s0 = Game.score;
 Game.scoreKill(gHero);
-assert.strictEqual(Game.score - s0, Math.floor(1000 * scoreMul(1)), 'kill score');
+assert.strictEqual(Game.score - s0, Math.floor(SCORE_RULES.kill * scoreMul(1)), 'kill score');
 gHero.elite = true;
 const s2 = Game.score;
 Game.scoreKill(gHero);
-assert.strictEqual(Game.score - s2, Math.floor(5000 * scoreMul(1)), 'elite score');
+assert.strictEqual(Game.score - s2, Math.floor(SCORE_RULES.kill * SCORE_RULES.eliteMul * scoreMul(1)), 'elite score');
 gHero.elite = false;
 // 무한 라운드: 표 끝을 넘어 계속 이어지고, 체력이 늘고, 인원은 상한에서 멈춘다
 Game.heroes = [];
