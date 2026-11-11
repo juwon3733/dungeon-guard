@@ -30,7 +30,6 @@ const HQ_ROOM = {
     throne: { sprite: 'hq_throne', x: 770, y: 176, scale: 3 },
     lord: { x: 1030, foot: 384 },
     decor: [
-        { sprite: 'hq_notice_board', x: 1640, y: 84, scale: 2 },
         { sprite: 'hq_plant', x: 636, y: 214, scale: 2 },
         { sprite: 'hq_crates', x: 70, y: 880, scale: 2 },
         { sprite: 'hq_tea_table', x: 560, y: 880, scale: 2 },
@@ -71,6 +70,8 @@ const HQ_FACILITIES = [
         news: () => (Meta.data.equips.length ? String(Meta.data.equips.length) : null) },
     { id: 'goblin_desk', sprite: 'hq_goblin_desk', name: '고블린 비서', desc: '기록 장부 · 기록 지우기', x: 1450, y: 780, scale: 3, view: 'record',
         news: () => null },
+    { id: 'board', sprite: 'hq_notice_board', name: '업적 게시판', desc: '업적 · 숙련도 · 임무 · 칭호', x: 1640, y: 84, scale: 2, view: 'progress',
+        news: () => (typeof Progress !== 'undefined' && Progress.data.done.length ? String(Progress.data.done.length) : null) }, // 새 업적이 생기면 느낌표
     { id: 'portal', sprite: 'hq_portal', name: '도전의 문', desc: '도전 콘텐츠', x: 800, y: 396, scale: 5, view: 'portal', main: true,
         news: () => { const open = HQ_CONTENTS.filter(hqContentOpen); return open.length ? open.map(c => c.id).join() : null; } }
 ];
@@ -266,6 +267,7 @@ Object.assign(UI, {
     // 본부 안 화면: 닫기 버튼과 화면별 버튼(기록 지우기, 콘텐츠)
     layoutHqView() {
         this.button('hq_close', GAME_WIDTH - 230, 28, 180, 68, { label: '닫기', icon: 'close', size: 26, onClick: () => this.closeHqView() });
+        if (this.hqView === 'progress') this.layoutHqProgress();
         if (this.hqView === 'record') {
             const armed = this.wipeArmed > 0;
             this.button('col_wipe', GAME_WIDTH / 2 - 270, 930, 540, 88, {
@@ -338,7 +340,7 @@ Object.assign(UI, {
     drawHQ(ctx) {
         if (this.hqView) {
             this.drawTable(ctx);
-            this[{ relics: 'drawHqRelics', armory: 'drawHqArmory', record: 'drawHqRecord', portal: 'drawHqPortal' }[this.hqView]](ctx);
+            this[{ relics: 'drawHqRelics', armory: 'drawHqArmory', record: 'drawHqRecord', portal: 'drawHqPortal', progress: 'drawHqProgress' }[this.hqView]](ctx);
             return;
         }
         this.drawHqRoom(ctx);
@@ -347,6 +349,7 @@ Object.assign(UI, {
         this.drawHexPlate(ctx, 40, 22, 460, 66);
         UIKit.text(ctx, '마왕군 본부', 80, 56, 32, T.cream, 'left', 'bold');
         UIKit.text(ctx, `스토리 ${Meta.data.cleared.length}/${STAGES.length}`, 464, 57, 24, T.gold, 'right', 'bold');
+        if (typeof Progress !== 'undefined' && Progress.data.title) UIKit.text(ctx, `칭호 · ${Progress.data.title}`, 60, 112, 22, T.gold, 'left', 'bold');
         this.drawGoblinBubble(ctx);
         if (this.hqSettings) this.drawHqSettings(ctx);
     },

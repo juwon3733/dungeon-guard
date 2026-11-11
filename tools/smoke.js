@@ -5,7 +5,7 @@ const vm = require('vm');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
 const files = ['js/core/config.js', 'js/data/balance.js', 'js/data/asteria_art.js', 'js/data/asteria_heroes.js', 'js/data/hd_monster_art.js', 'js/data/monsters.js', 'js/data/demonlords.js', 'js/data/story.js', 'js/data/asteria_bosses.js', 'js/data/challenge.js', 'js/data/map.js', 'js/game/effects.js', 'js/game/combat.js',
-    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/relics.js', 'js/game/meta.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js', 'js/ui/menu.js'];
+    'js/game/hero.js', 'js/game/monster.js', 'js/game/unit.js', 'js/game/relics.js', 'js/game/meta.js', 'js/game/progress.js', 'js/core/server_config.js', 'js/core/account.js', 'js/game/game.js', 'js/ui/ui.js', 'js/ui/hq.js', 'js/ui/progress_ui.js', 'js/ui/title.js', 'js/ui/tutorial.js', 'js/ui/account_ui.js', 'js/ui/menu.js'];
 const ctx = vm.createContext({ console, assert, Math, Set, Object, Array, Infinity, Number, String, JSON,
     Sfx: { play() {}, unlock() {}, setMuted(v) { this.muted = v; }, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume(k, v) { this.volume[k] = Math.max(0, Math.min(100, v)); } }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
 // 옛 시험은 칸 번호를 직접 적어 두었으므로 옛 배치(30x15칸, tools/legacy_map.js)로 돌린다. 지금 맵은 맨 끝의 tools/smoke_maps.js가 시험한다
@@ -3347,7 +3347,7 @@ assert.strictEqual(Meta.maxSlots(), 4);
 // ----- 첫 실행: 균열의 군주만, 유물 0종, 유물 칸 0개, 첫 스테이지만 열림 -----
 freshWindow();
 same(Meta.data, Meta.fresh(), 'empty storage: fresh record');
-same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false }, savedAt: 0 }, 'record fields');
+same(Meta.fresh(), { version: 3, daily: {}, abyss: { week: '', levels: {} }, raid: { week: '', bestTier: 0, bestScore: 0 }, cleared: [], seen: [], recipes: [], equips: [], runs: 0, wins: 0, bestStage: 0, tutorial: { hq: false, battle: false }, progress: progressFresh(), savedAt: 0 }, 'record fields');
 same(Meta.lordsOwned(), ['rift'], 'lords at start');
 same(Meta.relicsOwned(), [], 'no relics at start');
 assert.strictEqual(Meta.relicSlots(), 0, 'no relic slot at start');
@@ -4071,8 +4071,8 @@ const fac = id => HQ_FACILITIES.find(f => f.id === id);
 const news = id => UI.hqHasNews(fac(id));
 
 // ----- 표 -----
-same(HQ_FACILITIES.map(f => f.id), ['wartable', 'bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk', 'portal'], 'six facilities');
-same(HQ_FACILITIES.map(f => f.name), ['작전 테이블', '서재', '보물 진열장', '무기고', '고블린 비서', '도전의 문'], 'facility names');
+same(HQ_FACILITIES.map(f => f.id), ['wartable', 'bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk', 'board', 'portal'], 'seven facilities');
+same(HQ_FACILITIES.map(f => f.name), ['작전 테이블', '서재', '보물 진열장', '무기고', '고블린 비서', '업적 게시판', '도전의 문'], 'facility names');
 for (const f of HQ_FACILITIES) {
     assert(!!f.action !== !!f.view, f.id + ' opens one thing');
     assert(!f.action || typeof UI[f.action] === 'function', f.id + ' action');
@@ -4118,7 +4118,7 @@ assert(!UI.accountView && hasBtn('start'), 'Esc closes the account panel');
 btn('start');
 assert(Game.state === 'hq' && !UI.hqView, 'title to the hq');
 UI.update(0);
-same(UI.buttons.filter(b => b.facility).map(b => b.key), [1, 2, 3, 4, 5, 6], 'number keys on the plates');
+same(UI.buttons.filter(b => b.facility).map(b => b.key), [1, 2, 3, 4, 5, 6, 7], 'number keys on the plates');
 assert(news('wartable'), 'first stage badge on the war table');
 assert(['bookshelf', 'relic_case', 'weapon_rack', 'goblin_desk'].every(id => !news(id)) && news('portal'), 'only the first stage and the open daily challenge are new');
 assert(hqGoblinLine().includes('작전 테이블'), 'goblin tells what to do first');
@@ -4150,10 +4150,10 @@ const enterAndLeave = (how, id) => {
     assert(Game.state === 'hq' && !UI.hqView && !UI.collection && hasBtn('hq_wartable'), id + ': back to the hq (' + how + ')');
 };
 for (const how of ['click', 'key']) for (const f of HQ_FACILITIES) enterAndLeave(how, f.id);
-UI.onKey('Numpad6');
+UI.onKey('Numpad7');
 assert.strictEqual(UI.hqView, 'portal', 'numpad keys too');
 UI.onKey('Escape');
-UI.onKey('Digit7');
+UI.onKey('Digit8');
 UI.onKey('Digit0');
 assert(Game.state === 'hq' && !UI.hqView, 'other keys do nothing');
 // 터치(마우스 이동 없이 누르기)도 된다
@@ -7841,5 +7841,43 @@ console.log('smoke ok: equipment crafting');
         assert.strictEqual(new Set(keys).size, keys.length, 'hidden recipes differ');
         console.log('smoke ok: hidden altar');
     }).toString() + ')()', actx);
+}
+{
+    // 업적·숙련도·임무(js/game/progress.js)
+    const pctx = vm.createContext({ console, assert, Math, Set, Map, Object, Array, Infinity, Number, String, JSON, Date,
+        Sfx: { play() {}, unlock() {}, setMuted() {}, muted: false, volume: { master: 80, sfx: 80, bgm: 60 }, setVolume() {} }, saveSettings() {}, Render: {}, UIKit: {}, Assets: { get() { return null; } } });
+    for (const f of files.filter(f => !f.startsWith('js/ui/'))) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), pctx, { filename: f });
+    vm.runInContext('(' + (() => {
+        const now = Date.UTC(2026, 10, 11, 3);
+        assert.strictEqual(new Set(ACHIEVEMENTS.map(a => a.id)).size, ACHIEVEMENTS.length, 'achievement ids unique');
+        // 임무는 날짜로 정해진다
+        const a = Progress.refreshMissions(now), b = Progress.refreshMissions(now);
+        assert.strictEqual(a.daily.map(p => p.id).join(), b.daily.map(p => p.id).join(), 'missions fixed by date');
+        assert.strictEqual(a.daily.length, MISSION_RULES.dailyCount, 'daily count');
+        assert.strictEqual(new Set(a.daily.map(p => p.id)).size, a.daily.length, 'daily picks differ');
+        // 판 기록: 숙련도는 라운드만큼, 업적은 한 번만
+        const lord = Object.keys(DEMON_LORDS)[0];
+        const run = { kind: 'abyss', lord, rounds: 120, kills: 5000, altars: 3, rankRolls: 10, splus: 1, mythics: 2, transcendents: 1, transKinds: ['ferry_reaper'], abyssLevel: 1, fieldRun: 20, awakenRun: 1, raidTier: 0 };
+        const r1 = Progress.recordRun(run, now);
+        assert(r1.achievements.length > 0, 'first run unlocks achievements');
+        assert(Progress.data.mastery[lord] >= 120, 'mastery xp from rounds');
+        assert(r1.levelUp >= 2, 'mastery level up');
+        const r2 = Progress.recordRun(run, now);
+        assert(r2.achievements.every(x => !r1.achievements.includes(x)), 'achievements once');
+        assert(r2.missions.every(x => !r1.missions.includes(x)), 'missions claimed once');
+        // 칭호: 이룬 업적의 칭호만 단다
+        Progress.setTitle('없는 칭호');
+        assert.strictEqual(Progress.data.title, '', 'unknown title refused');
+        const t = Progress.titles()[0];
+        if (t) { Progress.setTitle(t); assert.strictEqual(Progress.data.title, t, 'title set'); }
+        // 다듬기: 망가진 기록도 받아 준다
+        const bad = progressSanitize({ stats: 'x', done: ['nope', ACHIEVEMENTS[0].id], mastery: { [lord]: -5, fake: 9 }, title: 7, missions: null });
+        assert(bad.done.join() === ACHIEVEMENTS[0].id && !bad.mastery.fake && (bad.mastery[lord] || 0) >= 0 && bad.title === '', 'sanitize progress');
+        assert(Meta.sanitize({ version: 1 }).progress, 'meta keeps progress');
+        // 날이 바뀌면 일일 진행만 지운다
+        Progress.refreshMissions(now + 86400000);
+        assert.deepStrictEqual(Progress.data.missions.daily, {}, 'daily reset next day');
+        console.log('smoke ok: progress');
+    }).toString() + ')()', pctx);
 }
 require('./smoke_maps.js');
