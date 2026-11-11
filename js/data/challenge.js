@@ -69,7 +69,7 @@ const DAILY_RULES = { relics: 2, hard: 2, boon: 1 };
 
 // 점수: 처치와 라운드마다 쌓이고 뒤 라운드일수록 커진다. 기준값 x scoreMul(라운드)
 //   kill: 일반 처치(eliteMul, bossMul을 곱한다), clear: 라운드를 다 잡음, earlySecond: 남은 시간 1초
-const SCORE_RULES = { kill: 1000, eliteMul: 5, bossMul: 100, clear: 50000, earlySecond: 5000, roundGrowth: 1.04 };
+const SCORE_RULES = { kill: 100, eliteMul: 5, bossMul: 100, clear: 5000, earlySecond: 500, roundGrowth: 1.04 }; // 2026-11-11 사용자: 점수가 너무 빨리 올라 기본값을 1/10로
 
 // 라운드 r의 점수 배율: r x 1.04^r. 곱셈을 되풀이한다(Math.pow는 엔진마다 값이 다를 수 있어 입력 재생이 어긋난다)
 function scoreMul(r) {
@@ -118,7 +118,7 @@ const ABYSS_RULES = { mutateEvery: 10, hpFrom: 20, hpGrowth: 1.025, scorePerMuta
 // 주간 토벌전: 일주일 동안 모두 같은 시드, 같은 보스, 같은 조건으로 몇 단계까지 잡는지 겨룬다.
 //   tierEvery: 보스가 나오는 라운드 간격, tierHpGrowth: 보스를 잡을 때마다 다음 보스 체력 배율(곱해진다)
 //   bossDamageScore: 보스에게 준 피해 1당 기준 점수(라운드 배율을 곱한다). 잡지 못한 마지막 보스도 점수로 남는다
-const RAID_RULES = { tierEvery: 10, tierHpGrowth: 2, relics: 2, hard: 2, bossDamageScore: 20 };
+const RAID_RULES = { tierEvery: 10, tierHpGrowth: 2, relics: 2, hard: 2, bossDamageScore: 2 };
 
 // 토벌 보스: 그림은 Asteria 보스. 패턴 표는 BOSSES와 같다. 체력은 전사 체력 x hpMultiplier x 라운드 배율 x 단계 배율이다
 const RAID_BOSSES = {

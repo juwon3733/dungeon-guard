@@ -1291,7 +1291,20 @@ const UI = {
         const T = UI_THEME;
         const P = ALTAR_PANEL;
         UIKit.hudFrame(ctx, 'hud_panel', P.x, P.y, P.w, P.h, 26);
-        UIKit.text(ctx, '조합 제단', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
+        const altarImg = Assets.get('uiicon_altar');
+        if (altarImg) { ctx.imageSmoothingEnabled = false; ctx.drawImage(altarImg, P.x + 20, P.y + 14, 48, 48); }
+        UIKit.text(ctx, '조합 제단', P.x + 76, P.y + 40, 30, T.gold, 'left', 'bold');
+        // 칸 뒤 마법진: 칸을 잇는 보라 룬 줄과 칸마다 빛 고리(올리면 밝아진다)
+        ctx.fillStyle = 'rgba(196,107,255,0.35)';
+        ctx.fillRect(P.x + 40, P.y + 128, P.w - 80, 4);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < ALTAR_RULES.slots; i++) {
+            const on = !!this.altarList[i];
+            ctx.fillStyle = `rgba(196,107,255,${on ? 0.22 + Math.sin(Game.time * 4 + i) * 0.06 : 0.07})`;
+            UIKit.pixelEllipse(ctx, P.x + 28 + i * 118 + 53, P.y + 129, 62, 62, 4);
+        }
+        ctx.restore();
         UIKit.text(ctx, '맵의 몬스터를 눌러 올린다', P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
         for (const b of this.buttons) {
             if (b.altarSlot === undefined) continue;
@@ -1893,21 +1906,38 @@ const UI = {
     },
 
     // 종족 강화 창: 종족마다 레벨, 피해 보너스, 다음 성공률과 강화 버튼
+    // 강화 창: 종족마다 문장 아이콘(uiicon_fam_<종족>), 이름, 레벨과 피해, 다음 성공률, 강화 버튼.
+    // 아래 골드 상점 줄(칸 넓히기, 마력 사기)도 아이콘과 지금 값 -> 다음 값. 줄마다 아이콘 칸 바탕은 종족 색
     drawFamily(ctx) {
         const T = UI_THEME;
         const P = FAMILY_PANEL;
+        const FAMILY_TINT = { undead: '#6fd97a', orc: '#8fbf4a', demon: '#ff6a4a', beast: '#c98a4a', spirit: '#5fd8ff' };
         UIKit.hudFrame(ctx, 'hud_panel', P.x, P.y, P.w, P.h, 26);
-        UIKit.text(ctx, '강화', P.x + 28, P.y + 40, 30, T.gold, 'left', 'bold');
-        UIKit.text(ctx, `레벨당 피해 +${Math.round(FAMILY_UPGRADE.damagePer * 100)}%`, P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
+        const forge = Assets.get('uiicon_forge');
+        if (forge) { ctx.imageSmoothingEnabled = false; ctx.drawImage(forge, P.x + 20, P.y + 14, 48, 48); }
+        UIKit.text(ctx, '강화', P.x + 76, P.y + 40, 30, T.gold, 'left', 'bold');
+        UIKit.text(ctx, `레벨당 피해 ${Math.round(FAMILY_UPGRADE.damagePer * 100)}% 증가`, P.x + P.w - 24, P.y + 40, 20, T.creamSoft, 'right');
+        const iconRow = (name, tint, y) => {
+            // 아이콘 칸: 어두운 바탕에 색 띠
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillRect(P.x + 22, y - 26, 52, 52);
+            ctx.fillStyle = tint;
+            ctx.fillRect(P.x + 22, y + 22, 52, 4);
+            const img = Assets.get(`uiicon_${name}`);
+            if (img) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img, P.x + 24, y - 26, 48, 48); }
+        };
         for (const b of this.buttons) {
             if (!b.famRow) continue;
             const f = b.famRow;
             const y = b.y + b.h / 2;
             if (f === 'field' || f === 'mana') {
-                // 골드 상점 줄: 이름, 지금 값, 버튼
+                // 골드 상점 줄: 아이콘, 이름, 지금 -> 다음, 버튼
                 if (f === 'field') { ctx.fillStyle = T.goldLine; ctx.fillRect(P.x + 28, b.y - 14, P.w - 56, 2); }
-                UIKit.text(ctx, f === 'field' ? '칸 넓히기' : '마력 사기', P.x + 28, y + 1, 26, T.cream, 'left', 'bold');
-                UIKit.text(ctx, f === 'field' ? `맵 ${Game.maxField()}마리` : `마력 ${Game.mana}`, P.x + 200, y + 1, 21, T.good, 'left');
+                iconRow(f === 'field' ? 'field' : 'mana', f === 'field' ? '#ffd25a' : '#b48cff', y);
+                UIKit.text(ctx, f === 'field' ? '칸 넓히기' : '마력 사기', P.x + 86, y + 1, 24, T.cream, 'left', 'bold');
+                const now = f === 'field' ? `맵 ${Game.maxField()}마리` : `마력 ${Game.mana}`;
+                const next = f === 'field' ? (Game.fieldCost() === null ? '' : ` → ${Game.maxField() + 1}`) : ` → ${Game.mana + 1}`;
+                UIKit.text(ctx, now + next, P.x + 220, y + 1, 20, T.good, 'left');
                 const st = this.btnState(b);
                 const kind = b.disabled ? 'off' : 'primary';
                 const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
@@ -1916,10 +1946,17 @@ const UI = {
             }
             const level = Game.familyLevel(f);
             const chance = Math.round(familyUpgradeChance(level) * 100);
-            UIKit.text(ctx, MONSTER_FAMILIES[f], P.x + 28, y + 1, 26, T.cream, 'left', 'bold');
-            UIKit.text(ctx, `Lv${level}`, P.x + 120, y + 1, 26, level ? T.gold : T.creamSoft, 'left', 'bold');
-            UIKit.text(ctx, level ? `피해 +${Math.round(level * FAMILY_UPGRADE.damagePer * 100)}%` : '-', P.x + 200, y + 1, 21, level ? T.good : T.creamSoft, 'left');
-            UIKit.text(ctx, `성공 ${chance}%`, b.x - 14, y + 1, 20, chance < 100 ? '#ffb49a' : T.creamSoft, 'right', 'bold');
+            iconRow(`fam_${f}`, FAMILY_TINT[f] || T.gold, y);
+            UIKit.text(ctx, MONSTER_FAMILIES[f], P.x + 86, y - 10, 22, T.cream, 'left', 'bold');
+            UIKit.text(ctx, `Lv${level}`, P.x + 86, y + 16, 20, level ? T.gold : T.creamSoft, 'left', 'bold');
+            // 피해 막대: 레벨 10까지 칸이 차오른다(그 위로는 숫자로)
+            const bx = P.x + 170;
+            for (let k = 0; k < 10; k++) {
+                ctx.fillStyle = k < level ? (FAMILY_TINT[f] || T.gold) : 'rgba(255,255,255,0.08)';
+                ctx.fillRect(bx + k * 16, y - 2, 12, 10);
+            }
+            if (level) UIKit.text(ctx, `피해 ${Math.round(level * FAMILY_UPGRADE.damagePer * 100)}%`, bx + 166, y + 4, 18, T.good, 'left');
+            UIKit.text(ctx, `성공 ${chance}%`, b.x - 12, y + 1, 18, chance < 100 ? '#ffb49a' : T.creamSoft, 'right', 'bold');
             const st = this.btnState(b);
             const kind = b.disabled ? 'off' : 'primary';
             const dy = UIKit.button(ctx, b.x, b.y, b.w, b.h, kind, st);
@@ -3297,8 +3334,10 @@ const UI = {
             ctx.restore();
         }
         UIKit.text(ctx, '균열 지도', W.x + 44, W.y + 50, 32, T.cream, 'left', 'bold');
-        UIKit.bigText(ctx, `마력 ${G.mana}`, W.x + 230, W.y + 50, 28, '#c9a6ff', 'left');
-        UIKit.text(ctx, `${G.powerCount()}/${POWER_RULES.maxNodes}개`, W.x + 400, W.y + 50, 22, G.powerCount() >= POWER_RULES.maxNodes ? T.bad : T.creamSoft, 'left');
+        const manaImg = Assets.get('uiicon_mana');
+        if (manaImg) { ctx.imageSmoothingEnabled = false; ctx.drawImage(manaImg, W.x + 222, W.y + 26, 48, 48); }
+        UIKit.bigText(ctx, `마력 ${G.mana}`, W.x + 274, W.y + 50, 28, '#c9a6ff', 'left');
+        UIKit.text(ctx, `${G.powerCount()}/${POWER_RULES.maxNodes}개`, W.x + 440, W.y + 50, 22, G.powerCount() >= POWER_RULES.maxNodes ? T.gold : T.creamSoft, 'left');
         const close = this.buttons.find(b => b.powerClose);
         if (close) {
             const dy = UIKit.button(ctx, close.x, close.y, close.w, close.h, 'silver', this.btnState(close));
