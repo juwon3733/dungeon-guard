@@ -366,7 +366,7 @@ const DEMON_LORDS = {
     rift: {
         id: 'rift', name: '균열의 군주', desc: '낙뢰 특화',
         sprite: 'lord_rift', footPx: 120, skills: ['lightning', 'portal'],
-        portrait: { sprite: 'lord_rift', crop: [34, 12, 44] },
+        portrait: { sprite: 'lord_rift', crop: [43, 13, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'lightningCurse', name: '감전 낙인', desc: '낙뢰가 최대 체력 20% 추가 피해, 맞은 용사 8초간 받는 피해 +60%', duration: 8, takenMul: 1.6, hpRatio: 0.2 },
         speech: {
@@ -378,7 +378,7 @@ const DEMON_LORDS = {
     bone_queen: {
         id: 'bone_queen', name: '뼈의 여왕', desc: '성장·제물 특화',
         sprite: 'lord_bone_queen', footPx: 119, skills: ['boneSpear', 'ghosts'],
-        portrait: { sprite: 'lord_bone_queen', crop: [42, 4, 44] },
+        portrait: { sprite: 'lord_bone_queen', crop: [40, 13, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'soulVolley', name: '망령 일제 사격', desc: '용사 25명 처치마다 망령이 선두 6명 공격', every: 25, count: 6, base: 30, perRound: 6 },
         speech: {
@@ -390,7 +390,7 @@ const DEMON_LORDS = {
     gold_king: {
         id: 'gold_king', name: '황금 마왕', desc: '골드 특화',
         sprite: 'lord_gold_king', footPx: 120, skills: ['goldBomb', 'bribe'],
-        portrait: { sprite: 'lord_gold_king', crop: [40, 6, 44] },
+        portrait: { sprite: 'lord_gold_king', crop: [42, 6, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'goldTouch', name: '황금 수완', desc: '소환 강화 비용 -25%, 정예·보스 처치 골드 2배', upgradeMul: 0.75, eliteGold: 2 },
         speech: {
@@ -402,7 +402,7 @@ const DEMON_LORDS = {
     plague: {
         id: 'plague', name: '역병의 군주', desc: '독·전염 특화',
         sprite: 'lord_plague', footPx: 119, skills: ['venomRain', 'miasma'],
-        portrait: { sprite: 'lord_plague', crop: [42, 8, 44] },
+        portrait: { sprite: 'lord_plague', crop: [42, 18, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'plague', name: '역병', desc: '적중 시 3초 중독(초당 공격력 15%), 중독 상태로 쓰러지면 1.5칸 전염', duration: 3, ratio: 0.15, radius: 1.5 },
         speech: {
@@ -414,7 +414,7 @@ const DEMON_LORDS = {
     chain: {
         id: 'chain', name: '사슬의 군주', desc: '속박·제어 특화',
         sprite: 'lord_chain', footPx: 120, skills: ['chainPull', 'jail'],
-        portrait: { sprite: 'lord_chain', crop: [40, 4, 44] },
+        portrait: { sprite: 'lord_chain', crop: [45, 8, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'shackle', name: '족쇄', desc: '적중 시 18% 확률로 0.6초 속박(정예는 확률 절반, 보스는 확률 5분의 1과 시간 절반)', chance: 0.18, duration: 0.6 },
         speech: {
@@ -426,7 +426,7 @@ const DEMON_LORDS = {
     mirror: {
         id: 'mirror', name: '거울 마녀', desc: '합치기·복제 특화',
         sprite: 'lord_mirror', footPx: 119, skills: ['mirrorWard', 'mirrorClone'],
-        portrait: { sprite: 'lord_mirror', crop: [42, 8, 44] },
+        portrait: { sprite: 'lord_mirror', crop: [41, 19, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'reflection', name: '거울상', desc: '합치기 때 8% 확률로 재료 1마리 보존', chance: 0.08 },
         speech: {
@@ -438,7 +438,7 @@ const DEMON_LORDS = {
     clock: {
         id: 'clock', name: '시계탑의 마왕', desc: '감속·시간 특화',
         sprite: 'lord_clock', footPx: 119, skills: ['clockTower', 'timeStop'],
-        portrait: { sprite: 'lord_clock', crop: [40, 4, 44] },
+        portrait: { sprite: 'lord_clock', crop: [43, 6, 44] },
         effects: {}, // 기본 수치 효과는 없다(마왕은 패시브와 권능으로 갈린다)
         passive: { kind: 'stopwatch', name: '멈춘 초침', desc: '라운드 시작 6초간 용사 이동 -40%(보스 절반)', duration: 6, cut: 0.4 },
         speech: {
