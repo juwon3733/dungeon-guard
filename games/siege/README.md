@@ -53,3 +53,6 @@ npx tsx tools/campaign.ts 3   # 캠페인을 처음부터 끝까지 자동 진�
 - 결계 기둥, 새 성채 2곳(하늘 성채·왕성 내성), 지역 3곳, 적장 3명(세레나·아델·루나). 캠페인 14지역
 
 그림은 아직 없고 도형으로 그린다(그림 규격은 `docs/siege/05_art_gpt.md`).
+
+## 효과 그림 출처
+전투 효과(`public/assets/fx`)는 [pixelfx](https://github.com/patch-gg/pixelfx)(MIT, Patch & Hugo Duprez)로 구웠다. 다시 굽기: `node tools/pfx_sheets.mjs <pixelfx 폴더>` → `src/data/fx_sheets.ts`도 같이 바뀐다.

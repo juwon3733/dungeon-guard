@@ -4,6 +4,7 @@
 import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
 import { TUNNEL_IN } from '../core/siege';
 import { GRADES, ROLES, MON, type Role } from '../data/monsters';
+import { FX_SHEETS, type FxName } from '../data/fx_sheets';
 
 export const VW = 1280, VH = 720;
 /** 부대 색: 발밑 표시, 부대장 이름표, 패널에 같은 색을 쓴다 */
@@ -24,6 +25,13 @@ function sheetOf(id: string): HTMLImageElement | null {
   }
   return SHEETS[id];
 }
+// pixelfx 효과 시트(public/assets/fx, tools/pfx_sheets.mjs)
+const FXIMG: Partial<Record<FxName, HTMLImageElement>> = {};
+function fxImg(n: FxName) {
+  if (!(n in FXIMG) && typeof Image !== 'undefined') { const im = new Image(); im.src = `assets/fx/${n}.png`; FXIMG[n] = im; }
+  const im = FXIMG[n]; return im && im.complete && im.naturalWidth ? im : null;
+}
+if (typeof Image !== 'undefined') for (const n of Object.keys(FX_SHEETS) as FxName[]) fxImg(n);
 const LANE_CY = [250, 390, 530];          // 레인 띠의 가운데(땅 위 y)
 const LANE_H = 120;
 const YARD_CY = 390, YARD_H = 360;        // 성 안뜰
@@ -106,8 +114,10 @@ export class SiegeView {
             const x = a.x + (tx - a.x) * p, y = ay + (ty - ay) * p - Math.sin(p * Math.PI) * 30;
             c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x - 7, y + 2); c.lineTo(x, y); c.stroke();
           } });
+          this.pfx('arrow_hit', tx, ty, { k: 0.8, dur: 0.25, delay: 0.25, flip: f.side === 'ally' });
         } else {
-          this.burst(tx, a.y - 18, 3, f.side === 'ally' ? '#fff1b0' : '#ffb0b0', 90, 3, 0.25);
+          const big = f.isLeader || f.role === 'assault';
+          this.pfx(f.isLeader ? 'slash' : R() < 0.5 ? 'hit' : 'claw', tx, a.y - 18, { k: big ? 1.4 : 1, dur: 0.3, flip: f.side !== 'ally' });
         }
         break;
       }
@@ -121,26 +131,26 @@ export class SiegeView {
         if (e.miss) this.texts.push({ x: to.x, y: to.y - 50, str: '빗나감', col: '#9fe0a0', life: 0.7, size: 13 });
         break;
       }
-      case 'die': { const p = this.pos(e.u); this.burst(p.x, p.y - 16, e.u.isLeader ? 30 : 10, e.u.side === 'ally' ? '#c08aff' : '#ffe08a', 160, 4, 0.6); break; }
+      case 'die': { const p = this.pos(e.u); this.pfx('poof', p.x, p.y, { k: e.u.isLeader ? 2 : 1.2, dur: 0.6 }); if (e.u.isLeader) this.pfx('soul', p.x, p.y, { k: 2, dur: 1.4 }); break; }
       case 'revive': {
         const p = this.pos(e.u);
-        this.burst(p.x, p.y - 16, 18, '#7dffb2', 120, 4, 0.8);
+        this.pfx('respawn', p.x, p.y, { k: 1.4, dur: 1.1, add: true });
         this.texts.push({ x: p.x, y: p.y - 56, str: '부활', col: '#7dffb2', life: 1, size: 16 });
         break;
       }
       case 'gateBreak':
         this.shake = 16; this.flash = 0.6;
-        this.burst(e.x, LANE_CY[1] - 30, 70, '#c9a477', 320, 6, 1.1);
+        this.pfx('big_boom', e.x, LANE_CY[1] + 10, { k: 1.6, dur: 1.4 }); this.pfx('dirt_boom', e.x - 30, LANE_CY[1] + 20, { k: 1.2, dur: 1.0, delay: 0.1 });
         this.banner('성문 파괴!', '#ffd166');
         break;
       case 'towerBreak':
         this.shake = 10;
-        this.burst(e.x, this.towerBase(e.lane) - TOWER_H / 2, 50, '#d9c7a0', 260, 5, 0.9);
+        this.pfx('small_boom', e.x, this.towerBase(e.lane), { k: 1.4, dur: 1.1 });
         this.banner('망루 붕괴', '#ffffff');
         break;
       case 'tunnelOpen':
         this.shake = 8;
-        this.burst(this.s.castle.wallX + TUNNEL_IN, LANE_CY[2], 40, '#8b6a45', 200, 5, 0.9);
+        this.pfx('dirt_boom', this.s.castle.wallX + TUNNEL_IN, LANE_CY[2] + 10, { k: 1.3, dur: 1.0 });
         this.banner('굴이 뚫렸다', '#c9a477');
         break;
       case 'skill': {
@@ -153,7 +163,7 @@ export class SiegeView {
       }
       case 'skillHit': this.skillFx(e.kind, e.x, this.laneY(e.lane), e.r ?? 100); break;
       case 'palisadeBreak':
-        this.shake = 8; this.burst(e.x, LANE_CY[e.lane] - 20, 40, '#a07448', 240, 5, 0.9);
+        this.shake = 8; this.pfx('dirt_boom', e.x, LANE_CY[e.lane] + 10, { k: 1.1, dur: 0.9 });
         this.banner('목책 돌파', '#e0b77f');
         break;
       case 'outpost':
@@ -163,6 +173,20 @@ export class SiegeView {
         this.banner(`${e.u.name} 쓰러짐 — 지휘 효과 사라짐`, '#ff7a7a');
         break;
     }
+  }
+
+  /** pixelfx 시트 한 번 재생. dur: 재생 시간(초), k: 확대, flip: 왼쪽을 봄, add: 빛 섞기 */
+  pfx(n: FxName, x: number, y: number, o: { k?: number; dur?: number; flip?: boolean; add?: boolean; delay?: number } = {}) {
+    const sh = FX_SHEETS[n], k = o.k ?? 2, dur = o.dur ?? Math.min(sh.life, 0.9);
+    this.fx.push({ age: -(o.delay ?? 0), dur, draw: (c, p) => {
+      if (p < 0) return;
+      const im = fxImg(n); if (!im) return;
+      const f = Math.min(sh.frames - 1, Math.floor(Math.max(0, p) * sh.frames));
+      c.imageSmoothingEnabled = false;
+      if (o.add) c.globalCompositeOperation = 'lighter';
+      c.translate(Math.round(x), Math.round(y)); if (o.flip) c.scale(-1, 1);
+      c.drawImage(im, (f % sh.cols) * sh.w, Math.floor(f / sh.cols) * sh.h, sh.w, sh.h, -sh.px * k, -sh.py * k, sh.w * k, sh.h * k);
+    } });
   }
 
   burst(x: number, y: number, n: number, col: string, speed: number, size: number, life: number) {
@@ -332,17 +356,17 @@ export class SiegeView {
       c.fillStyle = g; c.beginPath(); c.ellipse(x, y, r, r * 0.55, 0, 0, 7); c.fill();
     } });
     switch (kind) {
-      case 'slam': ring('#ffd08a', 0.6, 14); ring('#ffffff', 0.4, 6); this.burst(x, y, 40, '#c9a477', 280, 6, 0.8); this.shake = 14; break;
-      case 'charm': glow('rgba(255,110,190,1)', 1.0); ring('#ff8ad8', 0.8); this.burst(x, y - 20, 24, '#ff9ad8', 140, 4, 1.0); break;
-      case 'swarm': for (let i = 0; i < 14; i++) this.parts.push({ x: x - 60 + Math.random() * 120, y: y - 60 + Math.random() * 60, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 160, life: 0.6, max: 0.6, col: '#9d7bff', size: 7 }); ring('#9d7bff', 0.4, 5); break;
-      case 'charge': this.burst(x, y, 36, '#d9b48a', 240, 5, 0.7); ring('#ffb070', 0.45, 10); this.shake = 12; break;
-      case 'aegis': this.fx.push({ age: 0, dur: 1.2, draw: (c, p) => { c.globalAlpha = 0.8 * (1 - p); c.strokeStyle = '#8fd0ff'; c.lineWidth = 5; c.beginPath(); c.arc(x, y - 30, 70, Math.PI, 0); c.stroke(); c.fillStyle = 'rgba(143,208,255,.15)'; c.fill(); } }); break;
-      case 'hex': glow('rgba(140,60,200,1)', 1.4); this.burst(x, y - 20, 30, '#a26bff', 90, 6, 1.3); break;
-      case 'feast': glow('rgba(220,30,60,1)', 0.9); ring('#ff4d6d', 0.7, 10); this.burst(x, y - 20, 30, '#ff4d6d', 200, 5, 0.9); break;
-      case 'breath': this.fx.push({ age: 0, dur: 0.9, draw: (c, p) => { c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.7 * (1 - p); const g = c.createLinearGradient(x, 0, x + r, 0); g.addColorStop(0, '#b8ff7a'); g.addColorStop(1, 'rgba(80,200,60,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(x, y - 20); c.lineTo(x + r, y - 90); c.lineTo(x + r, y + 50); c.closePath(); c.fill(); } }); this.shake = 10; break;
-      case 'hellfire': for (let i = 0; i < 6; i++) { const tx = x - 60 + Math.random() * 160, ty = y - 120 + Math.random() * 200, d = i * 0.08; this.fx.push({ age: -d, dur: 0.5, draw: (c, p) => { if (p < 0) return; const fy = ty - 300 * (1 - p); c.globalCompositeOperation = 'lighter'; c.fillStyle = '#ff7a2a'; c.beginPath(); c.arc(tx, fy, 12, 0, 7); c.fill(); } }); } setTimeout(() => { this.burst(x, y - 40, 70, '#ff7a2a', 320, 6, 1); this.shake = 18; this.flash = 0.4; }, 400); break;
-      case 'song': ring('#7ae7ff', 1.2, 6); ring('#c8f6ff', 0.9, 4); for (let i = 0; i < 10; i++) this.texts.push({ x: x - r / 2 + Math.random() * r, y: y - 40 - Math.random() * 60, str: '♪', col: '#9ff0ff', life: 1.2, size: 22 }); break;
-      case 'doom': this.flash = 0.9; this.shake = 24; ring('#ff3df0', 1.0, 18); glow('rgba(170,40,255,1)', 1.2); this.burst(x + 200, y, 120, '#d07bff', 500, 7, 1.2); break;
+      case 'slam': this.pfx('slam', x, y + 10, { k: 2, dur: 0.9 }); this.pfx('quake', x, y + 20, { k: 2, dur: 1.0, delay: 0.1 }); this.shake = 14; break;
+      case 'charm': glow('rgba(255,110,190,1)', 1.0); for (let i = 0; i < 5; i++) this.pfx('charmed', x - r / 2 + Math.random() * r, y - 30 - Math.random() * 40, { k: 1.6, dur: 1.2, delay: i * 0.06 }); break;
+      case 'swarm': for (let i = 0; i < 14; i++) this.parts.push({ x: x - 60 + Math.random() * 120, y: y - 60 + Math.random() * 60, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 160, life: 0.6, max: 0.6, col: '#9d7bff', size: 7 }); ring('#9d7bff', 0.4, 5); this.pfx('drain', x - 40, y - 10, { k: 1.6, dur: 0.9 }); break;
+      case 'charge': this.pfx('dash', x - 160, y - 10, { k: 2, dur: 0.6 }); this.pfx('crit', x, y - 20, { k: 1.6, dur: 0.6, delay: 0.15 }); this.shake = 12; break;
+      case 'aegis': this.pfx('shield', x, y, { k: 2.4, dur: 1.4, add: true }); this.fx.push({ age: 0, dur: 1.2, draw: (c, p) => { c.globalAlpha = 0.8 * (1 - p); c.strokeStyle = '#8fd0ff'; c.lineWidth = 5; c.beginPath(); c.arc(x, y - 30, 70, Math.PI, 0); c.stroke(); c.fillStyle = 'rgba(143,208,255,.15)'; c.fill(); } }); break;
+      case 'hex': glow('rgba(140,60,200,1)', 1.4); this.pfx('hex', x, y + 10, { k: 1.8, dur: 1.4 }); this.pfx('curse', x, y, { k: 1.6, dur: 1.4, delay: 0.2 }); break;
+      case 'feast': glow('rgba(220,30,60,1)', 0.9); this.pfx('drain', x - 60, y - 10, { k: 2, dur: 1.0 }); this.pfx('crit', x, y - 20, { k: 1.4, dur: 0.5 }); break;
+      case 'breath': this.pfx('breath', x, y - 10, { k: Math.max(1.5, r / 120), dur: 1.0 }); this.fx.push({ age: 0, dur: 0.9, draw: (c, p) => { c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.7 * (1 - p); const g = c.createLinearGradient(x, 0, x + r, 0); g.addColorStop(0, '#b8ff7a'); g.addColorStop(1, 'rgba(80,200,60,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(x, y - 20); c.lineTo(x + r, y - 90); c.lineTo(x + r, y + 50); c.closePath(); c.fill(); } }); this.shake = 10; break;
+      case 'hellfire': for (let i = 0; i < 6; i++) { const tx = x - 60 + Math.random() * 160, ty = y - 120 + Math.random() * 200, d = i * 0.08; this.fx.push({ age: -d, dur: 0.5, draw: (c, p) => { if (p < 0) return; const fy = ty - 300 * (1 - p); c.globalCompositeOperation = 'lighter'; c.fillStyle = '#ff7a2a'; c.beginPath(); c.arc(tx, fy, 12, 0, 7); c.fill(); } }); } this.pfx('meteor', x + 40, y + 10, { k: 1.6, dur: 0.8 }); this.pfx('fire_boom', x + 40, y, { k: 1.8, dur: 0.8, delay: 0.4, add: true }); setTimeout(() => { this.shake = 18; this.flash = 0.4; }, 400); break;
+      case 'song': this.pfx('heal_ring', x, y + 10, { k: Math.max(1.4, r / 120), dur: 1.4, add: true }); for (let i = 0; i < 10; i++) this.texts.push({ x: x - r / 2 + Math.random() * r, y: y - 40 - Math.random() * 60, str: '♪', col: '#9ff0ff', life: 1.2, size: 22 }); break;
+      case 'doom': this.flash = 0.9; this.shake = 24; this.pfx('magic_circle', x + 200, y + 20, { k: 2, dur: 0.8 }); this.pfx('black_hole', x + 200, y, { k: 2.4, dur: 1.2, delay: 0.2 }); this.pfx('dark_boom', x + 200, y + 20, { k: 2.2, dur: 1.2, delay: 0.6 }); break;
     }
   }
 
