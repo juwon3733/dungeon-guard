@@ -38,7 +38,10 @@ export class SiegeView {
   follow = true;
   bannerQ: { str: string; col: string; t: number }[] = [];
   /** 부대장 스킬 컷인. 이게 있는 동안 전투를 멈춘다 */
-  cutin: null | { name: string; skill: string; grade: string; role: Role; t: number; dur: number } = null;
+  cutin: null | {
+    uid: number; lx: number; ly: number; name: string; skill: string; kind: string; grade: string;
+    t: number; dur: number; release: number; released: boolean; pending: SiegeEvent[];
+  } = null;
 
   constructor(public canvas: HTMLCanvasElement, public s: SiegeState) {
     this.ctx = canvas.getContext('2d')!;
@@ -60,6 +63,8 @@ export class SiegeView {
   banner(str: string, col: string) { this.bannerQ.push({ str, col, t: 0 }); }
 
   onEvent(e: SiegeEvent) {
+    // 연출 중에 생긴 일(스킬 효과, 피해 숫자)은 모아 두었다가 터뜨리는 순간에 보여 준다
+    if (this.cutin && !this.cutin.released && e.t !== 'skill') { this.cutin.pending.push(e); return; }
     const R = Math.random;
     switch (e.t) {
       case 'hit': {
@@ -117,7 +122,10 @@ export class SiegeView {
         break;
       case 'skill': {
         const g = MON[e.leader.monId!].grade;
-        this.cutin = { name: e.leader.name, skill: e.skill.name, grade: g, role: e.leader.role as Role, t: 0, dur: g === 'hero' ? 0.85 : 1.15 };
+        const p = this.pos(e.leader);
+        const [dur, release] = g === 'myth' ? [2.0, 1.35] : g === 'legend' ? [1.45, 0.9] : [0.95, 0.55];
+        this.cutin = { uid: e.leader.uid, lx: p.x, ly: p.y, name: e.leader.name, skill: e.skill.name, kind: e.skill.kind, grade: g,
+          t: 0, dur, release, released: false, pending: [] };
         break;
       }
       case 'skillHit': this.skillFx(e.kind, e.x, this.laneY(e.lane), e.r ?? 100); break;
@@ -136,22 +144,40 @@ export class SiegeView {
 
   /** 컷인 시간만 진행. 컷인이 끝나면 false */
   updateCutin(dt: number) {
-    if (!this.cutin) return false;
-    this.cutin.t += dt;
-    if (this.cutin.t >= this.cutin.dur) { this.cutin = null; this.flash = 0.35; this.shake = 8; return false; }
+    const ci = this.cutin;
+    if (!ci) return false;
+    ci.t += dt;
+    this.t += dt;
+    if (!ci.released) {
+      // 준비 동작: 부대장 발밑으로 등급 색 기운이 모여든다
+      const col = GRADES[ci.grade as keyof typeof GRADES].color;
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * 6.283, r = 60 + Math.random() * 50;
+        this.parts.push({ x: ci.lx + Math.cos(a) * r, y: ci.ly - 20 + Math.sin(a) * r * 0.5, vx: -Math.cos(a) * r * 2.2, vy: -Math.sin(a) * r * 1.1, life: 0.4, max: 0.4, col, size: 4 });
+      }
+      if (ci.t >= ci.release) {
+        ci.released = true;
+        this.shake = ci.grade === 'hero' ? 12 : 20; this.flash = ci.grade === 'myth' ? 0.7 : 0.3;
+        const ev = ci.pending; ci.pending = [];
+        for (const e of ev) this.onEvent(e);
+      }
+    }
+    this.updateFx(dt);
+    if (ci.t >= ci.dur) { this.cutin = null; return false; }
     return true;
+  }
+
+  /** 연출 진행 정도(0~1): 다가가기 → 준비 → 터뜨리며 빠지기 */
+  focusAmount() {
+    const ci = this.cutin;
+    if (!ci) return 0;
+    if (ci.t < ci.release) return Math.min(1, ci.t / 0.25);
+    return Math.max(0, 1 - (ci.t - ci.release) / 0.22);
   }
 
   update(dt: number) {
     this.t += dt;
-    for (const f of this.fx) f.age += dt;
-    this.fx = this.fx.filter((f) => f.age < f.dur);
-    for (const p of this.parts) { p.life -= dt; p.vx *= 0.92; p.vy *= 0.92; p.vy += 120 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
-    this.parts = this.parts.filter((p) => p.life > 0);
-    for (const x of this.texts) { x.life -= dt; x.y -= 26 * dt; }
-    this.texts = this.texts.filter((x) => x.life > 0);
-    this.shake = Math.max(0, this.shake - 40 * dt);
-    this.flash = Math.max(0, this.flash - 2 * dt);
+    this.updateFx(dt);
     if (this.bannerQ[0]) { this.bannerQ[0].t += dt; if (this.bannerQ[0].t > 1.6) this.bannerQ.shift(); }
     if (this.follow) {
       const allies = this.s.units.filter((u) => u.side === 'ally' && u.alive);
@@ -161,13 +187,34 @@ export class SiegeView {
     }
   }
 
+  updateFx(dt: number) {
+    for (const f of this.fx) f.age += dt;
+    this.fx = this.fx.filter((f) => f.age < f.dur);
+    for (const p of this.parts) { p.life -= dt; p.vx *= 0.92; p.vy *= 0.92; p.vy += 120 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    this.parts = this.parts.filter((p) => p.life > 0);
+    for (const x of this.texts) { x.life -= dt; x.y -= 26 * dt; }
+    this.texts = this.texts.filter((x) => x.life > 0);
+    this.shake = Math.max(0, this.shake - 40 * dt);
+    this.flash = Math.max(0, this.flash - 2 * dt);
+  }
+
   draw() {
     const c = this.ctx, s = this.s, k = s.castle;
     const scale = this.canvas.width / VW;
     c.setTransform(scale, 0, 0, scale, 0, 0);
     c.fillStyle = '#4a6b3a'; c.fillRect(0, 0, VW, VH);
     c.save();
-    c.translate(-this.camX + (Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
+    const f = this.focusAmount(), ci = this.cutin;
+    if (ci && f > 0) {
+      // 부대장을 화면 가운데로 당기며 확대(영웅 1.6배, 전설 1.8배, 신화 2배)
+      const zMax = ci.grade === 'myth' ? 2 : ci.grade === 'legend' ? 1.8 : 1.6;
+      const e = f * f * (3 - 2 * f), z = 1 + (zMax - 1) * e;
+      const tx = (ci.lx - this.camX) + (VW / 2 - (ci.lx - this.camX)) * e, ty = ci.ly + (VH * 0.58 - ci.ly) * e;
+      c.translate(tx + sx, ty + sy); c.scale(z, z); c.translate(-ci.lx, -ci.ly);
+    } else {
+      c.translate(-this.camX + sx, sy);
+    }
     this.drawIsland(c);
     this.drawFloor(c);
 
@@ -192,6 +239,7 @@ export class SiegeView {
     c.globalAlpha = 1;
     c.restore();
     void k;
+    if (ci && f > 0) this.drawFocus(c, f);
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${this.flash})`; c.fillRect(0, 0, VW, VH); }
     const b = this.bannerQ[0];
     if (b) {
@@ -200,45 +248,38 @@ export class SiegeView {
       c.lineWidth = 7; c.strokeStyle = '#140f1f'; c.strokeText(b.str, VW / 2, 70); c.fillStyle = b.col; c.fillText(b.str, VW / 2, 70);
       c.globalAlpha = 1;
     }
-    if (this.cutin) this.drawCutin(c);
   }
 
-  /** 컷인: 화면이 어두워지고 등급 색 띠가 사선으로 지나가며 부대장과 스킬 이름이 크게 나온다 */
-  drawCutin(c: CanvasRenderingContext2D) {
-    const ci = this.cutin!, p = ci.t / ci.dur;
-    const inn = Math.min(1, p / 0.2), out = p > 0.82 ? (p - 0.82) / 0.18 : 0;
-    const e = 1 - Math.pow(1 - inn, 3), a = 1 - out;
+  /** 연출 덮개: 부대장만 비추는 조명, 전설·신화는 하늘색이 바뀐다. 스킬 이름은 부대장 위에 작게 */
+  drawFocus(c: CanvasRenderingContext2D, f: number) {
+    const ci = this.cutin!;
     const col = GRADES[ci.grade as keyof typeof GRADES].color;
+    const cx = VW / 2, cy = VH * 0.58;
     c.save();
-    c.fillStyle = `rgba(0,0,0,${0.6 * a})`; c.fillRect(0, 0, VW, VH);
-    c.globalAlpha = a;
-    c.translate((1 - e) * -VW, 0);
-    const top = 250, h = 220;
-    c.fillStyle = col; c.beginPath(); c.moveTo(-40, top + 40); c.lineTo(VW + 40, top - 20); c.lineTo(VW + 40, top + h - 60); c.lineTo(-40, top + h); c.closePath(); c.fill();
-    c.fillStyle = 'rgba(16,12,28,.85)'; c.beginPath(); c.moveTo(-40, top + 56); c.lineTo(VW + 40, top - 4); c.lineTo(VW + 40, top + h - 76); c.lineTo(-40, top + h - 16); c.closePath(); c.fill();
-    // 집중선
-    c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = 2;
-    for (let i = 0; i < 18; i++) { const y = top + 10 + ((i * 47) % (h - 30)); const xx = VW - ((p * 2600 + i * 170) % (VW + 300)); c.beginPath(); c.moveTo(xx, y); c.lineTo(xx + 80 + (i % 4) * 40, y); c.stroke(); }
-    // 부대장(크게)
-    const fx = 260 + (1 - e) * 80, fy = top + h - 24;
-    this.drawFigure(c, fx, fy, 6.5, ROLE_COL[ci.role], ci.role === 'flying');
-    // 글자
-    c.textAlign = 'right';
-    c.font = 'bold 22px sans-serif'; c.fillStyle = col; c.fillText(`${GRADES[ci.grade as keyof typeof GRADES].label} · ${ci.name}`, VW - 80, top + 70);
-    c.font = 'italic 900 72px sans-serif'; c.lineWidth = 10; c.strokeStyle = '#140f1f'; c.strokeText(ci.skill, VW - 80, top + 150);
-    c.fillStyle = '#ffffff'; c.fillText(ci.skill, VW - 80, top + 150);
+    // 전설·신화: 스킬마다 하늘색
+    const TINT: Record<string, string> = { breath: '60,255,110', feast: '255,30,70', hellfire: '255,110,20', song: '70,210,255', doom: '110,20,255' };
+    if (ci.grade !== 'hero') {
+      const tint = TINT[ci.kind] ?? '255,255,255';
+      c.fillStyle = `rgba(${tint},${0.22 * f})`; c.fillRect(0, 0, VW, VH);
+    }
+    // 조명: 가운데(부대장)는 밝고 바깥은 어둡게
+    const g = c.createRadialGradient(cx, cy - 30, 60, cx, cy - 30, 520);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(5,3,12,${0.78 * f})`);
+    c.fillStyle = g; c.fillRect(0, 0, VW, VH);
+    // 신화: 거대한 그림자가 화면을 가로지른다
+    if (ci.grade === 'myth' && !ci.released) {
+      const p = ci.t / ci.release, x = -400 + p * (VW + 800);
+      c.fillStyle = `rgba(10,0,20,${0.55 * f})`;
+      c.beginPath(); c.moveTo(x - 380, 40); c.quadraticCurveTo(x - 120, 200, x, 150); c.quadraticCurveTo(x + 120, 200, x + 380, 40); c.quadraticCurveTo(x, 110, x - 380, 40); c.fill();
+    }
+    // 스킬 이름: 부대장 머리 위에 작게
+    if (!ci.released) {
+      const a = Math.min(1, ci.t / 0.2);
+      c.globalAlpha = a * f; c.textAlign = 'center';
+      c.font = 'bold 13px sans-serif'; c.fillStyle = col; c.fillText(ci.name, cx, cy - 150);
+      c.font = 'bold 22px sans-serif'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(ci.skill, cx, cy - 124); c.fillStyle = '#fff'; c.fillText(ci.skill, cx, cy - 124);
+    }
     c.restore();
-  }
-
-  /** 컷인용 큰 캐릭터(유닛 그림과 같은 모양을 크게) */
-  drawFigure(c: CanvasRenderingContext2D, x: number, feet: number, k: number, body: string, flying: boolean) {
-    const bw = 12 * k, bh = 14 * k, hr = 6.5 * k, dark = shade(body, 0.7);
-    c.fillStyle = dark; c.fillRect(x - bw * 0.35, feet - 5 * k, bw * 0.25, 5 * k); c.fillRect(x + bw * 0.1, feet - 5 * k, bw * 0.25, 5 * k);
-    c.fillStyle = body; roundRect(c, x - bw / 2, feet - 5 * k - bh, bw, bh, 3 * k); c.fill();
-    const hy = feet - 5 * k - bh - hr + 2;
-    c.fillStyle = shade(body, 1.15); c.beginPath(); c.arc(x, hy, hr, 0, 7); c.fill();
-    c.fillStyle = '#140f1f'; c.fillRect(x + hr * 0.25, hy - k, 2 * k, 2.5 * k);
-    if (flying) { c.fillStyle = dark; c.beginPath(); c.moveTo(x - 2, feet - bh * 0.8); c.lineTo(x - bw - 10 * k, feet - bh - 10 * k); c.lineTo(x - bw * 0.6, feet - bh * 0.4); c.fill(); }
   }
 
   /** 스킬 이펙트 */
@@ -370,12 +411,20 @@ export class SiegeView {
     const step = Math.abs(Math.sin(this.t * 9 + u.uid)) * 2;
     const x = px + lunge;
     const fly = u.role === 'flying' ? 30 + Math.sin(this.t * 4 + u.uid) * 3 : 0;
-    const big = u.isLeader ? 1.9 : u.foeType === 'captain' ? 1.6 : u.foeType === 'knight' ? 1.2 : 1;
+    const ci = this.cutin, focused = !!ci && ci.uid === u.uid && !ci.released;
+    const wind = focused ? Math.min(1, ci!.t / ci!.release) : 0;
+    const big = (u.isLeader ? 1.9 : u.foeType === 'captain' ? 1.6 : u.foeType === 'knight' ? 1.2 : 1) * (1 + 0.18 * wind);
+    if (focused) {
+      const gc = GRADES[u.grade as keyof typeof GRADES].color;
+      c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.5 + 0.3 * Math.sin(this.t * 20);
+      const gg = c.createRadialGradient(px, py, 2, px, py, 70); gg.addColorStop(0, gc); gg.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = gg; c.beginPath(); c.ellipse(px, py, 70, 30, 0, 0, 7); c.fill(); c.restore();
+    }
     const bw = 12 * big, bh = 14 * big, hr = 6.5 * big;
     c.save();
     if (!u.alive) c.globalAlpha = Math.max(0, u.hitT / 0.12);
     c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(px, py, bw * 0.8, bw * 0.32, 0, 0, 7); c.fill();
-    const feet = py - fly - step;
+    const feet = py - fly - step - wind * 14;
     const body = u.hitT > 0 ? '#ffffff' : ROLE_COL[u.role];
     const dark = u.hitT > 0 ? '#ffffff' : shade(body, 0.7);
     // 다리
