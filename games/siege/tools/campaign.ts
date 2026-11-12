@@ -1,7 +1,7 @@
 // 캠페인 시뮬레이션: 가상의 플레이어가 처음부터 진행한다. 지역마다 몇 번째 출격에 뚫리는지, 어디서 막히는지 본다.
 // 실행: npx tsx tools/campaign.ts [판 수=3]
 // 플레이어: 기본 편성(autoForm), 스킬 자동 + 망루가 남으면 성문 대기, 금화는 시설 → 훈련, 마석은 적장 타락 → 계약 → 포로 타락 → 소환.
-import { createSiege, step, stars, autoCast, setOrders } from '../src/core/siege';
+import { createSiege, step, stars, autoCast, autoDeploy, setOrders } from '../src/core/siege';
 import { MON } from '../src/data/monsters';
 import { PEOPLE, giftCost } from '../src/data/characters';
 import {
@@ -21,7 +21,7 @@ function siege(m: Meta, rid: string, seed: number) {
     if (tick++ % 4 === 0) {
       const up = s.towers.some((t) => t.alive), ranged = s.units.some((u) => u.side === 'ally' && u.alive && u.lane === 1 && u.role === 'ranged');
       for (const q of s.squads) setOrders(s, q.idx, { gate: up && ranged ? 'wait' : 'attack' });
-      autoCast(s);
+      autoCast(s); autoDeploy(s);
     }
     step(s, 0.05);
   }

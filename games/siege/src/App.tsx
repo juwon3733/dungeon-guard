@@ -12,7 +12,7 @@ import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { MON, GRADES, ROLES, SKILLS, type Grade } from './data/monsters';
 import { LANE_NAMES, type Lane, type Castle } from './data/castles';
-import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, GEARS, type Gear, type SquadPlan, type SiegeState } from './core/siege';
+import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, autoDeploy, deploy, canDeploy, deployCost, CMD_MAX, GEARS, type Gear, type SquadPlan, type SiegeState } from './core/siege';
 import { SQUAD_COL } from './render/view';
 import { SiegeView, VW, VH } from './render/view';
 import {
@@ -351,7 +351,7 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   const troops = Object.keys(meta.owned).filter((id) => (MON[id].grade === 'common' || MON[id].grade === 'rare') && meta.owned[id] > 0);
   const runEstimate = () => {
     let win = 0; const n = 20;
-    for (let seed = 1; seed <= n; seed++) { const s = createSiege(castle, plans, { seed }); while (!s.over) step(s, 1 / 20); if (s.over.win) win++; }
+    for (let seed = 1; seed <= n; seed++) { const s = createSiege(castle, plans, { seed }); while (!s.over) { autoDeploy(s); step(s, 1 / 20); } if (s.over.win) win++; }
     setEstimate(`자동 진행 기준 예상 승률 ${Math.round((win / n) * 100)}% (스킬과 명령을 쓰면 달라집니다)`);
   };
   // 레인 안내: 성벽·들판·지형을 짧게
@@ -422,16 +422,13 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
             <NumberInput label="수" value={t.count} min={0} max={cap} onChange={(v) => setTroop(k, { count: Math.max(0, Math.floor(v ?? 0)) })} />
           </HStack>
         ))}
-        <SegmentedControl label="레인" value={String(plan.lane)} onChange={(v) => onChange((p) => { p.lane = Number(v) as Lane; return p; })}>
+        <SegmentedControl label="기본 레인 (숫자키로 투입할 곳)" value={String(plan.lane)} onChange={(v) => onChange((p) => { p.lane = Number(v) as Lane; return p; })}>
           {LANE_NAMES.map((n, i) => <SegmentedControlItem key={i} value={String(i)} label={n} isDisabled={i === 2 && !tunnel} />)}
         </SegmentedControl>
         <Selector label={`공성 장비 (대장간 ${facValue(meta, 'forge')}단계)`} value={plan.gear ?? 'none'}
           options={[{ value: 'none', label: '없음' }, ...(Object.keys(GEARS) as Gear[]).filter((k) => GEARS[k].forge <= facValue(meta, 'forge'))
             .map((k) => ({ value: k, label: `${GEARS[k].name} · 금화 ${GEARS[k].cost} — ${GEARS[k].desc}` }))]}
           onChange={(v) => onChange((p) => { p.gear = v === 'none' ? undefined : (v as Gear); return p; })} />
-        <SegmentedControl label="출발" value={String(plan.delay)} onChange={(v) => onChange((p) => { p.delay = Number(v); return p; })}>
-          {[0, 3, 6, 10, 20].map((d) => <SegmentedControlItem key={d} value={String(d)} label={d ? `${d}초 뒤` : '바로'} />)}
-        </SegmentedControl>
       </VStack>
     </div>
   );
@@ -487,7 +484,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    const onKey = (e: KeyboardEvent) => { const n = Number(e.key); if (n >= 1 && n <= s.squads.length) cast(s, n - 1); if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); } };
+    const onKey = (e: KeyboardEvent) => { const n = Number(e.key); if (n >= 1 && n <= s.squads.length) { const q = s.squads[n - 1]; if (q.started) cast(s, n - 1); else deploy(s, n - 1, q.plan.lane); } if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); } };
     window.addEventListener('keydown', onKey);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); };
   }, [plans, castle]);
@@ -500,6 +497,11 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
         <span className="bt-name">{castle.name}</span>
         <span className="bt-time">{s ? Math.max(0, Math.ceil(castle.timeLimit - s.t)) : castle.timeLimit}<small>초</small></span>
         <div className="bt-core" title="본관 점거"><div style={{ width: `${s ? Math.min(100, (s.coreProg / castle.holdSec) * 100) : 0}%` }} /><span>본관 점거</span></div>
+        <div className="bt-cmd" title="지휘력: 예비 부대를 투입한다">
+          <span>지휘력</span>
+          <div className="cmd-pips">{Array.from({ length: CMD_MAX }, (_, i) => <i key={i} className={s && i < Math.floor(s.cmdPts) ? 'on' : s && i < s.cmdPts ? 'part' : ''} />)}</div>
+          <b>{s ? Math.floor(s.cmdPts) : 0}</b>
+        </div>
         <div className="bt-ctrl">
           <button onClick={() => setPaused(!paused)} title="일시정지(스페이스)">{paused ? '▶' : '❚❚'}</button>
           <button onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} title="배속">×{speed}</button>
@@ -507,6 +509,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
         </div>
       </div>
       <div className="battle-field"><canvas ref={canvasRef} /></div>
+      <div className="bt-help">지휘력이 차면 예비 부대를 원하는 레인에 투입(숫자키는 기본 레인) · 외곽 초소를 정리한 레인은 더 앞에서 나온다</div>
       <div className="bt-bottom">
         {s?.squads.map((q) => {
           const units = s.units.filter((u) => u.side === 'ally' && u.squad === q.idx);
@@ -517,8 +520,18 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
           const cdP = q.skill ? 1 - q.skillCd / q.skill.cd : 0;
           const lm = MON[q.plan.leader];
           return (
-            <div key={q.idx} className={`plate${!leaderOk && q.started ? ' down' : ''}`} style={{ ['--c' as string]: col, ['--g' as string]: GRADES[lm.grade].color }}>
+            <div key={q.idx} className={`plate${!leaderOk && q.started ? ' down' : ''}${!q.started ? ' reserve' : ''}${!q.started && s && s.cmdPts >= deployCost(q.plan.leader) ? ' ready' : ''}`} style={{ ['--c' as string]: col, ['--g' as string]: GRADES[lm.grade].color }}>
               <div className="plate-face">{glyph(q.plan.leader)}<span>{q.idx + 1}</span></div>
+              {!q.started ? (
+                <div className="plate-mid">
+                  <div className="plate-name">{lm.name}<small>예비 · 지휘력 {deployCost(q.plan.leader)}</small></div>
+                  <div className="plate-deploy">
+                    {LANE_NAMES.map((n, L) => (
+                      <button key={L} className={L === q.plan.lane ? 'pref' : ''} disabled={!canDeploy(s, q.idx, L as Lane)} onClick={() => deploy(s, q.idx, L as Lane)}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
               <div className="plate-mid">
                 <div className="plate-name">{lm.name}<small>{LANE_NAMES[q.plan.lane]}{q.plan.gear ? ` · ${GEARS[q.plan.gear].name}` : ''}</small></div>
                 <div className="plate-bar"><div style={{ width: `${q.started ? (alive / total) * 100 : 100}%` }} /></div>
@@ -530,7 +543,8 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
                   <button title="후퇴" className="warn" disabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)}>⚑</button>
                 </div>
               </div>
-              {q.skill && (
+              )}
+              {q.skill && q.started && (
                 <button className={`plate-skill${canCast(s, q.idx) ? ' ready' : ''}`} style={{ ['--p' as string]: cdP }} disabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} title={`${q.skill.name}: ${q.skill.desc}`}>
                   <span>{q.skill.name}</span>{q.skillCd > 0 && <b>{Math.ceil(q.skillCd)}</b>}
                 </button>

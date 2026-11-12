@@ -169,6 +169,14 @@ export class SiegeView {
       case 'outpost':
         this.banner(`외곽 초소 정리 — ${['성벽', '정문', '지하'][e.lane]} 레인 망루 피해 -30%`, '#7dff9a');
         break;
+      case 'deploy': {
+        const y = LANE_CY[e.lane];
+        this.pfx('magic_circle', e.x + 30, y + 10, { k: 1.4, dur: 0.7 });
+        this.pfx('respawn', e.x + 30, y + 10, { k: 1.6, dur: 0.8, add: true, delay: 0.1 });
+        this.shake = Math.max(this.shake, 5);
+        this.banner(`${this.s.squads[e.squad].leader?.name ?? ''} 투입`, SQUAD_COL[e.squad]);
+        break;
+      }
       case 'leaderDown':
         this.banner(`${e.u.name} 쓰러짐 — 지휘 효과 사라짐`, '#ff7a7a');
         break;

@@ -7,7 +7,7 @@ export interface SquadPlan {
   leader: string;                              // 몬스터 id (희귀 이상)
   troops: { id: string; count: number }[];     // 일반·희귀
   lane: Lane;
-  delay: number;                               // 출발 지연(초)
+  delay: number;                               // 자동 투입(시뮬레이션)일 때 이 초 전에는 내보내지 않는다
   gear?: Gear;                                 // 공성 장비(대장간): 부대장과 상관없이 부대에 붙는다
 }
 
@@ -77,6 +77,7 @@ export type SiegeEvent =
   | { t: 'skillHit'; kind: string; x: number; lane: Lane; r?: number }
   | { t: 'palisadeBreak'; x: number; lane: Lane }
   | { t: 'outpost'; lane: Lane }
+  | { t: 'deploy'; squad: number; lane: Lane; x: number }
   | { t: 'end'; win: boolean; reason: string };
 
 export interface SiegeState {
@@ -102,6 +103,8 @@ export interface SiegeState {
   /** 부대별로 준 피해(MVP 계산) */
   dmgBy: number[];
   captainName?: string;
+  /** 지휘력: 예비 부대를 투입하는 데 쓴다. 시간이 지나면 찬다 */
+  cmdPts: number;
 }
 
 const NOCMD: Command = { desc: '' };
@@ -152,7 +155,7 @@ export function createSiege(castle: Castle, plans: SquadPlan[], opts: {
     castle, t: 0, units: [], squads: [], towers: castle.towers.map((t) => ({ ...t, hp: t.hp * castle.power, max: t.hp * castle.power, dmg: t.dmg * castle.power, atkT: 1, alive: true })),
     gateHp: castle.gateHp * castle.power, gateMax: castle.gateHp * castle.power, tunnelWork: 0, tunnelOpen: false, coreProg: 0, over: null,
     rng, emit: opts.emit ?? (() => {}), stats: { allyDead: 0, foeDead: 0, leadersLost: 0 }, noCommand: !!opts.noCommand, timers: [], palisades: [], outpostCleared: [false, false, false],
-    boost: opts.boost ?? (() => 1), squadBoost: opts.squadBoost ?? (() => 1), dmgBy: plans.map(() => 0), captainName: opts.captainName,
+    boost: opts.boost ?? (() => 1), squadBoost: opts.squadBoost ?? (() => 1), dmgBy: plans.map(() => 0), captainName: opts.captainName, cmdPts: CMD_START,
   };
   plans.forEach((p, i) => s.squads.push({ idx: i, plan: p, leader: null, started: false, retreated: false,
     orders: { advance: true, gate: 'attack' }, skill: SKILLS[p.leader] ?? null, skillCd: 4, shieldT: 0 }));
@@ -167,18 +170,48 @@ export function createSiege(castle: Castle, plans: SquadPlan[], opts: {
   return s;
 }
 
+// ---------------- 예비대 투입 ----------------
+export const CMD_START = 6, CMD_MAX = 10, CMD_RATE = 0.4;   // 시작 6, 2.5초에 1, 최대 10
+const DEPLOY_COST: Record<string, number> = { rare: 2, hero: 3, legend: 5, myth: 7 };
+export const deployCost = (leaderId: string) => DEPLOY_COST[MON[leaderId].grade] ?? 3;
+/** 그 레인에서 투입할 자리: 외곽 초소를 정리하면 그 자리까지 앞당겨진다 */
+export function deployX(s: SiegeState, lane: Lane) {
+  const posts = s.units.filter((u) => u.outpost && u.lane === lane);
+  return s.outpostCleared[lane] && posts.length ? Math.min(...posts.map((u) => u.homeX)) - 40 : 40;
+}
+export function canDeploy(s: SiegeState, squad: number, lane: Lane) {
+  const q = s.squads[squad];
+  return !!q && !q.started && !s.over && s.cmdPts >= deployCost(q.plan.leader) && !(lane === 2 && !s.castle.tunnel);
+}
+/** 예비 부대를 그 레인에 내보낸다 */
+export function deploy(s: SiegeState, squad: number, lane: Lane): boolean {
+  if (!canDeploy(s, squad, lane)) return false;
+  const q = s.squads[squad];
+  s.cmdPts -= deployCost(q.plan.leader);
+  q.plan.lane = lane;
+  spawnSquad(s, q);
+  s.emit({ t: 'deploy', squad, lane, x: deployX(s, lane) });
+  return true;
+}
+/** 시뮬레이션용: 편성 순서대로, 지휘력이 차면 정한 레인에 */
+export function autoDeploy(s: SiegeState) {
+  const q = s.squads.find((x) => !x.started);
+  if (q && s.t >= q.plan.delay) deploy(s, q.idx, q.plan.lane);
+}
+
 function spawnSquad(s: SiegeState, sq: Squad) {
   sq.started = true;
+  const x0 = deployX(s, sq.plan.lane) - 40;
   const cmd = s.noCommand ? NOCMD : (MON[sq.plan.leader].command ?? NOCMD);
   const lane = sq.plan.lane;
   const sb = s.squadBoost(sq.plan.leader);
-  const leader = allyUnit(sq.plan.leader, sq.idx, lane, 40, true, cmd, s.boost(sq.plan.leader) * sb);
+  const leader = allyUnit(sq.plan.leader, sq.idx, lane, x0 + 40, true, cmd, s.boost(sq.plan.leader) * sb);
   sq.leader = leader;
   s.units.push(leader);
   let k = 0;
   const cap = troopCap(sq.plan.leader);
   for (const t of sq.plan.troops) {
-    for (let i = 0; i < t.count && k < cap; i++, k++) s.units.push(allyUnit(t.id, sq.idx, lane, 70 + (k % 4) * 16 - Math.floor(k / 4) * 14, false, cmd, s.boost(t.id) * sb));
+    for (let i = 0; i < t.count && k < cap; i++, k++) s.units.push(allyUnit(t.id, sq.idx, lane, x0 + 70 + (k % 4) * 16 - Math.floor(k / 4) * 14, false, cmd, s.boost(t.id) * sb));
   }
 }
 
@@ -456,7 +489,7 @@ export function retreat(s: SiegeState, squad: number) {
 export function step(s: SiegeState, dt: number) {
   if (s.over) return;
   s.t += dt;
-  for (const sq of s.squads) if (!sq.started && s.t >= sq.plan.delay) spawnSquad(s, sq);
+  s.cmdPts = Math.min(CMD_MAX, s.cmdPts + CMD_RATE * dt);
   for (const u of s.units) {
     u.hitT = Math.max(0, u.hitT - dt); u.lungeT = Math.max(0, u.lungeT - dt);
     u.stunT = Math.max(0, u.stunT - dt); u.vulnT = Math.max(0, u.vulnT - dt);

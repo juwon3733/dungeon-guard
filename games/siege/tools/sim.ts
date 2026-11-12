@@ -2,7 +2,7 @@
 // 실행: npm run sim  (빠르게: npm test)
 // 기준(docs/siege/06_roadmap.md): 지휘 효과를 성채에 맞춘 편성은 승률이 높고, 안 맞춘 같은 등급 편성은 확연히 낮아야 한다.
 import { CASTLE } from '../src/data/castles';
-import { createSiege, step, stars, autoCast, setOrders, type SquadPlan, type SiegeState } from '../src/core/siege';
+import { createSiege, step, stars, autoCast, autoDeploy, setOrders, type SquadPlan, type SiegeState } from '../src/core/siege';
 
 const quick = process.argv.includes('--quick');
 const N = quick ? 20 : 100;
@@ -70,6 +70,7 @@ const base = CASTLE[process.argv.find((a) => CASTLE[a]) ?? 'border_fort'];
 /** 운영 방식: 방치(아무것도 안 함) / 스킬(자동 사용) / 스킬+명령(망루가 무너질 때까지 성문 대기) */
 type Policy = 'idle' | 'skill' | 'smart';
 function play(s: SiegeState, policy: Policy) {
+  autoDeploy(s);
   if (policy === 'smart') {
     // 망루가 남아 있고, 그걸 부술 원거리가 정문 쪽에 있을 때만 성문 공격을 미룬다
     const towersUp = s.towers.some((t) => t.alive);
