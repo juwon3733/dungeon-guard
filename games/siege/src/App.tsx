@@ -189,132 +189,156 @@ function ArmyTab({ meta, onTrain, onAwaken, onRelease }: { meta: Meta; onTrain: 
   );
 }
 
+const FAC_GLYPH: Record<string, string> = { nest: '巢', warroom: '戰', circle: '召', mine: '鑛', prison: '獄', forge: '冶' };
 function DungeonTab({ meta, onUpgrade, onExchange }: { meta: Meta; onUpgrade: (f: FacId) => void; onExchange: () => void }) {
+  const keys = Object.keys(FACILITIES) as FacId[];
+  const [sel, setSel] = useState<FacId>('warroom');
+  const F = FACILITIES[sel], lv = meta.fac[sel], next = F.costs[lv + 1];
   return (
-    <div className="squads">
-      <Card padding={4}>
-        <VStack gap={2}>
-          <Heading level={3}>마석 교환</Heading>
-          <Text size="sm" color="secondary">남는 금화를 마석으로 바꾼다. 손해 보는 비율이니 금화가 남아돌 때만.</Text>
-          <Button label={`금화 ${EXCHANGE.gold} → 마석 ${EXCHANGE.mana}`} isDisabled={meta.gold < EXCHANGE.gold} onClick={onExchange} />
-        </VStack>
-      </Card>
-      {(Object.keys(FACILITIES) as FacId[]).map((f) => {
-        const F = FACILITIES[f], lv = meta.fac[f], next = F.costs[lv + 1];
-        return (
-          <Card key={f} padding={4}>
-            <VStack gap={2}>
-              <HStack gap={2}><Heading level={3}>{F.name}</Heading><Badge label={`${lv + 1}단계`} /></HStack>
-              <Text size="sm" color="secondary">{F.desc}</Text>
-              <Text>지금: {facValue(meta, f)}{F.unit}{next != null ? ` → 다음: ${F.values[lv + 1]}${F.unit}` : ''}</Text>
-              {next != null
-                ? <Button label={`올리기 · 금화 ${next}`} isDisabled={meta.gold < next} onClick={() => onUpgrade(f)} />
-                : <Badge label="최고 단계" />}
-            </VStack>
-          </Card>
-        );
-      })}
+    <div className="ledger">
+      <div className="ledger-list">
+        <div className="ledger-group">던전의 방</div>
+        <div className="tiles">
+          {keys.map((f) => {
+            const L = meta.fac[f], max = FACILITIES[f].costs.length;
+            return (
+              <button key={f} className={`tile${f === sel ? ' on' : ''}`} style={{ ['--g' as string]: '#c8963e' }} onClick={() => setSel(f)}>
+                <span className="glyph">{FAC_GLYPH[f]}</span>
+                <span className="lv">{Array.from({ length: max }, (_, k) => (k <= L ? '◆' : '◇')).join('')}</span>
+                <span className="nm">{FACILITIES[f].name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="ledger-group">환전</div>
+        <button className="btn-plain" style={{ maxWidth: 320 }} disabled={meta.gold < EXCHANGE.gold} onClick={onExchange}>
+          <span>금화를 마석으로</span><span className="cost"><IconGold size={15} />{EXCHANGE.gold} → <IconMana size={15} />{EXCHANGE.mana}</span>
+        </button>
+      </div>
+      <aside className="ledger-side">
+        <div className="side-title">{F.name}</div>
+        <div className="side-sub">{lv + 1}단계 / {F.costs.length}</div>
+        <div className="side-text">{F.desc}</div>
+        <div className="side-text"><b>지금</b> {facValue(meta, sel)}{F.unit}{next != null && <> &nbsp;→&nbsp; <b>다음</b> {F.values[lv + 1]}{F.unit}</>}</div>
+        <div style={{ flex: 1 }} />
+        <button className="btn-plain" disabled={next == null || meta.gold < next} onClick={() => onUpgrade(sel)}>
+          <span>{next == null ? '더 넓힐 수 없다' : '증축'}</span>{next != null && <span className="cost"><IconGold size={15} />{next}</span>}
+        </button>
+      </aside>
     </div>
   );
 }
 
 function DormTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) => void; mutate: <T>(f: (m: Meta) => T) => T }) {
   const ids = people(meta);
-  if (!ids.length) return <Card padding={4}><Text color="secondary">아직 숙소에 사는 동료가 없습니다. 적장을 사로잡아 타락시키거나, 포로를 타락시키거나, 서큐버스·박쥐 여왕·해마녀 같은 사람 모습 몬스터를 얻으면 방이 생깁니다.</Text></Card>;
+  const [sel, setSel] = useState<string>(ids[0]);
+  if (!ids.length) return <div className="ledger"><div className="ledger-list"><div className="side-text" style={{ padding: 20 }}>숙소가 비어 있다. 적장을 사로잡아 타락시키거나, 사람 모습의 마족을 얻으면 방이 생긴다.</div></div></div>;
+  const cur = ids.includes(sel) ? sel : ids[0];
+  const P = PEOPLE[cur], a = meta.affinity[cur] ?? 0, m = MON[cur], g = GRADES[m.grade];
+  const boost = Math.round((affinityBoost(a) - 1) * 100);
   return (
-    <div className="squads">
-      {ids.map((id) => {
-        const P = PEOPLE[id], a = meta.affinity[id] ?? 0, m = MON[id], g = GRADES[m.grade];
-        const boost = Math.round((affinityBoost(a) - 1) * 100);
-        return (
-          <Card key={id} padding={4}>
-            <VStack gap={2}>
-              <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Heading level={3}>{m.name}</Heading>{meta.aide === id && <Badge label="측근" variant="warning" />}</HStack>
-              {P.human && <Text size="sm" color="secondary">타락 전: {P.human}</Text>}
-              <ProgressBar label={`호감도 ${a}/10${boost ? ` · 이끄는 부대 능력 +${boost}%` : ''}`} value={a} max={10} />
-              {([2, 5, 10] as const).map((lv) => (
-                <Text key={lv} size="sm" color={a >= lv ? undefined : 'secondary'}>{a >= lv ? `「${P.lines[lv]}」` : `🔒 호감도 ${lv}에서 열리는 이야기`}</Text>
-              ))}
-              <Text size="sm" color="secondary">측근 효과: {P.aide.desc}</Text>
-              <HStack gap={2}>
-                <Button size="sm" label={a >= 10 ? '호감도 최대' : `선물 · 금화 ${giftCost(a)}`} isDisabled={a >= 10 || meta.gold < giftCost(a)} onClick={() => setMsg(mutate((mm) => gift(mm, id)) ?? `${m.name} 호감도 ${a + 1}`)} />
-                <Button size="sm" variant={meta.aide === id ? 'primary' : 'secondary'} label={meta.aide === id ? '측근' : '측근으로'} isDisabled={meta.aide === id || a < 3} onClick={() => setMsg(mutate((mm) => setAide(mm, id)) ?? `${m.name}을(를) 측근으로 두었습니다.`)} />
-              </HStack>
-            </VStack>
-          </Card>
-        );
-      })}
+    <div className="ledger">
+      <div className="ledger-list">
+        <div className="ledger-group">숙소</div>
+        <div className="tiles">
+          {ids.map((id) => {
+            const mm = MON[id], aa = meta.affinity[id] ?? 0;
+            return (
+              <button key={id} className={`tile${id === cur ? ' on' : ''}`} style={{ ['--g' as string]: GRADES[mm.grade].color }} onClick={() => setSel(id)} title={mm.name}>
+                <span className="lv" style={{ color: '#e88' }}>{'♥'.repeat(Math.ceil(aa / 2))}</span>
+                {meta.aide === id && <span className="cnt">측근</span>}
+                <span className="glyph">{mm.name.split(' ').pop()!.slice(0, 1)}</span>
+                <span className="nm">{mm.name.split(' ').pop()}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <aside className="ledger-side" style={{ ['--g' as string]: g.color }}>
+        <div className="side-title">{m.name}</div>
+        <div className="side-sub">{P.human ? `${P.human} · ` : ''}호감 {a}/10{boost ? ` · 이끄는 부대 +${boost}%` : ''}</div>
+        <div className="hearts">{Array.from({ length: 10 }, (_, k) => <span key={k} className={k < a ? 'on' : ''}>♥</span>)}</div>
+        {([2, 5, 10] as const).map((lv) => (
+          a >= lv ? <div key={lv} className="speech">{P.lines[lv]}</div> : <div key={lv} className="speech locked">호감 {lv}에서 들을 수 있다</div>
+        ))}
+        <div style={{ flex: 1 }} />
+        <div className="side-text"><b>측근이 되면</b> {P.aide.desc}</div>
+        <button className="btn-plain" disabled={a >= 10 || meta.gold < giftCost(a)} onClick={() => setMsg(mutate((mm) => gift(mm, cur)) ?? `${m.name.split(' ').pop()}의 호감이 올랐다.`)}>
+          <span>{a >= 10 ? '더 바랄 것 없다' : '선물'}</span>{a < 10 && <span className="cost"><IconGold size={15} />{giftCost(a)}</span>}
+        </button>
+        <button className="btn-plain" disabled={meta.aide === cur || a < 3} onClick={() => setMsg(mutate((mm) => setAide(mm, cur)) ?? `${m.name.split(' ').pop()}을(를) 곁에 두었다.`)}>
+          <span>{meta.aide === cur ? '곁에 두고 있다' : '곁에 두기'}</span><span className="cost">{a < 3 ? '호감 3 필요' : ''}</span>
+        </button>
+      </aside>
     </div>
   );
 }
 
 function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) => void; mutate: <T>(f: (m: Meta) => T) => T }) {
+  const [last, setLast] = useState<{ id: string; n: number } | null>(null);
+  const doSummon = () => {
+    const r = mutate((m) => summon(m));
+    if (typeof r === 'string') setMsg(r); else { setLast(r); setMsg(''); }
+  };
   return (
-    <div className="squads">
-      <Card padding={4}>
-        <VStack gap={2}>
-          <Heading level={3}>소환진</Heading>
-          <Text size="sm" color="secondary">마석 {SUMMON_COST}개로 마계에서 몬스터를 부른다. 일반은 3마리씩 온다. 소환진 단계가 높을수록 높은 등급이 나온다(지금 {facValue(meta, 'circle')}단계).</Text>
-          <Button label={`소환 · 마석 ${SUMMON_COST}`} variant="primary" isDisabled={meta.mana < SUMMON_COST} onClick={() => {
-            const r = mutate((m) => summon(m));
-            setMsg(typeof r === 'string' ? r : `소환: ${GRADES[MON[r.id].grade].label} ${MON[r.id].name}${r.n > 1 ? ` ×${r.n}` : ''}`);
-          }} />
-        </VStack>
-      </Card>
-      <div style={{ gridColumn: '1 / -1' }}><Card padding={4}>
-        <VStack gap={2}>
-          <Heading level={3}>감옥</Heading>
-          <Text size="sm" color="secondary">공성에서 쓰러뜨린 적 중 일부를 사로잡는다(보병·궁수 15%, 기사 35%, 수비대장 65%). 타락 의식으로 우리 편 몬스터가 된다.</Text>
-          <Text>포로 {prisonerCount(meta)} / {facValue(meta, 'prison')}</Text>
-          {meta.named.map((id) => (
-            <HStack gap={2} key={id}>
-              <Badge label="사로잡은 적장" variant="error" /><Text weight="bold">{PEOPLE[id].human}</Text>
-              <Button size="sm" variant="primary" label={`타락 의식 · 마석 ${namedCost(id)}`} isDisabled={meta.mana < namedCost(id)} onClick={() => {
-                const r = mutate((m) => corruptNamed(m, id));
-                setMsg(r ?? `「${PEOPLE[id].human}」 → 「${MON[id].name}」(${GRADES[MON[id].grade].label}). 숙소에 방이 생겼습니다.`);
-              }} />
-            </HStack>
-          ))}
-          {(['captain', 'knight', 'archer', 'footman'] as PrisonerType[]).map((t) => {
-            const P = PRISONERS[t], n = meta.prisoners[t] ?? 0;
-            const to = P.to ? `${GRADES[MON[P.to].grade].label} ${MON[P.to].name}` : '서큐버스·늪의 마녀·타락 기사·흡혈 군주 중 하나';
-            return (
-              <HStack gap={2} key={t}>
-                <Badge label={`${P.name} ×${n}`} variant={n ? 'info' : 'neutral'} />
-                <Text size="sm" color="secondary">→ {to}</Text>
-                <Button size="sm" label={`타락 · 마석 ${P.cost}`} isDisabled={n <= 0 || meta.mana < P.cost} onClick={() => {
-                  const r = mutate((m) => corrupt(m, t));
-                  setMsg(typeof r === 'string' ? r : `타락: ${P.name} → ${GRADES[MON[r.id].grade].label} ${MON[r.id].name}이(가) 군단에 합류했습니다.`);
-                }} />
-              </HStack>
-            );
-          })}
-        </VStack>
-      </Card></div>
-      <div style={{ gridColumn: '1 / -1' }}><Card padding={4}>
-        <VStack gap={2}>
-          <Heading level={3}>계약</Heading>
-          <Text size="sm" color="secondary">명성이 쌓이면 몬스터가 던전에 찾아온다. 마석을 바치면 합류한다(몬스터마다 한 번). 지금 명성 {meta.fame}.</Text>
-          {CONTRACTS.map((c) => {
-            const st = contractState(meta, c), m = MON[c.id];
-            return (
-              <HStack gap={2} key={c.id}>
-                <span className="dot" style={{ background: GRADES[m.grade].color }} />
-                <Text weight="bold">{m.name}</Text><Badge label={GRADES[m.grade].label} />
-                <Text size="sm" color="secondary">{st === 'locked' ? `명성 ${c.fame}${c.need?.circle ? ` · 소환진 ${c.need.circle}단계` : ''}${c.need?.region ? ' · 장 보스 점령' : ''} 필요` : c.desc}</Text>
-                {st === 'done' ? <Badge label="계약함" variant="success" />
-                  : <Button size="sm" label={`계약 · 마석 ${c.mana}`} isDisabled={st !== 'open' || meta.mana < c.mana}
-                      onClick={() => setMsg(mutate((mm) => signContract(mm, c.id)) ?? `${m.name}과(와) 계약했습니다.`)} />}
-              </HStack>
-            );
-          })}
-        </VStack>
-      </Card></div>
+    <div className="ledger">
+      <div className="ledger-list">
+        <div className="ledger-group">감옥 · {prisonerCount(meta)}/{facValue(meta, 'prison')}</div>
+        {meta.named.map((id) => (
+          <div className="row-line" key={id}>
+            <span className="chip red">적장</span><span className="row-name">{PEOPLE[id].human}</span>
+            <span className="row-to">→ {MON[id].name}</span>
+            <button className="btn-plain sm" disabled={meta.mana < namedCost(id)} onClick={() => setMsg(mutate((m) => corruptNamed(m, id)) ?? `${PEOPLE[id].human}이(가) 타락했다. 숙소에 방이 생겼다.`)}>
+              <span>타락</span><span className="cost"><IconMana size={14} />{namedCost(id)}</span>
+            </button>
+          </div>
+        ))}
+        {(['captain', 'knight', 'archer', 'footman'] as PrisonerType[]).map((t) => {
+          const P = PRISONERS[t], n = meta.prisoners[t] ?? 0;
+          if (!n) return null;
+          return (
+            <div className="row-line" key={t}>
+              <span className="chip">{P.name} ×{n}</span>
+              <span className="row-to">→ {P.to ? MON[P.to].name : '마족 하나(무작위)'}</span>
+              <button className="btn-plain sm" disabled={meta.mana < P.cost} onClick={() => {
+                const r = mutate((m) => corrupt(m, t));
+                setMsg(typeof r === 'string' ? r : `${P.name} 포로가 ${MON[r.id].name}이(가) 되었다.`);
+              }}><span>타락</span><span className="cost"><IconMana size={14} />{P.cost}</span></button>
+            </div>
+          );
+        })}
+        {!meta.named.length && !prisonerCount(meta) && <div className="side-text faint">비어 있다. 공성에서 쓰러뜨린 적 일부를 사로잡는다.</div>}
+        <div className="ledger-group" style={{ marginTop: 20 }}>찾아온 자들 · 명성 {meta.fame}</div>
+        {CONTRACTS.map((c) => {
+          const st = contractState(meta, c), m = MON[c.id];
+          return (
+            <div className={`row-line${st === 'locked' ? ' dim' : ''}`} key={c.id}>
+              <span className="chip" style={{ borderColor: GRADES[m.grade].color, color: GRADES[m.grade].color }}>{GRADES[m.grade].label}</span>
+              <span className="row-name">{st === 'locked' ? '???' : m.name}</span>
+              <span className="row-to">{st === 'locked' ? `명성 ${c.fame}${c.need?.circle ? ` · 소환진 ${c.need.circle}단계` : ''}${c.need?.region ? ' · 장 보스' : ''}` : st === 'done' ? '계약함' : c.desc}</span>
+              {st === 'open' && <button className="btn-plain sm" disabled={meta.mana < c.mana} onClick={() => setMsg(mutate((mm) => signContract(mm, c.id)) ?? `${m.name}이(가) 군단에 들어왔다.`)}>
+                <span>계약</span><span className="cost"><IconMana size={14} />{c.mana}</span></button>}
+            </div>
+          );
+        })}
+      </div>
+      <aside className="ledger-side summon-side">
+        <div className="side-title">소환진</div>
+        <div className="side-sub">{facValue(meta, 'circle')}단계 — 높을수록 강한 것이 응답한다</div>
+        <svg viewBox="0 0 200 200" className="circle-svg" aria-hidden="true">
+          <circle cx="100" cy="100" r="86" fill="none" stroke="#7d4ad8" strokeWidth="2" />
+          <circle cx="100" cy="100" r="70" fill="none" stroke="#b38cff" strokeWidth="1" strokeDasharray="4 6" />
+          <path d="M100 18 L127 155 L30 70 H170 L73 155 Z" fill="none" stroke="#b38cff" strokeWidth="1.5" />
+          {last && <text x="100" y="112" textAnchor="middle" className="circle-glyph" fill={GRADES[MON[last.id].grade].color}>{MON[last.id].name.split(' ')[0].slice(0, 1)}</text>}
+        </svg>
+        {last && <div className="side-text" style={{ textAlign: 'center' }}><b style={{ color: GRADES[MON[last.id].grade].color }}>{GRADES[MON[last.id].grade].label} {MON[last.id].name}</b>{last.n > 1 ? ` ×${last.n}` : ''}이(가) 응답했다</div>}
+        <div style={{ flex: 1 }} />
+        <button className="btn-war" disabled={meta.mana < SUMMON_COST} onClick={doSummon}>소환 <span style={{ fontSize: 13, letterSpacing: 0 }}>· 마석 {SUMMON_COST}</span></button>
+      </aside>
     </div>
   );
 }
 
-// ---------------- 편성 ----------------
 function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   meta: Meta; region: Region; plans: SquadPlan[]; setPlans: (p: SquadPlan[]) => void; onBack: () => void; onStart: () => void;
 }) {
@@ -344,28 +368,27 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   ];
 
   return (
-    <div className="page">
-      <VStack gap={4}>
-        <HStack gap={3}><Button label="← 본부" variant="ghost" onClick={onBack} /><Heading level={1}>{region.name} 공성 편성</Heading><Badge label={`수비 강도 ${castle.power}`} /><Badge label={`제한 ${castle.timeLimit}초`} /></HStack>
-        <Card padding={4}>
-          <VStack gap={2}>
-            <Text color="secondary">{castle.tip}</Text>
-            <div className="lanes">
-              {laneInfo.map((t, i) => (
-                <div className="lane-box" key={i}><Text weight="bold">{['위', '가운데', '아래'][i]} · {LANE_NAMES[i]}</Text><br /><Text size="sm" color="secondary">{t}</Text></div>
-              ))}
-            </div>
-          </VStack>
-        </Card>
-        <div className="squads">
-          {plans.map((p, i) => <SquadCard key={i} idx={i} plan={p} leaders={leaders} troops={troops} meta={meta} onChange={(f) => update(i, f)} tunnel={castle.tunnel} />)}
-        </div>
-        <HStack gap={3}>
-          <Button label={gearCost ? `공성 시작 · 장비 금화 ${gearCost}` : '공성 시작'} variant="primary" size="lg" isDisabled={!!problem} onClick={onStart} />
-          <Button label="예상 승률 계산" isDisabled={!!problem} onClick={runEstimate} />
-          {problem ? <Text weight="bold">편성 문제: {problem}</Text> : estimate && <Text color="secondary">{estimate}</Text>}
-        </HStack>
-      </VStack>
+    <div className="hub">
+      <header className="hub-top">
+        <button className="room" style={{ padding: '4px 8px' }} onClick={onBack}>← 지도</button>
+        <div className="hub-title" style={{ marginRight: 0 }}>{region.name}</div>
+        <span className="pips" title="수비 강도">{Array.from({ length: 5 }, (_, k) => <span key={k} style={{ opacity: k < Math.max(1, Math.min(5, Math.round(castle.power * 2))) ? 1 : 0.2 }}><IconThreat size={16} /></span>)}</span>
+        <span className="res" style={{ marginLeft: 'auto' }}><IconGold /> {meta.gold}</span>
+        <span className="res" title="제한 시간">⌛ {castle.timeLimit}<small>초</small></span>
+      </header>
+      <div className="lane-strip">
+        {laneInfo.map((t, k) => (
+          <div className="lane-row" key={k}><span className="lane-tag">{['위', '가운데', '아래'][k]} · {LANE_NAMES[k]}</span><span>{t}</span></div>
+        ))}
+        <div className="lane-tip">{castle.tip}</div>
+      </div>
+      <div className="squads" style={{ marginTop: 14 }}>
+        {plans.map((p, i) => <SquadCard key={i} idx={i} plan={p} leaders={leaders} troops={troops} meta={meta} onChange={(f) => update(i, f)} tunnel={castle.tunnel} />)}
+      </div>
+      <div className="form-foot">
+        {problem ? <span className="warn-text">{problem}</span> : estimate ? <span className="faint">{estimate}</span> : <button className="btn-ghost" onClick={runEstimate}>이 편성으로 미리 겨뤄 보기</button>}
+        <button className="btn-war" style={{ minWidth: 260 }} disabled={!!problem} onClick={onStart}>출격{gearCost ? <span style={{ fontSize: 13, letterSpacing: 0 }}> · 장비 금화 {gearCost}</span> : null}</button>
+      </div>
     </div>
   );
 }
@@ -386,13 +409,13 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
   });
   const troopOpts = Array.from(new Set([...troops, ...plan.troops.map((t) => t.id)])).map((id) => ({ value: id, label: `${monLabel(id)} (보유 ${meta.owned[id] ?? 0})` }));
   return (
-    <Card padding={4}>
+    <div className="squad-panel" style={{ ['--c' as string]: SQUAD_COL[idx % SQUAD_COL.length] }}>
       <VStack gap={3}>
-        <HStack gap={2}><span className="dot" style={{ background: SQUAD_COL[idx % SQUAD_COL.length] }} /><Heading level={3}>{idx + 1}부대</Heading><Badge label={`${g.label} 부대장 · 병력 ${used}/${cap}`} /></HStack>
+        <div className="squad-head"><span>{idx + 1}부대</span><small style={{ color: g.color }}>{g.label}</small><small className="faint">병력 {used}/{cap}</small></div>
         <Selector label="부대장" value={plan.leader} options={Array.from(new Set([...leaders, plan.leader])).map((id) => ({ value: id, label: `${monLabel(id)} (보유 ${meta.owned[id] ?? 0})` }))}
           onChange={(v) => onChange((p) => { p.leader = v; let left = troopCap(v); p.troops.forEach((t) => { t.count = Math.min(t.count, left); left -= t.count; }); return p; })} />
-        <Text size="sm" color="secondary"><span className="dot" style={{ background: g.color }} />지휘 효과: {leader.command?.desc ?? '없음'}</Text>
-        {SKILLS[plan.leader] && <Text size="sm" color="secondary">스킬 「{SKILLS[plan.leader].name}」({SKILLS[plan.leader].cd}초): {SKILLS[plan.leader].desc}</Text>}
+        {leader.command && <div className="side-text"><b>지휘</b> {leader.command.desc}</div>}
+        {SKILLS[plan.leader] && <div className="side-text"><b>「{SKILLS[plan.leader].name}」</b> {SKILLS[plan.leader].desc}</div>}
         {plan.troops.map((t, k) => (
           <HStack gap={2} key={k}>
             <Selector label={`병력 ${k + 1}`} value={t.id} options={troopOpts} onChange={(v) => setTroop(k, { id: v })} />
@@ -410,7 +433,7 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
           {[0, 3, 6, 10, 20].map((d) => <SegmentedControlItem key={d} value={String(d)} label={d ? `${d}초 뒤` : '바로'} />)}
         </SegmentedControl>
       </VStack>
-    </Card>
+    </div>
   );
 }
 
@@ -470,65 +493,70 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
   }, [plans, castle]);
 
   const s = ref.current?.s;
+  const glyph = (id: string) => (PEOPLE[id] ? MON[id].name.split(' ').pop()! : MON[id].name.split(' ')[0]).slice(0, 1);
   return (
     <div className="battle">
-      <div className="battle-top">
-        <HStack gap={3}>
-          <Heading level={3}>{castle.name}</Heading>
-          <Text hasTabularNumbers>{s ? `${Math.floor(s.t)}초 / ${castle.timeLimit}초` : ''}</Text>
-          <div style={{ width: 200 }}><ProgressBar label="핵심 지점 점거" value={s ? Math.min(castle.holdSec, s.coreProg) : 0} max={castle.holdSec} /></div>
-          <Button label={paused ? '계속' : '일시정지'} onClick={() => setPaused(!paused)} />
-          <Button label={`×${speed}`} onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} />
-          <Button label="포기하고 본부로" variant="ghost" onClick={onExit} />
-        </HStack>
+      <div className="bt-top">
+        <span className="bt-name">{castle.name}</span>
+        <span className="bt-time">{s ? Math.max(0, Math.ceil(castle.timeLimit - s.t)) : castle.timeLimit}<small>초</small></span>
+        <div className="bt-core" title="본관 점거"><div style={{ width: `${s ? Math.min(100, (s.coreProg / castle.holdSec) * 100) : 0}%` }} /><span>본관 점거</span></div>
+        <div className="bt-ctrl">
+          <button onClick={() => setPaused(!paused)} title="일시정지(스페이스)">{paused ? '▶' : '❚❚'}</button>
+          <button onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} title="배속">×{speed}</button>
+          <button onClick={onExit} title="포기하고 돌아가기">⚑</button>
+        </div>
       </div>
       <div className="battle-field"><canvas ref={canvasRef} /></div>
-      <div className="battle-bottom">
-        <div className="squad-hud">
-          {s?.squads.map((q) => {
-            const alive = s.units.filter((u) => u.side === 'ally' && u.squad === q.idx && u.alive).length;
-            const leaderOk = !!q.leader?.alive;
-            const active = !!cmdOf(s, q.idx).desc;
-            return (
-              <Card key={q.idx} padding={3}>
-                <VStack gap={2}>
-                  <VStack gap={0}>
-                    <Text weight="bold"><span className="dot" style={{ background: SQUAD_COL[q.idx % SQUAD_COL.length] }} />{q.idx + 1}부대 · {MON[q.plan.leader].name} ({LANE_NAMES[q.plan.lane]}){q.plan.gear ? ` · ${GEARS[q.plan.gear].name}` : ''}</Text>
-                    <Text size="sm" color="secondary">{!q.started ? `출발 대기 ${Math.max(0, Math.ceil(q.plan.delay - s.t))}초` : q.retreated ? '후퇴함' : `생존 ${alive} · 지휘 효과 ${active ? '켜짐' : leaderOk ? '-' : '꺼짐(부대장 쓰러짐)'}`}</Text>
-                  </VStack>
-                  <HStack gap={2}>
-                    {q.skill && <Button size="sm" variant="primary" label={q.skillCd > 0 ? `${q.idx + 1} · ${Math.ceil(q.skillCd)}초` : `${q.idx + 1} ${q.skill.name}`}
-                      isDisabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} />}
-                    <Button size="sm" label="↑" isDisabled={q.plan.lane === 0 || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane - 1) as Lane })} />
-                    <Button size="sm" label="↓" isDisabled={q.plan.lane === 2 || (q.plan.lane === 1 && !castle.tunnel) || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane + 1) as Lane })} />
-                    <Button size="sm" label={q.orders.advance ? '전진' : '정지'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })} />
-                    {q.plan.lane === 1 && <Button size="sm" label={q.orders.gate === 'attack' ? '공격' : '대기'} isDisabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })} />}
-                    <Button label="후퇴" size="sm" variant="destructive" isDisabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)} />
-                  </HStack>
-                </VStack>
-              </Card>
-            );
-          })}
-        </div>
+      <div className="bt-bottom">
+        {s?.squads.map((q) => {
+          const units = s.units.filter((u) => u.side === 'ally' && u.squad === q.idx);
+          const alive = units.filter((u) => u.alive).length;
+          const total = Math.max(1, units.length || 1);
+          const col = SQUAD_COL[q.idx % SQUAD_COL.length];
+          const leaderOk = !!q.leader?.alive;
+          const cdP = q.skill ? 1 - q.skillCd / q.skill.cd : 0;
+          const lm = MON[q.plan.leader];
+          return (
+            <div key={q.idx} className={`plate${!leaderOk && q.started ? ' down' : ''}`} style={{ ['--c' as string]: col, ['--g' as string]: GRADES[lm.grade].color }}>
+              <div className="plate-face">{glyph(q.plan.leader)}<span>{q.idx + 1}</span></div>
+              <div className="plate-mid">
+                <div className="plate-name">{lm.name}<small>{LANE_NAMES[q.plan.lane]}{q.plan.gear ? ` · ${GEARS[q.plan.gear].name}` : ''}</small></div>
+                <div className="plate-bar"><div style={{ width: `${q.started ? (alive / total) * 100 : 100}%` }} /></div>
+                <div className="plate-tools">
+                  <button title="위 레인으로" disabled={q.plan.lane === 0 || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane - 1) as Lane })}>▲</button>
+                  <button title="아래 레인으로" disabled={q.plan.lane === 2 || (q.plan.lane === 1 && !castle.tunnel) || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane + 1) as Lane })}>▼</button>
+                  <button title={q.orders.advance ? '정지' : '전진'} className={q.orders.advance ? '' : 'off'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })}>{q.orders.advance ? '➜' : '■'}</button>
+                  {q.plan.lane === 1 && <button title={q.orders.gate === 'attack' ? '성문 공격 멈추기' : '성문 공격'} className={q.orders.gate === 'attack' ? '' : 'off'} disabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })}>⚔</button>}
+                  <button title="후퇴" className="warn" disabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)}>⚑</button>
+                </div>
+              </div>
+              {q.skill && (
+                <button className={`plate-skill${canCast(s, q.idx) ? ' ready' : ''}`} style={{ ['--p' as string]: cdP }} disabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} title={`${q.skill.name}: ${q.skill.desc}`}>
+                  <span>{q.skill.name}</span>{q.skillCd > 0 && <b>{Math.ceil(q.skillCd)}</b>}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
       {s?.over && (
         <div className="result">
-          <Card padding={6}>
-            <VStack gap={3}>
-              <Heading level={2}>{s.over.win ? '점령 성공' : '공성 실패'}</Heading>
-              <Text>{s.over.reason} · {Math.floor(s.t)}초 · 쓰러진 아군 {s.stats.allyDead} · 쓰러뜨린 적 {s.stats.foeDead}</Text>
-              {s.over.win && <Text weight="bold">{'★'.repeat(stars(s))}{'☆'.repeat(3 - stars(s))}  (★2 부대장 전원 생존, ★3 120초 안에)</Text>}
-              {mvp && (
-                <Card padding={3}><HStack gap={2}><Badge label="MVP" variant="warning" /><Text weight="bold">{MON[mvp].name}</Text>
-                  <Text color="secondary">「{PEOPLE[mvp]?.mvp ?? '이 정도는 식은 죽 먹기지.'}」</Text></HStack></Card>
-              )}
-              {reward?.map((line, i) => <Text key={i}>{line}</Text>)}
-              <HStack gap={2}>
-                <Button label="본부로" variant="primary" onClick={onExit} />
-                <Button label="편성 바꿔 다시" onClick={onRetry} />
-              </HStack>
-            </VStack>
-          </Card>
+          <div className="result-card">
+            <div className={`result-title${s.over.win ? '' : ' lose'}`}>{s.over.win ? '함락' : '퇴각'}</div>
+            {s.over.win && <div className="result-stars">{Array.from({ length: 3 }, (_, k) => <span key={k} className={k < stars(s) ? 'on' : ''}>★</span>)}</div>}
+            <div className="result-sub">{s.over.win ? `${Math.floor(s.t)}초 만에 본관을 차지했다` : s.over.reason === '시간 초과' ? '시간 안에 성을 무너뜨리지 못했다' : '군단이 무너졌다'}</div>
+            {mvp && (
+              <div className="result-mvp" style={{ ['--g' as string]: GRADES[MON[mvp].grade].color }}>
+                <div className="plate-face big">{glyph(mvp)}</div>
+                <div><div className="mvp-name">{MON[mvp].name}</div><div className="speech">{PEOPLE[mvp]?.mvp ?? '이 정도는 식은 죽 먹기지.'}</div></div>
+              </div>
+            )}
+            <ul className="result-list">{reward?.map((line, k) => <li key={k}>{line}</li>)}</ul>
+            <div className="result-btns">
+              <button className="btn-war" onClick={onExit}>돌아가기</button>
+              <button className="btn-plain" onClick={onRetry}><span>편성 바꿔 다시</span></button>
+            </div>
+          </div>
         </div>
       )}
     </div>
