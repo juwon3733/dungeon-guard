@@ -16,7 +16,7 @@ npm run build      # 타입 검사 + 정적 빌드(dist/)
 | `src/data/monsters.ts` | 몬스터 30종(5등급), 역할, 지휘 효과 |
 | `src/data/castles.ts` | 성채(국경 요새): 3레인, 성문, 해자, 망루, 굴, 수비대 |
 | `src/core/siege.ts` | 공성전 규칙 엔진(화면과 분리, Node에서 그대로 돎) |
-| `src/render/view.ts` | Canvas 탑다운(왼쪽 → 오른쪽 진군) 화면과 연출 |
+| `src/render/view.ts` | Canvas, Asteria식 3/4 시점(왼쪽 → 오른쪽 진군) 화면과 연출 |
 | `src/App.tsx` | Astryx 편성 화면, 전투 HUD, 결과 |
 | `tools/sim.ts` | 시뮬레이션: 편성마다 한계 수비 배율(지휘 효과 켬/끔) |
 
