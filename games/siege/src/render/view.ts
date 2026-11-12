@@ -6,6 +6,24 @@ import { TUNNEL_IN } from '../core/siege';
 import { GRADES, ROLES, MON, type Role } from '../data/monsters';
 
 export const VW = 1280, VH = 720;
+/** 부대 색: 발밑 표시, 부대장 이름표, 패널에 같은 색을 쓴다 */
+export const SQUAD_COL = ['#ff6b6b', '#4fd1ff', '#ffd166', '#7dff9a'];
+
+// ---- 그림(있으면 쓰고, 없으면 도형) ----
+// public/assets/monsters/<id>/sheet.png: 4×2 칸 시트(오른쪽을 보는 3/4 시점). 칸 순서:
+// 0 서기, 1 걷기1, 2 걷기2, 3 공격, 4 스킬, 5 피격, 6 쓰러짐, 7 승리 (docs/siege/05_art_gpt.md)
+const SHEETS: Record<string, HTMLImageElement | null> = {};
+function sheetOf(id: string): HTMLImageElement | null {
+  if (!(id in SHEETS)) {
+    SHEETS[id] = null;
+    if (typeof Image !== 'undefined') {
+      const im = new Image();
+      im.onload = () => { SHEETS[id] = im; };
+      im.src = `assets/monsters/${id}/sheet.png`;
+    }
+  }
+  return SHEETS[id];
+}
 const LANE_CY = [250, 390, 530];          // 레인 띠의 가운데(땅 위 y)
 const LANE_H = 120;
 const YARD_CY = 390, YARD_H = 360;        // 성 안뜰
@@ -411,6 +429,17 @@ export class SiegeView {
     c.fillText('본관', x + w / 2, bot - KEEP_H - 8);
   }
 
+  /** 부대장 이름표: 부대 색 점 + 이름 + 체력. 같은 레인에서 겹치지 않게 부대마다 높이를 엇갈린다 */
+  leaderTag(c: CanvasRenderingContext2D, u: Unit, x: number, top: number) {
+    const y = top - 10 - (u.squad % 2) * 20;
+    c.textAlign = 'center'; c.font = 'bold 12px sans-serif';
+    const w = c.measureText(u.name).width;
+    c.fillStyle = 'rgba(10,8,20,.6)'; c.fillRect(x - w / 2 - 12, y - 13, w + 18, 24);
+    c.fillStyle = SQUAD_COL[u.squad % SQUAD_COL.length]; c.beginPath(); c.arc(x - w / 2 - 5, y - 4, 4, 0, 7); c.fill();
+    c.fillStyle = '#fff'; c.fillText(u.name, x + 3, y);
+    bar(c, x, y + 4, 44, u.hp / u.max, '#62d394');
+  }
+
   drawUnit(c: CanvasRenderingContext2D, u: Unit, px: number, py: number) {
     const lunge = u.lungeT > 0 ? Math.sin((u.lungeT / 0.15) * Math.PI) * 8 * (u.side === 'ally' ? 1 : -1) : 0;
     const step = Math.abs(Math.sin(this.t * 9 + u.uid)) * 2;
@@ -429,7 +458,22 @@ export class SiegeView {
     c.save();
     if (!u.alive) c.globalAlpha = Math.max(0, u.hitT / 0.12);
     c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(px, py, bw * 0.8, bw * 0.32, 0, 0, 7); c.fill();
+    if (u.side === 'ally' && u.squad >= 0) {   // 부대 색 발밑 표시
+      c.strokeStyle = SQUAD_COL[u.squad % SQUAD_COL.length]; c.lineWidth = u.isLeader ? 2 : 1.5;
+      c.beginPath(); c.ellipse(px, py, bw * 0.75, bw * 0.3, 0, 0, 7); c.stroke();
+    }
     const feet = py - fly - step - wind * 14;
+    const sheet = u.side === 'ally' && u.monId ? sheetOf(u.monId) : null;
+    if (sheet) {
+      // 칸 고르기: 쓰러짐 > 피격 > 스킬 준비 > 공격 > 걷기
+      const frame = !u.alive ? 6 : u.hitT > 0 ? 5 : focused ? 4 : u.lungeT > 0 ? 3 : Math.floor(this.t * 6 + u.uid) % 2 ? 1 : 2;
+      const fw = sheet.naturalWidth / 4, fh = sheet.naturalHeight / 2;
+      const h = (u.isLeader ? 72 : 40) * (1 + 0.18 * wind), w = h * (fw / fh);
+      c.drawImage(sheet, (frame % 4) * fw, Math.floor(frame / 4) * fh, fw, fh, x - w / 2, feet - h, w, h);
+      if (u.isLeader) this.leaderTag(c, u, x, feet - h);
+      c.restore();
+      return;
+    }
     const body = u.hitT > 0 ? '#ffffff' : ROLE_COL[u.role];
     const dark = u.hitT > 0 ? '#ffffff' : shade(body, 0.7);
     // 다리
@@ -455,8 +499,7 @@ export class SiegeView {
     if (u.side === 'ally' && u.isLeader) {
       const g = GRADES[u.grade as keyof typeof GRADES];
       c.strokeStyle = g.color; c.lineWidth = 3; c.beginPath(); c.ellipse(px, py, bw * 1.1, bw * 0.45, 0, 0, 7); c.stroke();
-      c.fillStyle = '#fff'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center'; c.fillText(u.name, x, hy - hr - 14);
-      bar(c, x, hy - hr - 10, 44, u.hp / u.max, '#62d394');
+      this.leaderTag(c, u, x, hy - hr);
     } else if (u.revived) {
       c.strokeStyle = '#7dffb2'; c.lineWidth = 2; c.beginPath(); c.ellipse(px, py, bw, bw * 0.4, 0, 0, 7); c.stroke();
     }

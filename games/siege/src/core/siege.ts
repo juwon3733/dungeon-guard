@@ -8,7 +8,17 @@ export interface SquadPlan {
   troops: { id: string; count: number }[];     // 일반·희귀
   lane: Lane;
   delay: number;                               // 출발 지연(초)
+  gear?: Gear;                                 // 공성 장비(대장간): 부대장과 상관없이 부대에 붙는다
 }
+
+/** 공성 장비: 사다리(성벽 넘기), 충차(성문 피해 2배), 큰 방패(망루 피해 -30%) */
+export type Gear = 'ladder' | 'ram' | 'mantlet';
+export const GEARS: Record<Gear, { name: string; desc: string; cost: number; forge: number }> = {
+  ladder: { name: '사다리', desc: '비행이 아니어도 성벽 레인을 넘는다', cost: 120, forge: 1 },
+  ram: { name: '충차', desc: '부대의 성문 피해 2배', cost: 150, forge: 2 },
+  mantlet: { name: '큰 방패', desc: '망루에게 받는 피해 -30%', cost: 100, forge: 3 },
+};
+const gearOf = (s: SiegeState, squad: number) => s.squads[squad]?.plan.gear;
 
 export interface Unit {
   uid: number;
@@ -176,7 +186,7 @@ function sameField(s: SiegeState, a: Unit, b: Unit) {
 }
 
 function canPassWall(s: SiegeState, u: Unit) {
-  return u.role === 'flying' || !!cmdOf(s, u.squad).wallPass;
+  return u.role === 'flying' || !!cmdOf(s, u.squad).wallPass || gearOf(s, u.squad) === 'ladder';
 }
 
 /** 아군 유닛이 이 레인에서 갈 수 있는 가장 먼 x */
@@ -288,7 +298,7 @@ function stepAlly(s: SiegeState, u: Unit, dt: number) {
         s.emit({ t: 'hit', x: tgt.t.x, lane: tgt.t.lane, dmg: Math.round(a), ally: false });
         if (tgt.t.hp <= 0) { tgt.t.alive = false; s.emit({ t: 'towerBreak', x: tgt.t.x, lane: tgt.t.lane }); }
       } else {
-        const g = a * (u.role === 'siege' ? 3 : 1) * (cmd.gateMul ?? 1);
+        const g = a * (u.role === 'siege' ? 3 : 1) * (cmd.gateMul ?? 1) * (gearOf(s, u.squad) === 'ram' ? 2 : 1);
         s.emit({ t: 'attack', from: u, to: { x: s.castle.wallX, lane: 1 }, ranged: u.range > 60 });
         s.gateHp -= g;
         s.emit({ t: 'hit', x: s.castle.wallX, lane: 1, dmg: Math.round(g), ally: false, big: g >= 80 });
@@ -378,7 +388,7 @@ function stepTower(s: SiegeState, t: Tower, dt: number) {
   t.atkT = t.iv;
   const miss = s.rng() < (cmdOf(s, best.squad).towerMiss ?? 0);
   s.emit({ t: 'tower', x: t.x, lane: t.lane, to: best, miss });
-  if (!miss) damage(s, null, best, t.dmg * (t.antiAir && best.role === 'flying' ? 2.5 : 1));
+  if (!miss) damage(s, null, best, t.dmg * (t.antiAir && best.role === 'flying' ? 2.5 : 1) * (gearOf(s, best.squad) === 'mantlet' ? 0.7 : 1));
 }
 
 export function retreat(s: SiegeState, squad: number) {

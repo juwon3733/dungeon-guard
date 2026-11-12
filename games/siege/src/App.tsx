@@ -12,7 +12,8 @@ import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { MON, GRADES, ROLES, SKILLS, type Grade } from './data/monsters';
 import { LANE_NAMES, type Lane, type Castle } from './data/castles';
-import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, type SquadPlan, type SiegeState } from './core/siege';
+import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, GEARS, type Gear, type SquadPlan, type SiegeState } from './core/siege';
+import { SQUAD_COL } from './render/view';
 import { SiegeView, VW, VH } from './render/view';
 import {
   load, save, fresh, REGIONS, FACILITIES, SUMMON_COST, capUsed, capMax, squadSlots, threat, unlocked, regionCastle,
@@ -47,6 +48,8 @@ export default function App() {
       {screen.k === 'form' && (
         <Formation meta={meta} region={screen.region} plans={plans} setPlans={setPlans} onBack={() => setScreen({ k: 'hub' })}
           onStart={() => {
+            const gearCost = plans.reduce((a, p) => a + (p.gear ? GEARS[p.gear].cost : 0), 0);
+            if (gearCost) mutate((m) => { m.gold -= gearCost; });
             const castle = regionCastle(meta, screen.region);
             const ps = structuredClone(plans).map((p) => (p.lane === 2 && !castle.tunnel ? { ...p, lane: 1 as Lane } : p));
             setScreen({ k: 'battle', region: screen.region, castle, plans: ps, captain: regionCaptain(meta, screen.region) });
@@ -284,7 +287,8 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   const castle = regionCastle(meta, region);
   const [estimate, setEstimate] = useState('');
   const update = (i: number, f: (p: SquadPlan) => SquadPlan) => { setPlans(plans.map((p, j) => (j === i ? f(structuredClone(p)) : p))); setEstimate(''); };
-  const problem = plans.length === 0 ? '부대장을 맡을 희귀 이상 몬스터가 없습니다.' : checkPlans(meta, plans);
+  const gearCost = plans.reduce((a, p) => a + (p.gear ? GEARS[p.gear].cost : 0), 0);
+  const problem = plans.length === 0 ? '부대장을 맡을 희귀 이상 몬스터가 없습니다.' : checkPlans(meta, plans) ?? (gearCost > meta.gold ? `장비 금화 ${gearCost} 필요(보유 ${meta.gold})` : null);
   const leaders = Object.keys(meta.owned).filter((id) => MON[id].grade !== 'common' && meta.owned[id] > 0);
   const troops = Object.keys(meta.owned).filter((id) => (MON[id].grade === 'common' || MON[id].grade === 'rare') && meta.owned[id] > 0);
   const runEstimate = () => {
@@ -315,7 +319,7 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
           {plans.map((p, i) => <SquadCard key={i} idx={i} plan={p} leaders={leaders} troops={troops} meta={meta} onChange={(f) => update(i, f)} tunnel={castle.tunnel} />)}
         </div>
         <HStack gap={3}>
-          <Button label="공성 시작" variant="primary" size="lg" isDisabled={!!problem} onClick={onStart} />
+          <Button label={gearCost ? `공성 시작 · 장비 금화 ${gearCost}` : '공성 시작'} variant="primary" size="lg" isDisabled={!!problem} onClick={onStart} />
           <Button label="예상 승률 계산" isDisabled={!!problem} onClick={runEstimate} />
           {problem ? <Text weight="bold">편성 문제: {problem}</Text> : estimate && <Text color="secondary">{estimate}</Text>}
         </HStack>
@@ -342,7 +346,7 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
   return (
     <Card padding={4}>
       <VStack gap={3}>
-        <HStack gap={2}><Heading level={3}>{idx + 1}부대</Heading><Badge label={`${g.label} 부대장 · 병력 ${used}/${cap}`} /></HStack>
+        <HStack gap={2}><span className="dot" style={{ background: SQUAD_COL[idx % SQUAD_COL.length] }} /><Heading level={3}>{idx + 1}부대</Heading><Badge label={`${g.label} 부대장 · 병력 ${used}/${cap}`} /></HStack>
         <Selector label="부대장" value={plan.leader} options={Array.from(new Set([...leaders, plan.leader])).map((id) => ({ value: id, label: `${monLabel(id)} (보유 ${meta.owned[id] ?? 0})` }))}
           onChange={(v) => onChange((p) => { p.leader = v; let left = troopCap(v); p.troops.forEach((t) => { t.count = Math.min(t.count, left); left -= t.count; }); return p; })} />
         <Text size="sm" color="secondary"><span className="dot" style={{ background: g.color }} />지휘 효과: {leader.command?.desc ?? '없음'}</Text>
@@ -356,6 +360,10 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
         <SegmentedControl label="레인" value={String(plan.lane)} onChange={(v) => onChange((p) => { p.lane = Number(v) as Lane; return p; })}>
           {LANE_NAMES.map((n, i) => <SegmentedControlItem key={i} value={String(i)} label={n} isDisabled={i === 2 && !tunnel} />)}
         </SegmentedControl>
+        <Selector label={`공성 장비 (대장간 ${facValue(meta, 'forge')}단계)`} value={plan.gear ?? 'none'}
+          options={[{ value: 'none', label: '없음' }, ...(Object.keys(GEARS) as Gear[]).filter((k) => GEARS[k].forge <= facValue(meta, 'forge'))
+            .map((k) => ({ value: k, label: `${GEARS[k].name} · 금화 ${GEARS[k].cost} — ${GEARS[k].desc}` }))]}
+          onChange={(v) => onChange((p) => { p.gear = v === 'none' ? undefined : (v as Gear); return p; })} />
         <SegmentedControl label="출발" value={String(plan.delay)} onChange={(v) => onChange((p) => { p.delay = Number(v); return p; })}>
           {[0, 3, 6, 10, 20].map((d) => <SegmentedControlItem key={d} value={String(d)} label={d ? `${d}초 뒤` : '바로'} />)}
         </SegmentedControl>
@@ -443,7 +451,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
               <Card key={q.idx} padding={3}>
                 <VStack gap={2}>
                   <VStack gap={0}>
-                    <Text weight="bold">{q.idx + 1}부대 · {MON[q.plan.leader].name} ({LANE_NAMES[q.plan.lane]})</Text>
+                    <Text weight="bold"><span className="dot" style={{ background: SQUAD_COL[q.idx % SQUAD_COL.length] }} />{q.idx + 1}부대 · {MON[q.plan.leader].name} ({LANE_NAMES[q.plan.lane]}){q.plan.gear ? ` · ${GEARS[q.plan.gear].name}` : ''}</Text>
                     <Text size="sm" color="secondary">{!q.started ? `출발 대기 ${Math.max(0, Math.ceil(q.plan.delay - s.t))}초` : q.retreated ? '후퇴함' : `생존 ${alive} · 지휘 효과 ${active ? '켜짐' : leaderOk ? '-' : '꺼짐(부대장 쓰러짐)'}`}</Text>
                   </VStack>
                   <HStack gap={2}>

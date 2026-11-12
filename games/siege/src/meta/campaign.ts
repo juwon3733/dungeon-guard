@@ -28,13 +28,14 @@ export const REGIONS: Region[] = [
 export const REGION: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 
 // ---------------- 던전 시설 ----------------
-export type FacId = 'nest' | 'warroom' | 'circle' | 'mine' | 'prison';
+export type FacId = 'nest' | 'warroom' | 'circle' | 'mine' | 'prison' | 'forge';
 export const FACILITIES: Record<FacId, { name: string; desc: string; costs: number[]; values: number[]; unit: string }> = {
   nest: { name: '둥지', desc: '군단 수용량(일반 1, 희귀 2, 영웅 4, 전설 8, 신화 16)', costs: [0, 300, 700, 1400], values: [50, 70, 100, 140], unit: '' },
   warroom: { name: '작전실', desc: '한 번에 출전하는 부대 수', costs: [0, 400, 1000], values: [2, 3, 4], unit: '부대' },
   circle: { name: '소환진', desc: '소환에서 높은 등급이 나올 확률', costs: [0, 400, 900, 1600], values: [1, 2, 3, 4], unit: '단계' },
   mine: { name: '광산', desc: '공성으로 얻는 마석 증가', costs: [0, 250, 600], values: [0, 25, 50], unit: '%' },
   prison: { name: '감옥', desc: '가둘 수 있는 포로 수', costs: [0, 300, 700], values: [3, 5, 8], unit: '명' },
+  forge: { name: '대장간', desc: '공성 장비를 만든다(1단계 사다리, 2단계 충차, 3단계 큰 방패). 장비는 출격할 때마다 금화로 산다', costs: [0, 250, 500, 800], values: [0, 1, 2, 3], unit: '종' },
 };
 
 // 소환진 단계별 등급 확률(%)
@@ -80,7 +81,7 @@ export function fresh(): Meta {
   return {
     v: 1, gold: 300, mana: 120, fame: 0,
     owned: { orc_warrior: 1, harpy: 1, bone_archer: 1, wolf_alpha: 1, goblin: 12, skeleton: 6, imp: 6, bat: 4, dire_rat: 4 },
-    fac: { nest: 0, warroom: 0, circle: 0, mine: 0, prison: 0 },
+    fac: { nest: 0, warroom: 0, circle: 0, mine: 0, prison: 0, forge: 0 },
     conquered: {}, captives: 0, prisoners: { footman: 0, archer: 0, knight: 0, captain: 0 }, lv: {}, aw: {}, affinity: {}, aide: null, named: [], contracted: [],
   };
 }
@@ -91,6 +92,7 @@ export function load(): Meta {
       const m = JSON.parse(raw);
       if (m && m.v === 1) {
         const out: Meta = { ...fresh(), ...m };
+        out.fac = { ...fresh().fac, ...(m.fac ?? {}) };
         out.prisoners = { ...fresh().prisoners, ...(m.prisoners ?? {}) };
         if (m.captives > 0) { out.prisoners.footman += m.captives; out.captives = 0; }   // 옛 저장: 숫자 포로 → 보병 포로
         return out;
