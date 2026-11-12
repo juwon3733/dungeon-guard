@@ -88,6 +88,14 @@ export const MONSTERS: Monster[] = [
   M('bone_dragon', '해골 용', 'legend', 'flying', 'undead', { command: { desc: '성벽 진입, 부활', wallPass: true, revive: true } }),
   M('demon_general', '마장군', 'legend', 'siege', 'demon', { command: { desc: '성문 피해 2배, 공격력 +20%', gateMul: 2, atkMul: 1.2 } }),
   M('siren_queen', '해마녀', 'legend', 'support', 'fiend', { command: { desc: '같은 레인의 모든 부대가 해자를 그대로 건넘, 받는 피해 -20%', moatIgnore: true, dmgTakenMul: 0.8 } }),
+  // 타락한 적장(사람 모습, 지역 적장을 사로잡아 타락시켜야 얻는다. docs/siege/07_characters.md)
+  M('cmd_elise', '검은 수비대장 엘리제', 'hero', 'shield', 'fiend', { command: { desc: '받는 피해 -25%, 병력 체력 회복 1%/초', dmgTakenMul: 0.75, regen: 0.01 } }),
+  M('cmd_mira', '피의 신관 미라', 'hero', 'support', 'fiend', { command: { desc: '병력 체력 회복 3%/초', regen: 0.03 } }),
+  M('cmd_sylvia', '가시 사냥꾼 실비아', 'hero', 'ranged', 'fiend', { command: { desc: '사격 병력 공격력 +30%, 사거리 +15%', atkMulRole: { role: 'ranged', mul: 1.3 }, rangeMul: 1.15 } }),
+  M('cmd_aria', '흑장미 기사 아리아', 'legend', 'assault', 'fiend', { command: { desc: '첫 공격 2.5배, 부대 공격력 +20%', firstHitMul: 2.5, atkMul: 1.2 } }),
+  M('cmd_vera', '황금 악마 베라', 'hero', 'support', 'fiend', { command: { desc: '부대 공격력 +15%, 성문 피해 1.5배', atkMul: 1.15, gateMul: 1.5 } }),
+  M('cmd_celes', '별을 삼킨 마녀 셀레스', 'legend', 'ranged', 'fiend', { command: { desc: '망루 명중률 -50%, 사격 사거리 +20%', towerMiss: 0.5, rangeMul: 1.2 } }),
+  M('cmd_reina', '심연 기사단장 레이나', 'legend', 'shield', 'fiend', { command: { desc: '받는 피해 -30%, 성벽 진입', dmgTakenMul: 0.7, wallPass: true } }),
   // 신화
   M('abyss_dragon', '심연의 용', 'myth', 'flying', 'demon', { command: { desc: '성벽 진입, 망루 무력화, 공격력 +30%', wallPass: true, towerMiss: 1, atkMul: 1.3 } }),
 ];
@@ -112,5 +120,12 @@ export const SKILLS: Record<string, Skill> = {
   bone_dragon: { name: '썩은 숨결', kind: 'breath', cd: 15, desc: '앞쪽 일직선의 적과 망루에 큰 피해' },
   demon_general: { name: '지옥불 투석', kind: 'hellfire', cd: 18, desc: '성문과 가까운 망루에 지옥불을 떨어뜨린다' },
   siren_queen: { name: '노래', kind: 'song', cd: 20, desc: '넓은 범위 적 4초 잠재우기' },
+  cmd_elise: { name: '철벽 명령', kind: 'aegis', cd: 15, desc: '5초간 부대가 받는 피해 절반' },
+  cmd_mira: { name: '피의 기도', kind: 'feast', cd: 15, desc: '주변 적에게 피해, 부대 체력 30% 회복' },
+  cmd_sylvia: { name: '가시 덫', kind: 'hex', cd: 13, desc: '적이 모인 곳에 피해, 6초간 받는 피해 +40%' },
+  cmd_aria: { name: '흑장미 돌격', kind: 'charge', cd: 11, desc: '앞으로 돌진하며 들이받는다. 성문에 닿으면 큰 피해' },
+  cmd_vera: { name: '황금 유혹', kind: 'charm', cd: 15, desc: '주변 적 3초 기절, 받는 피해 +30%' },
+  cmd_celes: { name: '별의 낙하', kind: 'hellfire', cd: 16, desc: '성문과 가까운 망루에 별을 떨어뜨린다' },
+  cmd_reina: { name: '심연의 맹세', kind: 'slam', cd: 14, desc: '주변 적에게 큰 피해와 2초 기절' },
   abyss_dragon: { name: '종말의 불', kind: 'doom', cd: 25, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
 };

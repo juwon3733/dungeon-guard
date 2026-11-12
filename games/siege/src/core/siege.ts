@@ -79,6 +79,12 @@ export interface SiegeState {
   stats: { allyDead: number; foeDead: number; leadersLost: number };
   noCommand: boolean;        // 시뮬레이션 비교용: 지휘 효과 끄기
   timers: { at: number; fn: () => void }[];
+  /** 레벨·각성 보정(몬스터 id → 능력 배율), 호감도 보정(부대장 id → 부대 전체 배율) */
+  boost: (monId: string) => number;
+  squadBoost: (leaderId: string) => number;
+  /** 부대별로 준 피해(MVP 계산) */
+  dmgBy: number[];
+  captainName?: string;
 }
 
 const NOCMD: Command = { desc: '' };
@@ -98,15 +104,15 @@ export function cmdOf(s: SiegeState, squad: number): Command {
 
 export function troopCap(leaderId: string) { return GRADES[MON[leaderId].grade].troops; }
 
-function allyUnit(monId: string, squad: number, lane: Lane, x: number, isLeader: boolean, cmd: Command): Unit {
+function allyUnit(monId: string, squad: number, lane: Lane, x: number, isLeader: boolean, cmd: Command, mult = 1): Unit {
   const m = MON[monId], g = GRADES[m.grade], r = ROLES[m.role];
-  let hp = g.hp * r.hp * (isLeader ? 2 : 1);
+  let hp = g.hp * r.hp * (isLeader ? 2 : 1) * mult;
   if (cmd.hpMulRole && cmd.hpMulRole.role === m.role) hp *= cmd.hpMulRole.mul;
   let range = r.range;
   if (m.role === 'ranged' && cmd.rangeMul) range *= cmd.rangeMul;
   return {
     uid: UID++, side: 'ally', name: m.name, monId, squad, isLeader, role: m.role, grade: m.grade, lane, x,
-    hp, max: hp, atk: g.atk * r.atk, range, iv: r.iv, speed: 40 * r.speed * (cmd.speedMul ?? 1),
+    hp, max: hp, atk: g.atk * r.atk * mult, range, iv: r.iv, speed: 40 * r.speed * (cmd.speedMul ?? 1),
     atkT: 0.3, alive: true, hitT: 0, firstHit: true, revived: false, canDig: !!m.canDig, core: false, aggro: true, lungeT: 0, homeX: x, stunT: 0, vulnT: 0, vulnMul: 1,
   };
 }
@@ -120,12 +126,16 @@ function foeUnit(type: FoeType, lane: Lane, x: number, core: boolean, pw: number
   };
 }
 
-export function createSiege(castle: Castle, plans: SquadPlan[], opts: { seed?: number; emit?: (e: SiegeEvent) => void; noCommand?: boolean } = {}): SiegeState {
+export function createSiege(castle: Castle, plans: SquadPlan[], opts: {
+  seed?: number; emit?: (e: SiegeEvent) => void; noCommand?: boolean;
+  boost?: (monId: string) => number; squadBoost?: (leaderId: string) => number; captainName?: string;
+} = {}): SiegeState {
   const rng = opts.seed != null ? mulberry(opts.seed) : Math.random;
   const s: SiegeState = {
     castle, t: 0, units: [], squads: [], towers: castle.towers.map((t) => ({ ...t, hp: t.hp * castle.power, max: t.hp * castle.power, dmg: t.dmg * castle.power, atkT: 1, alive: true })),
     gateHp: castle.gateHp * castle.power, gateMax: castle.gateHp * castle.power, tunnelWork: 0, tunnelOpen: false, coreProg: 0, over: null,
     rng, emit: opts.emit ?? (() => {}), stats: { allyDead: 0, foeDead: 0, leadersLost: 0 }, noCommand: !!opts.noCommand, timers: [],
+    boost: opts.boost ?? (() => 1), squadBoost: opts.squadBoost ?? (() => 1), dmgBy: plans.map(() => 0), captainName: opts.captainName,
   };
   plans.forEach((p, i) => s.squads.push({ idx: i, plan: p, leader: null, started: false, retreated: false,
     orders: { advance: true, gate: 'attack' }, skill: SKILLS[p.leader] ?? null, skillCd: 4, shieldT: 0 }));
@@ -135,6 +145,7 @@ export function createSiege(castle: Castle, plans: SquadPlan[], opts: { seed?: n
       s.units.push(foeUnit(g.type, lane, g.x + i * 18, g.lane === 'core', castle.power));
     }
   }
+  if (s.captainName) for (const u of s.units) if (u.foeType === 'captain') u.name = s.captainName;
   return s;
 }
 
@@ -142,13 +153,14 @@ function spawnSquad(s: SiegeState, sq: Squad) {
   sq.started = true;
   const cmd = s.noCommand ? NOCMD : (MON[sq.plan.leader].command ?? NOCMD);
   const lane = sq.plan.lane;
-  const leader = allyUnit(sq.plan.leader, sq.idx, lane, 40, true, cmd);
+  const sb = s.squadBoost(sq.plan.leader);
+  const leader = allyUnit(sq.plan.leader, sq.idx, lane, 40, true, cmd, s.boost(sq.plan.leader) * sb);
   sq.leader = leader;
   s.units.push(leader);
   let k = 0;
   const cap = troopCap(sq.plan.leader);
   for (const t of sq.plan.troops) {
-    for (let i = 0; i < t.count && k < cap; i++, k++) s.units.push(allyUnit(t.id, sq.idx, lane, 70 + (k % 4) * 16 - Math.floor(k / 4) * 14, false, cmd));
+    for (let i = 0; i < t.count && k < cap; i++, k++) s.units.push(allyUnit(t.id, sq.idx, lane, 70 + (k % 4) * 16 - Math.floor(k / 4) * 14, false, cmd, s.boost(t.id) * sb));
   }
 }
 
@@ -193,6 +205,7 @@ function damage(s: SiegeState, src: Unit | null, tgt: Unit, raw: number) {
   if (tgt.vulnT > 0) dmg *= tgt.vulnMul;
   dmg = Math.max(1, Math.round(dmg));
   tgt.hp -= dmg; tgt.hitT = 0.12;
+  if (src && src.side === 'ally' && tgt.side === 'foe' && src.squad >= 0) s.dmgBy[src.squad] += Math.min(dmg, tgt.hp + dmg);
   s.emit({ t: 'hit', x: tgt.x, lane: tgt.lane, dmg, ally: tgt.side === 'ally', big: dmg >= 60 });
   if (tgt.hp > 0) return;
   // 리치 등: 병력은 한 번 해골로 부활

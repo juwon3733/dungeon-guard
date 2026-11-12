@@ -17,12 +17,14 @@ import { SiegeView, VW, VH } from './render/view';
 import {
   load, save, fresh, REGIONS, FACILITIES, SUMMON_COST, CORRUPT_COST, capUsed, capMax, squadSlots, threat, unlocked, regionCastle,
   upgrade, summon, corrupt, checkPlans, applyResult, facValue, type Meta, type Region, type FacId,
+  lvOf, awOf, trainCost, train, awaken, MAX_LV, MAX_AW, boostOf, squadBoostOf, people, gift, setAide, regionCaptain, corruptNamed,
 } from './meta/campaign';
+import { PEOPLE, CORRUPT_NAMED_COST, giftCost, affinityBoost } from './data/characters';
 
 const GRADE_ORDER: Grade[] = ['myth', 'legend', 'hero', 'rare', 'common'];
 const monLabel = (id: string) => { const m = MON[id]; return `${m.name} · ${GRADES[m.grade].label} ${ROLES[m.role].label}`; };
 
-type Screen = { k: 'hub' } | { k: 'form'; region: Region } | { k: 'battle'; region: Region; castle: Castle; plans: SquadPlan[] };
+type Screen = { k: 'hub' } | { k: 'form'; region: Region } | { k: 'battle'; region: Region; castle: Castle; plans: SquadPlan[]; captain?: string };
 
 export default function App() {
   const [meta, setMeta] = useState<Meta>(load);
@@ -78,12 +80,13 @@ export default function App() {
           onStart={() => {
             const castle = regionCastle(meta, screen.region);
             const ps = structuredClone(plans).map((p) => (p.lane === 2 && !castle.tunnel ? { ...p, lane: 1 as Lane } : p));
-            setScreen({ k: 'battle', region: screen.region, castle, plans: ps });
+            setScreen({ k: 'battle', region: screen.region, castle, plans: ps, captain: regionCaptain(meta, screen.region) });
           }} />
       )}
       {screen.k === 'battle' && (
-        <Battle plans={screen.plans} castle={screen.castle}
-          onFinish={(win, st) => mutate((m) => applyResult(m, screen.region, win, st))}
+        <Battle plans={screen.plans} castle={screen.castle} captain={screen.captain}
+          boost={(id) => boostOf(meta, id)} squadBoost={(id) => squadBoostOf(meta, id)}
+          onFinish={(win, st, leaders, mvp) => mutate((m) => applyResult(m, screen.region, win, st, leaders, mvp))}
           onExit={() => setScreen({ k: 'hub' })} onRetry={() => openForm(screen.region)} />
       )}
     </Theme>
@@ -102,15 +105,22 @@ function Hub({ meta, mutate, onSortie, onReset }: { meta: Meta; mutate: <T>(f: (
           <Badge label={`금화 ${meta.gold}`} /><Badge label={`마석 ${meta.mana}`} /><Badge label={`명성 ${meta.fame}`} />
           <Badge label={`군단 ${capUsed(meta)}/${capMax(meta)}`} /><Badge label={`출전 ${squadSlots(meta)}부대`} /><Badge label={`위협도 ${threat(meta)}`} />
         </HStack>
+        {meta.aide && PEOPLE[meta.aide] && (
+          <Card padding={3}><HStack gap={2}><Badge label="측근" variant="warning" /><Text weight="bold">{MON[meta.aide].name}</Text>
+            <Text color="secondary">「{PEOPLE[meta.aide].lines[(meta.affinity[meta.aide] ?? 0) >= 10 ? 10 : (meta.affinity[meta.aide] ?? 0) >= 5 ? 5 : 2]}」 · {PEOPLE[meta.aide].aide.desc}</Text></HStack></Card>
+        )}
         <SegmentedControl label="본부" value={tab} onChange={(v) => { setTab(v); setMsg(''); }}>
           <SegmentedControlItem value="map" label="지도" />
           <SegmentedControlItem value="army" label="군단" />
           <SegmentedControlItem value="dungeon" label="던전 시설" />
           <SegmentedControlItem value="summon" label="소환 · 감옥" />
+          <SegmentedControlItem value="dorm" label="숙소" />
         </SegmentedControl>
         {msg && <Text weight="bold">{msg}</Text>}
         {tab === 'map' && <MapTab meta={meta} onSortie={onSortie} />}
-        {tab === 'army' && <ArmyTab meta={meta} />}
+        {tab === 'army' && <ArmyTab meta={meta} onTrain={(id) => setMsg(mutate((m) => train(m, id)) ?? `${MON[id].name} 레벨 ${lvOf(meta, id) + 1}`)}
+          onAwaken={(id) => setMsg(mutate((m) => awaken(m, id)) ?? `${MON[id].name} 각성 ${awOf(meta, id) + 1}`)} />}
+        {tab === 'dorm' && <DormTab meta={meta} setMsg={setMsg} mutate={mutate} />}
         {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)} />}
         {tab === 'summon' && <SummonTab meta={meta} setMsg={setMsg} mutate={mutate} />}
         <HStack gap={2}><Button size="sm" variant="ghost" label="진행 처음부터" onClick={() => { if (confirm('저장을 지우고 처음부터 시작할까요?')) onReset(); }} /></HStack>
@@ -143,7 +153,7 @@ function MapTab({ meta, onSortie }: { meta: Meta; onSortie: (r: Region) => void 
   );
 }
 
-function ArmyTab({ meta }: { meta: Meta }) {
+function ArmyTab({ meta, onTrain, onAwaken }: { meta: Meta; onTrain: (id: string) => void; onAwaken: (id: string) => void }) {
   const ids = Object.keys(meta.owned).filter((id) => meta.owned[id] > 0)
     .sort((a, b) => GRADE_ORDER.indexOf(MON[a].grade) - GRADE_ORDER.indexOf(MON[b].grade));
   return (
@@ -153,7 +163,12 @@ function ArmyTab({ meta }: { meta: Meta }) {
         return (
           <Card key={id} padding={3}>
             <VStack gap={1}>
-              <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Text weight="bold">{m.name}</Text><Badge label={`${g.label} ${ROLES[m.role].label}`} /><Text>×{meta.owned[id]}</Text></HStack>
+              <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Text weight="bold">{m.name}</Text><Badge label={`${g.label} ${ROLES[m.role].label}`} /><Text>×{meta.owned[id]}</Text>
+                <Badge label={`Lv ${lvOf(meta, id)}`} />{awOf(meta, id) > 0 && <Badge label={`각성 ${awOf(meta, id)}`} variant="warning" />}</HStack>
+              <HStack gap={2}>
+                <Button size="sm" label={lvOf(meta, id) >= MAX_LV ? '최고 레벨' : `훈련 · 금화 ${trainCost(meta, id)}`} isDisabled={lvOf(meta, id) >= MAX_LV || meta.gold < trainCost(meta, id)} onClick={() => onTrain(id)} />
+                {(m.grade !== 'common' && m.grade !== 'rare') && <Button size="sm" label={awOf(meta, id) >= MAX_AW ? '최고 각성' : '각성 (같은 몬스터 1 소모)'} isDisabled={awOf(meta, id) >= MAX_AW || meta.owned[id] < 2} onClick={() => onAwaken(id)} />}
+              </HStack>
               {m.command && <Text size="sm" color="secondary">지휘 효과: {m.command.desc}</Text>}
               {SKILLS[id] && <Text size="sm" color="secondary">스킬 「{SKILLS[id].name}」: {SKILLS[id].desc}</Text>}
               {!m.command && <Text size="sm" color="secondary">병력 전용</Text>}
@@ -187,6 +202,36 @@ function DungeonTab({ meta, onUpgrade }: { meta: Meta; onUpgrade: (f: FacId) => 
   );
 }
 
+function DormTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) => void; mutate: <T>(f: (m: Meta) => T) => T }) {
+  const ids = people(meta);
+  if (!ids.length) return <Card padding={4}><Text color="secondary">아직 숙소에 사는 동료가 없습니다. 적장을 사로잡아 타락시키거나, 포로를 타락시키거나, 서큐버스·박쥐 여왕·해마녀 같은 사람 모습 몬스터를 얻으면 방이 생깁니다.</Text></Card>;
+  return (
+    <div className="squads">
+      {ids.map((id) => {
+        const P = PEOPLE[id], a = meta.affinity[id] ?? 0, m = MON[id], g = GRADES[m.grade];
+        const boost = Math.round((affinityBoost(a) - 1) * 100);
+        return (
+          <Card key={id} padding={4}>
+            <VStack gap={2}>
+              <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Heading level={3}>{m.name}</Heading>{meta.aide === id && <Badge label="측근" variant="warning" />}</HStack>
+              {P.human && <Text size="sm" color="secondary">타락 전: {P.human}</Text>}
+              <ProgressBar label={`호감도 ${a}/10${boost ? ` · 이끄는 부대 능력 +${boost}%` : ''}`} value={a} max={10} />
+              {([2, 5, 10] as const).map((lv) => (
+                <Text key={lv} size="sm" color={a >= lv ? undefined : 'secondary'}>{a >= lv ? `「${P.lines[lv]}」` : `🔒 호감도 ${lv}에서 열리는 이야기`}</Text>
+              ))}
+              <Text size="sm" color="secondary">측근 효과: {P.aide.desc}</Text>
+              <HStack gap={2}>
+                <Button size="sm" label={a >= 10 ? '호감도 최대' : `선물 · 금화 ${giftCost(a)}`} isDisabled={a >= 10 || meta.gold < giftCost(a)} onClick={() => setMsg(mutate((mm) => gift(mm, id)) ?? `${m.name} 호감도 ${a + 1}`)} />
+                <Button size="sm" variant={meta.aide === id ? 'primary' : 'secondary'} label={meta.aide === id ? '측근' : '측근으로'} isDisabled={meta.aide === id || a < 3} onClick={() => setMsg(mutate((mm) => setAide(mm, id)) ?? `${m.name}을(를) 측근으로 두었습니다.`)} />
+              </HStack>
+            </VStack>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) => void; mutate: <T>(f: (m: Meta) => T) => T }) {
   return (
     <div className="squads">
@@ -205,6 +250,15 @@ function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) =
           <Heading level={3}>감옥</Heading>
           <Text size="sm" color="secondary">공성에서 사로잡은 포로를 타락 의식(마석 {CORRUPT_COST})으로 마족으로 만든다. 서큐버스, 타락 기사, 늪의 마녀, 드물게 흡혈 군주.</Text>
           <Text>포로 {meta.captives} / {facValue(meta, 'prison')}</Text>
+          {meta.named.map((id) => (
+            <HStack gap={2} key={id}>
+              <Badge label="사로잡은 적장" variant="error" /><Text weight="bold">{PEOPLE[id].human}</Text>
+              <Button size="sm" variant="primary" label={`타락 의식 · 마석 ${CORRUPT_NAMED_COST}`} isDisabled={meta.mana < CORRUPT_NAMED_COST} onClick={() => {
+                const r = mutate((m) => corruptNamed(m, id));
+                setMsg(r ?? `「${PEOPLE[id].human}」 → 「${MON[id].name}」(${GRADES[MON[id].grade].label}). 숙소에 방이 생겼습니다.`);
+              }} />
+            </HStack>
+          ))}
           <Button label={`타락 의식 · 마석 ${CORRUPT_COST}`} isDisabled={meta.captives <= 0 || meta.mana < CORRUPT_COST} onClick={() => {
             const r = mutate((m) => corrupt(m));
             setMsg(typeof r === 'string' ? r : `타락: ${GRADES[MON[r.id].grade].label} ${MON[r.id].name}이(가) 군단에 합류했습니다.`);
@@ -303,9 +357,11 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
 }
 
 // ---------------- 공성전 ----------------
-function Battle({ plans, castle, onFinish, onExit, onRetry }: {
-  plans: SquadPlan[]; castle: Castle; onFinish: (win: boolean, stars: number) => string[]; onExit: () => void; onRetry: () => void;
+function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, onRetry }: {
+  plans: SquadPlan[]; castle: Castle; captain?: string; boost: (id: string) => number; squadBoost: (id: string) => number;
+  onFinish: (win: boolean, stars: number, leaders: string[], mvp: string | null) => string[]; onExit: () => void; onRetry: () => void;
 }) {
+  const [mvp, setMvp] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -322,7 +378,7 @@ function Battle({ plans, castle, onFinish, onExit, onRetry }: {
     const canvas = canvasRef.current!;
     canvas.width = VW * 1.5; canvas.height = VH * 1.5;
     let view: SiegeView | null = null;
-    const s = createSiege(castle, plans, { emit: (e) => view?.onEvent(e) });
+    const s = createSiege(castle, plans, { emit: (e) => view?.onEvent(e), boost, squadBoost, captainName: captain });
     view = new SiegeView(canvas, s);
     ref.current = { s, view };
     let last = performance.now(), raf = 0, hud = 0;
@@ -335,7 +391,15 @@ function Battle({ plans, castle, onFinish, onExit, onRetry }: {
         view!.update(dt * ctl.current.speed);
       }
       view!.draw();
-      if (s.over && !finished.current) { finished.current = true; setReward(finishRef.current(s.over.win, stars(s))); }
+      if (s.over && !finished.current) {
+        finished.current = true;
+        // MVP: 적에게 가장 많은 피해를 준 부대의 부대장
+        let best = -1, bi = -1;
+        s.dmgBy.forEach((d, i) => { if (d > best) { best = d; bi = i; } });
+        const mv = s.over.win && bi >= 0 ? plans[bi].leader : null;
+        setMvp(mv);
+        setReward(finishRef.current(s.over.win, stars(s), plans.map((p) => p.leader), mv));
+      }
       if ((hud += dt) > 0.2) { hud = 0; force((x) => x + 1); }
       raf = requestAnimationFrame(loop);
     };
@@ -392,6 +456,10 @@ function Battle({ plans, castle, onFinish, onExit, onRetry }: {
               <Heading level={2}>{s.over.win ? '점령 성공' : '공성 실패'}</Heading>
               <Text>{s.over.reason} · {Math.floor(s.t)}초 · 쓰러진 아군 {s.stats.allyDead} · 쓰러뜨린 적 {s.stats.foeDead}</Text>
               {s.over.win && <Text weight="bold">{'★'.repeat(stars(s))}{'☆'.repeat(3 - stars(s))}  (★2 부대장 전원 생존, ★3 120초 안에)</Text>}
+              {mvp && (
+                <Card padding={3}><HStack gap={2}><Badge label="MVP" variant="warning" /><Text weight="bold">{MON[mvp].name}</Text>
+                  <Text color="secondary">「{PEOPLE[mvp]?.mvp ?? '이 정도는 식은 죽 먹기지.'}」</Text></HStack></Card>
+              )}
               {reward?.map((line, i) => <Text key={i}>{line}</Text>)}
               <HStack gap={2}>
                 <Button label="본부로" variant="primary" onClick={onExit} />

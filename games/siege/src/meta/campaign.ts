@@ -2,6 +2,7 @@
 // 계획: docs/siege/04_dungeon.md, 02_monsters.md
 import { MON, GRADES, type Grade } from '../data/monsters';
 import { CASTLE, type Castle } from '../data/castles';
+import { PEOPLE, COMMANDERS, CORRUPT_NAMED_COST, affinityBoost, giftCost } from '../data/characters';
 
 // ---------------- 지역(지도) ----------------
 export interface Region {
@@ -51,6 +52,11 @@ export interface Meta {
   fac: Record<FacId, number>;               // 시설 단계(0부터)
   conquered: Record<string, number>;        // 지역 id → 최고 별
   captives: number;
+  lv: Record<string, number>;               // 몬스터 종 레벨(1~20)
+  aw: Record<string, number>;               // 각성(0~5, 영웅 이상)
+  affinity: Record<string, number>;         // 사람 모습 캐릭터 호감도(0~10)
+  aide: string | null;                      // 측근
+  named: string[];                          // 사로잡은 적장(타락 전)
 }
 const KEY = 'siege.meta.v1';
 
@@ -59,7 +65,7 @@ export function fresh(): Meta {
     v: 1, gold: 300, mana: 120, fame: 0,
     owned: { orc_warrior: 1, harpy: 1, bone_archer: 1, wolf_alpha: 1, goblin: 12, skeleton: 6, imp: 6, bat: 4, dire_rat: 4 },
     fac: { nest: 0, warroom: 0, circle: 0, mine: 0, prison: 0 },
-    conquered: {}, captives: 0,
+    conquered: {}, captives: 0, lv: {}, aw: {}, affinity: {}, aide: null, named: [],
   };
 }
 export function load(): Meta {
@@ -98,7 +104,7 @@ function pickGrade(odds: Record<Grade, number>, rng: () => number): Grade {
   for (const g of ['myth', 'legend', 'hero', 'rare', 'common'] as Grade[]) { if (r < odds[g]) return g; r -= odds[g]; }
   return 'common';
 }
-const SUMMONABLE = (g: Grade) => Object.values(MON).filter((x) => x.grade === g && !CORRUPT_POOL.some(([id]) => id === x.id));
+const SUMMONABLE = (g: Grade) => Object.values(MON).filter((x) => x.grade === g && !x.id.startsWith('cmd_') && !CORRUPT_POOL.some(([id]) => id === x.id));
 
 /** 소환: 일반은 3마리, 그 외 1마리 */
 export function summon(m: Meta, rng = Math.random): { id: string; n: number } | string {
@@ -134,28 +140,94 @@ export function checkPlans(m: Meta, plans: { leader: string; troops: { id: strin
   return null;
 }
 
-/** 공성 결과 반영. 보상 글을 돌려준다 */
-export function applyResult(m: Meta, r: Region, win: boolean, stars: number, rng = Math.random): string[] {
+// ---------------- 성장: 레벨·각성 ----------------
+export const MAX_LV = 20, MAX_AW = 5;
+export const lvOf = (m: Meta, id: string) => m.lv[id] ?? 1;
+export const awOf = (m: Meta, id: string) => m.aw[id] ?? 0;
+export const trainCost = (m: Meta, id: string) => 30 * lvOf(m, id) * GRADES[MON[id].grade].cap;
+/** 엔진에 넘기는 능력 배율: 레벨 1당 +5%, 각성 1당 +8% */
+export const boostOf = (m: Meta, id: string) => (1 + 0.05 * (lvOf(m, id) - 1)) * (1 + 0.08 * awOf(m, id));
+export const squadBoostOf = (m: Meta, leaderId: string) => (PEOPLE[leaderId] ? affinityBoost(m.affinity[leaderId] ?? 0) : 1);
+
+export function train(m: Meta, id: string): string | null {
+  if (lvOf(m, id) >= MAX_LV) return '최고 레벨입니다.';
+  const c = trainCost(m, id);
+  if (m.gold < c) return '금화가 모자랍니다.';
+  m.gold -= c; m.lv[id] = lvOf(m, id) + 1; return null;
+}
+export function awaken(m: Meta, id: string): string | null {
+  const g = MON[id].grade;
+  if (g === 'common' || g === 'rare') return '영웅 이상만 각성할 수 있습니다.';
+  if ((m.owned[id] ?? 0) < 2) return '같은 몬스터가 하나 더 있어야 합니다.';
+  if (awOf(m, id) >= MAX_AW) return '최고 각성입니다.';
+  m.owned[id] -= 1; m.aw[id] = awOf(m, id) + 1; return null;
+}
+
+// ---------------- 숙소·측근·적장 ----------------
+export const people = (m: Meta) => Object.keys(PEOPLE).filter((id) => (m.owned[id] ?? 0) > 0);
+export function gift(m: Meta, id: string): string | null {
+  const a = m.affinity[id] ?? 0;
+  if (a >= 10) return '호감도가 가득 찼습니다.';
+  if (m.gold < giftCost(a)) return '금화가 모자랍니다.';
+  m.gold -= giftCost(a); m.affinity[id] = a + 1; return null;
+}
+export function setAide(m: Meta, id: string): string | null {
+  if (!PEOPLE[id] || !(m.owned[id] > 0)) return '측근으로 둘 수 없습니다.';
+  if ((m.affinity[id] ?? 0) < 3) return '호감도 3 이상이어야 측근이 됩니다.';
+  m.aide = id; return null;
+}
+const aideBonus = (m: Meta, kind: string) => (m.aide && PEOPLE[m.aide]?.aide.kind === kind ? PEOPLE[m.aide].aide.v : 0);
+
+/** 지역 수비대장 이름: 아직 사로잡지 않은 적장이면 그 이름으로 나온다 */
+export function regionCaptain(m: Meta, r: Region): string | undefined {
+  const id = COMMANDERS[r.id];
+  if (!id || m.named.includes(id) || (m.owned[id] ?? 0) > 0) return undefined;
+  return PEOPLE[id].human;
+}
+export function corruptNamed(m: Meta, id: string): string | null {
+  if (!m.named.includes(id)) return '사로잡은 적장이 아닙니다.';
+  if (m.mana < CORRUPT_NAMED_COST) return '마석이 모자랍니다.';
+  if (capUsed(m) + GRADES[MON[id].grade].cap > capMax(m)) return '둥지가 가득 찼습니다.';
+  m.mana -= CORRUPT_NAMED_COST; m.named = m.named.filter((x) => x !== id);
+  m.owned[id] = (m.owned[id] ?? 0) + 1; m.affinity[id] = m.affinity[id] ?? 0;
+  return null;
+}
+
+/** 공성 결과 반영. 보상 글을 돌려준다. leaders: 출전한 부대장, mvp: 가장 활약한 부대장 */
+export function applyResult(m: Meta, r: Region, win: boolean, stars: number, leaders: string[] = [], mvp: string | null = null, rng = Math.random): string[] {
   const out: string[] = [];
   if (!win) { out.push('잃은 것은 없습니다. 편성을 바꿔 다시 도전하세요.'); return out; }
   const first = !(r.id in m.conquered);
   const k = first ? 1 : 0.5;
-  const gold = Math.round(r.gold * k * (1 + 0.15 * (stars - 1)));
-  const mana = Math.round(r.mana * k * (1 + facValue(m, 'mine') / 100));
+  const gold = Math.round(r.gold * k * (1 + 0.15 * (stars - 1)) * (1 + aideBonus(m, 'gold') / 100));
+  const mana = Math.round(r.mana * k * (1 + (facValue(m, 'mine') + aideBonus(m, 'mana')) / 100));
   m.gold += gold; m.mana += mana; m.fame += first ? 10 * stars : stars;
   out.push(`금화 +${gold}, 마석 +${mana}${first ? ' (첫 점령)' : ' (다시 공략: 절반)'}`);
+  // 적장 포획: ★2 이상이면 확정, ★1이면 50%
+  const cmd = COMMANDERS[r.id];
+  if (cmd && regionCaptain(m, r) && (stars >= 2 || rng() < 0.5)) {
+    m.named.push(cmd); out.push(`적장 「${PEOPLE[cmd].human}」을(를) 사로잡았습니다! 감옥에서 타락 의식을 할 수 있습니다.`);
+  }
   m.conquered[r.id] = Math.max(m.conquered[r.id] ?? 0, stars);
   // 굴복: 그 지역 몬스터 하나(일반은 3마리)
   const id = r.wild[Math.floor(rng() * r.wild.length)];
   const g = MON[id].grade;
-  const chance = g === 'common' ? 1 : g === 'rare' ? 0.6 : 0.25;
+  const chance = (g === 'common' ? 1 : g === 'rare' ? 0.6 : 0.25) * (1 + aideBonus(m, 'subdue') / 100);
   if (rng() < chance) {
     const n = g === 'common' ? 3 : 1;
     if (capUsed(m) + GRADES[g].cap * n <= capMax(m)) { m.owned[id] = (m.owned[id] ?? 0) + n; out.push(`굴복: ${MON[id].name}${n > 1 ? ` ×${n}` : ''} 합류`); }
     else out.push(`굴복한 ${MON[id].name}이(가) 있었지만 둥지가 가득 차 돌려보냈습니다.`);
   }
-  // 포로
-  if (m.captives < facValue(m, 'prison')) { m.captives++; out.push('포로 1명을 감옥에 가뒀습니다.'); }
+  // 포로(측근에 따라 더)
+  const caps = 1 + aideBonus(m, 'captive');
+  for (let i = 0; i < caps; i++) if (m.captives < facValue(m, 'prison')) { m.captives++; out.push('포로 1명을 감옥에 가뒀습니다.'); }
+  // 호감도: 함께 이긴 사람 모습 부대장 +1, MVP는 +1 더
+  for (const L of new Set(leaders)) if (PEOPLE[L]) {
+    const add = L === mvp ? 2 : 1;
+    const before = m.affinity[L] ?? 0;
+    m.affinity[L] = Math.min(10, before + add);
+    if (m.affinity[L] !== before) out.push(`${MON[L].name} 호감도 ${before} → ${m.affinity[L]}`);
+  }
   if (first) out.push(`위협도 ${threat(m)}: 아직 점령하지 않은 성채가 강해집니다.`);
   return out;
 }
