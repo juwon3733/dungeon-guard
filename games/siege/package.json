@@ -1,0 +1,28 @@
+{
+  "name": "siege",
+  "private": true,
+  "type": "module",
+  "description": "마계 진군(가제): 던전 운영 + 몬스터 부대 공성. 계획은 docs/siege/",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "sim": "tsx tools/sim.ts",
+    "test": "tsx tools/sim.ts --quick"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.7.14",
+    "@astryxdesign/theme-neutral": "^0.7.14",
+    "@stylexjs/stylex": "^0.19.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
