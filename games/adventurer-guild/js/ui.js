@@ -187,7 +187,10 @@
         c.bonds.map((b) => '<div class="bd ' + b.type + '">' + (b.type === 'friend' ? '♥ ' : '⚡ ') + esc(G.byId[b.a].name) + ' · ' + esc(G.byId[b.b].name) + ' (' + (b.type === 'friend' ? '친구 +6%' : '앙숙 -4%') + ')</div>').join('') +
         '<div class="ch">성공 확률 <b>' + Math.round(c.chance * 100) + '%</b></div></div>';
     }
-    h += '<div class="btns"><button class="btn ghost" data-act="close">취소</button><button class="btn gold" data-act="start"' + (d.party.length ? '' : ' disabled') + '>출발</button></div>';
+    h += '<div class="btns"><button class="btn ghost" data-act="close">취소</button>' +
+      '<button class="btn" data-act="sortie"' + (d.party.length ? '' : ' disabled') + '>⚔ 직접 출격</button>' +
+      '<button class="btn gold" data-act="start"' + (d.party.length ? '' : ' disabled') + '>파견 (자동)</button></div>' +
+      '<p class="hint">직접 출격은 스킬을 눌러 싸우는 전투입니다(약 1분). 파견은 시간이 지나면 자동으로 결과가 나옵니다.</p>';
     return h;
   }
 
@@ -245,6 +248,11 @@
       if (G.busyIds().has(id)) return;
       const p = ui.disp.party, i = p.indexOf(id);
       if (i >= 0) p.splice(i, 1); else if (p.length < G.PARTY_MAX) p.push(id);
+    } else if (act === 'sortie') {
+      const dn = ui.disp.dungeon, party = ui.disp.party.slice();
+      ui.modal = null; ui.disp = null; render();
+      window.GuildBattleUI.start(dn, party, render);
+      return;
     } else if (act === 'start') {
       const r = G.startJob(ui.disp.dungeon, ui.disp.party);
       if (r.ok) { ui.modal = null; ui.disp = null; } else { alert(r.why); }

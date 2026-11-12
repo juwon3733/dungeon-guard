@@ -153,6 +153,18 @@
       this.save();
       return { ok: true };
     },
+    // 직접 출격(전투) 보상. 처음 돌파하는 던전은 보너스가 붙습니다.
+    grantBattle(dungeonId, win) {
+      const S = this.S, dn = dungeonById[dungeonId];
+      S.cleared = S.cleared || {};
+      let gold = win ? dn.gold : Math.floor(dn.gold * 0.25), tk = 0, first = false;
+      if (win) {
+        tk = dn.tk + (this.rng() < dn.tkChance ? 1 : 0);
+        if (!S.cleared[dungeonId]) { S.cleared[dungeonId] = true; first = true; tk += 2; gold += dn.gold; }
+      }
+      S.gold += gold; S.tickets += tk; this.save();
+      return { gold, tk, first };
+    },
     jobDone(job) { return this.now() >= job.end; },
     claim(index) {
       const S = this.S;
