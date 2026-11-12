@@ -21,6 +21,7 @@ export interface Command {
   digMul?: number;          // 굴 파기 속도 배율
   dmgTakenMul?: number;     // 받는 피해 배율
   afterGateAtkMul?: number; // 성문이 부서진 뒤 공격력 배율
+  moatIgnore?: boolean;     // 부대가 해자에서 느려지지 않음
 }
 
 export interface Monster {
@@ -86,7 +87,7 @@ export const MONSTERS: Monster[] = [
   M('vampire_lord', '흡혈 군주', 'legend', 'assault', 'fiend', { command: { desc: '부대 공격력 +30%, 초당 체력 3% 회복', atkMul: 1.3, regen: 0.03 } }),
   M('bone_dragon', '해골 용', 'legend', 'flying', 'undead', { command: { desc: '성벽 진입, 부활', wallPass: true, revive: true } }),
   M('demon_general', '마장군', 'legend', 'siege', 'demon', { command: { desc: '성문 피해 2배, 공격력 +20%', gateMul: 2, atkMul: 1.2 } }),
-  M('siren_queen', '해마녀', 'legend', 'support', 'fiend', { command: { desc: '해자 무시, 받는 피해 -20%', dmgTakenMul: 0.8 } }),
+  M('siren_queen', '해마녀', 'legend', 'support', 'fiend', { command: { desc: '같은 레인의 모든 부대가 해자를 그대로 건넘, 받는 피해 -20%', moatIgnore: true, dmgTakenMul: 0.8 } }),
   // 신화
   M('abyss_dragon', '심연의 용', 'myth', 'flying', 'demon', { command: { desc: '성벽 진입, 망루 무력화, 공격력 +30%', wallPass: true, towerMiss: 1, atkMul: 1.3 } }),
 ];

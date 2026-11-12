@@ -251,6 +251,12 @@ function findAllyTarget(s: SiegeState, u: Unit): Target | null {
   return null;
 }
 
+/** 해마녀처럼 해자를 건너게 하는 부대장이 같은 레인에 살아 있으면 그 레인의 모든 부대가 물을 그대로 건넌다 */
+function moatFree(s: SiegeState, u: Unit) {
+  if (s.noCommand) return false;
+  return s.squads.some((q) => q.plan.lane === u.lane && q.leader?.alive && MON[q.plan.leader].command?.moatIgnore);
+}
+
 function stepAlly(s: SiegeState, u: Unit, dt: number) {
   const cmd = cmdOf(s, u.squad);
   if (cmd.regen) u.hp = Math.min(u.max, u.hp + u.max * cmd.regen * dt);
@@ -283,7 +289,7 @@ function stepAlly(s: SiegeState, u: Unit, dt: number) {
   const lim = allyLimit(s, u);
   let speed = u.speed;
   const c = s.castle;
-  if (u.lane === 1 && c.moat && u.x > c.moat[0] && u.x < c.moat[1] && u.role !== 'flying' && !SWIMMERS.has(u.monId!)) speed *= 0.6;
+  if (u.lane === 1 && c.moat && u.x > c.moat[0] && u.x < c.moat[1] && u.role !== 'flying' && !SWIMMERS.has(u.monId!) && !moatFree(s, u)) speed *= c.moatSlow ?? 0.6;
   // 성 안에서는 남은 적을 쫓아간다(방향 상관없이)
   if (inside(s, u)) {
     let near: Unit | null = null, nd = Infinity;

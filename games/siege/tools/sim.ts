@@ -23,6 +23,11 @@ const PRESETS: Record<string, SquadPlan[]> = {
     sq('orc_warrior', 1, [['goblin', 4]], 4),
     sq('bone_archer', 1, [['imp', 4]], 6),
   ],
+  '성문 공성 + 방패 (오우거 + 타락 기사)': [
+    sq('dark_knight', 1, [['skeleton', 3], ['goblin', 3]]),
+    sq('ogre_chief', 1, [['skeleton', 3], ['goblin', 3]], 3),
+    sq('bone_archer', 1, [['imp', 4]], 6),
+  ],
   '성벽 넘기 (박쥐 여왕 + 하피)': [
     sq('bat_queen', 0, [['bat', 3], ['goblin', 3]]),
     sq('harpy', 0, [['goblin', 4]], 3),
@@ -42,6 +47,16 @@ const PRESETS: Record<string, SquadPlan[]> = {
     sq('lich', 1, [['skeleton', 3], ['goblin', 3]]),
     sq('orc_warrior', 1, [['goblin', 4]], 4),
     sq('bone_archer', 1, [['imp', 4]], 6),
+  ],
+  '호수 건너기 (해마녀)': [
+    sq('siren_queen', 1, [['skeleton', 4], ['goblin', 4]]),
+    sq('orc_warrior', 1, [['goblin', 4]], 4),
+    sq('bone_archer', 1, [['imp', 4]], 6),
+  ],
+  '비행 군단 (박쥐 여왕 + 가고일 + 하피)': [
+    sq('bat_queen', 0, [['bat', 6]]),
+    sq('gargoyle', 0, [['bat', 4]], 2),
+    sq('harpy', 0, [['goblin', 4]], 4),
   ],
   '여러 갈래 (오우거 정문 + 하피 성벽 + 굴착)': [
     sq('ogre_chief', 1, [['skeleton', 3], ['goblin', 3]]),
@@ -75,6 +90,21 @@ function winRate(power: number, plans: SquadPlan[], policy: Policy, n: number) {
   }
   return { rate: win / n, time: win ? time / win : 0, stars: win ? st / win : 0 };
 }
+function limitPowerOn(castle: typeof base, plans: SquadPlan[], policy: Policy) {
+  let lo = 0.3, hi = 3;
+  for (let i = 0; i < 6; i++) {
+    const mid = (lo + hi) / 2;
+    let win = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const s = createSiege({ ...castle, power: mid }, plans, { seed });
+      let tick = 0;
+      while (!s.over) { if (tick++ % 4 === 0) play(s, policy); step(s, DT); }
+      if (s.over.win) win++;
+    }
+    if (win / 6 >= 0.5) lo = mid; else hi = mid;
+  }
+  return lo;
+}
 /** 이길 수 있는(승률 50% 이상) 최대 수비 배율 */
 function limitPower(plans: SquadPlan[], policy: Policy) {
   let lo = 0.3, hi = 3;
@@ -85,6 +115,22 @@ function limitPower(plans: SquadPlan[], policy: Policy) {
   return lo;
 }
 
+// --castles: 모든 성채에서 편성별 한계 배율(스킬 자동 + 성문 대기 명령)을 한 표로
+if (process.argv.includes('--castles')) {
+  const names = Object.keys(CASTLE);
+  console.log('편성'.padEnd(36), names.map((id) => CASTLE[id].name.padStart(8)).join(''));
+  for (const [name, plans] of Object.entries(PRESETS)) {
+    const usesTunnel = plans.some((p) => p.lane === 2);
+    const row = names.map((id) => {
+      if (usesTunnel && !CASTLE[id].tunnel) return '       -';
+      const saved = base; (globalThis as any).__base = CASTLE[id];
+      const v = limitPowerOn(CASTLE[id], plans, 'smart');
+      void saved; return v.toFixed(2).padStart(8);
+    });
+    console.log(name.padEnd(36), row.join(''));
+  }
+  process.exit(0);
+}
 console.log(`성채: ${base.name}  현재 수비 배율 ${base.power}`);
 console.log('편성'.padEnd(34), '한계배율: 방치', '  스킬', ' 스킬+명령', '   (스킬+명령) 현재 배율 승률·시간·★');
 for (const [name, plans] of Object.entries(PRESETS)) {

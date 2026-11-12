@@ -27,21 +27,22 @@ const DEFAULT: SquadPlan[] = [
 
 export default function App() {
   const [plans, setPlans] = useState<SquadPlan[]>(DEFAULT);
-  const [castleId] = useState(CASTLES[0].id);
+  const [castleId, setCastleId] = useState(CASTLES[0].id);
   const [battle, setBattle] = useState<null | { plans: SquadPlan[] }>(null);
   const castle = CASTLES.find((c) => c.id === castleId)!;
   return (
     <Theme theme={neutralTheme} mode="dark">
       {battle
         ? <Battle plans={battle.plans} castleId={castleId} onExit={() => setBattle(null)} />
-        : <Formation plans={plans} setPlans={setPlans} castle={castle} onStart={() => setBattle({ plans: structuredClone(plans) })} />}
+        : <Formation plans={plans} setPlans={setPlans} castle={castle} setCastleId={setCastleId}
+            onStart={() => setBattle({ plans: structuredClone(plans).map((p) => (p.lane === 2 && !castle.tunnel ? { ...p, lane: 1 } : p)) })} />}
     </Theme>
   );
 }
 
 // ---------------- 편성 ----------------
-function Formation({ plans, setPlans, castle, onStart }: {
-  plans: SquadPlan[]; setPlans: (p: SquadPlan[]) => void; castle: (typeof CASTLES)[number]; onStart: () => void;
+function Formation({ plans, setPlans, castle, setCastleId, onStart }: {
+  plans: SquadPlan[]; setPlans: (p: SquadPlan[]) => void; castle: (typeof CASTLES)[number]; setCastleId: (id: string) => void; onStart: () => void;
 }) {
   const [estimate, setEstimate] = useState<string>('');
   const update = (i: number, f: (p: SquadPlan) => SquadPlan) => { setPlans(plans.map((p, j) => (j === i ? f(structuredClone(p)) : p))); setEstimate(''); };
@@ -64,7 +65,10 @@ function Formation({ plans, setPlans, castle, onStart }: {
         </VStack>
         <Card padding={4}>
           <VStack gap={2}>
-            <HStack gap={2}><Heading level={2}>{castle.name}</Heading><Badge label={`제한 ${castle.timeLimit}초`} /></HStack>
+            <HStack gap={2}>
+              <div style={{ minWidth: 220 }}><Selector label="성채" value={castle.id} options={CASTLES.map((c) => ({ value: c.id, label: c.name }))} onChange={(v) => { setCastleId(v); setEstimate(''); }} /></div>
+              <Badge label={`제한 ${castle.timeLimit}초`} /><Badge label={`망루 ${castle.towers.length}`} /><Badge label={castle.tunnel ? '지하 길 있음' : '지하 길 없음'} />
+            </HStack>
             <Text color="secondary">{castle.tip}</Text>
             <div className="lanes">
               {laneInfo.map((t, i) => (

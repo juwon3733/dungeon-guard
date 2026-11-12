@@ -24,6 +24,7 @@ export interface Castle {
   power: number;            // 수비 전체 배율(적 체력·공격력, 성문, 망루)
   gateHp: number;
   moat?: [number, number];  // 정문 레인 해자 구간(느려짐)
+  moatSlow?: number;        // 해자 속도 배율(기본 0.6)
   tunnel: boolean;          // 지하 레인 있음
   tunnelDig: number;        // 굴을 여는 데 필요한 작업량(초·마리)
   towers: { lane: Lane; x: number; hp: number; dmg: number; range: number; iv: number }[];
@@ -35,7 +36,7 @@ export const CASTLES: Castle[] = [
   {
     id: 'border_fort',
     name: '국경 요새',
-    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 300, power: 1,
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 300, power: 1.3,
     gateHp: 4500, moat: [820, 960], tunnel: true, tunnelDig: 36,
     towers: [
       { lane: 0, x: 1000, hp: 1300, dmg: 42, range: 260, iv: 1.5 },
@@ -51,6 +52,62 @@ export const CASTLES: Castle[] = [
       { lane: 'core', x: 1740, type: 'captain', count: 1 },
     ],
     tip: '정문은 단단하고 해자가 있다. 성문을 부술 힘을 모으거나, 성벽을 넘거나, 굴을 파서 들어가라.',
+  },
+  {
+    id: 'rock_keep',
+    name: '바위 요새',
+    length: 1800, wallX: 980, mergeX: 1020, coreX: 1680, holdSec: 8, timeLimit: 300, power: 1.1,
+    gateHp: 3600, tunnel: false, tunnelDig: 999,
+    towers: [
+      { lane: 0, x: 960, hp: 1200, dmg: 38, range: 280, iv: 1.4 },
+      { lane: 0, x: 1010, hp: 1200, dmg: 38, range: 280, iv: 1.4 },
+      { lane: 1, x: 1000, hp: 1200, dmg: 38, range: 300, iv: 1.4 },
+      { lane: 1, x: 1050, hp: 1200, dmg: 38, range: 300, iv: 1.4 },
+    ],
+    garrison: [
+      { lane: 0, x: 1040, type: 'archer', count: 3 },
+      { lane: 1, x: 1060, type: 'footman', count: 4 },
+      { lane: 'core', x: 1600, type: 'knight', count: 2 },
+      { lane: 'core', x: 1640, type: 'captain', count: 1 },
+    ],
+    tip: '바위 위라 굴을 팔 수 없고 망루가 넷이다. 망루를 무력화하거나 하늘로 넘어라.',
+  },
+  {
+    id: 'lake_castle',
+    name: '호수 성',
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 300, power: 1.1,
+    gateHp: 3200, moat: [560, 960], moatSlow: 0.3, tunnel: false, tunnelDig: 999,
+    towers: [
+      { lane: 0, x: 1000, hp: 1100, dmg: 44, range: 340, iv: 1.4 },
+      { lane: 1, x: 1020, hp: 1100, dmg: 44, range: 380, iv: 1.4 },
+      { lane: 1, x: 1060, hp: 1100, dmg: 44, range: 380, iv: 1.4 },
+    ],
+    garrison: [
+      { lane: 0, x: 1060, type: 'archer', count: 6 },
+      { lane: 1, x: 1080, type: 'footman', count: 3 },
+      { lane: 1, x: 1110, type: 'archer', count: 2 },
+      { lane: 'core', x: 1700, type: 'knight', count: 2 },
+      { lane: 'core', x: 1740, type: 'captain', count: 1 },
+    ],
+    tip: '넓은 호수가 정문을 감싼다. 물에서 느려지는 동안 망루와 궁수에게 맞는다. 물을 건너는 힘이나 날개가 필요하다.',
+  },
+  {
+    id: 'iron_gate',
+    name: '철문 성채',
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 210, power: 1.35,
+    gateHp: 18000, tunnel: true, tunnelDig: 20,
+    towers: [
+      { lane: 0, x: 1000, hp: 1300, dmg: 36, range: 280, iv: 1.5 },
+      { lane: 1, x: 1040, hp: 1300, dmg: 36, range: 300, iv: 1.5 },
+    ],
+    garrison: [
+      { lane: 0, x: 1060, type: 'archer', count: 5 },
+      { lane: 1, x: 1080, type: 'knight', count: 2 },
+      { lane: 2, x: 1080, type: 'knight', count: 2 },
+      { lane: 'core', x: 1700, type: 'knight', count: 2 },
+      { lane: 'core', x: 1740, type: 'captain', count: 1 },
+    ],
+    tip: '성문이 매우 단단하다. 성문을 부술 장사를 데려오거나, 짧은 굴로 파고들어라. 성벽 위 궁수가 많다.',
   },
 ];
 
