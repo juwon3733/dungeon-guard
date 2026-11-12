@@ -1,20 +1,23 @@
-// 공성전 화면(Canvas). 규칙은 core/siege.ts, 여기는 그리기와 연출만.
-// 횡스크롤: 왼쪽 아군 진영 → 오른쪽 성. 레인 0=성벽 위, 1=땅(정문), 2=지하.
+// 공성전 화면(Canvas): 위에서 내려다보는 탑다운, 왼쪽(아군 진영) → 오른쪽(성)으로 진군.
+// 규칙은 core/siege.ts. 레인은 위아래로 나란한 띠: 0=북쪽 성벽 구간, 1=가운데 정문 길, 2=남쪽 굴.
 import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
 import { TUNNEL_IN } from '../core/siege';
 import { GRADES, ROLES, type Role } from '../data/monsters';
 
 export const VW = 1280, VH = 720;
-const GROUND = 500;                                  // 땅 높이(정문 레인 발 위치)
-
-const LANE_Y = [300, GROUND, 640];                   // 레인별 발 위치
+const LANE_CY = [190, 370, 560];          // 레인 띠의 가운데 y
+const LANE_H = 150;                       // 띠 높이
+const YARD_CY = 370, YARD_H = 420;        // 성 안뜰(레인이 합쳐지는 곳)
 const ROLE_COL: Record<Role | 'foe', string> = {
   assault: '#e8623c', shield: '#8aa0b8', ranged: '#ffcc4d', siege: '#b07a4a', flying: '#9d7bff', support: '#5fd3a0', foe: '#c9d2ff',
 };
 
-interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; col: string; size: number; g: number }
+interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; col: string; size: number }
 interface Txt { x: number; y: number; str: string; col: string; life: number; size: number }
 interface Fx { age: number; dur: number; draw: (c: CanvasRenderingContext2D, p: number) => void }
+
+/** 유닛마다 고정된 흩어짐(-1..1). 무리가 띠 안에 퍼져 보이게 */
+const jitter = (uid: number) => (((uid * 2654435761) >>> 0) % 1000) / 500 - 1;
 
 export class SiegeView {
   ctx: CanvasRenderingContext2D;
@@ -26,72 +29,80 @@ export class SiegeView {
   flash = 0;
   t = 0;
   follow = true;
+  bannerQ: { str: string; col: string; t: number }[] = [];
 
   constructor(public canvas: HTMLCanvasElement, public s: SiegeState) {
     this.ctx = canvas.getContext('2d')!;
   }
 
-  /** 유닛의 화면 y: 성 안으로 들어가면 땅 높이로 내려온다 */
-  unitY(u: { x: number; lane: number }) {
+  /** 위에서 본 위치. 성 안에 들어오면 안뜰로 퍼진다 */
+  pos(u: { x: number; lane: number; uid?: number }) {
     const c = this.s.castle;
-    const base = LANE_Y[u.lane];
-    // 지하는 성 안쪽 굴(수비대 대기실) 끝에서 땅 위로 올라온다
-    const rise = u.lane === 2 ? c.wallX + TUNNEL_IN : c.wallX + 10;
-    if (u.x <= rise || u.lane === 1) return base;
-    const k = Math.min(1, (u.x - rise) / 90);
-    return base + (GROUND - base) * k;
+    const j = u.uid != null ? jitter(u.uid) : 0;
+    const laneY = LANE_CY[u.lane] + j * (LANE_H * (u.lane === 2 ? 0.1 : 0.32));   // 굴은 좁다
+    const enter = u.lane === 2 ? c.wallX + TUNNEL_IN : c.wallX + 20;
+    if (u.x <= enter) return { x: u.x, y: laneY };
+    const k = Math.min(1, (u.x - enter) / 120);
+    const yardY = YARD_CY + j * (YARD_H * 0.38);
+    return { x: u.x, y: laneY + (yardY - laneY) * k };
   }
+  laneY(lane: number) { return LANE_CY[lane]; }
+  towerY(lane: number) { return lane === 0 ? LANE_CY[0] - 30 : LANE_CY[1] - LANE_H / 2 - 10; }
+  banner(str: string, col: string) { this.bannerQ.push({ str, col, t: 0 }); }
 
   onEvent(e: SiegeEvent) {
     const R = Math.random;
     switch (e.t) {
       case 'hit': {
-        const y = LANE_Y[e.lane] - 30;
-        this.texts.push({ x: e.x + (R() - 0.5) * 16, y, str: String(e.dmg), col: e.ally ? '#ff7a7a' : e.big ? '#ffd166' : '#ffffff', life: 0.8, size: e.big ? 22 : 15 });
-        this.burst(e.x, y + 10, e.big ? 10 : 4, e.ally ? '#ff8a8a' : '#fff1b0', 120, 3, 0.4);
+        const y = this.laneY(e.lane) - 20;
+        this.texts.push({ x: e.x + (R() - 0.5) * 20, y: y + (R() - 0.5) * 30, str: String(e.dmg), col: e.ally ? '#ff7a7a' : e.big ? '#ffd166' : '#ffffff', life: 0.8, size: e.big ? 22 : 14 });
         if (e.big) this.shake = Math.max(this.shake, 4);
         break;
       }
       case 'attack': {
-        if (!e.ranged) break;
-        const f = e.from, fy = this.unitY(f) - 24, ty = LANE_Y[e.to.lane] - 24, tx = e.to.x;
-        const col = f.side === 'ally' ? '#ffd166' : '#aac4ff';
-        this.fx.push({ age: 0, dur: 0.25, draw: (c, p) => {
-          const x = f.x + (tx - f.x) * p, y = fy + (ty - fy) * p - Math.sin(p * Math.PI) * 30;
-          c.fillStyle = col; c.beginPath(); c.arc(x, y, 3, 0, 7); c.fill();
-        } });
+        const f = e.from, a = this.pos(f);
+        const tx = e.to.x, ty = this.laneY(e.to.lane) + (R() - 0.5) * 40;
+        if (e.ranged) {
+          const col = f.side === 'ally' ? '#ffd166' : '#aac4ff';
+          this.fx.push({ age: 0, dur: 0.22, draw: (c, p) => {
+            const x = a.x + (tx - a.x) * p, y = a.y + (ty - a.y) * p;
+            c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.moveTo(x - 8, y); c.lineTo(x, y); c.stroke();
+          } });
+        } else {
+          this.burst(tx, a.y, 3, f.side === 'ally' ? '#fff1b0' : '#ffb0b0', 90, 3, 0.25);
+        }
         break;
       }
       case 'tower': {
-        const tx = e.x, ty = LANE_Y[e.lane] - 150, to = e.to, toY = this.unitY(to) - 20;
+        const tx = e.x, ty = this.towerY(e.lane), to = this.pos(e.to);
         this.fx.push({ age: 0, dur: 0.3, draw: (c, p) => {
           c.strokeStyle = e.miss ? 'rgba(200,200,200,.5)' : '#ff9f43'; c.lineWidth = 3;
-          const x = tx + (to.x - tx) * p, y = ty + (toY - ty) * p;
-          c.beginPath(); c.moveTo(x - 6, y - 4); c.lineTo(x + 6, y + 4); c.stroke();
+          const x = tx + (to.x - tx) * p, y = ty + (to.y - ty) * p;
+          c.beginPath(); c.moveTo(x + 8, y); c.lineTo(x - 4, y); c.stroke();
         } });
-        if (e.miss) this.texts.push({ x: to.x, y: toY - 20, str: '빗나감', col: '#9fe0a0', life: 0.7, size: 13 });
+        if (e.miss) this.texts.push({ x: to.x, y: to.y - 24, str: '빗나감', col: '#9fe0a0', life: 0.7, size: 13 });
         break;
       }
-      case 'die':
-        this.burst(e.u.x, this.unitY(e.u) - 16, e.u.isLeader ? 30 : 10, e.u.side === 'ally' ? '#c08aff' : '#ffe08a', 160, 4, 0.7);
+      case 'die': { const p = this.pos(e.u); this.burst(p.x, p.y, e.u.isLeader ? 30 : 10, e.u.side === 'ally' ? '#c08aff' : '#ffe08a', 160, 4, 0.6); break; }
+      case 'revive': {
+        const p = this.pos(e.u);
+        this.burst(p.x, p.y, 18, '#7dffb2', 120, 4, 0.8);
+        this.texts.push({ x: p.x, y: p.y - 30, str: '부활', col: '#7dffb2', life: 1, size: 16 });
         break;
-      case 'revive':
-        this.burst(e.u.x, this.unitY(e.u) - 16, 18, '#7dffb2', 120, 4, 0.8, -80);
-        this.texts.push({ x: e.u.x, y: this.unitY(e.u) - 50, str: '부활', col: '#7dffb2', life: 1, size: 16 });
-        break;
+      }
       case 'gateBreak':
         this.shake = 16; this.flash = 0.6;
-        this.burst(e.x, GROUND - 60, 70, '#c9a477', 320, 6, 1.2, 300);
+        this.burst(e.x, LANE_CY[1], 70, '#c9a477', 320, 6, 1.1);
         this.banner('성문 파괴!', '#ffd166');
         break;
       case 'towerBreak':
         this.shake = 10;
-        this.burst(e.x, LANE_Y[e.lane] - 150, 50, '#d9c7a0', 260, 5, 1, 300);
+        this.burst(e.x, this.towerY(e.lane), 50, '#d9c7a0', 260, 5, 0.9);
         this.banner('망루 붕괴', '#ffffff');
         break;
       case 'tunnelOpen':
         this.shake = 8;
-        this.burst(e.x, LANE_Y[2] - 10, 40, '#8b6a45', 200, 5, 1, 200);
+        this.burst(this.s.castle.wallX + TUNNEL_IN, LANE_CY[2], 40, '#8b6a45', 200, 5, 0.9);
         this.banner('굴이 뚫렸다', '#c9a477');
         break;
       case 'leaderDown':
@@ -100,13 +111,10 @@ export class SiegeView {
     }
   }
 
-  bannerQ: { str: string; col: string; t: number }[] = [];
-  banner(str: string, col: string) { this.bannerQ.push({ str, col, t: 0 }); }
-
-  burst(x: number, y: number, n: number, col: string, speed: number, size: number, life: number, g = 0) {
+  burst(x: number, y: number, n: number, col: string, speed: number, size: number, life: number) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * 6.283, sp = (0.3 + Math.random() * 0.7) * speed;
-      this.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: life * (0.6 + Math.random() * 0.4), max: life, col, size, g });
+      this.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: life * (0.6 + Math.random() * 0.4), max: life, col, size });
     }
   }
 
@@ -114,91 +122,33 @@ export class SiegeView {
     this.t += dt;
     for (const f of this.fx) f.age += dt;
     this.fx = this.fx.filter((f) => f.age < f.dur);
-    for (const p of this.parts) { p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    for (const p of this.parts) { p.life -= dt; p.vx *= 0.92; p.vy *= 0.92; p.x += p.vx * dt; p.y += p.vy * dt; }
     this.parts = this.parts.filter((p) => p.life > 0);
-    for (const x of this.texts) { x.life -= dt; x.y -= 30 * dt; }
+    for (const x of this.texts) { x.life -= dt; x.y -= 26 * dt; }
     this.texts = this.texts.filter((x) => x.life > 0);
     this.shake = Math.max(0, this.shake - 40 * dt);
     this.flash = Math.max(0, this.flash - 2 * dt);
     if (this.bannerQ[0]) { this.bannerQ[0].t += dt; if (this.bannerQ[0].t > 1.6) this.bannerQ.shift(); }
-    // 카메라: 가장 앞선 아군을 따라간다
     if (this.follow) {
       const allies = this.s.units.filter((u) => u.side === 'ally' && u.alive);
       const front = allies.length ? Math.max(...allies.map((u) => u.x)) : 0;
-      const want = Math.max(0, Math.min(this.s.castle.length + 120 - VW, front - VW * 0.55));
+      const want = Math.max(0, Math.min(this.s.castle.length + 140 - VW, front - VW * 0.55));
       this.camX += (want - this.camX) * Math.min(1, dt * 2.5);
     }
   }
 
   draw() {
-    const c = this.ctx, s = this.s, k = s.castle;
+    const c = this.ctx, s = this.s;
     const scale = this.canvas.width / VW;
     c.setTransform(scale, 0, 0, scale, 0, 0);
-    // 하늘
-    const sky = c.createLinearGradient(0, 0, 0, GROUND);
-    sky.addColorStop(0, '#1b1530'); sky.addColorStop(1, '#4a2f4f');
-    c.fillStyle = sky; c.fillRect(0, 0, VW, VH);
+    c.fillStyle = '#2d3a26'; c.fillRect(0, 0, VW, VH);
     c.save();
-    const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
-    c.translate(-this.camX * 0.3 + sx, sy);
-    // 먼 산
-    c.fillStyle = '#2a2140';
-    c.beginPath(); c.moveTo(0, GROUND);
-    for (let x = 0; x <= k.length + VW; x += 120) c.lineTo(x, GROUND - 120 - Math.sin(x * 0.01) * 60 - Math.sin(x * 0.023) * 30);
-    c.lineTo(k.length + VW, GROUND); c.fill();
-    c.restore();
-
-    c.save();
-    c.translate(-this.camX + sx, sy);
-    // 땅과 지하
-    c.fillStyle = '#3b2f2a'; c.fillRect(-50, GROUND, k.length + 200, VH - GROUND);
-    c.fillStyle = '#4f3f33'; c.fillRect(-50, GROUND, k.length + 200, 10);
-    // 지하 굴(레인 2)
-    if (k.tunnel) {
-      c.fillStyle = '#1e1714';
-      c.fillRect(0, LANE_Y[2] - 60, k.wallX - 20, 70);                       // 아군이 파 온 굴
-      c.fillRect(k.wallX + 20, LANE_Y[2] - 60, TUNNEL_IN - 20, 70);          // 성 안쪽 굴(수비대)
-      c.beginPath(); c.moveTo(k.wallX + TUNNEL_IN, LANE_Y[2] - 60); c.lineTo(k.wallX + TUNNEL_IN + 90, GROUND);
-      c.lineTo(k.wallX + TUNNEL_IN + 40, GROUND); c.lineTo(k.wallX + TUNNEL_IN - 20, LANE_Y[2] + 10); c.closePath(); c.fill();   // 올라오는 경사로
-      if (s.tunnelOpen) c.fillRect(k.wallX - 20, LANE_Y[2] - 60, 40, 70);
-      if (!s.tunnelOpen) {
-        c.fillStyle = '#5b4636'; c.fillRect(k.wallX - 20, LANE_Y[2] - 60, 40, 70);
-        const p = s.tunnelWork / k.tunnelDig;
-        c.fillStyle = '#c9a477'; c.fillRect(k.wallX - 20, LANE_Y[2] + 14, 40 * Math.min(1, p), 5);
-      }
-    }
-    // 해자
-    if (k.moat) { c.fillStyle = '#2d5d7c'; c.fillRect(k.moat[0], GROUND - 6, k.moat[1] - k.moat[0], 18); }
-    // 성 안 바닥과 핵심 지점(성채 본관)
-    c.fillStyle = '#5a4a3f'; c.fillRect(k.wallX, GROUND - 4, k.length - k.wallX + 100, 8);
-    c.fillStyle = '#3d3550'; c.fillRect(k.coreX - 60, GROUND - 230, 200, 230);
-    c.fillStyle = '#2b2540'; for (let i = 0; i < 5; i++) c.fillRect(k.coreX - 60 + i * 44, GROUND - 250, 26, 22);
-    c.fillStyle = s.coreProg > 0 ? '#b14cff' : '#d9d2ff';
-    c.fillRect(k.coreX + 30, GROUND - 330, 4, 80);
-    c.beginPath(); c.moveTo(k.coreX + 34, GROUND - 330); c.lineTo(k.coreX + 84, GROUND - 315); c.lineTo(k.coreX + 34, GROUND - 300); c.fill();
-    // 성벽
-    c.fillStyle = '#6b6178'; c.fillRect(k.wallX - 20, LANE_Y[0], 60, GROUND - LANE_Y[0]);
-    c.fillStyle = '#7d728c'; for (let i = 0; i < 3; i++) c.fillRect(k.wallX - 20 + i * 22, LANE_Y[0] - 18, 14, 18);
-    // 성문
-    if (s.gateHp > 0) {
-      c.fillStyle = '#6b4a2b'; c.fillRect(k.wallX - 22, GROUND - 110, 46, 110);
-      c.strokeStyle = '#3a2614'; c.lineWidth = 3; for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(k.wallX - 22, GROUND - 100 + i * 26); c.lineTo(k.wallX + 24, GROUND - 100 + i * 26); c.stroke(); }
-      bar(c, k.wallX, GROUND - 124, 60, s.gateHp / s.gateMax, '#ffb347');
-    } else {
-      c.fillStyle = '#1b1530'; c.fillRect(k.wallX - 22, GROUND - 110, 46, 110);
-    }
-    // 망루
-    for (const t of s.towers) {
-      const ty = LANE_Y[t.lane] - (t.lane === 0 ? 0 : 200);
-      if (!t.alive) { c.fillStyle = '#4a4252'; c.fillRect(t.x - 18, ty - 20, 36, 20); continue; }
-      c.fillStyle = '#80758f'; c.fillRect(t.x - 18, ty - 120, 36, 120);
-      c.fillStyle = '#9c2b3b'; c.beginPath(); c.moveTo(t.x - 24, ty - 120); c.lineTo(t.x, ty - 150); c.lineTo(t.x + 24, ty - 120); c.fill();
-      bar(c, t.x, ty - 160, 44, t.hp / t.max, '#ff6b6b');
-    }
-    // 유닛: 먼 레인부터
-    const order = [...s.units].filter((u) => u.alive || u.hitT > 0).sort((a, b) => this.unitY(a) - this.unitY(b));
-    for (const u of order) this.drawUnit(c, u);
-    // 연출
+    c.translate(-this.camX + (Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    this.drawGround(c);
+    this.drawCastle(c);
+    // 유닛: 위(먼 쪽)부터
+    const list = s.units.filter((u) => u.alive || u.hitT > 0).map((u) => ({ u, p: this.pos(u) })).sort((a, b) => a.p.y - b.p.y);
+    for (const { u, p } of list) this.drawUnit(c, u, p.x, p.y);
     for (const f of this.fx) { c.save(); f.draw(c, Math.min(1, f.age / f.dur)); c.restore(); }
     c.save(); c.globalCompositeOperation = 'lighter';
     for (const p of this.parts) { c.globalAlpha = Math.max(0, p.life / p.max); c.fillStyle = p.col; c.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); }
@@ -210,46 +160,115 @@ export class SiegeView {
     }
     c.globalAlpha = 1;
     c.restore();
-
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${this.flash})`; c.fillRect(0, 0, VW, VH); }
     const b = this.bannerQ[0];
     if (b) {
       const a = Math.min(1, b.t * 5) * (b.t > 1.2 ? Math.max(0, 1 - (b.t - 1.2) / 0.4) : 1);
       c.globalAlpha = a; c.textAlign = 'center'; c.font = 'italic 900 40px sans-serif';
-      c.lineWidth = 7; c.strokeStyle = '#140f1f'; c.strokeText(b.str, VW / 2, 120); c.fillStyle = b.col; c.fillText(b.str, VW / 2, 120);
+      c.lineWidth = 7; c.strokeStyle = '#140f1f'; c.strokeText(b.str, VW / 2, 70); c.fillStyle = b.col; c.fillText(b.str, VW / 2, 70);
       c.globalAlpha = 1;
     }
   }
 
-  drawUnit(c: CanvasRenderingContext2D, u: Unit) {
-    const y0 = this.unitY(u);
-    const bob = Math.sin(this.t * 6 + u.uid) * 1.5;
+  drawGround(c: CanvasRenderingContext2D) {
+    const k = this.s.castle;
+    // 풀밭 무늬
+    c.fillStyle = '#34432b';
+    for (let x = 0; x < k.length + 200; x += 80) for (let y = 0; y < VH; y += 80) if (((x + y) / 80) % 2 === 0) c.fillRect(x, y, 80, 80);
+    // 레인 길(성 밖)
+    const road = (lane: number, col: string) => { c.fillStyle = col; c.fillRect(-50, LANE_CY[lane] - LANE_H / 2 + 14, k.wallX + 50, LANE_H - 28); };
+    road(0, 'rgba(120,110,90,.35)'); road(1, 'rgba(160,140,100,.55)');
+    // 굴(지하): 성벽 밑을 점선으로 지나 안뜰 구멍으로
+    if (k.tunnel) {
+      c.strokeStyle = '#1a1410'; c.lineWidth = 34; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, LANE_CY[2]); c.lineTo(k.wallX - 24, LANE_CY[2]); c.stroke();
+      c.setLineDash([16, 12]); c.lineWidth = 6; c.strokeStyle = this.s.tunnelOpen ? '#c9a477' : 'rgba(201,164,119,.35)';
+      c.beginPath(); c.moveTo(k.wallX - 24, LANE_CY[2]); c.lineTo(k.wallX + TUNNEL_IN, LANE_CY[2]); c.stroke();
+      c.setLineDash([]); c.lineCap = 'butt';
+      if (!this.s.tunnelOpen) { c.fillStyle = '#c9a477'; c.fillRect(k.wallX - 70, LANE_CY[2] + 26, 60 * Math.min(1, this.s.tunnelWork / k.tunnelDig), 5); }
+      c.fillStyle = this.s.tunnelOpen ? '#120d0a' : '#4a3a2c';
+      c.beginPath(); c.ellipse(k.wallX + TUNNEL_IN, LANE_CY[2], 26, 18, 0, 0, 7); c.fill();
+    }
+    // 해자(성벽 앞 물길)
+    if (k.moat) {
+      // 규칙상 정문 레인만 느려지므로 정문 길 앞에만 그린다
+      const top = LANE_CY[1] - LANE_H / 2, h = LANE_H;
+      c.fillStyle = '#2d5d7c'; c.fillRect(k.moat[0], top, k.moat[1] - k.moat[0], h);
+      c.fillStyle = 'rgba(255,255,255,.08)'; for (let y = top + 16; y < top + h - 10; y += 30) c.fillRect(k.moat[0] + 10, y + Math.sin(this.t * 2 + y) * 4, k.moat[1] - k.moat[0] - 20, 3);
+    }
+  }
+
+  drawCastle(c: CanvasRenderingContext2D) {
+    const s = this.s, k = s.castle;
+    // 안뜰
+    c.fillStyle = '#5b5148'; c.fillRect(k.wallX + 20, YARD_CY - YARD_H / 2 - 40, k.length - k.wallX + 120, YARD_H + 80);
+    c.strokeStyle = 'rgba(0,0,0,.15)'; c.lineWidth = 1;
+    for (let x = k.wallX + 20; x < k.length + 140; x += 40) { c.beginPath(); c.moveTo(x, YARD_CY - YARD_H / 2 - 40); c.lineTo(x, YARD_CY + YARD_H / 2 + 40); c.stroke(); }
+    // 성 안쪽 굴(지하 수비대가 지키는 통로)
+    if (k.tunnel) { c.fillStyle = '#1e1714'; c.fillRect(k.wallX + 20, LANE_CY[2] - 22, TUNNEL_IN - 20, 44); }
+    // 본관(핵심 지점)과 점거 원
+    c.fillStyle = '#3d3550'; c.fillRect(k.coreX + 40, YARD_CY - 120, 160, 240);
+    c.fillStyle = '#4f4566'; c.fillRect(k.coreX + 50, YARD_CY - 110, 140, 220);
+    c.fillStyle = 'rgba(177,76,255,.12)'; c.beginPath(); c.arc(k.coreX, YARD_CY, 70, 0, 7); c.fill();
+    c.strokeStyle = s.coreProg > 0 ? '#b14cff' : 'rgba(217,210,255,.5)'; c.lineWidth = 4;
+    c.beginPath(); c.arc(k.coreX, YARD_CY, 70, -Math.PI / 2, -Math.PI / 2 + 6.283 * Math.max(0.001, s.coreProg / k.holdSec)); c.stroke();
+    c.fillStyle = '#d9d2ff'; c.font = 'bold 14px sans-serif'; c.textAlign = 'center'; c.fillText('본관', k.coreX + 120, YARD_CY + 5);
+    // 성벽(세로로 길게), 가운데 성문
+    const gateTop = LANE_CY[1] - 45, gateBot = LANE_CY[1] + 45;
+    c.fillStyle = '#6b6178';
+    c.fillRect(k.wallX - 22, 30, 44, gateTop - 30);
+    c.fillRect(k.wallX - 22, gateBot, 44, VH - 30 - gateBot);
+    c.fillStyle = '#7d728c'; for (let y = 34; y < VH - 30; y += 26) { if (y > gateTop - 10 && y < gateBot) continue; c.fillRect(k.wallX - 26, y, 8, 14); }
+    if (s.gateHp > 0) {
+      c.fillStyle = '#6b4a2b'; c.fillRect(k.wallX - 16, gateTop, 32, gateBot - gateTop);
+      c.strokeStyle = '#3a2614'; c.lineWidth = 3; for (let y = gateTop + 15; y < gateBot; y += 18) { c.beginPath(); c.moveTo(k.wallX - 16, y); c.lineTo(k.wallX + 16, y); c.stroke(); }
+      bar(c, k.wallX, gateTop - 14, 60, s.gateHp / s.gateMax, '#ffb347');
+    } else {
+      c.fillStyle = '#3a2f28'; c.fillRect(k.wallX - 16, gateTop, 32, gateBot - gateTop);
+    }
+    // 망루(성벽 위 둥근 탑), 사거리를 반원으로
+    for (const t of s.towers) {
+      const ty = this.towerY(t.lane);
+      if (!t.alive) { c.fillStyle = '#4a4252'; c.beginPath(); c.arc(t.x, ty, 20, 0, 7); c.fill(); continue; }
+      c.strokeStyle = 'rgba(255,120,80,.18)'; c.lineWidth = 2; c.beginPath(); c.arc(t.x, ty, t.range, Math.PI * 0.5, Math.PI * 1.5); c.stroke();
+      c.fillStyle = '#80758f'; c.beginPath(); c.arc(t.x, ty, 26, 0, 7); c.fill();
+      c.fillStyle = '#9c2b3b'; c.beginPath(); c.arc(t.x, ty, 16, 0, 7); c.fill();
+      bar(c, t.x, ty - 38, 44, t.hp / t.max, '#ff6b6b');
+    }
+  }
+
+  drawUnit(c: CanvasRenderingContext2D, u: Unit, px: number, py: number) {
     const lunge = u.lungeT > 0 ? Math.sin((u.lungeT / 0.15) * Math.PI) * 8 * (u.side === 'ally' ? 1 : -1) : 0;
-    const x = u.x + lunge, y = y0 + bob;
-    const fly = u.role === 'flying' ? 26 : 0;
-    const r = u.isLeader ? 20 : u.side === 'foe' ? 11 : 10;
+    const bob = Math.sin(this.t * 7 + u.uid) * 1.2;
+    const x = px + lunge;
+    const fly = u.role === 'flying' ? 16 : 0;
+    const r = u.isLeader ? 17 : u.side === 'foe' ? 9 : 8;
     c.save();
     if (!u.alive) c.globalAlpha = Math.max(0, u.hitT / 0.12);
-    // 그림자
-    c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(u.x, y0 + 2, r, r * 0.3, 0, 0, 7); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(px, py + r * 0.6, r * 0.9, r * 0.4, 0, 0, 7); c.fill();
+    const y = py - fly + bob;
     const col = u.hitT > 0 ? '#ffffff' : ROLE_COL[u.role];
     if (u.side === 'ally') {
-      c.fillStyle = col; c.beginPath(); c.arc(x, y - r - fly, r, 0, 7); c.fill();
-      if (u.role === 'flying') { c.beginPath(); c.moveTo(x - r, y - r - fly); c.lineTo(x - r - 14, y - r - fly - 10 + Math.sin(this.t * 14 + u.uid) * 6); c.lineTo(x - r + 2, y - fly - 4); c.fill(); }
+      c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+      c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + r * 0.35, y - r * 0.5); c.lineTo(x + r * 0.35, y + r * 0.5); c.fill();
+      if (u.role === 'flying') {
+        const w = Math.sin(this.t * 16 + u.uid) * 4;
+        c.fillStyle = col; c.beginPath(); c.moveTo(x - 2, y); c.lineTo(x - r - 8, y - r - w); c.lineTo(x - r - 2, y); c.lineTo(x - r - 8, y + r + w); c.fill();
+      }
       if (u.isLeader) {
         const g = GRADES[u.grade as keyof typeof GRADES];
-        c.strokeStyle = g.color; c.lineWidth = 3; c.beginPath(); c.arc(x, y - r - fly, r + 3, 0, 7); c.stroke();
-        c.fillStyle = '#140f1f'; c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillText(u.name[0], x, y - r - fly + 5);
-        c.fillStyle = '#fff'; c.font = 'bold 12px sans-serif'; c.fillText(u.name, x, y - r * 2 - fly - 14);
-        bar(c, x, y - r * 2 - fly - 10, 44, u.hp / u.max, '#62d394');
+        c.strokeStyle = g.color; c.lineWidth = 3; c.beginPath(); c.arc(x, y, r + 3, 0, 7); c.stroke();
+        c.fillStyle = '#140f1f'; c.font = 'bold 14px sans-serif'; c.textAlign = 'center'; c.fillText(u.name[0], x - 2, y + 5);
+        c.fillStyle = '#fff'; c.font = 'bold 12px sans-serif'; c.fillText(u.name, x, y - r - 14);
+        bar(c, x, y - r - 10, 44, u.hp / u.max, '#62d394');
       } else if (u.revived) {
-        c.fillStyle = '#7dffb2'; c.fillRect(x - 2, y - r * 2 - fly - 4, 4, 4);
+        c.strokeStyle = '#7dffb2'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r + 2, 0, 7); c.stroke();
       }
     } else {
-      c.fillStyle = col;
-      c.fillRect(x - r, y - r * 2.2, r * 2, r * 2.2);
-      c.fillStyle = u.foeType === 'captain' ? '#ffd166' : '#5b6aa8'; c.fillRect(x - r, y - r * 2.2, r * 2, 5);
-      if (u.foeType === 'captain' || u.foeType === 'knight') bar(c, x, y - r * 2.2 - 9, 30, u.hp / u.max, '#ff6b6b');
+      c.fillStyle = col; c.fillRect(x - r, y - r, r * 2, r * 2);
+      c.fillStyle = u.foeType === 'captain' ? '#ffd166' : u.foeType === 'archer' ? '#7fb0ff' : '#5b6aa8';
+      c.fillRect(x - r, y - r, r * 2, 4);
+      if (u.foeType === 'captain' || u.foeType === 'knight') bar(c, x, y - r - 8, 28, u.hp / u.max, '#ff6b6b');
     }
     c.restore();
   }
