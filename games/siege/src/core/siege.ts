@@ -171,7 +171,7 @@ export function createSiege(castle: Castle, plans: SquadPlan[], opts: {
 }
 
 // ---------------- 예비대 투입 ----------------
-export const CMD_START = 6, CMD_MAX = 10, CMD_RATE = 0.4;   // 시작 6, 2.5초에 1, 최대 10
+export const CMD_START = 7, CMD_MAX = 12, CMD_RATE = 0.55;   // 시작 7, 약 1.8초에 1, 최대 10
 const DEPLOY_COST: Record<string, number> = { rare: 2, hero: 3, legend: 5, myth: 7 };
 export const deployCost = (leaderId: string) => DEPLOY_COST[MON[leaderId].grade] ?? 3;
 /** 그 레인에서 투입할 자리: 외곽 초소를 정리하면 그 자리까지 앞당겨진다 */
@@ -195,8 +195,12 @@ export function deploy(s: SiegeState, squad: number, lane: Lane): boolean {
 }
 /** 시뮬레이션용: 편성 순서대로, 지휘력이 차면 정한 레인에 */
 export function autoDeploy(s: SiegeState) {
-  const q = s.squads.find((x) => !x.started);
-  if (q && s.t >= q.plan.delay) deploy(s, q.idx, q.plan.lane);
+  // 남은 부대를 한꺼번에 낼 만큼(또는 가득) 모았다가 연달아 낸다(조금씩 내면 각개 격파당한다)
+  const rest = s.squads.filter((x) => !x.started);
+  if (!rest.length) return;
+  const need = Math.min(CMD_MAX, rest.reduce((a, x) => a + deployCost(x.plan.leader), 0));
+  if (s.cmdPts < need) return;
+  for (const q of rest) deploy(s, q.idx, q.plan.lane);
 }
 
 function spawnSquad(s: SiegeState, sq: Squad) {

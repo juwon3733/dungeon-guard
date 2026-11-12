@@ -122,7 +122,7 @@ export const THREAT_STEP = 0.08;   // 점령 하나마다 남은 성채 수비 �
 /** 공성할 성채(위협도만큼 강해짐, 이미 점령한 곳은 그대로) */
 export function regionCastle(m: Meta, r: Region): Castle {
   const t = r.id in m.conquered ? 0 : threat(m);
-  return { ...CASTLE[r.castle], name: r.name, power: +(r.basePower + THREAT_STEP * t).toFixed(2) };
+  return { ...CASTLE[r.castle], name: r.name, power: +((r.basePower + THREAT_STEP * t) * 0.93).toFixed(2) };   // 0.93: 예비대가 나뉘어 들어가는 만큼 덜어 줌
 }
 
 export function upgrade(m: Meta, f: FacId): string | null {
