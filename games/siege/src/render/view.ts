@@ -2,8 +2,7 @@
 // 땅은 화면 전체, 높이가 있는 물체는 윗면과 앞(남쪽)면이 보이게 그린다.
 // 규칙은 core/siege.ts. 레인은 위아래로 나란한 띠: 0=북쪽 성벽 구간, 1=가운데 정문 길, 2=남쪽 굴.
 import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
-import { TUNNEL_IN, AIM, aimClamp, THREAT_INFO } from '../core/siege';
-import type { Lane } from '../data/castles';
+import { TUNNEL_IN } from '../core/siege';
 import { GRADES, ROLES, MON, type Role } from '../data/monsters';
 import { FX_SHEETS, type FxName } from '../data/fx_sheets';
 
@@ -56,8 +55,6 @@ const shade = (hex: string, k: number) => {
 export class SiegeView {
   ctx: CanvasRenderingContext2D;
   camX = 0;
-  /** 스킬 조준 중: 부대 번호와 마우스 자리(세계 좌표) */
-  aim: null | { squad: number; x: number; y: number } = null;
   parts: Particle[] = [];
   texts: Txt[] = [];
   fx: Fx[] = [];
@@ -172,28 +169,6 @@ export class SiegeView {
       case 'outpost':
         this.banner(`외곽 초소 정리 — ${['성벽', '정문', '지하'][e.lane]} 레인 망루 피해 -30%`, '#7dff9a');
         break;
-      case 'threat': {
-        const I = THREAT_INFO[e.th.kind];
-        this.banner(`${I.name}! ${I.hint}`, '#ff8a7a');
-        break;
-      }
-      case 'threatEnd': {
-        const th = e.th, y = this.laneY(th.lane);
-        if (th.kind === 'volley') {
-          for (let i = 0; i < 9; i++) this.pfx('arrow_hit', th.x - th.r + Math.random() * th.r * 2, y - 20 + (Math.random() - 0.5) * 50, { k: 1, dur: 0.35, delay: i * 0.04, flip: true });
-          this.shake = Math.max(this.shake, 6);
-        } else if (th.kind === 'oil') {
-          this.pfx('fire_boom', th.x, y, { k: 1.4, dur: 0.8, add: true }); this.shake = Math.max(this.shake, 8);
-        } else if (!e.foiled) {
-          this.pfx('heal_ring', this.s.castle.coreX - 120, YARD_CY + 20, { k: 3, dur: 1.4, add: true });
-        }
-        if (e.foiled) {
-          this.texts.push({ x: th.x, y: y - 70, str: th.kind === 'ritual' ? '의식 저지!' : '회피!', col: '#7dff9a', life: 1.2, size: 24 });
-          this.banner(th.kind === 'oil' ? '반격 — 성문이 흔들린다' : th.kind === 'volley' ? '반격 — 궁수들이 재장전 중' : '반격 — 주변 적 받는 피해 +40%', '#7dff9a');
-        } else if (th.kind === 'ritual') this.banner('의식 완성 — 수비대가 회복했다', '#ff8a7a');
-        else this.texts.push({ x: th.x, y: y - 70, str: `${e.hurt}명 피격`, col: '#ff7a7a', life: 1.2, size: 20 });
-        break;
-      }
       case 'leaderDown':
         this.banner(`${e.u.name} 쓰러짐 — 지휘 효과 사라짐`, '#ff7a7a');
         break;
@@ -314,8 +289,6 @@ export class SiegeView {
     items.push({ y: YARD_CY + 110, draw: () => this.drawKeep(c) });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
 
-    this.drawThreats(c);
-    this.drawAim(c);
     for (const f of this.fx) { c.save(); f.draw(c, Math.min(1, f.age / f.dur)); c.restore(); }
     c.save(); c.globalCompositeOperation = 'lighter';
     for (const p of this.parts) { c.globalAlpha = Math.max(0, p.life / p.max); c.fillStyle = p.col; c.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); }
@@ -369,61 +342,6 @@ export class SiegeView {
       c.font = 'bold 22px sans-serif'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(ci.skill, cx, cy - 124); c.fillStyle = '#fff'; c.fillText(ci.skill, cx, cy - 124);
     }
     c.restore();
-  }
-
-  /** 화면 좌표(clientX/Y) → 세계 좌표와 가장 가까운 레인 */
-  toWorld(cx: number, cy: number): { x: number; y: number; lane: Lane } {
-    const r = this.canvas.getBoundingClientRect();
-    const x = (cx - r.left) / r.width * VW + this.camX, y = (cy - r.top) / r.height * VH;
-    let lane = 0; for (let i = 1; i < 3; i++) if (Math.abs(LANE_CY[i] - y) < Math.abs(LANE_CY[lane] - y)) lane = i;
-    return { x, y, lane: lane as Lane };
-  }
-
-  drawThreats(c: CanvasRenderingContext2D) {
-    for (const th of this.s.threats) {
-      const left = Math.max(0, th.warn - th.t), p = Math.min(1, th.t / th.warn);
-      if (th.kind === 'ritual') {
-        const f = th.caster!, q = this.pos(f);
-        c.save(); c.globalCompositeOperation = 'lighter';
-        const g = c.createLinearGradient(0, q.y - 140, 0, q.y); g.addColorStop(0, 'rgba(160,80,255,0)'); g.addColorStop(1, `rgba(170,90,255,${0.35 + 0.25 * Math.sin(this.t * 10)})`);
-        c.fillStyle = g; c.fillRect(q.x - 18, q.y - 140, 36, 140);
-        c.restore();
-        c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.6)'; c.beginPath(); c.arc(q.x, q.y - 70, 16, 0, 7); c.stroke();
-        c.strokeStyle = '#c28bff'; c.beginPath(); c.arc(q.x, q.y - 70, 16, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.stroke();
-        this.label(c, `의식 ${left.toFixed(1)}`, q.x, q.y - 96, '#d9b8ff');
-        continue;
-      }
-      const y = this.laneY(th.lane), blink = left < 1 ? (Math.sin(this.t * 30) > 0 ? 1 : 0.5) : 1;
-      c.save();
-      c.fillStyle = `rgba(255,40,30,${(0.12 + 0.25 * p) * blink})`;
-      c.beginPath(); c.ellipse(th.x, y, th.r, th.r * 0.42, 0, 0, 7); c.fill();
-      c.strokeStyle = '#ff5a4a'; c.lineWidth = 3; c.setLineDash([10, 6]); c.lineDashOffset = -this.t * 40; c.stroke(); c.setLineDash([]);
-      // 줄어드는 고리 = 남은 시간
-      c.strokeStyle = '#ffd0c8'; c.lineWidth = 2; c.beginPath(); c.ellipse(th.x, y, th.r * (1 - p) + 4, (th.r * (1 - p) + 4) * 0.42, 0, 0, 7); c.stroke();
-      c.restore();
-      this.label(c, `${THREAT_INFO[th.kind].name} ${left.toFixed(1)}`, th.x, y + th.r * 0.42 + 20, '#ffb0a0');
-    }
-  }
-  label(c: CanvasRenderingContext2D, str: string, x: number, y: number, col: string) {
-    c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.85)';
-    c.strokeText(str, x, y); c.fillStyle = col; c.fillText(str, x, y);
-  }
-
-  drawAim(c: CanvasRenderingContext2D) {
-    const a = this.aim, q = a && this.s.squads[a.squad];
-    if (!a || !q?.leader?.alive || !q.skill) return;
-    const A = AIM[q.skill.kind]; if (!A) return;
-    let lane = 0; for (let i = 1; i < 3; i++) if (Math.abs(LANE_CY[i] - a.y) < Math.abs(LANE_CY[lane] - a.y)) lane = i;
-    const t = aimClamp(this.s, a.squad, a.x, lane as Lane), y = this.laneY(t.lane), L = this.pos(q.leader), col = SQUAD_COL[a.squad];
-    c.save();
-    c.strokeStyle = col; c.globalAlpha = 0.5; c.setLineDash([6, 6]); c.lineWidth = 2;
-    c.beginPath(); c.moveTo(L.x, L.y - 20); c.quadraticCurveTo((L.x + t.x) / 2, Math.min(L.y, y) - 80, t.x, y); c.stroke(); c.setLineDash([]);
-    c.globalAlpha = 1; c.fillStyle = col + '33'; c.lineWidth = 3;
-    const rr = Math.min(A.r, 320);
-    c.beginPath(); c.ellipse(t.x, y, rr, rr * 0.42, 0, 0, 7); c.fill(); c.stroke();
-    c.beginPath(); c.moveTo(t.x - 10, y); c.lineTo(t.x + 10, y); c.moveTo(t.x, y - 6); c.lineTo(t.x, y + 6); c.stroke();
-    c.restore();
-    this.label(c, q.skill.name, t.x, y - rr * 0.42 - 12, '#ffffff');
   }
 
   /** 스킬 이펙트 */

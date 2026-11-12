@@ -12,7 +12,7 @@ import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { MON, GRADES, ROLES, SKILLS, type Grade } from './data/monsters';
 import { LANE_NAMES, type Lane, type Castle } from './data/castles';
-import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, fallBack, AIM, GEARS, type Gear, type SquadPlan, type SiegeState } from './core/siege';
+import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, GEARS, type Gear, type SquadPlan, type SiegeState } from './core/siege';
 import { SQUAD_COL } from './render/view';
 import { SiegeView, VW, VH } from './render/view';
 import {
@@ -449,9 +449,8 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
   const [, force] = useState(0);
   const [reward, setReward] = useState<string[] | null>(null);
   const ref = useRef<{ s: SiegeState; view: SiegeView } | null>(null);
-  const [aim, setAim] = useState<number | null>(null);
-  const ctl = useRef({ paused, speed, aim });
-  ctl.current = { paused, speed, aim };
+  const ctl = useRef({ paused, speed });
+  ctl.current = { paused, speed };
   const finished = useRef(false);
   const finishRef = useRef(onFinish);
   finishRef.current = onFinish;
@@ -463,16 +462,14 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
     const s = createSiege(castle, plans, { emit: (e) => view?.onEvent(e), boost, squadBoost, captainName: captain });
     view = new SiegeView(canvas, s);
     ref.current = { s, view };
-    (window as unknown as { __siege?: SiegeState }).__siege = s;   // 시험용
     let last = performance.now(), raf = 0, hud = 0;
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (view!.updateCutin(dt)) { /* 연출 중에는 전투를 멈춘다 */ }
       else if (!ctl.current.paused) {
-        // 조준하는 동안은 느리게
-        let rem = dt * ctl.current.speed * (ctl.current.aim != null ? 0.15 : 1);
+        let rem = dt * ctl.current.speed;
         while (rem > 1e-6) { const d = Math.min(1 / 30, rem); step(s, d); rem -= d; }
-        view!.update(dt * ctl.current.speed * (ctl.current.aim != null ? 0.15 : 1));
+        view!.update(dt * ctl.current.speed);
       }
       view!.draw();
       if (s.over && !finished.current) {
@@ -490,34 +487,11 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    const onKey = (e: KeyboardEvent) => {
-      const n = Number(e.key);
-      if (n >= 1 && n <= s.squads.length) { if (e.shiftKey) fallBack(s, n - 1); else useSkill(n - 1); }
-      const dodge = ['q', 'w', 'e', 'r'].indexOf(e.key.toLowerCase());
-      if (dodge >= 0 && dodge < s.squads.length) fallBack(s, dodge);
-      if (e.key === 'Escape') setAim(null);
-      if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); }
-    };
+    const onKey = (e: KeyboardEvent) => { const n = Number(e.key); if (n >= 1 && n <= s.squads.length) cast(s, n - 1); if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); } };
     window.addEventListener('keydown', onKey);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); };
   }, [plans, castle]);
 
-  /** 스킬 버튼: 땅을 찍는 스킬이면 조준, 아니면 바로 */
-  function useSkill(i: number) {
-    const st = ref.current?.s; if (!st || !canCast(st, i)) return;
-    if (AIM[st.squads[i].skill!.kind]) setAim((a) => (a === i ? null : i)); else cast(st, i);
-  }
-  useEffect(() => { if (ref.current) ref.current.view.aim = aim == null ? null : { squad: aim, x: ref.current.view.aim?.x ?? 0, y: ref.current.view.aim?.y ?? 0 }; }, [aim]);
-  const onMove = (e: React.PointerEvent) => {
-    const v = ref.current?.view; if (!v?.aim) return;
-    const w = v.toWorld(e.clientX, e.clientY); v.aim.x = w.x; v.aim.y = w.y;
-  };
-  const onField = (e: React.MouseEvent) => {
-    const r = ref.current; if (!r || aim == null) return;
-    const w = r.view.toWorld(e.clientX, e.clientY);
-    cast(r.s, aim, { x: w.x, lane: w.lane });
-    setAim(null);
-  };
   const s = ref.current?.s;
   const glyph = (id: string) => (PEOPLE[id] ? MON[id].name.split(' ').pop()! : MON[id].name.split(' ')[0]).slice(0, 1);
   return (
@@ -532,8 +506,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
           <button onClick={onExit} title="포기하고 돌아가기">⚑</button>
         </div>
       </div>
-      <div className={`battle-field${aim != null ? ' aiming' : ''}`}><canvas ref={canvasRef} onPointerMove={onMove} onClick={onField} onContextMenu={(e) => { e.preventDefault(); setAim(null); }} /></div>
-      <div className="bt-help">{aim != null ? '땅을 눌러 스킬을 쓴다 · 오른쪽 클릭이나 Esc로 취소' : '1~4 스킬(땅을 찍어 조준) · Q W E R 회피 · 붉은 원이 뜨면 피하고, 보라 기둥은 끊어라'}</div>
+      <div className="battle-field"><canvas ref={canvasRef} /></div>
       <div className="bt-bottom">
         {s?.squads.map((q) => {
           const units = s.units.filter((u) => u.side === 'ally' && u.squad === q.idx);
@@ -554,12 +527,11 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
                   <button title="아래 레인으로" disabled={q.plan.lane === 2 || (q.plan.lane === 1 && !castle.tunnel) || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane + 1) as Lane })}>▼</button>
                   <button title={q.orders.advance ? '정지' : '전진'} className={q.orders.advance ? '' : 'off'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })}>{q.orders.advance ? '➜' : '■'}</button>
                   {q.plan.lane === 1 && <button title={q.orders.gate === 'attack' ? '성문 공격 멈추기' : '성문 공격'} className={q.orders.gate === 'attack' ? '' : 'off'} disabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })}>⚔</button>}
-                  <button title="회피: 위험한 곳에서 뒤로 뛴다" disabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => fallBack(s, q.idx)}>↶</button>
                   <button title="후퇴" className="warn" disabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)}>⚑</button>
                 </div>
               </div>
               {q.skill && (
-                <button className={`plate-skill${canCast(s, q.idx) ? ' ready' : ''}${aim === q.idx ? ' aiming' : ''}`} style={{ ['--p' as string]: cdP }} disabled={!canCast(s, q.idx)} onClick={() => useSkill(q.idx)} title={`${q.skill.name}: ${q.skill.desc}`}>
+                <button className={`plate-skill${canCast(s, q.idx) ? ' ready' : ''}`} style={{ ['--p' as string]: cdP }} disabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} title={`${q.skill.name}: ${q.skill.desc}`}>
                   <span>{q.skill.name}</span>{q.skillCd > 0 && <b>{Math.ceil(q.skillCd)}</b>}
                 </button>
               )}

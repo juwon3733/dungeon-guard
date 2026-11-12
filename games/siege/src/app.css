@@ -188,9 +188,3 @@ h1, h2, h3 { font-family: 'Gowun Batang', serif; letter-spacing: .02em; }
 .squad-head span { font: 700 20px 'Gowun Batang', serif; color: #f3dca4; }
 .form-foot { display: flex; align-items: center; justify-content: flex-end; gap: 18px; margin-top: 16px; }
 .warn-text { color: #e88; font-size: 13px; }
-
-/* 조준과 도움말 */
-.battle-field.aiming canvas { cursor: crosshair; }
-.plate-skill.aiming { outline: 3px solid #fff; outline-offset: 2px; animation: aimPulse .5s steps(2) infinite; }
-@keyframes aimPulse { 50% { outline-color: var(--c, #ffd166); } }
-.bt-help { font-size: 12px; color: #b8ab92; padding: 3px 12px; background: rgba(0,0,0,.35); letter-spacing: .02em; }
