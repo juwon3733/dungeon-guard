@@ -22,6 +22,8 @@ import {
 } from './meta/campaign';
 import { PEOPLE, giftCost, affinityBoost } from './data/characters';
 import { autoForm } from './meta/autoform';
+import { WorldMap } from './ui/WorldMap';
+import { IconGold, IconMana, IconFame, IconArmy, IconThreat, RoomIcon } from './ui/icons';
 
 const GRADE_ORDER: Grade[] = ['myth', 'legend', 'hero', 'rare', 'common'];
 const monLabel = (id: string) => { const m = MON[id]; return `${m.name} · ${GRADES[m.grade].label} ${ROLES[m.role].label}`; };
@@ -66,39 +68,48 @@ export default function App() {
 }
 
 // ---------------- 본부 ----------------
+const ROOMS: { k: string; name: string }[] = [
+  { k: 'map', name: '전쟁 지도' }, { k: 'army', name: '군단 막사' }, { k: 'dungeon', name: '던전 시설' },
+  { k: 'summon', name: '소환진 · 감옥' }, { k: 'dorm', name: '숙소' },
+];
+
 function Hub({ meta, mutate, onSortie, onReset }: { meta: Meta; mutate: <T>(f: (m: Meta) => T) => T; onSortie: (r: Region) => void; onReset: () => void }) {
   const [tab, setTab] = useState('map');
   const [msg, setMsg] = useState('');
+  const aideLine = meta.aide && PEOPLE[meta.aide] ? PEOPLE[meta.aide].lines[(meta.affinity[meta.aide] ?? 0) >= 10 ? 10 : (meta.affinity[meta.aide] ?? 0) >= 5 ? 5 : 2] : null;
+  const newPrison = meta.named.length > 0 || Object.values(meta.prisoners).some((n) => n > 0);
   return (
-    <div className="page">
-      <VStack gap={4}>
-        <HStack gap={3}>
-          <Heading level={1}>마계 진군</Heading>
-          <Badge label={`금화 ${meta.gold}`} /><Badge label={`마석 ${meta.mana}`} /><Badge label={`명성 ${meta.fame}`} />
-          <Badge label={`군단 ${capUsed(meta)}/${capMax(meta)}`} /><Badge label={`출전 ${squadSlots(meta)}부대`} /><Badge label={`위협도 ${threat(meta)}`} />
-        </HStack>
-        {meta.aide && PEOPLE[meta.aide] && (
-          <Card padding={3}><HStack gap={2}><Badge label="측근" variant="warning" /><Text weight="bold">{MON[meta.aide].name}</Text>
-            <Text color="secondary">「{PEOPLE[meta.aide].lines[(meta.affinity[meta.aide] ?? 0) >= 10 ? 10 : (meta.affinity[meta.aide] ?? 0) >= 5 ? 5 : 2]}」 · {PEOPLE[meta.aide].aide.desc}</Text></HStack></Card>
-        )}
-        <SegmentedControl label="본부" value={tab} onChange={(v) => { setTab(v); setMsg(''); }}>
-          <SegmentedControlItem value="map" label="지도" />
-          <SegmentedControlItem value="army" label="군단" />
-          <SegmentedControlItem value="dungeon" label="던전 시설" />
-          <SegmentedControlItem value="summon" label="소환 · 감옥" />
-          <SegmentedControlItem value="dorm" label="숙소" />
-        </SegmentedControl>
-        {msg && <Text weight="bold">{msg}</Text>}
-        {tab === 'map' && <MapTab meta={meta} onSortie={onSortie} />}
-        {tab === 'army' && <ArmyTab meta={meta} onTrain={(id) => setMsg(mutate((m) => train(m, id)) ?? `${MON[id].name} 레벨 ${lvOf(meta, id) + 1}`)}
-          onRelease={(id) => { if (confirm(`${MON[id].name}을(를) ${MON[id].grade === 'common' ? '3마리' : '1마리'} 내보낼까요? 되돌릴 수 없습니다.`)) setMsg(mutate((m) => release(m, id)) ?? `${MON[id].name}을(를) 내보냈습니다.`); }}
-          onAwaken={(id) => setMsg(mutate((m) => awaken(m, id)) ?? `${MON[id].name} 각성 ${awOf(meta, id) + 1}`)} />}
-        {tab === 'dorm' && <DormTab meta={meta} setMsg={setMsg} mutate={mutate} />}
-        {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)}
-          onExchange={() => setMsg(mutate((m) => buyMana(m)) ?? `마석 ${EXCHANGE.mana}을(를) 얻었습니다.`)} />}
-        {tab === 'summon' && <SummonTab meta={meta} setMsg={setMsg} mutate={mutate} />}
-        <HStack gap={2}><Button size="sm" variant="ghost" label="진행 처음부터" onClick={() => { if (confirm('저장을 지우고 처음부터 시작할까요?')) onReset(); }} /></HStack>
-      </VStack>
+    <div className="hub">
+      <header className="hub-top">
+        <div className="hub-title">마계 진군</div>
+        <span className="res" title="금화"><IconGold /> {meta.gold}</span>
+        <span className="res" title="마석"><IconMana /> {meta.mana}</span>
+        <span className="res" title="명성"><IconFame /> {meta.fame}</span>
+        <span className="res" title="군단 수용량"><IconArmy /> {capUsed(meta)}<small>/{capMax(meta)}</small></span>
+        <span className="res" title="위협도: 점령할수록 남은 성채가 강해진다"><IconThreat /> {threat(meta)}</span>
+      </header>
+      <div className="hub-body">
+        <nav className="rooms" aria-label="본부">
+          {ROOMS.map((r) => (
+            <button key={r.k} className={`room${tab === r.k ? ' on' : ''}`} onClick={() => { setTab(r.k); setMsg(''); }}>
+              <RoomIcon k={r.k === 'summon' ? 'summon' : r.k} />{r.name}{r.k === 'summon' && newPrison && <span className="dot-new" />}
+            </button>
+          ))}
+          {aideLine && <div className="aide"><b>{MON[meta.aide!].name}</b>「{aideLine}」</div>}
+          <button className="reset-link" onClick={() => { if (confirm('저장을 지우고 처음부터 시작할까요?')) onReset(); }}>처음부터 다시</button>
+        </nav>
+        <main>
+          {msg && <div className="toast">{msg}</div>}
+          {tab === 'map' && <WorldMap meta={meta} onSortie={onSortie} />}
+          {tab === 'army' && <ArmyTab meta={meta} onTrain={(id) => setMsg(mutate((m) => train(m, id)) ?? `${MON[id].name} 레벨 ${lvOf(meta, id) + 1}`)}
+            onRelease={(id) => { if (confirm(`${MON[id].name}을(를) ${MON[id].grade === 'common' ? '3마리' : '1마리'} 내보낼까요?`)) setMsg(mutate((m) => release(m, id)) ?? `${MON[id].name}을(를) 내보냈습니다.`); }}
+            onAwaken={(id) => setMsg(mutate((m) => awaken(m, id)) ?? `${MON[id].name} 각성 ${awOf(meta, id) + 1}`)} />}
+          {tab === 'dorm' && <DormTab meta={meta} setMsg={setMsg} mutate={mutate} />}
+          {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)}
+            onExchange={() => setMsg(mutate((m) => buyMana(m)) ?? `마석 ${EXCHANGE.mana}을(를) 얻었습니다.`)} />}
+          {tab === 'summon' && <SummonTab meta={meta} setMsg={setMsg} mutate={mutate} />}
+        </main>
+      </div>
     </div>
   );
 }
@@ -129,28 +140,51 @@ function MapTab({ meta, onSortie }: { meta: Meta; onSortie: (r: Region) => void 
 
 function ArmyTab({ meta, onTrain, onAwaken, onRelease }: { meta: Meta; onTrain: (id: string) => void; onAwaken: (id: string) => void; onRelease: (id: string) => void }) {
   const ids = Object.keys(meta.owned).filter((id) => meta.owned[id] > 0)
-    .sort((a, b) => GRADE_ORDER.indexOf(MON[a].grade) - GRADE_ORDER.indexOf(MON[b].grade));
+    .sort((a, b) => GRADE_ORDER.indexOf(MON[a].grade) - GRADE_ORDER.indexOf(MON[b].grade) || lvOf(meta, b) - lvOf(meta, a));
+  const [sel, setSel] = useState<string>(ids[0]);
+  const cur = meta.owned[sel] ? sel : ids[0];
+  const m = MON[cur], g = GRADES[m.grade];
+  const groups: [string, string[]][] = [['지휘관', ids.filter((id) => MON[id].grade !== 'common')], ['병졸', ids.filter((id) => MON[id].grade === 'common')]];
   return (
-    <div className="squads">
-      {ids.map((id) => {
-        const m = MON[id], g = GRADES[m.grade];
-        return (
-          <Card key={id} padding={3}>
-            <VStack gap={1}>
-              <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Text weight="bold">{m.name}</Text><Badge label={`${g.label} ${ROLES[m.role].label}`} /><Text>×{meta.owned[id]}</Text>
-                <Badge label={`Lv ${lvOf(meta, id)}`} />{awOf(meta, id) > 0 && <Badge label={`각성 ${awOf(meta, id)}`} variant="warning" />}</HStack>
-              <HStack gap={2}>
-                <Button size="sm" label={lvOf(meta, id) >= MAX_LV ? '최고 레벨' : `훈련 · 마석 ${trainCost(meta, id)}`} isDisabled={lvOf(meta, id) >= MAX_LV || meta.mana < trainCost(meta, id)} onClick={() => onTrain(id)} />
-                {(m.grade !== 'common' && m.grade !== 'rare') && <Button size="sm" label={awOf(meta, id) >= MAX_AW ? '최고 각성' : '각성 (같은 몬스터 1 소모)'} isDisabled={awOf(meta, id) >= MAX_AW || meta.owned[id] < 2} onClick={() => onAwaken(id)} />}
-                <Button size="sm" variant="ghost" label={m.grade === 'common' ? '내보내기 3' : '내보내기'} onClick={() => onRelease(id)} />
-              </HStack>
-              {m.command && <Text size="sm" color="secondary">지휘 효과: {m.command.desc}</Text>}
-              {SKILLS[id] && <Text size="sm" color="secondary">스킬 「{SKILLS[id].name}」: {SKILLS[id].desc}</Text>}
-              {!m.command && <Text size="sm" color="secondary">병력 전용</Text>}
-            </VStack>
-          </Card>
-        );
-      })}
+    <div className="ledger">
+      <div className="ledger-list">
+        {groups.map(([title, list]) => list.length > 0 && (
+          <div key={title}>
+            <div className="ledger-group">{title}</div>
+            <div className="tiles">
+              {list.map((id) => {
+                const mm = MON[id];
+                return (
+                  <button key={id} className={`tile${id === cur ? ' on' : ''}`} style={{ ['--g' as string]: GRADES[mm.grade].color }} onClick={() => setSel(id)} title={mm.name}>
+                    <span className="lv">Lv{lvOf(meta, id)}{awOf(meta, id) ? ` ✦${awOf(meta, id)}` : ''}</span>
+                    {meta.owned[id] > 1 && <span className="cnt">×{meta.owned[id]}</span>}
+                    <span className="glyph">{(PEOPLE[id] ? mm.name.split(' ').pop()! : mm.name.split(' ')[0]).slice(0, 1)}</span>
+                    <span className="nm">{mm.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <aside className="ledger-side" style={{ ['--g' as string]: g.color }}>
+        <div className="side-title">{m.name}</div>
+        <div className="side-sub">{g.label} {ROLES[m.role].label} · Lv {lvOf(meta, cur)}{awOf(meta, cur) ? ` · 각성 ${awOf(meta, cur)}` : ''} · {meta.owned[cur]}마리</div>
+        {PEOPLE[cur]?.human && <div className="side-text">{PEOPLE[cur].human}이었다.</div>}
+        {m.command && <div className="side-text"><b>지휘</b> {m.command.desc}</div>}
+        {SKILLS[cur] && <div className="side-text"><b>「{SKILLS[cur].name}」</b> {SKILLS[cur].desc}</div>}
+        {!m.command && <div className="side-text">부대장 밑에서 싸우는 병졸.</div>}
+        <div style={{ flex: 1 }} />
+        <button className="btn-plain" disabled={lvOf(meta, cur) >= MAX_LV || meta.mana < trainCost(meta, cur)} onClick={() => onTrain(cur)}>
+          <span>{lvOf(meta, cur) >= MAX_LV ? '더 단련할 수 없다' : '단련'}</span>{lvOf(meta, cur) < MAX_LV && <span className="cost"><IconMana size={15} />{trainCost(meta, cur)}</span>}
+        </button>
+        {m.grade !== 'common' && m.grade !== 'rare' && (
+          <button className="btn-plain" disabled={awOf(meta, cur) >= MAX_AW || meta.owned[cur] < 2} onClick={() => onAwaken(cur)}>
+            <span>각성</span><span className="cost">{awOf(meta, cur) >= MAX_AW ? '끝' : meta.owned[cur] < 2 ? '같은 몬스터 하나 더' : '같은 몬스터 1'}</span>
+          </button>
+        )}
+        <button className="btn-ghost" onClick={() => onRelease(cur)}>{m.grade === 'common' ? '3마리 내보내기' : '내보내기'}</button>
+      </aside>
     </div>
   );
 }
@@ -296,11 +330,19 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
     for (let seed = 1; seed <= n; seed++) { const s = createSiege(castle, plans, { seed }); while (!s.over) step(s, 1 / 20); if (s.over.win) win++; }
     setEstimate(`자동 진행 기준 예상 승률 ${Math.round((win / n) * 100)}% (스킬과 명령을 쓰면 달라집니다)`);
   };
+  // 레인 안내: 성벽·들판·지형을 짧게
+  const outs = (L: number) => [
+    ...(castle.outworks ?? []).filter((o) => o.lane === L).map((o) => (o.kind === 'palisade' ? '목책' : '가시밭')),
+    ...castle.towers.filter((t) => t.splash && t.lane === L).map(() => '투석기'),
+    ...(castle.garrison.some((g) => g.outpost && g.lane === L) ? ['외곽 초소'] : []),
+    ...(castle.terrain ?? []).filter((z) => z.lane === L).map((z) => (z.kind === 'forest' ? '숲(원거리 피해 -30%)' : '언덕(사거리 +25%)')),
+  ].join(' · ');
   const laneInfo = [
-    `망루 ${castle.towers.filter((t) => t.lane === 0).length}${castle.towers.some((t) => t.antiAir) ? ' (쇠뇌탑 있음: 비행에 강함)' : ''}, 성벽 궁수. 비행이나 성벽 진입 지휘 효과가 있어야 넘는다.`,
-    `해자${castle.moat ? ' 있음' : ' 없음'}, 성문 체력 ${Math.round(castle.gateHp * castle.power)}, 망루 ${castle.towers.filter((t) => t.lane === 1).length}, 정문 수비대.`,
-    castle.tunnel ? '굴을 파야 열린다(굴착 몬스터: 굴착 고블린, 거대 쥐). 지하 수비대.' : '지하 길 없음.',
+    `망루 ${castle.towers.filter((t) => t.lane === 0 && !t.splash && !t.barrier).length}${castle.towers.some((t) => t.antiAir) ? ', 쇠뇌탑' : ''}. 날개나 사다리가 있어야 넘는다.${outs(0) ? ` 들판: ${outs(0)}` : ''}`,
+    `성문${castle.moat ? '과 해자' : ''}. 망루 ${castle.towers.filter((t) => t.lane === 1 && !t.splash && !t.barrier).length}.${outs(1) ? ` 들판: ${outs(1)}` : ''}`,
+    castle.tunnel ? '굴을 파야 열린다(굴착 고블린, 거대 쥐).' : '굴을 팔 수 없다.',
   ];
+
   return (
     <div className="page">
       <VStack gap={4}>

@@ -400,16 +400,11 @@ export class SiegeView {
       c.fillStyle = 'rgba(214,196,140,.35)'; c.beginPath(); c.ellipse((z.x0 + z.x1) / 2, cy, (z.x1 - z.x0) / 2, LANE_H * 0.42, 0, 0, 7); c.fill();
       c.strokeStyle = 'rgba(120,100,60,.35)'; c.lineWidth = 2;
       for (let r = 0.3; r < 1; r += 0.3) { c.beginPath(); c.ellipse((z.x0 + z.x1) / 2, cy, (z.x1 - z.x0) / 2 * r, LANE_H * 0.42 * r, 0, 0, 7); c.stroke(); }
-      c.fillStyle = 'rgba(80,60,30,.8)'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center'; c.fillText('언덕 · 사거리 +25%', (z.x0 + z.x1) / 2, cy + LANE_H * 0.42 - 4);
     }
     for (const z of k.terrain ?? []) {
       if (z.kind !== 'forest') continue;
       c.fillStyle = 'rgba(30,60,30,.35)'; c.fillRect(z.x0, LANE_CY[z.lane] - LANE_H / 2 + 6, z.x1 - z.x0, LANE_H - 12);
-      const ly = LANE_CY[z.lane] - LANE_H / 2 - 4;   // 안내 글자는 띠 위쪽(나무에 안 가리게)
-      c.font = 'bold 12px sans-serif'; c.textAlign = 'center';
-      const tw = c.measureText('숲 · 원거리 피해 -30%').width;
-      c.fillStyle = 'rgba(10,20,10,.6)'; c.fillRect((z.x0 + z.x1) / 2 - tw / 2 - 6, ly - 13, tw + 12, 18);
-      c.fillStyle = '#c8f0c8'; c.fillText('숲 · 원거리 피해 -30%', (z.x0 + z.x1) / 2, ly);
+
     }
     // 가시밭
     for (const o of k.outworks ?? []) {
