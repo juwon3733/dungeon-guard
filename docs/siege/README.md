@@ -10,5 +10,6 @@
 | [04_dungeon.md](04_dungeon.md) | 던전 시설, 자원, 시간 흐름, 지상 지도와 위협도 |
 | [05_art_gpt.md](05_art_gpt.md) | GPT로 몬스터 그림 뽑는 규격과 요청 글 |
 | [06_roadmap.md](06_roadmap.md) | 기술 구성, 만드는 순서(마일스톤), 정할 것 |
+| [07_characters.md](07_characters.md) | 캐릭터 시스템: 적장 포획·타락, 숙소와 호감도, 측근, 승리 연출 |
 
 수치는 모두 초안이며 시뮬레이션으로 맞춘다.
