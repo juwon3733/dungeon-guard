@@ -3,7 +3,15 @@ import { useState } from 'react';
 import { MON } from '../data/monsters';
 import { PEOPLE, COMMANDERS } from '../data/characters';
 import { REGIONS, unlocked, regionCastle, regionCaptain, type Meta, type Region } from '../meta/campaign';
-import { IconGold, IconMana, IconThreat } from './icons';
+import { Card } from '@astryxdesign/core/Card';
+import { VStack } from '@astryxdesign/core/VStack';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Text } from '@astryxdesign/core/Text';
+import { Badge } from '@astryxdesign/core/Badge';
+import { Button } from '@astryxdesign/core/Button';
+import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList';
+import { Skull } from 'lucide-react';
 
 // 지도 위 자리(가로 1200 × 세로 560)
 const POS: Record<string, [number, number]> = {
@@ -80,18 +88,23 @@ export function WorldMap({ meta, onSortie }: { meta: Meta; onSortie: (r: Region)
         })}
       </svg>
       </div>
-      <aside className="map-panel">
-        <div className="map-panel-title">{r.name}</div>
-        <div className="map-panel-sub">{done ? `점령 ${'★'.repeat(meta.conquered[r.id])}` : open ? '공략 가능' : '앞 지역을 점령하면 열린다'}</div>
-        <p className="map-panel-desc">{r.desc}</p>
-        <div className="map-row"><span>수비</span><span className="pips">{Array.from({ length: 5 }, (_, i) => <span key={i} style={{ opacity: i < skulls ? 1 : 0.2 }}><IconThreat size={15} /></span>)}</span></div>
-        <div className="map-row"><span>성채</span><span>{[c.tunnel ? '굴' : null, c.moat ? '해자' : null, c.towers.some((t) => t.antiAir) ? '쇠뇌탑' : null, c.towers.some((t) => t.barrier) ? '결계' : null].filter(Boolean).join(' · ') || '평범한 성벽'}</span></div>
-        {cmd && <div className="map-row"><span>적장</span><span>{captain ?? (meta.owned[cmd] ? `${MON[cmd].name} (동료)` : '사로잡음')}</span></div>}
-        <div className="map-row"><span>전리품</span><span className="pips"><IconGold size={15} />{done ? Math.round(r.gold / 2) : r.gold}<IconMana size={15} />{done ? Math.round(r.mana / 2) : r.mana}</span></div>
-        <div className="map-row"><span>사는 것</span><span className="faint">{r.wild.map((id) => MON[id].name).join(', ')}</span></div>
-        <button className="btn-war" disabled={!open} onClick={() => onSortie(r)}>{done ? '다시 공략' : '출격'}</button>
-        {cmd && captain && <div className="map-hint">★2 이상으로 점령하면 {PEOPLE[cmd].human}을(를) 사로잡는다</div>}
-      </aside>
+      <Card padding={5} elevation="low" width={320}>
+        <VStack gap={3} height="100%">
+          <Heading level={2}>{r.name}</Heading>
+          {done ? <Badge label={`점령 ${'★'.repeat(meta.conquered[r.id])}`} variant="success" /> : open ? <Badge label="공략 가능" variant="info" /> : <Badge label="앞 지역을 점령하면 열린다" />}
+          <Text color="secondary">{r.desc}</Text>
+          <MetadataList>
+            <MetadataListItem label="수비"><HStack gap={0.5}>{Array.from({ length: 5 }, (_, i) => <Skull key={i} size={15} opacity={i < skulls ? 1 : 0.2} />)}</HStack></MetadataListItem>
+            <MetadataListItem label="성채">{[c.tunnel ? '굴' : null, c.moat ? '해자' : null, c.towers.some((t) => t.antiAir) ? '쇠뇌탑' : null, c.towers.some((t) => t.barrier) ? '결계' : null].filter(Boolean).join(' · ') || '평범한 성벽'}</MetadataListItem>
+            {cmd ? <MetadataListItem label="적장">{captain ?? (meta.owned[cmd] ? `${MON[cmd].name} (동료)` : '사로잡음')}</MetadataListItem> : null}
+            <MetadataListItem label="전리품">금화 {done ? Math.round(r.gold / 2) : r.gold} · 마석 {done ? Math.round(r.mana / 2) : r.mana}</MetadataListItem>
+            <MetadataListItem label="사는 것">{r.wild.map((id) => MON[id].name).join(', ')}</MetadataListItem>
+          </MetadataList>
+          <div style={{ flex: 1 }} />
+          {cmd && captain && <Text size="sm" color="secondary">★2 이상으로 점령하면 {PEOPLE[cmd].human}을(를) 사로잡는다</Text>}
+          <Button label={done ? '다시 공략' : '출격'} variant="primary" size="lg" width="100%" isDisabled={!open} onClick={() => onSortie(r)} />
+        </VStack>
+      </Card>
     </div>
   );
 }

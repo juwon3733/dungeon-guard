@@ -322,7 +322,7 @@ export class SiegeView {
     c.restore();
     c.textAlign = 'center';
     for (const x of this.texts) {
-      c.globalAlpha = Math.min(1, x.life * 2); c.font = `bold ${Math.round(x.size * (1 + (x.pop ?? 0) * 3))}px sans-serif`;
+      c.globalAlpha = Math.min(1, x.life * 2); c.font = `bold ${Math.round(x.size * (1 + (x.pop ?? 0) * 3))}px "IBM Plex Sans KR", sans-serif`;
       c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(x.str, x.x, x.y); c.fillStyle = x.col; c.fillText(x.str, x.x, x.y);
     }
     c.globalAlpha = 1;
@@ -333,7 +333,7 @@ export class SiegeView {
     const b = this.bannerQ[0];
     if (b) {
       const a = Math.min(1, b.t * 5) * (b.t > 1.2 ? Math.max(0, 1 - (b.t - 1.2) / 0.4) : 1);
-      c.globalAlpha = a; c.textAlign = 'center'; c.font = 'italic 900 40px sans-serif';
+      c.globalAlpha = a; c.textAlign = 'center'; c.font = 'italic 900 40px "IBM Plex Sans KR", sans-serif';
       c.lineWidth = 7; c.strokeStyle = '#140f1f'; c.strokeText(b.str, VW / 2, 70); c.fillStyle = b.col; c.fillText(b.str, VW / 2, 70);
       c.globalAlpha = 1;
     }
@@ -365,8 +365,8 @@ export class SiegeView {
     if (!ci.released) {
       const a = Math.min(1, ci.t / 0.2);
       c.globalAlpha = a * f; c.textAlign = 'center';
-      c.font = 'bold 13px sans-serif'; c.fillStyle = col; c.fillText(ci.name, cx, cy - 150);
-      c.font = 'bold 22px sans-serif'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(ci.skill, cx, cy - 124); c.fillStyle = '#fff'; c.fillText(ci.skill, cx, cy - 124);
+      c.font = 'bold 13px "IBM Plex Sans KR", sans-serif'; c.fillStyle = col; c.fillText(ci.name, cx, cy - 150);
+      c.font = 'bold 22px "IBM Plex Sans KR", sans-serif'; c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(ci.skill, cx, cy - 124); c.fillStyle = '#fff'; c.fillText(ci.skill, cx, cy - 124);
     }
     c.restore();
   }
@@ -538,7 +538,7 @@ export class SiegeView {
     c.fillStyle = '#4a3a2c'; c.fillRect(x - 2, y - 40, 4, 40);
     c.fillStyle = cleared ? '#b14cff' : '#3f6fd8';
     c.beginPath(); c.moveTo(x + 2, y - 40); c.lineTo(x + 30, y - 32); c.lineTo(x + 2, y - 24); c.fill();
-    c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'left'; c.fillText(cleared ? '초소 점령' : '외곽 초소', x + 6, y - 46);
+    c.fillStyle = '#fff'; c.font = 'bold 11px "IBM Plex Sans KR", sans-serif'; c.textAlign = 'left'; c.fillText(cleared ? '초소 점령' : '외곽 초소', x + 6, y - 46);
   }
 
   drawTower(c: CanvasRenderingContext2D, t: { x: number; alive: boolean; hp: number; max: number; range: number; barrier?: boolean }, by: number) {
@@ -590,14 +590,14 @@ export class SiegeView {
     c.beginPath(); c.moveTo(x - 8, top - KEEP_H); c.lineTo(x + w / 2, top - KEEP_H - 50); c.lineTo(x + w + 8, top - KEEP_H); c.fill();
     c.fillStyle = '#ffcf6e'; for (let i = 0; i < 4; i++) c.fillRect(x + 20 + i * 38, bot - KEEP_H + 30, 12, 18);
     c.fillStyle = '#2b2119'; c.fillRect(x + w / 2 - 18, bot - 44, 36, 44);                  // 문
-    c.fillStyle = this.s.coreProg > 0 ? '#c27bff' : '#d9d2ff'; c.font = 'bold 14px sans-serif'; c.textAlign = 'center';
+    c.fillStyle = this.s.coreProg > 0 ? '#c27bff' : '#d9d2ff'; c.font = 'bold 14px "IBM Plex Sans KR", sans-serif'; c.textAlign = 'center';
     c.fillText('본관', x + w / 2, bot - KEEP_H - 8);
   }
 
   /** 부대장 이름표: 부대 색 점 + 이름 + 체력. 같은 레인에서 겹치지 않게 부대마다 높이를 엇갈린다 */
   leaderTag(c: CanvasRenderingContext2D, u: Unit, x: number, top: number) {
     const y = top - 10 - (u.squad % 2) * 20;
-    c.textAlign = 'center'; c.font = 'bold 12px sans-serif';
+    c.textAlign = 'center'; c.font = 'bold 12px "IBM Plex Sans KR", sans-serif';
     const w = c.measureText(u.name).width;
     c.fillStyle = 'rgba(10,8,20,.6)'; c.fillRect(x - w / 2 - 12, y - 13, w + 18, 24);
     c.fillStyle = SQUAD_COL[u.squad % SQUAD_COL.length]; c.beginPath(); c.arc(x - w / 2 - 5, y - 4, 4, 0, 7); c.fill();
