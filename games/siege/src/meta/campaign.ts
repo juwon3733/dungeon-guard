@@ -12,22 +12,22 @@ export interface Region {
   desc: string;
 }
 export const REGIONS: Region[] = [
-  { id: 'r1', name: '개척 마을', castle: 'border_fort', basePower: 0.45, gold: 180, mana: 60, wild: ['goblin', 'dire_rat', 'kobold'], desc: '국경 끝의 작은 마을. 첫 공성으로 알맞다.' },
-  { id: 'r2', name: '언덕 초소', castle: 'rock_keep', basePower: 0.5, gold: 220, mana: 70, wild: ['kobold', 'bat', 'wolf_alpha'], desc: '바위 언덕 위 초소. 굴을 팔 수 없다.' },
-  { id: 'r3', name: '강가 방앗간', castle: 'lake_castle', basePower: 0.22, gold: 260, mana: 80, wild: ['slime', 'giant_spider', 'mushroom_shaman'], desc: '강물을 끌어들인 해자가 있다.' },
-  { id: 'r4', name: '국경 요새', castle: 'border_fort', basePower: 1.15, gold: 340, mana: 100, wild: ['gargoyle', 'troll', 'sapper'], desc: '왕국 국경을 지키는 요새. 세 길이 모두 열려 있다.' },
-  { id: 'r5', name: '철문 성채', castle: 'iron_gate', basePower: 1.25, gold: 420, mana: 120, wild: ['hellhound', 'troll', 'ogre_chief'], desc: '성문이 매우 단단하다. 장사가 필요하다.' },
-  { id: 'r6', name: '호수 성', castle: 'lake_castle', basePower: 1.05, gold: 480, mana: 140, wild: ['harpy', 'giant_spider', 'minotaur'], desc: '넓은 호수에 둘러싸인 성.' },
-  { id: 'r7', name: '바위 요새', castle: 'rock_keep', basePower: 1.35, gold: 560, mana: 160, wild: ['gargoyle', 'bone_archer', 'bat_queen'], desc: '1장의 마지막 요새.' },
+  { id: 'r1', name: '개척 마을', castle: 'border_fort', basePower: 0.38, gold: 180, mana: 60, wild: ['goblin', 'dire_rat', 'kobold'], desc: '국경 끝의 작은 마을. 첫 공성으로 알맞다.' },
+  { id: 'r2', name: '언덕 초소', castle: 'rock_keep', basePower: 0.42, gold: 220, mana: 70, wild: ['kobold', 'bat', 'wolf_alpha'], desc: '바위 언덕 위 초소. 굴을 팔 수 없다.' },
+  { id: 'r3', name: '강가 방앗간', castle: 'lake_castle', basePower: 0.19, gold: 260, mana: 80, wild: ['slime', 'giant_spider', 'mushroom_shaman'], desc: '강물을 끌어들인 해자가 있다.' },
+  { id: 'r4', name: '국경 요새', castle: 'border_fort', basePower: 1.2, gold: 340, mana: 100, wild: ['gargoyle', 'troll', 'sapper'], desc: '왕국 국경을 지키는 요새. 세 길이 모두 열려 있다.' },
+  { id: 'r5', name: '철문 성채', castle: 'iron_gate', basePower: 1.3, gold: 420, mana: 120, wild: ['hellhound', 'troll', 'ogre_chief'], desc: '성문이 매우 단단하다. 장사가 필요하다.' },
+  { id: 'r6', name: '호수 성', castle: 'lake_castle', basePower: 1.1, gold: 480, mana: 140, wild: ['harpy', 'giant_spider', 'minotaur'], desc: '넓은 호수에 둘러싸인 성.' },
+  { id: 'r7', name: '바위 요새', castle: 'rock_keep', basePower: 1.3, gold: 560, mana: 160, wild: ['gargoyle', 'bone_archer', 'bat_queen'], desc: '1장의 마지막 요새.' },
   // 2장
-  { id: 'r8', name: '산길 관문', castle: 'iron_gate', basePower: 1.55, gold: 620, mana: 180, wild: ['troll', 'hellhound', 'minotaur'], desc: '2장. 산맥으로 들어가는 관문.' },
-  { id: 'r9', name: '산맥 신전', castle: 'mountain_temple', basePower: 1.65, gold: 700, mana: 200, wild: ['gargoyle', 'mushroom_shaman', 'lich'], desc: '성녀가 지키는 신전. 기사가 많다.' },
-  { id: 'r10', name: '용사의 마을', castle: 'border_fort', basePower: 1.8, gold: 780, mana: 220, wild: ['orc_warrior', 'wolf_alpha', 'witch'], desc: '용사가 태어난 마을. 용사가 직접 지킨다.' },
-  { id: 'r11', name: '왕도 외성', castle: 'capital_wall', basePower: 1.25, gold: 1200, mana: 360, wild: ['dark_knight', 'bat_queen', 'siren_queen'], desc: '장 보스. 여왕이 지키는 왕도의 바깥 성벽.' },
+  { id: 'r8', name: '산길 관문', castle: 'iron_gate', basePower: 2.0, gold: 620, mana: 180, wild: ['troll', 'hellhound', 'minotaur'], desc: '2장. 산맥으로 들어가는 관문.' },
+  { id: 'r9', name: '산맥 신전', castle: 'mountain_temple', basePower: 2.2, gold: 700, mana: 200, wild: ['gargoyle', 'mushroom_shaman', 'lich'], desc: '성녀가 지키는 신전. 기사가 많다.' },
+  { id: 'r10', name: '용사의 마을', castle: 'border_fort', basePower: 2.4, gold: 780, mana: 220, wild: ['orc_warrior', 'wolf_alpha', 'witch'], desc: '용사가 태어난 마을. 용사가 직접 지킨다.' },
+  { id: 'r11', name: '왕도 외성', castle: 'capital_wall', basePower: 1.15, gold: 1200, mana: 360, wild: ['dark_knight', 'bat_queen', 'siren_queen'], desc: '장 보스. 여왕이 지키는 왕도의 바깥 성벽.' },
   // 3장
-  { id: 'r12', name: '성기사 수련장', castle: 'mountain_temple', basePower: 2.2, gold: 1300, mana: 400, wild: ['dark_knight', 'troll', 'lich'], desc: '3장. 왕국 기사들이 마지막으로 모인 수련장.' },
-  { id: 'r13', name: '하늘 성채', castle: 'sky_bastion', basePower: 2.1, gold: 1500, mana: 460, wild: ['gargoyle', 'bat_queen', 'harpy'], desc: '결계 기둥과 쇠뇌탑이 하늘을 막는 성채.' },
-  { id: 'r14', name: '왕성 내성', castle: 'royal_keep', basePower: 1.0, gold: 2500, mana: 800, wild: ['vampire_lord', 'bone_dragon', 'siren_queen'], desc: '최종 보스. 왕녀가 지키는 왕성의 심장.' },
+  { id: 'r12', name: '성기사 수련장', castle: 'mountain_temple', basePower: 2.9, gold: 1300, mana: 400, wild: ['dark_knight', 'troll', 'lich'], desc: '3장. 왕국 기사들이 마지막으로 모인 수련장.' },
+  { id: 'r13', name: '하늘 성채', castle: 'sky_bastion', basePower: 2.6, gold: 1500, mana: 460, wild: ['gargoyle', 'bat_queen', 'harpy'], desc: '결계 기둥과 쇠뇌탑이 하늘을 막는 성채.' },
+  { id: 'r14', name: '왕성 내성', castle: 'royal_keep', basePower: 1.05, gold: 2500, mana: 800, wild: ['vampire_lord', 'bone_dragon', 'siren_queen'], desc: '최종 보스. 왕녀가 지키는 왕성의 심장.' },
 ];
 export const REGION: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 

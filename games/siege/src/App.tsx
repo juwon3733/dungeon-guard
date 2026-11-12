@@ -457,6 +457,8 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
                   <HStack gap={2}>
                     {q.skill && <Button size="sm" variant="primary" label={q.skillCd > 0 ? `${q.idx + 1} · ${Math.ceil(q.skillCd)}초` : `${q.idx + 1} ${q.skill.name}`}
                       isDisabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} />}
+                    <Button size="sm" label="↑" isDisabled={q.plan.lane === 0 || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane - 1) as Lane })} />
+                    <Button size="sm" label="↓" isDisabled={q.plan.lane === 2 || (q.plan.lane === 1 && !castle.tunnel) || !q.started || !!s.over} onClick={() => setOrders(s, q.idx, { lane: (q.plan.lane + 1) as Lane })} />
                     <Button size="sm" label={q.orders.advance ? '전진' : '정지'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })} />
                     {q.plan.lane === 1 && <Button size="sm" label={q.orders.gate === 'attack' ? '공격' : '대기'} isDisabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })} />}
                     <Button label="후퇴" size="sm" variant="destructive" isDisabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)} />

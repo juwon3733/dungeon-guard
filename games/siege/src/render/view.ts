@@ -66,10 +66,15 @@ export class SiegeView {
   }
 
   /** 땅 위의 발 위치. 성 안에 들어오면 안뜰로 퍼진다 */
-  pos(u: { x: number; lane: number; uid?: number }) {
+  pos(u: { x: number; lane: number; uid?: number; shiftT?: number; shiftMax?: number; fromLane?: number }) {
     const c = this.s.castle;
     const j = u.uid != null ? jitter(u.uid) : 0;
-    const laneY = LANE_CY[u.lane] + j * (LANE_H * (u.lane === 2 ? 0.08 : 0.3));
+    let laneY = LANE_CY[u.lane] + j * (LANE_H * (u.lane === 2 ? 0.08 : 0.3));
+    if (u.shiftT && u.shiftT > 0 && u.fromLane != null) {   // 레인을 옮기는 중: 이전 레인에서 비스듬히
+      const k = 1 - u.shiftT / (u.shiftMax || 1);
+      const from = LANE_CY[u.fromLane] + j * (LANE_H * 0.3);
+      laneY = from + (laneY - from) * k;
+    }
     const enter = u.lane === 2 ? c.wallX + TUNNEL_IN : c.wallX + 30;
     if (u.x <= enter) return { x: u.x, y: laneY };
     const k = Math.min(1, (u.x - enter) / 120);
@@ -77,7 +82,7 @@ export class SiegeView {
     return { x: u.x, y: laneY + (yardY - laneY) * k };
   }
   laneY(lane: number) { return LANE_CY[lane]; }
-  towerBase(lane: number, t?: { x: number; barrier?: boolean }) { return t?.barrier ? YARD_CY - 60 : lane === 0 ? LANE_CY[0] - 10 : LANE_CY[1] - 70; }
+  towerBase(lane: number, t?: { x: number; barrier?: boolean; splash?: number }) { return t?.barrier ? YARD_CY - 60 : t?.splash ? LANE_CY[lane] - LANE_H / 2 + 20 : lane === 0 ? LANE_CY[0] - 10 : LANE_CY[1] - 70; }
   banner(str: string, col: string) { this.bannerQ.push({ str, col, t: 0 }); }
 
   onEvent(e: SiegeEvent) {
@@ -147,6 +152,13 @@ export class SiegeView {
         break;
       }
       case 'skillHit': this.skillFx(e.kind, e.x, this.laneY(e.lane), e.r ?? 100); break;
+      case 'palisadeBreak':
+        this.shake = 8; this.burst(e.x, LANE_CY[e.lane] - 20, 40, '#a07448', 240, 5, 0.9);
+        this.banner('목책 돌파', '#e0b77f');
+        break;
+      case 'outpost':
+        this.banner(`외곽 초소 정리 — ${['성벽', '정문', '지하'][e.lane]} 레인 망루 피해 -30%`, '#7dff9a');
+        break;
       case 'leaderDown':
         this.banner(`${e.u.name} 쓰러짐 — 지휘 효과 사라짐`, '#ff7a7a');
         break;
@@ -241,6 +253,14 @@ export class SiegeView {
     const items: Item[] = [];
     for (const u of s.units) if (u.alive || u.hitT > 0) { const p = this.pos(u); items.push({ y: p.y, draw: () => this.drawUnit(c, u, p.x, p.y) }); }
     this.wallItems(items);
+    for (const d of this.decor()) items.push({ y: d.y, draw: () => this.drawDecor(c, d) });
+    for (const p of s.palisades) items.push({ y: LANE_CY[p.lane] + LANE_H / 2 - 12, draw: () => this.drawPalisade(c, p) });
+    for (const L of [0, 1, 2]) {   // 외곽 초소 깃발
+      const post = s.units.filter((u) => u.outpost && u.lane === L);
+      if (!post.length) continue;
+      const x = Math.min(...post.map((u) => u.homeX)) - 30, y = LANE_CY[L] - LANE_H / 2 + 16;
+      items.push({ y, draw: () => this.drawOutpostFlag(c, x, y, !!s.outpostCleared[L]) });
+    }
     for (const t of s.towers) { const by = this.towerBase(t.lane, t); items.push({ y: by + 1, draw: () => this.drawTower(c, t, by) }); }
     items.push({ y: YARD_CY + 110, draw: () => this.drawKeep(c) });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
@@ -326,6 +346,40 @@ export class SiegeView {
     }
   }
 
+  /** 빈 들판 장식: 레인 사이·위아래에 바위와 덤불(위치는 고정) */
+  decor(): { x: number; y: number; kind: 'tree' | 'rock' | 'bush'; r: number }[] {
+    if (this._decor) return this._decor;
+    const k = this.s.castle, out: { x: number; y: number; kind: 'tree' | 'rock' | 'bush'; r: number }[] = [];
+    const bands = [[60, LANE_CY[0] - LANE_H / 2 - 6], [LANE_CY[0] + LANE_H / 2 + 4, LANE_CY[1] - LANE_H / 2 - 4], [LANE_CY[1] + LANE_H / 2 + 4, LANE_CY[2] - 24], [LANE_CY[2] + 26, 700]];
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let x = -60; x < k.wallX - 40; x += 46) for (const [y0, y1] of bands) {
+      if (y1 - y0 < 10 || rnd() < 0.45) continue;
+      const kind = rnd() < 0.45 ? 'tree' : rnd() < 0.5 ? 'rock' : 'bush';
+      out.push({ x: x + rnd() * 30, y: y0 + rnd() * (y1 - y0), kind, r: 8 + rnd() * 10 });
+    }
+    // 숲 지형 안의 나무
+    for (const z of k.terrain ?? []) if (z.kind === 'forest') for (let x = z.x0 + 10; x < z.x1; x += 34) {
+      out.push({ x: x + rnd() * 12, y: LANE_CY[z.lane] - LANE_H / 2 + 14 + rnd() * 10, kind: 'tree', r: 14 });
+      out.push({ x: x + 16 + rnd() * 12, y: LANE_CY[z.lane] + LANE_H / 2 - 18 - rnd() * 10, kind: 'tree', r: 13 });
+    }
+    return (this._decor = out);
+  }
+  _decor: { x: number; y: number; kind: 'tree' | 'rock' | 'bush'; r: number }[] | null = null;
+  drawDecor(c: CanvasRenderingContext2D, d: { x: number; y: number; kind: string; r: number }) {
+    c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(d.x, d.y + 2, d.r, d.r * 0.4, 0, 0, 7); c.fill();
+    if (d.kind === 'tree') {
+      c.fillStyle = '#5a3d24'; c.fillRect(d.x - 3, d.y - d.r, 6, d.r);
+      c.fillStyle = '#2f5a2a'; c.beginPath(); c.arc(d.x, d.y - d.r * 1.6, d.r, 0, 7); c.fill();
+      c.fillStyle = '#3d7034'; c.beginPath(); c.arc(d.x - d.r * 0.3, d.y - d.r * 1.8, d.r * 0.6, 0, 7); c.fill();
+    } else if (d.kind === 'rock') {
+      c.fillStyle = '#7d7a72'; c.beginPath(); c.ellipse(d.x, d.y - d.r * 0.3, d.r * 0.9, d.r * 0.6, 0, 0, 7); c.fill();
+      c.fillStyle = '#99958a'; c.beginPath(); c.ellipse(d.x - 2, d.y - d.r * 0.5, d.r * 0.5, d.r * 0.3, 0, 0, 7); c.fill();
+    } else {
+      c.fillStyle = '#3b6b33'; for (let i = -1; i <= 1; i++) { c.beginPath(); c.arc(d.x + i * d.r * 0.5, d.y - d.r * 0.4, d.r * 0.55, 0, 7); c.fill(); }
+    }
+  }
+
   /** 땅(풀밭)이 화면 전체를 채운다 */
   drawIsland(c: CanvasRenderingContext2D) {
     const k = this.s.castle, x0 = -200, x1 = k.length + 400;
@@ -339,6 +393,34 @@ export class SiegeView {
     const s = this.s, k = s.castle;
     const road = (lane: number, col: string) => { c.fillStyle = col; c.fillRect(-80, LANE_CY[lane] - LANE_H / 2 + 12, k.wallX + 80, LANE_H - 24); };
     road(0, 'rgba(150,135,100,.35)'); road(1, 'rgba(176,152,108,.6)');
+    // 지형: 언덕(밝은 둔덕과 등고선), 숲은 나무를 유닛과 같이 그린다(drawTrees)
+    for (const z of k.terrain ?? []) {
+      if (z.kind !== 'hill') continue;
+      const cy = LANE_CY[z.lane];
+      c.fillStyle = 'rgba(214,196,140,.35)'; c.beginPath(); c.ellipse((z.x0 + z.x1) / 2, cy, (z.x1 - z.x0) / 2, LANE_H * 0.42, 0, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(120,100,60,.35)'; c.lineWidth = 2;
+      for (let r = 0.3; r < 1; r += 0.3) { c.beginPath(); c.ellipse((z.x0 + z.x1) / 2, cy, (z.x1 - z.x0) / 2 * r, LANE_H * 0.42 * r, 0, 0, 7); c.stroke(); }
+      c.fillStyle = 'rgba(80,60,30,.8)'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center'; c.fillText('언덕 · 사거리 +25%', (z.x0 + z.x1) / 2, cy + LANE_H * 0.42 - 4);
+    }
+    for (const z of k.terrain ?? []) {
+      if (z.kind !== 'forest') continue;
+      c.fillStyle = 'rgba(30,60,30,.35)'; c.fillRect(z.x0, LANE_CY[z.lane] - LANE_H / 2 + 6, z.x1 - z.x0, LANE_H - 12);
+      const ly = LANE_CY[z.lane] - LANE_H / 2 - 4;   // 안내 글자는 띠 위쪽(나무에 안 가리게)
+      c.font = 'bold 12px sans-serif'; c.textAlign = 'center';
+      const tw = c.measureText('숲 · 원거리 피해 -30%').width;
+      c.fillStyle = 'rgba(10,20,10,.6)'; c.fillRect((z.x0 + z.x1) / 2 - tw / 2 - 6, ly - 13, tw + 12, 18);
+      c.fillStyle = '#c8f0c8'; c.fillText('숲 · 원거리 피해 -30%', (z.x0 + z.x1) / 2, ly);
+    }
+    // 가시밭
+    for (const o of k.outworks ?? []) {
+      if (o.kind !== 'spikes') continue;
+      const cy = LANE_CY[o.lane];
+      c.fillStyle = 'rgba(90,60,40,.45)'; c.fillRect(o.x0, cy - LANE_H / 2 + 14, o.x1 - o.x0, LANE_H - 28);
+      c.fillStyle = '#8c8c96';
+      for (let x = o.x0 + 6; x < o.x1; x += 14) for (let y = cy - LANE_H / 2 + 20; y < cy + LANE_H / 2 - 16; y += 16) {
+        c.beginPath(); c.moveTo(x - 4, y + 6); c.lineTo(x, y - 6); c.lineTo(x + 4, y + 6); c.fill();
+      }
+    }
     // 안뜰(돌바닥)
     c.fillStyle = '#7a6d5e'; c.fillRect(k.wallX, YARD_CY - YARD_H / 2 - 30, k.length - k.wallX + 160, YARD_H + 60);
     c.strokeStyle = 'rgba(0,0,0,.12)'; c.lineWidth = 1;
@@ -396,8 +478,34 @@ export class SiegeView {
     } });
   }
 
+  drawPalisade(c: CanvasRenderingContext2D, p: { lane: number; x: number; hp: number; max: number; alive: boolean }) {
+    const top = LANE_CY[p.lane] - LANE_H / 2 + 12, bot = LANE_CY[p.lane] + LANE_H / 2 - 12;
+    if (!p.alive) { c.fillStyle = '#5a3d24'; for (let y = top; y < bot; y += 14) c.fillRect(p.x - 8 + ((y / 14) % 2) * 6, y + 6, 14, 5); return; }
+    for (let y = top; y < bot; y += 12) {
+      c.fillStyle = '#7a5532'; c.fillRect(p.x - 6, y - 18, 12, 24);
+      c.fillStyle = '#9a7048'; c.beginPath(); c.moveTo(p.x - 6, y - 18); c.lineTo(p.x, y - 26); c.lineTo(p.x + 6, y - 18); c.fill();
+    }
+    bar(c, p.x, top - 34, 44, p.hp / p.max, '#e0b77f');
+  }
+
+  drawOutpostFlag(c: CanvasRenderingContext2D, x: number, y: number, cleared: boolean) {
+    c.fillStyle = '#4a3a2c'; c.fillRect(x - 2, y - 40, 4, 40);
+    c.fillStyle = cleared ? '#b14cff' : '#3f6fd8';
+    c.beginPath(); c.moveTo(x + 2, y - 40); c.lineTo(x + 30, y - 32); c.lineTo(x + 2, y - 24); c.fill();
+    c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'left'; c.fillText(cleared ? '초소 점령' : '외곽 초소', x + 6, y - 46);
+  }
+
   drawTower(c: CanvasRenderingContext2D, t: { x: number; alive: boolean; hp: number; max: number; range: number; barrier?: boolean }, by: number) {
     const r = 24;
+    if ((t as { splash?: number }).splash) {   // 투석기: 나무 틀과 팔
+      if (!t.alive) { c.fillStyle = '#5a3d24'; c.fillRect(t.x - 20, by - 10, 40, 10); return; }
+      c.fillStyle = '#6b4a2b'; c.fillRect(t.x - 22, by - 16, 44, 14);
+      c.fillStyle = '#4a3220'; c.fillRect(t.x - 18, by - 40, 6, 26); c.fillRect(t.x + 12, by - 40, 6, 26);
+      const sw = Math.sin(this.t * 2) * 0.2;
+      c.strokeStyle = '#8a6440'; c.lineWidth = 5; c.beginPath(); c.moveTo(t.x, by - 36); c.lineTo(t.x + Math.cos(-2.2 + sw) * 40, by - 36 + Math.sin(-2.2 + sw) * 40); c.stroke();
+      bar(c, t.x, by - 70, 44, t.hp / t.max, '#ff6b6b');
+      return;
+    }
     if (t.barrier) {   // 결계 기둥: 빛나는 수정
       if (!t.alive) { c.fillStyle = '#5a6a8a'; c.fillRect(t.x - 14, by - 16, 28, 16); return; }
       const pulse = 0.5 + 0.5 * Math.sin(this.t * 4);
