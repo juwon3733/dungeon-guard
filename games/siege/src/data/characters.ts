@@ -31,6 +31,15 @@ export const PEOPLE: Record<string, Person> = {
   cmd_reina: { human: '성기사단장 레이나',
     lines: { 2: '빛을 등지면 그림자가 앞에 생기죠. 그게 지금의 저예요.', 5: '기사단의 이름은 버렸어요. 하지만 지키는 법은 잊지 않았어요.', 10: '심연까지 함께 가겠어요. 그게 제 마지막 맹세예요.' },
     mvp: '단 한 명도 뒤로 넘기지 않았습니다.', aide: { kind: 'captive', v: 1, desc: '공성마다 포로 +1' } },
+  cmd_lucia: { human: '산맥 신전 성녀 루시아',
+    lines: { 2: '종이 울리지 않는 곳에서도 노래는 할 수 있네요.', 5: '신은 대답하지 않았어요. 당신은 매번 대답하죠.', 10: '이제 제 노래는 당신만을 위한 기도예요.' },
+    mvp: '모두 고요히 잠들었답니다.', aide: { kind: 'mana', v: 35, desc: '공성 마석 +35%' } },
+  cmd_ellen: { human: '용사 엘렌',
+    lines: { 2: '용사가 마왕군에 있다니, 이야기책엔 없는 결말이네.', 5: '세상을 구하라는 말만 들었지, 누구를 위해서인지는 아무도 말 안 해 줬어.', 10: '이 검은 이제 세상이 아니라 너를 지켜.' },
+    mvp: '용사의 검은 녹슬지 않았어.', aide: { kind: 'gold', v: 40, desc: '공성 금화 +40%' } },
+  cmd_iris: { human: '왕국 여왕 이리스',
+    lines: { 2: '왕관이 없으니 목이 가볍군요.', 5: '나라를 다스리는 것과 군단을 다스리는 것, 생각보다 닮았어요.', 10: '밤의 여왕은 한 사람의 곁에만 머물기로 했어요.' },
+    mvp: '밤이 내리면, 모두 고개를 숙이죠.', aide: { kind: 'subdue', v: 40, desc: '굴복 확률 +40%' } },
   succubus: {
     lines: { 2: '던전 생활도 나쁘지 않네. 침대가 조금 딱딱하지만.', 5: '사람의 마음을 빼앗는 건 쉬워. 지키는 게 어렵지.', 10: '이번엔 내가 빼앗긴 것 같아. 인정하기 싫지만.' },
     mvp: '다들 내 쪽을 보느라 바빴지?', aide: { kind: 'subdue', v: 20, desc: '굴복 확률 +20%' } },
@@ -54,8 +63,9 @@ export const PEOPLE: Record<string, Person> = {
 /** 지역 적장: 그 지역 수비대장으로 나오고, 사로잡아 타락시키면 동료가 된다 */
 export const COMMANDERS: Record<string, string> = {
   r1: 'cmd_elise', r2: 'cmd_mira', r3: 'cmd_sylvia', r4: 'cmd_aria', r5: 'cmd_vera', r6: 'cmd_celes', r7: 'cmd_reina',
+  r9: 'cmd_lucia', r10: 'cmd_ellen', r11: 'cmd_iris',
 };
-export const CORRUPT_NAMED_COST = 120;
+export const CORRUPT_NAMED_COST = { hero: 150, legend: 300, myth: 600 } as const;
 
 /** 호감도 보정: 이 부대장이 이끄는 부대 전체 능력 배율 */
 export const affinityBoost = (aff: number) => (aff >= 10 ? 1.15 : aff >= 7 ? 1.1 : aff >= 4 ? 1.05 : 1);

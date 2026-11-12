@@ -13,12 +13,17 @@ export interface Region {
 }
 export const REGIONS: Region[] = [
   { id: 'r1', name: '개척 마을', castle: 'border_fort', basePower: 0.45, gold: 180, mana: 60, wild: ['goblin', 'dire_rat', 'kobold'], desc: '국경 끝의 작은 마을. 첫 공성으로 알맞다.' },
-  { id: 'r2', name: '언덕 초소', castle: 'rock_keep', basePower: 0.42, gold: 220, mana: 70, wild: ['kobold', 'bat', 'wolf_alpha'], desc: '바위 언덕 위 초소. 굴을 팔 수 없다.' },
-  { id: 'r3', name: '강가 방앗간', castle: 'lake_castle', basePower: 0.48, gold: 260, mana: 80, wild: ['slime', 'giant_spider', 'mushroom_shaman'], desc: '강물을 끌어들인 해자가 있다.' },
-  { id: 'r4', name: '국경 요새', castle: 'border_fort', basePower: 0.8, gold: 340, mana: 100, wild: ['gargoyle', 'troll', 'sapper'], desc: '왕국 국경을 지키는 요새. 세 길이 모두 열려 있다.' },
-  { id: 'r5', name: '철문 성채', castle: 'iron_gate', basePower: 0.75, gold: 420, mana: 120, wild: ['hellhound', 'troll', 'ogre_chief'], desc: '성문이 매우 단단하다. 장사가 필요하다.' },
-  { id: 'r6', name: '호수 성', castle: 'lake_castle', basePower: 0.8, gold: 480, mana: 140, wild: ['harpy', 'giant_spider', 'minotaur'], desc: '넓은 호수에 둘러싸인 성.' },
-  { id: 'r7', name: '바위 요새', castle: 'rock_keep', basePower: 0.85, gold: 560, mana: 160, wild: ['gargoyle', 'bone_archer', 'bat_queen'], desc: '1장의 마지막 요새.' },
+  { id: 'r2', name: '언덕 초소', castle: 'rock_keep', basePower: 0.5, gold: 220, mana: 70, wild: ['kobold', 'bat', 'wolf_alpha'], desc: '바위 언덕 위 초소. 굴을 팔 수 없다.' },
+  { id: 'r3', name: '강가 방앗간', castle: 'lake_castle', basePower: 0.22, gold: 260, mana: 80, wild: ['slime', 'giant_spider', 'mushroom_shaman'], desc: '강물을 끌어들인 해자가 있다.' },
+  { id: 'r4', name: '국경 요새', castle: 'border_fort', basePower: 1.15, gold: 340, mana: 100, wild: ['gargoyle', 'troll', 'sapper'], desc: '왕국 국경을 지키는 요새. 세 길이 모두 열려 있다.' },
+  { id: 'r5', name: '철문 성채', castle: 'iron_gate', basePower: 1.25, gold: 420, mana: 120, wild: ['hellhound', 'troll', 'ogre_chief'], desc: '성문이 매우 단단하다. 장사가 필요하다.' },
+  { id: 'r6', name: '호수 성', castle: 'lake_castle', basePower: 1.05, gold: 480, mana: 140, wild: ['harpy', 'giant_spider', 'minotaur'], desc: '넓은 호수에 둘러싸인 성.' },
+  { id: 'r7', name: '바위 요새', castle: 'rock_keep', basePower: 1.35, gold: 560, mana: 160, wild: ['gargoyle', 'bone_archer', 'bat_queen'], desc: '1장의 마지막 요새.' },
+  // 2장
+  { id: 'r8', name: '산길 관문', castle: 'iron_gate', basePower: 1.55, gold: 620, mana: 180, wild: ['troll', 'hellhound', 'minotaur'], desc: '2장. 산맥으로 들어가는 관문.' },
+  { id: 'r9', name: '산맥 신전', castle: 'mountain_temple', basePower: 1.65, gold: 700, mana: 200, wild: ['gargoyle', 'mushroom_shaman', 'lich'], desc: '성녀가 지키는 신전. 기사가 많다.' },
+  { id: 'r10', name: '용사의 마을', castle: 'border_fort', basePower: 1.8, gold: 780, mana: 220, wild: ['orc_warrior', 'wolf_alpha', 'witch'], desc: '용사가 태어난 마을. 용사가 직접 지킨다.' },
+  { id: 'r11', name: '왕도 외성', castle: 'capital_wall', basePower: 1.5, gold: 1200, mana: 360, wild: ['dark_knight', 'bat_queen', 'siren_queen'], desc: '장 보스. 여왕이 지키는 왕도의 바깥 성벽.' },
 ];
 export const REGION: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 
@@ -57,6 +62,7 @@ export interface Meta {
   affinity: Record<string, number>;         // 사람 모습 캐릭터 호감도(0~10)
   aide: string | null;                      // 측근
   named: string[];                          // 사로잡은 적장(타락 전)
+  contracted: string[];                     // 계약을 마친 몬스터
 }
 const KEY = 'siege.meta.v1';
 
@@ -65,7 +71,7 @@ export function fresh(): Meta {
     v: 1, gold: 300, mana: 120, fame: 0,
     owned: { orc_warrior: 1, harpy: 1, bone_archer: 1, wolf_alpha: 1, goblin: 12, skeleton: 6, imp: 6, bat: 4, dire_rat: 4 },
     fac: { nest: 0, warroom: 0, circle: 0, mine: 0, prison: 0 },
-    conquered: {}, captives: 0, lv: {}, aw: {}, affinity: {}, aide: null, named: [],
+    conquered: {}, captives: 0, lv: {}, aw: {}, affinity: {}, aide: null, named: [], contracted: [],
   };
 }
 export function load(): Meta {
@@ -85,10 +91,11 @@ export function unlocked(m: Meta, r: Region) {
   const i = REGIONS.indexOf(r);
   return i === 0 || REGIONS[i - 1].id in m.conquered;
 }
+export const THREAT_STEP = 0.08;   // 점령 하나마다 남은 성채 수비 강도 증가
 /** 공성할 성채(위협도만큼 강해짐, 이미 점령한 곳은 그대로) */
 export function regionCastle(m: Meta, r: Region): Castle {
   const t = r.id in m.conquered ? 0 : threat(m);
-  return { ...CASTLE[r.castle], name: r.name, power: +(r.basePower + 0.04 * t).toFixed(2) };
+  return { ...CASTLE[r.castle], name: r.name, power: +(r.basePower + THREAT_STEP * t).toFixed(2) };
 }
 
 export function upgrade(m: Meta, f: FacId): string | null {
@@ -184,11 +191,13 @@ export function regionCaptain(m: Meta, r: Region): string | undefined {
   if (!id || m.named.includes(id) || (m.owned[id] ?? 0) > 0) return undefined;
   return PEOPLE[id].human;
 }
+/** 적장 타락 비용: 등급에 따라 */
+export const namedCost = (id: string) => CORRUPT_NAMED_COST[MON[id].grade as 'hero' | 'legend' | 'myth'] ?? 150;
 export function corruptNamed(m: Meta, id: string): string | null {
   if (!m.named.includes(id)) return '사로잡은 적장이 아닙니다.';
-  if (m.mana < CORRUPT_NAMED_COST) return '마석이 모자랍니다.';
+  if (m.mana < namedCost(id)) return '마석이 모자랍니다.';
   if (capUsed(m) + GRADES[MON[id].grade].cap > capMax(m)) return '둥지가 가득 찼습니다.';
-  m.mana -= CORRUPT_NAMED_COST; m.named = m.named.filter((x) => x !== id);
+  m.mana -= namedCost(id); m.named = m.named.filter((x) => x !== id);
   m.owned[id] = (m.owned[id] ?? 0) + 1; m.affinity[id] = m.affinity[id] ?? 0;
   return null;
 }
@@ -230,4 +239,31 @@ export function applyResult(m: Meta, r: Region, win: boolean, stars: number, lea
   }
   if (first) out.push(`위협도 ${threat(m)}: 아직 점령하지 않은 성채가 강해집니다.`);
   return out;
+}
+
+// ---------------- 계약: 명성이 쌓이면 찾아오는 몬스터(한 번씩) ----------------
+export interface Contract { id: string; fame: number; mana: number; need?: { circle?: number; region?: string }; desc: string }
+export const CONTRACTS: Contract[] = [
+  { id: 'troll', fame: 20, mana: 80, desc: '떠돌던 트롤이 둥지 냄새를 맡고 왔다.' },
+  { id: 'gargoyle', fame: 40, mana: 90, desc: '무너진 성당의 가고일이 새 주인을 찾는다.' },
+  { id: 'minotaur', fame: 70, mana: 200, desc: '미궁에서 나온 미노타우로스. 힘을 시험하고 싶어 한다.' },
+  { id: 'lich', fame: 100, mana: 240, desc: '오래된 리치가 던전의 이름을 들었다.' },
+  { id: 'bone_dragon', fame: 150, mana: 450, need: { circle: 3 }, desc: '해골 용은 소환진이 3단계는 되어야 내려앉는다.' },
+  { id: 'demon_general', fame: 200, mana: 520, need: { region: 'r7' }, desc: '1장을 끝낸 군단에만 마장군이 고개를 숙인다.' },
+  { id: 'abyss_dragon', fame: 320, mana: 1200, need: { circle: 4, region: 'r11' }, desc: '심연의 용. 왕도 외성을 무너뜨린 마왕에게만 나타난다.' },
+];
+export function contractState(m: Meta, c: Contract): 'done' | 'open' | 'locked' {
+  if (m.contracted.includes(c.id)) return 'done';
+  if (m.fame < c.fame) return 'locked';
+  if (c.need?.circle && facValue(m, 'circle') < c.need.circle) return 'locked';
+  if (c.need?.region && !(c.need.region in m.conquered)) return 'locked';
+  return 'open';
+}
+export function signContract(m: Meta, id: string): string | null {
+  const c = CONTRACTS.find((x) => x.id === id)!;
+  if (contractState(m, c) !== 'open') return '아직 계약할 수 없습니다.';
+  if (m.mana < c.mana) return '마석이 모자랍니다.';
+  if (capUsed(m) + GRADES[MON[id].grade].cap > capMax(m)) return '둥지가 가득 찼습니다.';
+  m.mana -= c.mana; m.contracted.push(id); m.owned[id] = (m.owned[id] ?? 0) + 1;
+  return null;
 }

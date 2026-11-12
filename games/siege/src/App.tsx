@@ -17,9 +17,10 @@ import { SiegeView, VW, VH } from './render/view';
 import {
   load, save, fresh, REGIONS, FACILITIES, SUMMON_COST, CORRUPT_COST, capUsed, capMax, squadSlots, threat, unlocked, regionCastle,
   upgrade, summon, corrupt, checkPlans, applyResult, facValue, type Meta, type Region, type FacId,
-  lvOf, awOf, trainCost, train, awaken, MAX_LV, MAX_AW, boostOf, squadBoostOf, people, gift, setAide, regionCaptain, corruptNamed,
+  CONTRACTS, contractState, signContract, namedCost, lvOf, awOf, trainCost, train, awaken, MAX_LV, MAX_AW, boostOf, squadBoostOf, people, gift, setAide, regionCaptain, corruptNamed,
 } from './meta/campaign';
-import { PEOPLE, CORRUPT_NAMED_COST, giftCost, affinityBoost } from './data/characters';
+import { PEOPLE, giftCost, affinityBoost } from './data/characters';
+import { autoForm } from './meta/autoform';
 
 const GRADE_ORDER: Grade[] = ['myth', 'legend', 'hero', 'rare', 'common'];
 const monLabel = (id: string) => { const m = MON[id]; return `${m.name} · ${GRADES[m.grade].label} ${ROLES[m.role].label}`; };
@@ -34,40 +35,8 @@ export default function App() {
   const mutate = <T,>(f: (m: Meta) => T): T => { const m = structuredClone(meta); const r = f(m); setMeta(m); save(m); return r; };
 
   const openForm = (region: Region) => {
-    // 이전 편성을 부대 수와 보유 몬스터에 맞춰 다듬어 쓴다
-    const slots = squadSlots(meta);
-    // 기본 부대장: 높은 등급부터, 같은 등급이면 근접 하나 → 사격 하나 → 나머지 순으로 섞는다
-    const ROLE_PICK = ['siege', 'shield', 'assault', 'ranged', 'support', 'flying'];
-    const pool = Object.keys(meta.owned).filter((id) => MON[id].grade !== 'common' && meta.owned[id] > 0)
-      .sort((a, b) => GRADE_ORDER.indexOf(MON[a].grade) - GRADE_ORDER.indexOf(MON[b].grade) || ROLE_PICK.indexOf(MON[a].role) - ROLE_PICK.indexOf(MON[b].role));
-    const leaders: string[] = [];
-    const melee = pool.find((id) => ['siege', 'shield', 'assault'].includes(MON[id].role));
-    const ranged = pool.find((id) => MON[id].role === 'ranged');
-    for (const id of [melee, ranged, ...pool]) if (id && !leaders.includes(id)) leaders.push(id);
-    const castle = regionCastle(meta, region);
-    const laneFor = (id: string): Lane => (MON[id].role === 'flying' || MON[id].command?.wallPass ? 0 : MON[id].canDig && castle.tunnel ? 2 : 1);
-    const next: SquadPlan[] = [];
-    for (let i = 0; i < Math.min(slots, leaders.length); i++) {
-      next.push(plans[i] && meta.owned[plans[i].leader] ? structuredClone(plans[i]) : { leader: leaders[i], lane: laneFor(leaders[i]), delay: i * 3, troops: [] });
-    }
-    // 병력은 남은 일반 몬스터로 부대마다 수용량까지 자동으로 채운다(나중에 바꿀 수 있음)
-    const left: Record<string, number> = {};
-    for (const [id, n] of Object.entries(meta.owned)) if (MON[id].grade === 'common') left[id] = n;
-    for (const p of next) for (const t of p.troops) if (left[t.id] != null) left[t.id] = Math.max(0, left[t.id] - t.count);
-    for (const p of next) {
-      if (p.troops.some((t) => t.count > 0)) continue;
-      let need = troopCap(p.leader); p.troops = [];
-      // 부대장 역할에 맞는 병력을 먼저(사격 → 사격, 비행 → 비행, 굴착 → 굴착, 돌격 → 돌격, 그 외 → 방패)
-      const L = MON[p.leader];
-      const want = L.role === 'ranged' ? 'ranged' : L.role === 'flying' || L.command?.wallPass ? 'flying' : L.canDig ? 'dig' : L.role === 'assault' ? 'assault' : 'shield';
-      const fit = (id: string) => (want === 'dig' ? (MON[id].canDig ? 0 : 1) : MON[id].role === want ? 0 : 1);
-      for (const id of Object.keys(left).sort((a, b) => fit(a) - fit(b) || left[b] - left[a])) {
-        if (need <= 0 || p.troops.length >= 2) break;
-        const n = Math.min(need, left[id]); if (n <= 0) continue;
-        p.troops.push({ id, count: n }); left[id] -= n; need -= n;
-      }
-      while (p.troops.length < 2) p.troops.push({ id: 'goblin', count: 0 });
-    }
+    // 이전 편성을 살리고 빈 자리는 알아서 채운다(src/meta/autoform.ts)
+    const next = autoForm(meta, region, plans);
     setPlans(next);
     setScreen({ k: 'form', region });
   };
@@ -138,7 +107,7 @@ function MapTab({ meta, onSortie }: { meta: Meta; onSortie: (r: Region) => void 
           <Card key={r.id} padding={4}>
             <VStack gap={2}>
               <HStack gap={2}>
-                <Heading level={3}>{i + 1}. {r.name}</Heading>
+                <Heading level={3}>{i < 7 ? '1장' : '2장'} · {i + 1}. {r.name}</Heading>
                 {done ? <Badge label={`점령 ${'★'.repeat(meta.conquered[r.id])}`} variant="success" /> : open ? <Badge label="공략 가능" variant="info" /> : <Badge label="잠김" />}
               </HStack>
               <Text size="sm" color="secondary">{r.desc}</Text>
@@ -253,7 +222,7 @@ function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) =
           {meta.named.map((id) => (
             <HStack gap={2} key={id}>
               <Badge label="사로잡은 적장" variant="error" /><Text weight="bold">{PEOPLE[id].human}</Text>
-              <Button size="sm" variant="primary" label={`타락 의식 · 마석 ${CORRUPT_NAMED_COST}`} isDisabled={meta.mana < CORRUPT_NAMED_COST} onClick={() => {
+              <Button size="sm" variant="primary" label={`타락 의식 · 마석 ${namedCost(id)}`} isDisabled={meta.mana < namedCost(id)} onClick={() => {
                 const r = mutate((m) => corruptNamed(m, id));
                 setMsg(r ?? `「${PEOPLE[id].human}」 → 「${MON[id].name}」(${GRADES[MON[id].grade].label}). 숙소에 방이 생겼습니다.`);
               }} />
@@ -265,6 +234,25 @@ function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) =
           }} />
         </VStack>
       </Card>
+      <div style={{ gridColumn: '1 / -1' }}><Card padding={4}>
+        <VStack gap={2}>
+          <Heading level={3}>계약</Heading>
+          <Text size="sm" color="secondary">명성이 쌓이면 몬스터가 던전에 찾아온다. 마석을 바치면 합류한다(몬스터마다 한 번). 지금 명성 {meta.fame}.</Text>
+          {CONTRACTS.map((c) => {
+            const st = contractState(meta, c), m = MON[c.id];
+            return (
+              <HStack gap={2} key={c.id}>
+                <span className="dot" style={{ background: GRADES[m.grade].color }} />
+                <Text weight="bold">{m.name}</Text><Badge label={GRADES[m.grade].label} />
+                <Text size="sm" color="secondary">{st === 'locked' ? `명성 ${c.fame}${c.need?.circle ? ` · 소환진 ${c.need.circle}단계` : ''}${c.need?.region ? ' · 장 보스 점령' : ''} 필요` : c.desc}</Text>
+                {st === 'done' ? <Badge label="계약함" variant="success" />
+                  : <Button size="sm" label={`계약 · 마석 ${c.mana}`} isDisabled={st !== 'open' || meta.mana < c.mana}
+                      onClick={() => setMsg(mutate((mm) => signContract(mm, c.id)) ?? `${m.name}과(와) 계약했습니다.`)} />}
+              </HStack>
+            );
+          })}
+        </VStack>
+      </Card></div>
     </div>
   );
 }

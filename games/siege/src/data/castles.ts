@@ -112,6 +112,47 @@ export const CASTLES: Castle[] = [
     ],
     tip: '성문이 매우 단단하다. 성문을 부술 장사를 데려오거나, 짧은 굴로 파고들어라. 성벽 위 궁수가 많다.',
   },
+  {
+    id: 'mountain_temple',
+    name: '산맥 신전',
+    length: 1750, wallX: 960, mergeX: 1000, coreX: 1640, holdSec: 10, timeLimit: 300, power: 1,
+    gateHp: 6000, tunnel: true, tunnelDig: 30,
+    towers: [
+      { lane: 0, x: 960, hp: 1400, dmg: 40, range: 300, iv: 1.4 },
+      { lane: 1, x: 1000, hp: 1400, dmg: 40, range: 320, iv: 1.4 },
+      { lane: 0, x: 1080, hp: 1100, dmg: 32, range: 320, iv: 1.6, antiAir: true },
+    ],
+    garrison: [
+      { lane: 0, x: 1020, type: 'archer', count: 4 },
+      { lane: 1, x: 1040, type: 'knight', count: 3 },
+      { lane: 2, x: 1040, type: 'knight', count: 2 },
+      { lane: 'core', x: 1560, type: 'knight', count: 4 },
+      { lane: 'core', x: 1600, type: 'captain', count: 1 },
+    ],
+    tip: '기사가 지키는 좁은 신전. 어디로 들어가도 기사와 부딪친다. 버티는 힘과 회복이 필요하다.',
+  },
+  {
+    id: 'capital_wall',
+    name: '왕도 외성',
+    length: 2000, wallX: 1040, mergeX: 1080, coreX: 1880, holdSec: 12, timeLimit: 330, power: 1,
+    gateHp: 20000, moat: [860, 1000], moatSlow: 0.5, tunnel: true, tunnelDig: 45,
+    towers: [
+      { lane: 0, x: 1040, hp: 1600, dmg: 44, range: 320, iv: 1.4 },
+      { lane: 0, x: 1100, hp: 1600, dmg: 44, range: 320, iv: 1.4 },
+      { lane: 1, x: 1080, hp: 1600, dmg: 44, range: 340, iv: 1.4 },
+      { lane: 0, x: 1160, hp: 1200, dmg: 34, range: 340, iv: 1.6, antiAir: true },
+      { lane: 0, x: 1240, hp: 1200, dmg: 34, range: 340, iv: 1.6, antiAir: true },
+    ],
+    garrison: [
+      { lane: 0, x: 1100, type: 'archer', count: 5 },
+      { lane: 1, x: 1120, type: 'knight', count: 3 },
+      { lane: 1, x: 1160, type: 'footman', count: 4 },
+      { lane: 2, x: 1120, type: 'knight', count: 2 },
+      { lane: 'core', x: 1780, type: 'knight', count: 4 },
+      { lane: 'core', x: 1830, type: 'captain', count: 2 },
+    ],
+    tip: '1부의 마지막 성벽. 성문, 해자, 망루, 쇠뇌탑, 굴, 수비대 모두 가장 강하다. 지금까지 모은 모든 것을 써라.',
+  },
 ];
 
 export const CASTLE: Record<string, Castle> = Object.fromEntries(CASTLES.map((c) => [c.id, c]));

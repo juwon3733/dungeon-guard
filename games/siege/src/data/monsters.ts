@@ -96,6 +96,9 @@ export const MONSTERS: Monster[] = [
   M('cmd_vera', '황금 악마 베라', 'hero', 'support', 'fiend', { command: { desc: '부대 공격력 +15%, 성문 피해 1.5배', atkMul: 1.15, gateMul: 1.5 } }),
   M('cmd_celes', '별을 삼킨 마녀 셀레스', 'legend', 'ranged', 'fiend', { command: { desc: '망루 명중률 -50%, 사격 사거리 +20%', towerMiss: 0.5, rangeMul: 1.2 } }),
   M('cmd_reina', '심연 기사단장 레이나', 'legend', 'shield', 'fiend', { command: { desc: '받는 피해 -30%, 성벽 진입', dmgTakenMul: 0.7, wallPass: true } }),
+  M('cmd_lucia', '타락 성녀 루시아', 'legend', 'support', 'fiend', { command: { desc: '부대 공격력 +25%, 병력 체력 회복 2%/초', atkMul: 1.25, regen: 0.02 } }),
+  M('cmd_ellen', '마왕의 검 엘렌', 'myth', 'assault', 'fiend', { command: { desc: '부대 공격력 +40%, 첫 공격 2배, 이동 +20%', atkMul: 1.4, firstHitMul: 2, speedMul: 1.2 } }),
+  M('cmd_iris', '밤의 여왕 이리스', 'myth', 'support', 'fiend', { command: { desc: '받는 피해 -35%, 망루 명중률 -40%, 해자 무시', dmgTakenMul: 0.65, towerMiss: 0.4, moatIgnore: true } }),
   // 신화
   M('abyss_dragon', '심연의 용', 'myth', 'flying', 'demon', { command: { desc: '성벽 진입, 망루 무력화, 공격력 +30%', wallPass: true, towerMiss: 1, atkMul: 1.3 } }),
 ];
@@ -127,5 +130,8 @@ export const SKILLS: Record<string, Skill> = {
   cmd_vera: { name: '황금 유혹', kind: 'charm', cd: 15, desc: '주변 적 3초 기절, 받는 피해 +30%' },
   cmd_celes: { name: '별의 낙하', kind: 'hellfire', cd: 16, desc: '성문과 가까운 망루에 별을 떨어뜨린다' },
   cmd_reina: { name: '심연의 맹세', kind: 'slam', cd: 14, desc: '주변 적에게 큰 피해와 2초 기절' },
+  cmd_lucia: { name: '검은 성가', kind: 'song', cd: 18, desc: '넓은 범위 적 4초 잠재우기' },
+  cmd_ellen: { name: '마왕의 일격', kind: 'charge', cd: 9, desc: '앞으로 돌진하며 들이받는다. 성문에 닿으면 큰 피해' },
+  cmd_iris: { name: '밤의 장막', kind: 'doom', cd: 24, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
   abyss_dragon: { name: '종말의 불', kind: 'doom', cd: 25, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
 };
