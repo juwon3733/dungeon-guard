@@ -64,6 +64,7 @@ export const MONSTERS: Monster[] = [
   M('kobold', '코볼트 궁수', 'common', 'ranged', 'beast'),
   M('zombie', '좀비', 'common', 'shield', 'undead'),
   M('bat', '흡혈 박쥐', 'common', 'flying', 'beast'),
+  M('fallen_footman', '타락 병사', 'common', 'shield', 'fiend'),   // 사로잡은 보병을 타락시켜 얻는다
   // 희귀
   M('orc_warrior', '오크 전사', 'rare', 'assault', 'fiend', { command: { desc: '돌격 병력 공격력 +15%', atkMulRole: { role: 'assault', mul: 1.15 } } }),
   M('wolf_alpha', '늑대 우두머리', 'rare', 'assault', 'beast', { command: { desc: '이동 속도 +30%, 첫 공격 2배', speedMul: 1.3, firstHitMul: 2 } }),
@@ -75,6 +76,7 @@ export const MONSTERS: Monster[] = [
   M('giant_spider', '거대 거미', 'rare', 'assault', 'bug', { command: { desc: '받는 피해 -15% (거미줄 엄폐)', dmgTakenMul: 0.85 } }),
   M('hellhound', '지옥견', 'rare', 'assault', 'demon', { command: { desc: '부대 공격력 +20%', atkMul: 1.2 } }),
   M('sapper', '굴착 고블린', 'rare', 'siege', 'fiend', { canDig: true, command: { desc: '굴 파기 속도 3배', digMul: 3 } }),
+  M('shadow_archer', '그림자 궁수', 'rare', 'ranged', 'fiend', { command: { desc: '사격 병력 공격력 +15%, 사거리 +15%', atkMulRole: { role: 'ranged', mul: 1.15 }, rangeMul: 1.15 } }),   // 사로잡은 궁수를 타락
   // 영웅
   M('ogre_chief', '오우거 족장', 'hero', 'siege', 'giant', { command: { desc: '성문 피해 2.5배', gateMul: 2.5 } }),
   M('lich', '리치', 'hero', 'support', 'undead', { command: { desc: '쓰러진 병력이 한 번 해골로 부활', revive: true } }),

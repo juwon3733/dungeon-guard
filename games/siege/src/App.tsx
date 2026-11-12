@@ -15,9 +15,9 @@ import { LANE_NAMES, type Lane, type Castle } from './data/castles';
 import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, type SquadPlan, type SiegeState } from './core/siege';
 import { SiegeView, VW, VH } from './render/view';
 import {
-  load, save, fresh, REGIONS, FACILITIES, SUMMON_COST, CORRUPT_COST, capUsed, capMax, squadSlots, threat, unlocked, regionCastle,
+  load, save, fresh, REGIONS, FACILITIES, SUMMON_COST, capUsed, capMax, squadSlots, threat, unlocked, regionCastle,
   upgrade, summon, corrupt, checkPlans, applyResult, facValue, type Meta, type Region, type FacId,
-  CONTRACTS, contractState, signContract, namedCost, lvOf, awOf, trainCost, train, awaken, MAX_LV, MAX_AW, boostOf, squadBoostOf, people, gift, setAide, regionCaptain, corruptNamed,
+  release, buyMana, EXCHANGE, CONTRACTS, contractState, signContract, PRISONERS, prisonerCount, type PrisonerType, namedCost, lvOf, awOf, trainCost, train, awaken, MAX_LV, MAX_AW, boostOf, squadBoostOf, people, gift, setAide, regionCaptain, corruptNamed,
 } from './meta/campaign';
 import { PEOPLE, giftCost, affinityBoost } from './data/characters';
 import { autoForm } from './meta/autoform';
@@ -55,7 +55,7 @@ export default function App() {
       {screen.k === 'battle' && (
         <Battle plans={screen.plans} castle={screen.castle} captain={screen.captain}
           boost={(id) => boostOf(meta, id)} squadBoost={(id) => squadBoostOf(meta, id)}
-          onFinish={(win, st, leaders, mvp) => mutate((m) => applyResult(m, screen.region, win, st, leaders, mvp))}
+          onFinish={(win, st, leaders, mvp, defeated) => mutate((m) => applyResult(m, screen.region, win, st, leaders, mvp, Math.random, defeated))}
           onExit={() => setScreen({ k: 'hub' })} onRetry={() => openForm(screen.region)} />
       )}
     </Theme>
@@ -88,9 +88,11 @@ function Hub({ meta, mutate, onSortie, onReset }: { meta: Meta; mutate: <T>(f: (
         {msg && <Text weight="bold">{msg}</Text>}
         {tab === 'map' && <MapTab meta={meta} onSortie={onSortie} />}
         {tab === 'army' && <ArmyTab meta={meta} onTrain={(id) => setMsg(mutate((m) => train(m, id)) ?? `${MON[id].name} 레벨 ${lvOf(meta, id) + 1}`)}
+          onRelease={(id) => { if (confirm(`${MON[id].name}을(를) ${MON[id].grade === 'common' ? '3마리' : '1마리'} 내보낼까요? 되돌릴 수 없습니다.`)) setMsg(mutate((m) => release(m, id)) ?? `${MON[id].name}을(를) 내보냈습니다.`); }}
           onAwaken={(id) => setMsg(mutate((m) => awaken(m, id)) ?? `${MON[id].name} 각성 ${awOf(meta, id) + 1}`)} />}
         {tab === 'dorm' && <DormTab meta={meta} setMsg={setMsg} mutate={mutate} />}
-        {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)} />}
+        {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)}
+          onExchange={() => setMsg(mutate((m) => buyMana(m)) ?? `마석 ${EXCHANGE.mana}을(를) 얻었습니다.`)} />}
         {tab === 'summon' && <SummonTab meta={meta} setMsg={setMsg} mutate={mutate} />}
         <HStack gap={2}><Button size="sm" variant="ghost" label="진행 처음부터" onClick={() => { if (confirm('저장을 지우고 처음부터 시작할까요?')) onReset(); }} /></HStack>
       </VStack>
@@ -122,7 +124,7 @@ function MapTab({ meta, onSortie }: { meta: Meta; onSortie: (r: Region) => void 
   );
 }
 
-function ArmyTab({ meta, onTrain, onAwaken }: { meta: Meta; onTrain: (id: string) => void; onAwaken: (id: string) => void }) {
+function ArmyTab({ meta, onTrain, onAwaken, onRelease }: { meta: Meta; onTrain: (id: string) => void; onAwaken: (id: string) => void; onRelease: (id: string) => void }) {
   const ids = Object.keys(meta.owned).filter((id) => meta.owned[id] > 0)
     .sort((a, b) => GRADE_ORDER.indexOf(MON[a].grade) - GRADE_ORDER.indexOf(MON[b].grade));
   return (
@@ -135,8 +137,9 @@ function ArmyTab({ meta, onTrain, onAwaken }: { meta: Meta; onTrain: (id: string
               <HStack gap={2}><span className="dot" style={{ background: g.color }} /><Text weight="bold">{m.name}</Text><Badge label={`${g.label} ${ROLES[m.role].label}`} /><Text>×{meta.owned[id]}</Text>
                 <Badge label={`Lv ${lvOf(meta, id)}`} />{awOf(meta, id) > 0 && <Badge label={`각성 ${awOf(meta, id)}`} variant="warning" />}</HStack>
               <HStack gap={2}>
-                <Button size="sm" label={lvOf(meta, id) >= MAX_LV ? '최고 레벨' : `훈련 · 금화 ${trainCost(meta, id)}`} isDisabled={lvOf(meta, id) >= MAX_LV || meta.gold < trainCost(meta, id)} onClick={() => onTrain(id)} />
+                <Button size="sm" label={lvOf(meta, id) >= MAX_LV ? '최고 레벨' : `훈련 · 마석 ${trainCost(meta, id)}`} isDisabled={lvOf(meta, id) >= MAX_LV || meta.mana < trainCost(meta, id)} onClick={() => onTrain(id)} />
                 {(m.grade !== 'common' && m.grade !== 'rare') && <Button size="sm" label={awOf(meta, id) >= MAX_AW ? '최고 각성' : '각성 (같은 몬스터 1 소모)'} isDisabled={awOf(meta, id) >= MAX_AW || meta.owned[id] < 2} onClick={() => onAwaken(id)} />}
+                <Button size="sm" variant="ghost" label={m.grade === 'common' ? '내보내기 3' : '내보내기'} onClick={() => onRelease(id)} />
               </HStack>
               {m.command && <Text size="sm" color="secondary">지휘 효과: {m.command.desc}</Text>}
               {SKILLS[id] && <Text size="sm" color="secondary">스킬 「{SKILLS[id].name}」: {SKILLS[id].desc}</Text>}
@@ -149,9 +152,16 @@ function ArmyTab({ meta, onTrain, onAwaken }: { meta: Meta; onTrain: (id: string
   );
 }
 
-function DungeonTab({ meta, onUpgrade }: { meta: Meta; onUpgrade: (f: FacId) => void }) {
+function DungeonTab({ meta, onUpgrade, onExchange }: { meta: Meta; onUpgrade: (f: FacId) => void; onExchange: () => void }) {
   return (
     <div className="squads">
+      <Card padding={4}>
+        <VStack gap={2}>
+          <Heading level={3}>마석 교환</Heading>
+          <Text size="sm" color="secondary">남는 금화를 마석으로 바꾼다. 손해 보는 비율이니 금화가 남아돌 때만.</Text>
+          <Button label={`금화 ${EXCHANGE.gold} → 마석 ${EXCHANGE.mana}`} isDisabled={meta.gold < EXCHANGE.gold} onClick={onExchange} />
+        </VStack>
+      </Card>
       {(Object.keys(FACILITIES) as FacId[]).map((f) => {
         const F = FACILITIES[f], lv = meta.fac[f], next = F.costs[lv + 1];
         return (
@@ -214,11 +224,11 @@ function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) =
           }} />
         </VStack>
       </Card>
-      <Card padding={4}>
+      <div style={{ gridColumn: '1 / -1' }}><Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>감옥</Heading>
-          <Text size="sm" color="secondary">공성에서 사로잡은 포로를 타락 의식(마석 {CORRUPT_COST})으로 마족으로 만든다. 서큐버스, 타락 기사, 늪의 마녀, 드물게 흡혈 군주.</Text>
-          <Text>포로 {meta.captives} / {facValue(meta, 'prison')}</Text>
+          <Text size="sm" color="secondary">공성에서 쓰러뜨린 적 중 일부를 사로잡는다(보병·궁수 15%, 기사 35%, 수비대장 65%). 타락 의식으로 우리 편 몬스터가 된다.</Text>
+          <Text>포로 {prisonerCount(meta)} / {facValue(meta, 'prison')}</Text>
           {meta.named.map((id) => (
             <HStack gap={2} key={id}>
               <Badge label="사로잡은 적장" variant="error" /><Text weight="bold">{PEOPLE[id].human}</Text>
@@ -228,12 +238,22 @@ function SummonTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) =
               }} />
             </HStack>
           ))}
-          <Button label={`타락 의식 · 마석 ${CORRUPT_COST}`} isDisabled={meta.captives <= 0 || meta.mana < CORRUPT_COST} onClick={() => {
-            const r = mutate((m) => corrupt(m));
-            setMsg(typeof r === 'string' ? r : `타락: ${GRADES[MON[r.id].grade].label} ${MON[r.id].name}이(가) 군단에 합류했습니다.`);
-          }} />
+          {(['captain', 'knight', 'archer', 'footman'] as PrisonerType[]).map((t) => {
+            const P = PRISONERS[t], n = meta.prisoners[t] ?? 0;
+            const to = P.to ? `${GRADES[MON[P.to].grade].label} ${MON[P.to].name}` : '서큐버스·늪의 마녀·타락 기사·흡혈 군주 중 하나';
+            return (
+              <HStack gap={2} key={t}>
+                <Badge label={`${P.name} ×${n}`} variant={n ? 'info' : 'neutral'} />
+                <Text size="sm" color="secondary">→ {to}</Text>
+                <Button size="sm" label={`타락 · 마석 ${P.cost}`} isDisabled={n <= 0 || meta.mana < P.cost} onClick={() => {
+                  const r = mutate((m) => corrupt(m, t));
+                  setMsg(typeof r === 'string' ? r : `타락: ${P.name} → ${GRADES[MON[r.id].grade].label} ${MON[r.id].name}이(가) 군단에 합류했습니다.`);
+                }} />
+              </HStack>
+            );
+          })}
         </VStack>
-      </Card>
+      </Card></div>
       <div style={{ gridColumn: '1 / -1' }}><Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>계약</Heading>
@@ -347,7 +367,7 @@ function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
 // ---------------- 공성전 ----------------
 function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, onRetry }: {
   plans: SquadPlan[]; castle: Castle; captain?: string; boost: (id: string) => number; squadBoost: (id: string) => number;
-  onFinish: (win: boolean, stars: number, leaders: string[], mvp: string | null) => string[]; onExit: () => void; onRetry: () => void;
+  onFinish: (win: boolean, stars: number, leaders: string[], mvp: string | null, defeated: Partial<Record<PrisonerType, number>>) => string[]; onExit: () => void; onRetry: () => void;
 }) {
   const [mvp, setMvp] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -386,7 +406,9 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
         s.dmgBy.forEach((d, i) => { if (d > best) { best = d; bi = i; } });
         const mv = s.over.win && bi >= 0 ? plans[bi].leader : null;
         setMvp(mv);
-        setReward(finishRef.current(s.over.win, stars(s), plans.map((p) => p.leader), mv));
+        const defeated: Partial<Record<PrisonerType, number>> = {};
+        for (const u of s.units) if (u.side === 'foe' && !u.alive && u.foeType) defeated[u.foeType] = (defeated[u.foeType] ?? 0) + 1;
+        setReward(finishRef.current(s.over.win, stars(s), plans.map((p) => p.leader), mv, defeated));
       }
       if ((hud += dt) > 0.2) { hud = 0; force((x) => x + 1); }
       raf = requestAnimationFrame(loop);

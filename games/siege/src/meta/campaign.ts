@@ -34,7 +34,7 @@ export const FACILITIES: Record<FacId, { name: string; desc: string; costs: numb
   warroom: { name: '작전실', desc: '한 번에 출전하는 부대 수', costs: [0, 400, 1000], values: [2, 3, 4], unit: '부대' },
   circle: { name: '소환진', desc: '소환에서 높은 등급이 나올 확률', costs: [0, 400, 900, 1600], values: [1, 2, 3, 4], unit: '단계' },
   mine: { name: '광산', desc: '공성으로 얻는 마석 증가', costs: [0, 250, 600], values: [0, 25, 50], unit: '%' },
-  prison: { name: '감옥', desc: '가둘 수 있는 포로 수', costs: [0, 300, 700], values: [2, 4, 6], unit: '명' },
+  prison: { name: '감옥', desc: '가둘 수 있는 포로 수', costs: [0, 300, 700], values: [3, 5, 8], unit: '명' },
 };
 
 // 소환진 단계별 등급 확률(%)
@@ -45,9 +45,18 @@ const SUMMON_ODDS: Record<number, Record<Grade, number>> = {
   4: { common: 30, rare: 40, hero: 22, legend: 7, myth: 1 },
 };
 export const SUMMON_COST = 50;
-export const CORRUPT_COST = 60;
+export const CORRUPT_COST = 60;   // (옛 저장 호환용) 이름 없는 수비대장 외 기본값
+/** 포로 종류별 타락 결과와 비용. 수비대장(이름 없음)은 마족 여럿 중 하나 */
+export type PrisonerType = 'footman' | 'archer' | 'knight' | 'captain';
+export const PRISONERS: Record<PrisonerType, { name: string; to: string | null; cost: number; chance: number }> = {
+  footman: { name: '보병', to: 'fallen_footman', cost: 20, chance: 0.15 },
+  archer: { name: '궁수', to: 'shadow_archer', cost: 40, chance: 0.15 },
+  knight: { name: '기사', to: 'dark_knight', cost: 100, chance: 0.35 },
+  captain: { name: '수비대장', to: null, cost: 150, chance: 0.65 },
+};
+const PRISON_ORDER: PrisonerType[] = ['captain', 'knight', 'archer', 'footman'];
 // 타락: 포로 → 마족(사람 모습). 확률(%)
-const CORRUPT_POOL: [string, number][] = [['succubus', 30], ['dark_knight', 30], ['witch', 30], ['vampire_lord', 10]];
+const CORRUPT_POOL: [string, number][] = [['succubus', 30], ['witch', 30], ['dark_knight', 25], ['vampire_lord', 15]];   // 이름 없는 수비대장 타락
 
 // ---------------- 상태 ----------------
 export interface Meta {
@@ -56,7 +65,8 @@ export interface Meta {
   owned: Record<string, number>;           // 몬스터 id → 수
   fac: Record<FacId, number>;               // 시설 단계(0부터)
   conquered: Record<string, number>;        // 지역 id → 최고 별
-  captives: number;
+  captives: number;                         // (옛 저장) 쓰지 않음, 불러올 때 보병 포로로 옮김
+  prisoners: Record<PrisonerType, number>;  // 종류별 포로
   lv: Record<string, number>;               // 몬스터 종 레벨(1~20)
   aw: Record<string, number>;               // 각성(0~5, 영웅 이상)
   affinity: Record<string, number>;         // 사람 모습 캐릭터 호감도(0~10)
@@ -71,11 +81,22 @@ export function fresh(): Meta {
     v: 1, gold: 300, mana: 120, fame: 0,
     owned: { orc_warrior: 1, harpy: 1, bone_archer: 1, wolf_alpha: 1, goblin: 12, skeleton: 6, imp: 6, bat: 4, dire_rat: 4 },
     fac: { nest: 0, warroom: 0, circle: 0, mine: 0, prison: 0 },
-    conquered: {}, captives: 0, lv: {}, aw: {}, affinity: {}, aide: null, named: [], contracted: [],
+    conquered: {}, captives: 0, prisoners: { footman: 0, archer: 0, knight: 0, captain: 0 }, lv: {}, aw: {}, affinity: {}, aide: null, named: [], contracted: [],
   };
 }
 export function load(): Meta {
-  try { const raw = localStorage.getItem(KEY); if (raw) { const m = JSON.parse(raw); if (m && m.v === 1) return { ...fresh(), ...m }; } } catch { /* 못 읽으면 처음 상태 */ }
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const m = JSON.parse(raw);
+      if (m && m.v === 1) {
+        const out: Meta = { ...fresh(), ...m };
+        out.prisoners = { ...fresh().prisoners, ...(m.prisoners ?? {}) };
+        if (m.captives > 0) { out.prisoners.footman += m.captives; out.captives = 0; }   // 옛 저장: 숫자 포로 → 보병 포로
+        return out;
+      }
+    }
+  } catch { /* 못 읽으면 처음 상태 */ }
   return fresh();
 }
 export function save(m: Meta) { try { localStorage.setItem(KEY, JSON.stringify(m)); } catch { /* 무시 */ } }
@@ -111,7 +132,9 @@ function pickGrade(odds: Record<Grade, number>, rng: () => number): Grade {
   for (const g of ['myth', 'legend', 'hero', 'rare', 'common'] as Grade[]) { if (r < odds[g]) return g; r -= odds[g]; }
   return 'common';
 }
-const SUMMONABLE = (g: Grade) => Object.values(MON).filter((x) => x.grade === g && !x.id.startsWith('cmd_') && !CORRUPT_POOL.some(([id]) => id === x.id));
+// 타락 기사는 기사 포로로도, 소환으로도 얻는다(철문 성채 같은 곳의 방패 역할)
+const NOT_SUMMONABLE = new Set(['fallen_footman', 'shadow_archer', ...CORRUPT_POOL.map(([id]) => id).filter((id) => id !== 'dark_knight')]);
+const SUMMONABLE = (g: Grade) => Object.values(MON).filter((x) => x.grade === g && !x.id.startsWith('cmd_') && !NOT_SUMMONABLE.has(x.id));
 
 /** 소환: 일반은 3마리, 그 외 1마리 */
 export function summon(m: Meta, rng = Math.random): { id: string; n: number } | string {
@@ -125,15 +148,35 @@ export function summon(m: Meta, rng = Math.random): { id: string; n: number } | 
   return { id, n };
 }
 
-/** 타락 의식: 포로 1명 + 마석 → 마족 */
-export function corrupt(m: Meta, rng = Math.random): string | { id: string } {
-  if (m.captives <= 0) return '포로가 없습니다.';
-  if (m.mana < CORRUPT_COST) return '마석이 모자랍니다.';
-  let r = rng() * 100, id = CORRUPT_POOL[0][0];
-  for (const [k, p] of CORRUPT_POOL) { if (r < p) { id = k; break; } r -= p; }
+export const prisonerCount = (m: Meta) => Object.values(m.prisoners).reduce((a, b) => a + b, 0);
+
+/** 타락 의식: 그 종류의 포로 1명 + 마석 → 정해진 몬스터(수비대장은 마족 여럿 중 하나) */
+export function corrupt(m: Meta, type: PrisonerType = 'footman', rng = Math.random): string | { id: string } {
+  const P = PRISONERS[type];
+  if ((m.prisoners[type] ?? 0) <= 0) return `${P.name} 포로가 없습니다.`;
+  if (m.mana < P.cost) return '마석이 모자랍니다.';
+  let id = P.to;
+  if (!id) { let r = rng() * 100; id = CORRUPT_POOL[0][0]; for (const [k, p] of CORRUPT_POOL) { if (r < p) { id = k; break; } r -= p; } }
   if (capUsed(m) + GRADES[MON[id].grade].cap > capMax(m)) return '둥지가 가득 찼습니다.';
-  m.mana -= CORRUPT_COST; m.captives--; m.owned[id] = (m.owned[id] ?? 0) + 1;
+  m.mana -= P.cost; m.prisoners[type]--; m.owned[id] = (m.owned[id] ?? 0) + 1;
   return { id };
+}
+
+/** 마석 교환: 남는 금화를 마석으로(일부러 손해 보는 비율, 금화 3 → 마석 1) */
+export const EXCHANGE = { gold: 150, mana: 50 };
+export function buyMana(m: Meta): string | null {
+  if (m.gold < EXCHANGE.gold) return '금화가 모자랍니다.';
+  m.gold -= EXCHANGE.gold; m.mana += EXCHANGE.mana; return null;
+}
+
+/** 내보내기: 둥지 자리를 비운다(일반은 3마리씩, 그 외 1마리). 측근은 내보낼 수 없다 */
+export function release(m: Meta, id: string): string | null {
+  const have = m.owned[id] ?? 0;
+  if (have <= 0) return '없는 몬스터입니다.';
+  if (m.aide === id && have <= 1) return '측근은 내보낼 수 없습니다.';
+  const n = MON[id].grade === 'common' ? Math.min(3, have) : 1;
+  m.owned[id] = have - n;
+  return null;
 }
 
 /** 편성 검사: 가진 수를 넘게 쓰지 않았는지 */
@@ -151,7 +194,8 @@ export function checkPlans(m: Meta, plans: { leader: string; troops: { id: strin
 export const MAX_LV = 20, MAX_AW = 5;
 export const lvOf = (m: Meta, id: string) => m.lv[id] ?? 1;
 export const awOf = (m: Meta, id: string) => m.aw[id] ?? 0;
-export const trainCost = (m: Meta, id: string) => 30 * lvOf(m, id) * GRADES[MON[id].grade].cap;
+/** 훈련 비용(마석). 금화는 시설·선물, 마석은 몬스터 얻기·키우기 */
+export const trainCost = (m: Meta, id: string) => 20 * lvOf(m, id) * GRADES[MON[id].grade].cap;
 /** 엔진에 넘기는 능력 배율: 레벨 1당 +5%, 각성 1당 +8% */
 export const boostOf = (m: Meta, id: string) => (1 + 0.05 * (lvOf(m, id) - 1)) * (1 + 0.08 * awOf(m, id));
 export const squadBoostOf = (m: Meta, leaderId: string) => (PEOPLE[leaderId] ? affinityBoost(m.affinity[leaderId] ?? 0) : 1);
@@ -159,8 +203,8 @@ export const squadBoostOf = (m: Meta, leaderId: string) => (PEOPLE[leaderId] ? a
 export function train(m: Meta, id: string): string | null {
   if (lvOf(m, id) >= MAX_LV) return '최고 레벨입니다.';
   const c = trainCost(m, id);
-  if (m.gold < c) return '금화가 모자랍니다.';
-  m.gold -= c; m.lv[id] = lvOf(m, id) + 1; return null;
+  if (m.mana < c) return '마석이 모자랍니다.';
+  m.mana -= c; m.lv[id] = lvOf(m, id) + 1; return null;
 }
 export function awaken(m: Meta, id: string): string | null {
   const g = MON[id].grade;
@@ -203,7 +247,8 @@ export function corruptNamed(m: Meta, id: string): string | null {
 }
 
 /** 공성 결과 반영. 보상 글을 돌려준다. leaders: 출전한 부대장, mvp: 가장 활약한 부대장 */
-export function applyResult(m: Meta, r: Region, win: boolean, stars: number, leaders: string[] = [], mvp: string | null = null, rng = Math.random): string[] {
+export function applyResult(m: Meta, r: Region, win: boolean, stars: number, leaders: string[] = [], mvp: string | null = null, rng = Math.random,
+  defeated: Partial<Record<PrisonerType, number>> = {}): string[] {
   const out: string[] = [];
   if (!win) { out.push('잃은 것은 없습니다. 편성을 바꿔 다시 도전하세요.'); return out; }
   const first = !(r.id in m.conquered);
@@ -227,9 +272,26 @@ export function applyResult(m: Meta, r: Region, win: boolean, stars: number, lea
     if (capUsed(m) + GRADES[g].cap * n <= capMax(m)) { m.owned[id] = (m.owned[id] ?? 0) + n; out.push(`굴복: ${MON[id].name}${n > 1 ? ` ×${n}` : ''} 합류`); }
     else out.push(`굴복한 ${MON[id].name}이(가) 있었지만 둥지가 가득 차 돌려보냈습니다.`);
   }
-  // 포로(측근에 따라 더)
-  const caps = 1 + aideBonus(m, 'captive');
-  for (let i = 0; i < caps; i++) if (m.captives < facValue(m, 'prison')) { m.captives++; out.push('포로 1명을 감옥에 가뒀습니다.'); }
+  // 포로: 쓰러뜨린 적 중 일부를 종류대로 사로잡는다(높은 종류부터 감옥 자리만큼). 측근 효과로 더
+  const got: Record<string, number> = {};
+  const extra = aideBonus(m, 'captive');
+  for (const type of PRISON_ORDER) {
+    let n = 0;
+    for (let i = 0; i < (defeated[type] ?? 0); i++) if (rng() < PRISONERS[type].chance) n++;
+    if (type === 'footman') n += extra;   // 측근 보너스는 보병 포로로
+    for (let i = 0; i < n; i++) {
+      if (prisonerCount(m) >= facValue(m, 'prison')) {
+        // 감옥이 가득 차면 이번 포로보다 낮은 포로 하나를 풀어 주고 자리를 만든다
+        const low = [...PRISON_ORDER].reverse().find((t) => PRISON_ORDER.indexOf(t) > PRISON_ORDER.indexOf(type) && m.prisoners[t] > 0);
+        if (!low) break;
+        m.prisoners[low]--; out.push(`감옥이 가득 차 ${PRISONERS[low].name} 포로 하나를 풀어 주었습니다.`);
+      }
+      m.prisoners[type]++; got[type] = (got[type] ?? 0) + 1;
+    }
+  }
+  const caught = PRISON_ORDER.filter((t) => got[t]).map((t) => `${PRISONERS[t].name} ${got[t]}`);
+  if (caught.length) out.push(`포로: ${caught.join(', ')} (감옥 ${prisonerCount(m)}/${facValue(m, 'prison')})`);
+  else if (prisonerCount(m) >= facValue(m, 'prison')) out.push('감옥이 가득 차 포로를 더 잡지 못했습니다.');
   // 호감도: 함께 이긴 사람 모습 부대장 +1, MVP는 +1 더
   for (const L of new Set(leaders)) if (PEOPLE[L]) {
     const add = L === mvp ? 2 : 1;

@@ -5,8 +5,8 @@ import { createSiege, step, stars, autoCast, setOrders } from '../src/core/siege
 import { MON } from '../src/data/monsters';
 import { PEOPLE, giftCost } from '../src/data/characters';
 import {
-  fresh, REGIONS, regionCastle, regionCaptain, unlocked, applyResult, upgrade, summon, corrupt, corruptNamed, train, gift, setAide,
-  boostOf, squadBoostOf, capUsed, capMax, CONTRACTS, contractState, signContract, lvOf, SUMMON_COST, CORRUPT_COST, facValue, type Meta,
+  fresh, release, buyMana, REGIONS, regionCastle, regionCaptain, unlocked, applyResult, upgrade, summon, corrupt, corruptNamed, train, gift, setAide,
+  boostOf, squadBoostOf, capUsed, capMax, CONTRACTS, contractState, signContract, lvOf, SUMMON_COST, PRISONERS, facValue, type Meta, type PrisonerType,
 } from '../src/meta/campaign';
 import { autoForm } from '../src/meta/autoform';
 
@@ -26,19 +26,19 @@ function siege(m: Meta, rid: string, seed: number) {
     step(s, 0.05);
   }
   let best = -1, bi = 0; s.dmgBy.forEach((d, i) => { if (d > best) { best = d; bi = i; } });
-  return { win: s.over.win, stars: stars(s), leaders: plans.map((p) => p.leader), mvp: s.over.win ? plans[bi].leader : null };
+  const defeated: Partial<Record<PrisonerType, number>> = {};
+  for (const u of s.units) if (u.side === 'foe' && !u.alive && u.foeType) defeated[u.foeType] = (defeated[u.foeType] ?? 0) + 1;
+  return { win: s.over.win, stars: stars(s), leaders: plans.map((p) => p.leader), mvp: s.over.win ? plans[bi].leader : null, defeated };
 }
 
 function spend(m: Meta, rng: () => number) {
   // 금화: 작전실 → 둥지(80% 넘게 찼으면) → 소환진(3단계까지) → 광산 → 감옥 → 훈련
   for (let guard = 0; guard < 50; guard++) {
     if (!upgrade(m, 'warroom')) continue;
-    if (capUsed(m) > capMax(m) * 0.8 && !upgrade(m, 'nest')) continue;
-    if (facValue(m, 'circle') < 3 && !upgrade(m, 'circle')) continue;
+    if (capUsed(m) > capMax(m) * 0.8) { if (!upgrade(m, 'nest')) continue; if (m.fac.nest < 3) break; }   // 둥지가 차면 증축을 위해 금화를 모은다
+    if (facValue(m, 'circle') < 4 && !upgrade(m, 'circle')) continue;
+    if (!upgrade(m, 'prison')) continue;
     if (!upgrade(m, 'mine')) continue;
-    // 훈련: 부대장 후보(희귀 이상) 중 레벨이 가장 낮은 것
-    const leaders = Object.keys(m.owned).filter((id) => MON[id].grade !== 'common' && m.owned[id] > 0).sort((a, b) => lvOf(m, a) - lvOf(m, b));
-    if (leaders.length && lvOf(m, leaders[0]) < 15 && !train(m, leaders[0])) continue;
     break;
   }
   // 측근: 호감도 3까지 선물, 측근 지정
@@ -46,10 +46,27 @@ function spend(m: Meta, rng: () => number) {
     while ((m.affinity[id] ?? 0) < 3 && m.gold >= giftCost(m.affinity[id] ?? 0)) gift(m, id);
     if (!setAide(m, id)) break;
   }
+  // 남는 금화는 마석으로 바꾼다
+  while (m.gold > 1500) buyMana(m);
+  // 둥지가 90% 넘게 차면 남는 일반 몬스터(종류마다 8마리 넘는 것)를 내보낸다
+  while (capUsed(m) > capMax(m) * 0.9) {
+    const extra = Object.keys(m.owned).filter((id) => MON[id].grade === 'common' && m.owned[id] > 8).sort((a, b) => m.owned[b] - m.owned[a])[0];
+    if (!extra || release(m, extra)) break;
+  }
   // 마석: 적장 타락 → 계약 → 포로 타락 → 소환
   for (const id of [...m.named]) corruptNamed(m, id);
   for (const c of CONTRACTS) if (contractState(m, c) === 'open') signContract(m, c.id);
-  while (m.captives > 0 && m.mana >= CORRUPT_COST + 40) if (typeof corrupt(m, rng) === 'string') break;
+  for (const t of ['captain', 'knight', 'archer', 'footman'] as PrisonerType[]) {
+    // 보병·궁수는 둥지에 여유가 있을 때만(일반 몬스터로 둥지가 차면 소환·계약이 막힌다)
+    const roomy = capUsed(m) < capMax(m) * 0.7;
+    if ((t === 'footman' || t === 'archer') && !roomy) continue;
+    while (m.prisoners[t] > 0 && m.mana >= PRISONERS[t].cost + 40) if (typeof corrupt(m, t, rng) === 'string') break;
+  }
+  // 훈련(마석): 부대장 후보 중 레벨이 가장 낮은 것부터, 소환할 몫은 남긴다
+  for (let guard = 0; guard < 60; guard++) {
+    const leaders = Object.keys(m.owned).filter((id) => MON[id].grade !== 'common' && m.owned[id] > 0).sort((a, b) => lvOf(m, a) - lvOf(m, b));
+    if (!leaders.length || lvOf(m, leaders[0]) >= 20 || m.mana < 150 || train(m, leaders[0])) break;
+  }
   while (m.mana >= SUMMON_COST + 40) if (typeof summon(m, rng) === 'string') break;
 }
 
@@ -65,12 +82,21 @@ for (let run = 1; run <= RUNS; run++) {
     if (!target) break;
     sorties++;
     const res = siege(m, target.id, sorties * 13 + run);
-    if (res.win) { applyResult(m, target, true, res.stars, res.leaders, res.mvp, rng); firstAt[target.id] = sorties; fails = 0; continue; }
+    if (res.win) { applyResult(m, target, true, res.stars, res.leaders, res.mvp, rng, res.defeated); firstAt[target.id] = sorties; fails = 0; continue; }
     fails++;
-    if (fails > 40) { stuck = target.name; break; }
+    if (fails > 40) {
+      stuck = target.name;
+      if (process.env.DEBUG) {
+        const plan = autoForm(m, target);
+        console.log('  막힌 곳', target.name, '수비 강도', regionCastle(m, target).power, '금화', m.gold, '마석', m.mana, '명성', m.fame, '시설', JSON.stringify(m.fac), '포로', JSON.stringify(m.prisoners));
+        console.log('  편성', plan.map((p) => `${MON[p.leader].name}[L${p.lane}] ${p.troops.map((t) => MON[t.id].name + t.count).join('+')}`).join(' | '));
+        console.log('  보유', Object.entries(m.owned).filter(([, n]) => n > 0).map(([id, n]) => `${MON[id].name}×${n}(Lv${lvOf(m, id)})`).join(', '));
+      }
+      break;
+    }
     // 졌으면 마지막으로 점령한 곳을 다시 쳐서 자원을 모은다
     const farm = [...REGIONS].reverse().find((r) => r.id in m.conquered);
-    if (farm) { sorties++; const f = siege(m, farm.id, sorties * 7 + run); if (f.win) applyResult(m, farm, true, f.stars, f.leaders, f.mvp, rng); }
+    if (farm) { sorties++; const f = siege(m, farm.id, sorties * 7 + run); if (f.win) applyResult(m, farm, true, f.stars, f.leaders, f.mvp, rng, f.defeated); }
   }
   for (const r of REGIONS) (table[r.id] ??= []).push(firstAt[r.id] ?? NaN);
   const army = Object.entries(m.owned).filter(([id, n]) => n > 0 && MON[id].grade !== 'common').map(([id]) => `${MON[id].name}(${lvOf(m, id)})`).join(', ');
