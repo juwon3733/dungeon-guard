@@ -1,4 +1,5 @@
 // 화면: 본부(지도·군단·던전·소환과 감옥) → 편성 → 공성전(Canvas) → 결과와 보상. 진행은 브라우저에 저장된다.
+import { sfx, muted, setMuted } from './audio/sfx';
 import { useEffect, useRef, useState } from 'react';
 import { Theme } from '@astryxdesign/core/theme';
 import { neutralTheme } from '@astryxdesign/theme-neutral/built';
@@ -105,8 +106,8 @@ function Hub({ meta, mutate, onSortie, onReset }: { meta: Meta; mutate: <T>(f: (
             onRelease={(id) => { if (confirm(`${MON[id].name}을(를) ${MON[id].grade === 'common' ? '3마리' : '1마리'} 내보낼까요?`)) setMsg(mutate((m) => release(m, id)) ?? `${MON[id].name}을(를) 내보냈습니다.`); }}
             onAwaken={(id) => setMsg(mutate((m) => awaken(m, id)) ?? `${MON[id].name} 각성 ${awOf(meta, id) + 1}`)} />}
           {tab === 'dorm' && <DormTab meta={meta} setMsg={setMsg} mutate={mutate} />}
-          {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name}을(를) 올렸습니다.`)}
-            onExchange={() => setMsg(mutate((m) => buyMana(m)) ?? `마석 ${EXCHANGE.mana}을(를) 얻었습니다.`)} />}
+          {tab === 'dungeon' && <DungeonTab meta={meta} onUpgrade={(f) => setMsg(mutate((m) => upgrade(m, f)) ?? `${FACILITIES[f].name} ▲`)}
+            onExchange={() => setMsg(mutate((m) => buyMana(m)) ?? `마석 +${EXCHANGE.mana}`)} />}
           {tab === 'summon' && <SummonTab meta={meta} setMsg={setMsg} mutate={mutate} />}
         </main>
       </div>
@@ -263,7 +264,7 @@ function DormTab({ meta, setMsg, mutate }: { meta: Meta; setMsg: (s: string) => 
         ))}
         <div style={{ flex: 1 }} />
         <div className="side-text"><b>측근이 되면</b> {P.aide.desc}</div>
-        <button className="btn-plain" disabled={a >= 10 || meta.gold < giftCost(a)} onClick={() => setMsg(mutate((mm) => gift(mm, cur)) ?? `${m.name.split(' ').pop()}의 호감이 올랐다.`)}>
+        <button className="btn-plain" disabled={a >= 10 || meta.gold < giftCost(a)} onClick={() => setMsg(mutate((mm) => gift(mm, cur)) ?? `♥ ${m.name.split(' ').pop()}`)}>
           <span>{a >= 10 ? '더 바랄 것 없다' : '선물'}</span>{a < 10 && <span className="cost"><IconGold size={15} />{giftCost(a)}</span>}
         </button>
         <button className="btn-plain" disabled={meta.aide === cur || a < 3} onClick={() => setMsg(mutate((mm) => setAide(mm, cur)) ?? `${m.name.split(' ').pop()}을(를) 곁에 두었다.`)}>
@@ -349,6 +350,24 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   const problem = plans.length === 0 ? '부대장을 맡을 희귀 이상 몬스터가 없습니다.' : checkPlans(meta, plans) ?? (gearCost > meta.gold ? `장비 금화 ${gearCost} 필요(보유 ${meta.gold})` : null);
   const leaders = Object.keys(meta.owned).filter((id) => MON[id].grade !== 'common' && meta.owned[id] > 0);
   const troops = Object.keys(meta.owned).filter((id) => (MON[id].grade === 'common' || MON[id].grade === 'rare') && meta.owned[id] > 0);
+  const [cur, setCur] = useState(0);
+  // 남은 수: 보유 - 모든 부대에서 쓰는 수
+  const usedOf = (id: string) => plans.reduce((a, p) => a + (p.leader === id ? 1 : 0) + p.troops.filter((t) => t.id === id).reduce((x, t) => x + t.count, 0), 0);
+  const left = (id: string) => (meta.owned[id] ?? 0) - usedOf(id);
+  /** 몬스터 하나를 부대에: 희귀 이상이고 비어 있지 않으면 부대장 자리, 아니면 병력 한 칸 */
+  const give = (i: number, id: string, asLeader?: boolean) => {
+    if (left(id) <= 0 || !plans[i]) return;
+    const isLeaderGrade = asLeader ?? (MON[id].grade !== 'common' && MON[id].grade !== 'rare');
+    update(i, (p) => {
+      if (isLeaderGrade) {
+        p.leader = id; let room = troopCap(id); p.troops.forEach((t) => { t.count = Math.min(t.count, room); room -= t.count; }); p.troops = p.troops.filter((t) => t.count > 0);
+        return p;
+      }
+      if (p.troops.reduce((a, t) => a + t.count, 0) >= troopCap(p.leader)) return p;
+      const t = p.troops.find((x) => x.id === id); if (t) t.count++; else p.troops.push({ id, count: 1 });
+      return p;
+    });
+  };
   const runEstimate = () => {
     let win = 0; const n = 20;
     for (let seed = 1; seed <= n; seed++) { const s = createSiege(castle, plans, { seed }); while (!s.over) { autoDeploy(s); step(s, 1 / 20); } if (s.over.win) win++; }
@@ -383,7 +402,17 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
         <div className="lane-tip">{castle.tip}</div>
       </div>
       <div className="squads" style={{ marginTop: 14 }}>
-        {plans.map((p, i) => <SquadCard key={i} idx={i} plan={p} leaders={leaders} troops={troops} meta={meta} onChange={(f) => update(i, f)} tunnel={castle.tunnel} />)}
+        {plans.map((p, i) => <SquadCard key={i} idx={i} plan={p} meta={meta} on={i === cur} onPick={() => setCur(i)} onChange={(f) => update(i, f)} tunnel={castle.tunnel}
+          onDropMon={(id) => give(i, id)} />)}
+      </div>
+      <div className="roster">
+        <div className="roster-head"><b>{cur + 1}부대</b>에 넣기 · 누르거나 부대로 끌어 놓는다. 부대 안 병사를 누르면 뺀다.</div>
+        <div className="roster-row"><span className="roster-tag">부대장</span>
+          {leaders.map((id) => <MonTile key={id} id={id} left={left(id)} onClick={() => give(cur, id, true)} />)}
+        </div>
+        <div className="roster-row"><span className="roster-tag">병력</span>
+          {troops.map((id) => <MonTile key={id} id={id} left={left(id)} onClick={() => give(cur, id, false)} />)}
+        </div>
       </div>
       <div className="form-foot">
         {problem ? <span className="warn-text">{problem}</span> : estimate ? <span className="faint">{estimate}</span> : <button className="btn-ghost" onClick={runEstimate}>이 편성으로 미리 겨뤄 보기</button>}
@@ -393,43 +422,58 @@ function Formation({ meta, region, plans, setPlans, onBack, onStart }: {
   );
 }
 
-function SquadCard({ idx, plan, leaders, troops, meta, onChange, tunnel }: {
-  idx: number; plan: SquadPlan; leaders: string[]; troops: string[]; meta: Meta; onChange: (f: (p: SquadPlan) => SquadPlan) => void; tunnel: boolean;
+function MonTile({ id, left, onClick, small }: { id: string; left?: number; onClick?: () => void; small?: boolean }) {
+  const m = MON[id];
+  return (
+    <button className={`tile mon${small ? ' sm' : ''}${left != null && left <= 0 ? ' empty' : ''}`} style={{ ['--g' as string]: GRADES[m.grade].color }} title={monLabel(id)}
+      draggable={left == null || left > 0} onDragStart={(e) => e.dataTransfer.setData('text/mon', id)} onClick={onClick} disabled={left != null && left <= 0}>
+      <span className="glyph">{(PEOPLE[id] ? m.name.split(' ').pop()! : m.name.split(' ')[0]).slice(0, 1)}</span>
+      {!small && <span className="nm">{m.name}</span>}
+      {left != null && <span className="cnt">{left}</span>}
+    </button>
+  );
+}
+
+function SquadCard({ idx, plan, meta, on, onPick, onChange, tunnel, onDropMon }: {
+  idx: number; plan: SquadPlan; meta: Meta; on: boolean; onPick: () => void; onChange: (f: (p: SquadPlan) => SquadPlan) => void; tunnel: boolean; onDropMon: (id: string) => void;
 }) {
   const leader = MON[plan.leader];
   const cap = troopCap(plan.leader);
-  const used = plan.troops.reduce((a, t) => a + t.count, 0);
   const g = GRADES[leader.grade];
-  const setTroop = (k: number, patch: Partial<{ id: string; count: number }>) => onChange((p) => {
-    p.troops[k] = { ...p.troops[k], ...patch };
-    let over = p.troops.reduce((a, t) => a + t.count, 0) - troopCap(p.leader);
-    for (let j = p.troops.length - 1; j >= 0 && over > 0; j--) { if (j === k) continue; const cut = Math.min(over, p.troops[j].count); p.troops[j].count -= cut; over -= cut; }
-    if (over > 0) p.troops[k].count -= over;
-    return p;
-  });
-  const troopOpts = Array.from(new Set([...troops, ...plan.troops.map((t) => t.id)])).map((id) => ({ value: id, label: `${monLabel(id)} (보유 ${meta.owned[id] ?? 0})` }));
+  const [over, setOver] = useState(false);
+  const slots: string[] = plan.troops.flatMap((t) => Array.from({ length: t.count }, () => t.id));
+  const take = (id: string) => onChange((p) => { const t = p.troops.find((x) => x.id === id)!; t.count--; p.troops = p.troops.filter((x) => x.count > 0); return p; });
+  const forge = facValue(meta, 'forge');
   return (
-    <div className="squad-panel" style={{ ['--c' as string]: SQUAD_COL[idx % SQUAD_COL.length] }}>
-      <VStack gap={3}>
-        <div className="squad-head"><span>{idx + 1}부대</span><small style={{ color: g.color }}>{g.label}</small><small className="faint">병력 {used}/{cap}</small></div>
-        <Selector label="부대장" value={plan.leader} options={Array.from(new Set([...leaders, plan.leader])).map((id) => ({ value: id, label: `${monLabel(id)} (보유 ${meta.owned[id] ?? 0})` }))}
-          onChange={(v) => onChange((p) => { p.leader = v; let left = troopCap(v); p.troops.forEach((t) => { t.count = Math.min(t.count, left); left -= t.count; }); return p; })} />
-        {leader.command && <div className="side-text"><b>지휘</b> {leader.command.desc}</div>}
-        {SKILLS[plan.leader] && <div className="side-text"><b>「{SKILLS[plan.leader].name}」</b> {SKILLS[plan.leader].desc}</div>}
-        {plan.troops.map((t, k) => (
-          <HStack gap={2} key={k}>
-            <Selector label={`병력 ${k + 1}`} value={t.id} options={troopOpts} onChange={(v) => setTroop(k, { id: v })} />
-            <NumberInput label="수" value={t.count} min={0} max={cap} onChange={(v) => setTroop(k, { count: Math.max(0, Math.floor(v ?? 0)) })} />
-          </HStack>
-        ))}
-        <SegmentedControl label="기본 레인 (숫자키로 투입할 곳)" value={String(plan.lane)} onChange={(v) => onChange((p) => { p.lane = Number(v) as Lane; return p; })}>
-          {LANE_NAMES.map((n, i) => <SegmentedControlItem key={i} value={String(i)} label={n} isDisabled={i === 2 && !tunnel} />)}
-        </SegmentedControl>
-        <Selector label={`공성 장비 (대장간 ${facValue(meta, 'forge')}단계)`} value={plan.gear ?? 'none'}
-          options={[{ value: 'none', label: '없음' }, ...(Object.keys(GEARS) as Gear[]).filter((k) => GEARS[k].forge <= facValue(meta, 'forge'))
-            .map((k) => ({ value: k, label: `${GEARS[k].name} · 금화 ${GEARS[k].cost} — ${GEARS[k].desc}` }))]}
-          onChange={(v) => onChange((p) => { p.gear = v === 'none' ? undefined : (v as Gear); return p; })} />
-      </VStack>
+    <div className={`squad-panel${on ? ' on' : ''}${over ? ' over' : ''}`} style={{ ['--c' as string]: SQUAD_COL[idx % SQUAD_COL.length] }} onClick={onPick}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); onPick(); const id = e.dataTransfer.getData('text/mon'); if (id) onDropMon(id); }}>
+      <div className="sq-top">
+        <div className="sq-leader" style={{ ['--g' as string]: g.color }}>
+          <span className="glyph">{(PEOPLE[plan.leader] ? leader.name.split(' ').pop()! : leader.name.split(' ')[0]).slice(0, 1)}</span>
+          <span className="sq-no">{idx + 1}</span>
+        </div>
+        <div className="sq-info">
+          <div className="sq-name">{leader.name}<small style={{ color: g.color }}>{g.label}</small></div>
+          {leader.command && <div className="sq-line"><b>지휘</b> {leader.command.desc}</div>}
+          {SKILLS[plan.leader] && <div className="sq-line"><b>{SKILLS[plan.leader].name}</b> {SKILLS[plan.leader].desc}</div>}
+        </div>
+      </div>
+      <div className="sq-slots">
+        {Array.from({ length: cap }, (_, k) => slots[k]
+          ? <MonTile key={k} id={slots[k]} small onClick={() => take(slots[k])} />
+          : <div key={k} className="tile sm slot" />)}
+      </div>
+      <div className="sq-opts">
+        <div className="chips"><span>레인</span>{LANE_NAMES.map((n, L) => (
+          <button key={L} className={plan.lane === L ? 'on' : ''} disabled={L === 2 && !tunnel} onClick={(e) => { e.stopPropagation(); onChange((p) => { p.lane = L as Lane; return p; }); }}>{n}</button>))}
+        </div>
+        <div className="chips"><span>장비</span>
+          <button className={!plan.gear ? 'on' : ''} onClick={(e) => { e.stopPropagation(); onChange((p) => { p.gear = undefined; return p; }); }}>없음</button>
+          {(Object.keys(GEARS) as Gear[]).filter((k) => GEARS[k].forge <= forge).map((k) => (
+            <button key={k} title={`${GEARS[k].desc} · 금화 ${GEARS[k].cost}`} className={plan.gear === k ? 'on' : ''} onClick={(e) => { e.stopPropagation(); onChange((p) => { p.gear = k; return p; }); }}>{GEARS[k].name}</button>))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -463,6 +507,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (view!.updateCutin(dt)) { /* 연출 중에는 전투를 멈춘다 */ }
+      else if (view!.hitstop > 0) { view!.hitstop -= dt; }   // 타격 정지: 잠깐 멈춰 무게를 준다
       else if (!ctl.current.paused) {
         let rem = dt * ctl.current.speed;
         while (rem > 1e-6) { const d = Math.min(1 / 30, rem); step(s, d); rem -= d; }
@@ -471,6 +516,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
       view!.draw();
       if (s.over && !finished.current) {
         finished.current = true;
+        sfx(s.over.win ? 'win' : 'lose');
         // MVP: 적에게 가장 많은 피해를 준 부대의 부대장
         let best = -1, bi = -1;
         s.dmgBy.forEach((d, i) => { if (d > best) { best = d; bi = i; } });
@@ -505,6 +551,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
         <div className="bt-ctrl">
           <button onClick={() => setPaused(!paused)} title="일시정지(스페이스)">{paused ? '▶' : '❚❚'}</button>
           <button onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)} title="배속">×{speed}</button>
+          <button onClick={() => { setMuted(!muted); force((x) => x + 1); }} title="소리">{muted ? '♪̸' : '♪'}</button>
           <button onClick={onExit} title="포기하고 돌아가기">⚑</button>
         </div>
       </div>
@@ -558,7 +605,7 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
           <div className="result-card">
             <div className={`result-title${s.over.win ? '' : ' lose'}`}>{s.over.win ? '함락' : '퇴각'}</div>
             {s.over.win && <div className="result-stars">{Array.from({ length: 3 }, (_, k) => <span key={k} className={k < stars(s) ? 'on' : ''}>★</span>)}</div>}
-            <div className="result-sub">{s.over.win ? `${Math.floor(s.t)}초 만에 본관을 차지했다` : s.over.reason === '시간 초과' ? '시간 안에 성을 무너뜨리지 못했다' : '군단이 무너졌다'}</div>
+            <div className="result-sub">{s.over.win ? `${Math.floor(s.t)}초` : s.over.reason === '시간 초과' ? '시간 초과' : '전멸'}</div>
             {mvp && (
               <div className="result-mvp" style={{ ['--g' as string]: GRADES[MON[mvp].grade].color }}>
                 <div className="plate-face big">{glyph(mvp)}</div>

@@ -256,17 +256,17 @@ export function corruptNamed(m: Meta, id: string): string | null {
 export function applyResult(m: Meta, r: Region, win: boolean, stars: number, leaders: string[] = [], mvp: string | null = null, rng = Math.random,
   defeated: Partial<Record<PrisonerType, number>> = {}): string[] {
   const out: string[] = [];
-  if (!win) { out.push('잃은 것은 없습니다. 편성을 바꿔 다시 도전하세요.'); return out; }
+  if (!win) { out.push('잃은 것 없음'); return out; }
   const first = !(r.id in m.conquered);
   const k = first ? 1 : 0.5;
   const gold = Math.round(r.gold * k * (1 + 0.15 * (stars - 1)) * (1 + aideBonus(m, 'gold') / 100));
   const mana = Math.round(r.mana * k * (1 + (facValue(m, 'mine') + aideBonus(m, 'mana')) / 100));
   m.gold += gold; m.mana += mana; m.fame += first ? 10 * stars : stars;
-  out.push(`금화 +${gold}, 마석 +${mana}${first ? ' (첫 점령)' : ' (다시 공략: 절반)'}`);
+  out.push(`금화 +${gold} · 마석 +${mana}${first ? '' : ' (재공략 ½)'}`);
   // 적장 포획: ★2 이상이면 확정, ★1이면 50%
   const cmd = COMMANDERS[r.id];
   if (cmd && regionCaptain(m, r) && (stars >= 2 || rng() < 0.5)) {
-    m.named.push(cmd); out.push(`적장 「${PEOPLE[cmd].human}」을(를) 사로잡았습니다! 감옥에서 타락 의식을 할 수 있습니다.`);
+    m.named.push(cmd); out.push(`포획 · ${PEOPLE[cmd].human}`);
   }
   m.conquered[r.id] = Math.max(m.conquered[r.id] ?? 0, stars);
   // 굴복: 그 지역 몬스터 하나(일반은 3마리)
@@ -275,8 +275,8 @@ export function applyResult(m: Meta, r: Region, win: boolean, stars: number, lea
   const chance = (g === 'common' ? 1 : g === 'rare' ? 0.6 : 0.25) * (1 + aideBonus(m, 'subdue') / 100);
   if (rng() < chance) {
     const n = g === 'common' ? 3 : 1;
-    if (capUsed(m) + GRADES[g].cap * n <= capMax(m)) { m.owned[id] = (m.owned[id] ?? 0) + n; out.push(`굴복: ${MON[id].name}${n > 1 ? ` ×${n}` : ''} 합류`); }
-    else out.push(`굴복한 ${MON[id].name}이(가) 있었지만 둥지가 가득 차 돌려보냈습니다.`);
+    if (capUsed(m) + GRADES[g].cap * n <= capMax(m)) { m.owned[id] = (m.owned[id] ?? 0) + n; out.push(`합류 · ${MON[id].name}${n > 1 ? ` ×${n}` : ''}`); }
+    else out.push(`둥지 가득 · ${MON[id].name} 놓침`);
   }
   // 포로: 쓰러뜨린 적 중 일부를 종류대로 사로잡는다(높은 종류부터 감옥 자리만큼). 측근 효과로 더
   const got: Record<string, number> = {};
@@ -290,22 +290,22 @@ export function applyResult(m: Meta, r: Region, win: boolean, stars: number, lea
         // 감옥이 가득 차면 이번 포로보다 낮은 포로 하나를 풀어 주고 자리를 만든다
         const low = [...PRISON_ORDER].reverse().find((t) => PRISON_ORDER.indexOf(t) > PRISON_ORDER.indexOf(type) && m.prisoners[t] > 0);
         if (!low) break;
-        m.prisoners[low]--; out.push(`감옥이 가득 차 ${PRISONERS[low].name} 포로 하나를 풀어 주었습니다.`);
+        m.prisoners[low]--; out.push(`감옥 가득 · ${PRISONERS[low].name} 1 풀어 줌`);
       }
       m.prisoners[type]++; got[type] = (got[type] ?? 0) + 1;
     }
   }
   const caught = PRISON_ORDER.filter((t) => got[t]).map((t) => `${PRISONERS[t].name} ${got[t]}`);
-  if (caught.length) out.push(`포로: ${caught.join(', ')} (감옥 ${prisonerCount(m)}/${facValue(m, 'prison')})`);
-  else if (prisonerCount(m) >= facValue(m, 'prison')) out.push('감옥이 가득 차 포로를 더 잡지 못했습니다.');
+  if (caught.length) out.push(`포로 · ${caught.join(', ')}  (${prisonerCount(m)}/${facValue(m, 'prison')})`);
+  else if (prisonerCount(m) >= facValue(m, 'prison')) out.push('감옥 가득 · 포로 못 잡음');
   // 호감도: 함께 이긴 사람 모습 부대장 +1, MVP는 +1 더
   for (const L of new Set(leaders)) if (PEOPLE[L]) {
     const add = L === mvp ? 2 : 1;
     const before = m.affinity[L] ?? 0;
     m.affinity[L] = Math.min(10, before + add);
-    if (m.affinity[L] !== before) out.push(`${MON[L].name} 호감도 ${before} → ${m.affinity[L]}`);
+    if (m.affinity[L] !== before) out.push(`♥ ${MON[L].name.split(' ').pop()} ${before} → ${m.affinity[L]}`);
   }
-  if (first) out.push(`위협도 ${threat(m)}: 아직 점령하지 않은 성채가 강해집니다.`);
+  if (first) out.push(`위협도 ${threat(m)} · 남은 성채가 강해졌다`);
   return out;
 }
 

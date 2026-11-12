@@ -5,6 +5,7 @@ import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
 import { TUNNEL_IN } from '../core/siege';
 import { GRADES, ROLES, MON, type Role } from '../data/monsters';
 import { FX_SHEETS, type FxName } from '../data/fx_sheets';
+import { sfx } from '../audio/sfx';
 
 export const VW = 1280, VH = 720;
 /** 부대 색: 발밑 표시, 부대장 이름표, 패널에 같은 색을 쓴다 */
@@ -42,7 +43,7 @@ const ROLE_COL: Record<Role | 'foe', string> = {
 };
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; col: string; size: number }
-interface Txt { x: number; y: number; str: string; col: string; life: number; size: number }
+interface Txt { x: number; y: number; str: string; col: string; life: number; size: number; key?: string; val?: number; pop?: number }
 interface Fx { age: number; dur: number; draw: (c: CanvasRenderingContext2D, p: number) => void }
 
 const jitter = (uid: number) => (((uid * 2654435761) >>> 0) % 1000) / 500 - 1;
@@ -55,6 +56,9 @@ const shade = (hex: string, k: number) => {
 export class SiegeView {
   ctx: CanvasRenderingContext2D;
   camX = 0;
+  /** 맞은 유닛이 밀려난 거리(uid → px), 타격 정지(초) */
+  kb = new Map<number, number>();
+  hitstop = 0;
   parts: Particle[] = [];
   texts: Txt[] = [];
   fx: Fx[] = [];
@@ -99,14 +103,22 @@ export class SiegeView {
     const R = Math.random;
     switch (e.t) {
       case 'hit': {
-        const y = this.laneY(e.lane) - 40;
-        this.texts.push({ x: e.x + (R() - 0.5) * 20, y: y + (R() - 0.5) * 30, str: String(e.dmg), col: e.ally ? '#ff7a7a' : e.big ? '#ffd166' : '#ffffff', life: 0.8, size: e.big ? 22 : 14 });
-        if (e.big) this.shake = Math.max(this.shake, 4);
+        // 같은 자리에 잇따라 들어온 피해는 숫자 하나로 합친다(커지며 튄다)
+        const key = `${e.ally ? 'a' : 'f'}${e.lane}:${Math.round(e.x / 70)}`;
+        const old = this.texts.find((t) => t.key === key && t.life > 0.35);
+        if (old) { old.val! += e.dmg; old.str = String(old.val); old.life = 0.8; old.size = Math.min(34, 15 + Math.sqrt(old.val!) * 1.1); old.pop = 0.12; if (e.big) old.col = '#ffd166'; }
+        else this.texts.push({ key, val: e.dmg, x: e.x + (R() - 0.5) * 16, y: this.laneY(e.lane) - 46, str: String(e.dmg), col: e.ally ? '#ff7a7a' : e.big ? '#ffd166' : '#ffffff', life: 0.8, size: e.big ? 24 : 15, pop: 0.12 });
+        if (e.u) {   // 밀려남: 맞은 쪽 뒤로
+          const dir = e.u.side === 'ally' ? -1 : 1;
+          this.kb.set(e.u.uid, (this.kb.get(e.u.uid) ?? 0) + dir * (e.big ? 14 : 5));
+        }
+        if (e.big) { this.shake = Math.max(this.shake, 6); this.hitstop = Math.max(this.hitstop, 0.06); sfx('big'); } else sfx('hit');
         break;
       }
       case 'attack': {
         const f = e.from, a = this.pos(f);
         const tx = e.to.x, ty = this.laneY(e.to.lane) - 18 + (R() - 0.5) * 30;
+        sfx(e.ranged ? 'arrow' : 'slash');
         if (e.ranged) {
           const col = f.side === 'ally' ? '#ffd166' : '#aac4ff';
           const ay = a.y - 22;
@@ -131,7 +143,7 @@ export class SiegeView {
         if (e.miss) this.texts.push({ x: to.x, y: to.y - 50, str: '빗나감', col: '#9fe0a0', life: 0.7, size: 13 });
         break;
       }
-      case 'die': { const p = this.pos(e.u); this.pfx('poof', p.x, p.y, { k: e.u.isLeader ? 2 : 1.2, dur: 0.6 }); if (e.u.isLeader) this.pfx('soul', p.x, p.y, { k: 2, dur: 1.4 }); break; }
+      case 'die': { sfx('die'); if (e.u.isLeader) this.hitstop = Math.max(this.hitstop, 0.12); const p = this.pos(e.u); this.pfx('poof', p.x, p.y, { k: e.u.isLeader ? 2 : 1.2, dur: 0.6 }); if (e.u.isLeader) this.pfx('soul', p.x, p.y, { k: 2, dur: 1.4 }); break; }
       case 'revive': {
         const p = this.pos(e.u);
         this.pfx('respawn', p.x, p.y, { k: 1.4, dur: 1.1, add: true });
@@ -139,21 +151,25 @@ export class SiegeView {
         break;
       }
       case 'gateBreak':
+        sfx('gate'); this.hitstop = 0.22;
         this.shake = 16; this.flash = 0.6;
         this.pfx('big_boom', e.x, LANE_CY[1] + 10, { k: 1.6, dur: 1.4 }); this.pfx('dirt_boom', e.x - 30, LANE_CY[1] + 20, { k: 1.2, dur: 1.0, delay: 0.1 });
         this.banner('성문 파괴!', '#ffd166');
         break;
       case 'towerBreak':
+        sfx('boom'); this.hitstop = Math.max(this.hitstop, 0.1);
         this.shake = 10;
         this.pfx('small_boom', e.x, this.towerBase(e.lane), { k: 1.4, dur: 1.1 });
         this.banner('망루 붕괴', '#ffffff');
         break;
       case 'tunnelOpen':
+        sfx('boom');
         this.shake = 8;
         this.pfx('dirt_boom', this.s.castle.wallX + TUNNEL_IN, LANE_CY[2] + 10, { k: 1.3, dur: 1.0 });
         this.banner('굴이 뚫렸다', '#c9a477');
         break;
       case 'skill': {
+        sfx('skill');
         const g = MON[e.leader.monId!].grade;
         const p = this.pos(e.leader);
         const [dur, release] = g === 'myth' ? [2.0, 1.35] : g === 'legend' ? [1.45, 0.9] : [0.95, 0.55];
@@ -163,6 +179,7 @@ export class SiegeView {
       }
       case 'skillHit': this.skillFx(e.kind, e.x, this.laneY(e.lane), e.r ?? 100); break;
       case 'palisadeBreak':
+        sfx('boom');
         this.shake = 8; this.pfx('dirt_boom', e.x, LANE_CY[e.lane] + 10, { k: 1.1, dur: 0.9 });
         this.banner('목책 돌파', '#e0b77f');
         break;
@@ -170,6 +187,7 @@ export class SiegeView {
         this.banner(`외곽 초소 정리 — ${['성벽', '정문', '지하'][e.lane]} 레인 망루 피해 -30%`, '#7dff9a');
         break;
       case 'deploy': {
+        sfx('deploy');
         const y = LANE_CY[e.lane];
         this.pfx('magic_circle', e.x + 30, y + 10, { k: 1.4, dur: 0.7 });
         this.pfx('respawn', e.x + 30, y + 10, { k: 1.6, dur: 0.8, add: true, delay: 0.1 });
@@ -185,7 +203,7 @@ export class SiegeView {
 
   /** pixelfx 시트 한 번 재생. dur: 재생 시간(초), k: 확대, flip: 왼쪽을 봄, add: 빛 섞기 */
   pfx(n: FxName, x: number, y: number, o: { k?: number; dur?: number; flip?: boolean; add?: boolean; delay?: number } = {}) {
-    const sh = FX_SHEETS[n], k = o.k ?? 2, dur = o.dur ?? Math.min(sh.life, 0.9);
+    const sh = FX_SHEETS[n], k = (o.k ?? 2) * 1.5, dur = o.dur ?? Math.min(sh.life, 0.9);
     this.fx.push({ age: -(o.delay ?? 0), dur, draw: (c, p) => {
       if (p < 0) return;
       const im = fxImg(n); if (!im) return;
@@ -218,7 +236,7 @@ export class SiegeView {
         this.parts.push({ x: ci.lx + Math.cos(a) * r, y: ci.ly - 20 + Math.sin(a) * r * 0.5, vx: -Math.cos(a) * r * 2.2, vy: -Math.sin(a) * r * 1.1, life: 0.4, max: 0.4, col, size: 4 });
       }
       if (ci.t >= ci.release) {
-        ci.released = true;
+        ci.released = true; sfx('release'); this.hitstop = 0.1;
         this.shake = ci.grade === 'hero' ? 12 : 20; this.flash = ci.grade === 'myth' ? 0.7 : 0.3;
         const ev = ci.pending; ci.pending = [];
         for (const e of ev) this.onEvent(e);
@@ -254,7 +272,8 @@ export class SiegeView {
     this.fx = this.fx.filter((f) => f.age < f.dur);
     for (const p of this.parts) { p.life -= dt; p.vx *= 0.92; p.vy *= 0.92; p.vy += 120 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     this.parts = this.parts.filter((p) => p.life > 0);
-    for (const x of this.texts) { x.life -= dt; x.y -= 26 * dt; }
+    for (const x of this.texts) { x.life -= dt; x.y -= 26 * dt; if (x.pop) x.pop = Math.max(0, x.pop - dt); }
+    for (const [id, v] of this.kb) { const nv = v * Math.exp(-14 * dt); if (Math.abs(nv) < 0.3) this.kb.delete(id); else this.kb.set(id, nv); }
     this.texts = this.texts.filter((x) => x.life > 0);
     this.shake = Math.max(0, this.shake - 40 * dt);
     this.flash = Math.max(0, this.flash - 2 * dt);
@@ -303,7 +322,7 @@ export class SiegeView {
     c.restore();
     c.textAlign = 'center';
     for (const x of this.texts) {
-      c.globalAlpha = Math.min(1, x.life * 2); c.font = `bold ${x.size}px sans-serif`;
+      c.globalAlpha = Math.min(1, x.life * 2); c.font = `bold ${Math.round(x.size * (1 + (x.pop ?? 0) * 3))}px sans-serif`;
       c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.8)'; c.strokeText(x.str, x.x, x.y); c.fillStyle = x.col; c.fillText(x.str, x.x, x.y);
     }
     c.globalAlpha = 1;
@@ -589,7 +608,7 @@ export class SiegeView {
   drawUnit(c: CanvasRenderingContext2D, u: Unit, px: number, py: number) {
     const lunge = u.lungeT > 0 ? Math.sin((u.lungeT / 0.15) * Math.PI) * 8 * (u.side === 'ally' ? 1 : -1) : 0;
     const step = Math.abs(Math.sin(this.t * 9 + u.uid)) * 2;
-    const x = px + lunge;
+    const x = px + lunge + (this.kb.get(u.uid) ?? 0);
     const fly = u.role === 'flying' ? 30 + Math.sin(this.t * 4 + u.uid) * 3 : 0;
     const ci = this.cutin, focused = !!ci && ci.uid === u.uid && !ci.released;
     const wind = focused ? Math.min(1, ci!.t / ci!.release) : 0;

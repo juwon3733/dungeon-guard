@@ -65,7 +65,7 @@ export interface Squad {
 
 export type SiegeEvent =
   | { t: 'attack'; from: Unit; to: { x: number; lane: Lane }; ranged: boolean }
-  | { t: 'hit'; x: number; lane: Lane; dmg: number; ally: boolean; big?: boolean }
+  | { t: 'hit'; x: number; lane: Lane; dmg: number; ally: boolean; big?: boolean; u?: Unit }
   | { t: 'die'; u: Unit }
   | { t: 'revive'; u: Unit }
   | { t: 'tower'; x: number; lane: Lane; to: Unit; miss: boolean }
@@ -272,7 +272,7 @@ function damage(s: SiegeState, src: Unit | null, tgt: Unit, raw: number) {
   dmg = Math.max(1, Math.round(dmg));
   tgt.hp -= dmg; tgt.hitT = 0.12;
   if (src && src.side === 'ally' && tgt.side === 'foe' && src.squad >= 0) s.dmgBy[src.squad] += Math.min(dmg, tgt.hp + dmg);
-  s.emit({ t: 'hit', x: tgt.x, lane: tgt.lane, dmg, ally: tgt.side === 'ally', big: dmg >= 60 });
+  s.emit({ t: 'hit', x: tgt.x, lane: tgt.lane, dmg, ally: tgt.side === 'ally', big: dmg >= 60, u: tgt });
   if (tgt.hp > 0) return;
   // 리치 등: 병력은 한 번 해골로 부활
   if (tgt.side === 'ally' && !tgt.isLeader && !tgt.revived && cmdOf(s, tgt.squad).revive) {
