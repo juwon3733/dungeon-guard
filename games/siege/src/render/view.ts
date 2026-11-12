@@ -1,5 +1,5 @@
 // 공성전 화면(Canvas): Asteria처럼 위에서 비스듬히 내려다보는 3/4 시점. 왼쪽(아군 진영) → 오른쪽(성)으로 진군.
-// 땅은 떠 있는 섬(아래 가장자리에 절벽 단면), 높이가 있는 물체는 윗면과 앞(남쪽)면이 보이게 그린다.
+// 땅은 화면 전체, 높이가 있는 물체는 윗면과 앞(남쪽)면이 보이게 그린다.
 // 규칙은 core/siege.ts. 레인은 위아래로 나란한 띠: 0=북쪽 성벽 구간, 1=가운데 정문 길, 2=남쪽 굴.
 import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
 import { TUNNEL_IN } from '../core/siege';
@@ -37,11 +37,9 @@ export class SiegeView {
   t = 0;
   follow = true;
   bannerQ: { str: string; col: string; t: number }[] = [];
-  stars: { x: number; y: number; r: number }[];
 
   constructor(public canvas: HTMLCanvasElement, public s: SiegeState) {
     this.ctx = canvas.getContext('2d')!;
-    this.stars = Array.from({ length: 90 }, (_, i) => ({ x: (i * 977) % VW, y: (i * 613) % VH, r: (i % 3) * 0.6 + 0.6 }));
   }
 
   /** 땅 위의 발 위치. 성 안에 들어오면 안뜰로 퍼진다 */
@@ -151,12 +149,7 @@ export class SiegeView {
     const c = this.ctx, s = this.s, k = s.castle;
     const scale = this.canvas.width / VW;
     c.setTransform(scale, 0, 0, scale, 0, 0);
-    // 하늘(Asteria의 우주 배경 느낌)
-    const sky = c.createLinearGradient(0, 0, 0, VH);
-    sky.addColorStop(0, '#120c24'); sky.addColorStop(1, '#2a1640');
-    c.fillStyle = sky; c.fillRect(0, 0, VW, VH);
-    for (const st of this.stars) { c.fillStyle = `rgba(255,255,255,${0.35 + 0.35 * Math.sin(this.t * 2 + st.x)})`; c.fillRect((st.x - this.camX * 0.1 + VW) % VW, st.y, st.r, st.r); }
-
+    c.fillStyle = '#4a6b3a'; c.fillRect(0, 0, VW, VH);
     c.save();
     c.translate(-this.camX + (Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     this.drawIsland(c);
@@ -193,25 +186,12 @@ export class SiegeView {
     }
   }
 
-  /** 떠 있는 땅: 윗면 + 아래 절벽 단면 */
+  /** 땅(풀밭)이 화면 전체를 채운다 */
   drawIsland(c: CanvasRenderingContext2D) {
-    const k = this.s.castle, x0 = -80, x1 = k.length + 240;
-    // 절벽 단면(앞면)
-    const cliff = c.createLinearGradient(0, GROUND_BOT, 0, GROUND_BOT + 90);
-    cliff.addColorStop(0, '#6b5640'); cliff.addColorStop(1, '#2e2230');
-    c.fillStyle = cliff;
-    c.beginPath(); c.moveTo(x0, GROUND_BOT);
-    for (let x = x0; x <= x1; x += 40) c.lineTo(x, GROUND_BOT + 60 + ((x * 7919) % 30));
-    c.lineTo(x1, GROUND_BOT); c.closePath(); c.fill();
-    c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = 2;
-    for (let x = x0; x <= x1; x += 52) { c.beginPath(); c.moveTo(x, GROUND_BOT + 6); c.lineTo(x + 8, GROUND_BOT + 50); c.stroke(); }
-    // 윗면(풀밭)
-    c.fillStyle = '#4a6b3a'; c.fillRect(x0, GROUND_TOP, x1 - x0, GROUND_BOT - GROUND_TOP);
+    const k = this.s.castle, x0 = -200, x1 = k.length + 400;
+    c.fillStyle = '#4a6b3a'; c.fillRect(x0, -100, x1 - x0, VH + 200);
     c.fillStyle = 'rgba(255,255,255,.04)';
-    for (let x = x0; x < x1; x += 64) for (let y = GROUND_TOP; y < GROUND_BOT; y += 48) if (((x / 64 + y / 48) | 0) % 2 === 0) c.fillRect(x, y, 64, 48);
-    // 윗면 가장자리 밝은 테
-    c.fillStyle = '#6f9150'; c.fillRect(x0, GROUND_BOT - 6, x1 - x0, 6);
-    c.fillStyle = '#3c5a2f'; c.fillRect(x0, GROUND_TOP, x1 - x0, 6);
+    for (let x = x0; x < x1; x += 64) for (let y = -96; y < VH + 100; y += 48) if ((((x - x0) / 64 + (y + 96) / 48) | 0) % 2 === 0) c.fillRect(x, y, 64, 48);
   }
 
   /** 바닥에 붙은 것: 길, 해자, 굴, 안뜰 */
