@@ -50,6 +50,8 @@ export interface Unit {
   stunT: number;           // 기절(행동 불가)
   vulnT: number;           // 받는 피해 증가 남은 시간
   vulnMul: number;
+  channel?: number;
+  dodgeTo?: number;        // 피하는 중: 이 x까지 뛴다        // 의식 중(남은 초). 기절하거나 쓰러지면 끊긴다
 }
 
 export interface Tower { lane: Lane; x: number; hp: number; max: number; dmg: number; range: number; iv: number; atkT: number; alive: boolean; antiAir?: boolean; barrier?: boolean; splash?: number }
@@ -61,7 +63,17 @@ export interface Squad {
   orders: Orders;
   skill: Skill | null; skillCd: number;    // 부대장 고유 스킬(영웅 이상)
   shieldT: number;                          // 검은 방패 등 부대 피해 감소
+  fallT: number;                            // 물러서는 중(남은 초)
 }
+
+/** 적의 위기 사건: 미리 경고하고 warn초 뒤 터진다. 플레이어가 피하거나 끊어야 한다 */
+export type ThreatKind = 'volley' | 'oil' | 'ritual';
+export interface Threat { id: number; kind: ThreatKind; lane: Lane; x: number; r: number; t: number; warn: number; caster?: Unit; over: boolean }
+export const THREAT_INFO: Record<ThreatKind, { name: string; hint: string }> = {
+  volley: { name: '일제 사격', hint: '붉은 원 밖으로 물러서거나 레인을 옮겨라' },
+  oil: { name: '끓는 기름', hint: '성문 앞에서 물러서라' },
+  ritual: { name: '수호 의식', hint: '의식하는 적을 쓰러뜨리거나 기절시켜라' },
+};
 
 export type SiegeEvent =
   | { t: 'attack'; from: Unit; to: { x: number; lane: Lane }; ranged: boolean }
@@ -77,6 +89,8 @@ export type SiegeEvent =
   | { t: 'skillHit'; kind: string; x: number; lane: Lane; r?: number }
   | { t: 'palisadeBreak'; x: number; lane: Lane }
   | { t: 'outpost'; lane: Lane }
+  | { t: 'threat'; th: Threat }
+  | { t: 'threatEnd'; th: Threat; foiled: boolean; hurt: number }
   | { t: 'end'; win: boolean; reason: string };
 
 export interface SiegeState {
@@ -102,6 +116,8 @@ export interface SiegeState {
   /** 부대별로 준 피해(MVP 계산) */
   dmgBy: number[];
   captainName?: string;
+  threats: Threat[];
+  threatNext: number;
 }
 
 const NOCMD: Command = { desc: '' };
@@ -152,10 +168,10 @@ export function createSiege(castle: Castle, plans: SquadPlan[], opts: {
     castle, t: 0, units: [], squads: [], towers: castle.towers.map((t) => ({ ...t, hp: t.hp * castle.power, max: t.hp * castle.power, dmg: t.dmg * castle.power, atkT: 1, alive: true })),
     gateHp: castle.gateHp * castle.power, gateMax: castle.gateHp * castle.power, tunnelWork: 0, tunnelOpen: false, coreProg: 0, over: null,
     rng, emit: opts.emit ?? (() => {}), stats: { allyDead: 0, foeDead: 0, leadersLost: 0 }, noCommand: !!opts.noCommand, timers: [], palisades: [], outpostCleared: [false, false, false],
-    boost: opts.boost ?? (() => 1), squadBoost: opts.squadBoost ?? (() => 1), dmgBy: plans.map(() => 0), captainName: opts.captainName,
+    boost: opts.boost ?? (() => 1), squadBoost: opts.squadBoost ?? (() => 1), dmgBy: plans.map(() => 0), captainName: opts.captainName, threats: [], threatNext: 22,
   };
   plans.forEach((p, i) => s.squads.push({ idx: i, plan: p, leader: null, started: false, retreated: false,
-    orders: { advance: true, gate: 'attack' }, skill: SKILLS[p.leader] ?? null, skillCd: 4, shieldT: 0 }));
+    orders: { advance: true, gate: 'attack' }, skill: SKILLS[p.leader] ?? null, skillCd: 4, shieldT: 0, fallT: 0 }));
   for (const g of castle.garrison) {
     for (let i = 0; i < g.count; i++) {
       const lane: Lane = g.lane === 'core' ? 1 : g.lane;
@@ -281,7 +297,8 @@ function findAllyTarget(s: SiegeState, u: Unit): Target | null {
     const d = Math.abs(f.x - u.x);
     // 성 밖에서는 앞쪽 적만, 성 안에서는 방향 상관없이(지나친 적에게 뒤를 잡히지 않게)
     const facing = inside(s, u) || f.x >= u.x - 10;
-    if (facing && d <= range && d < bd) { bd = d; best = { kind: 'unit', u: f }; }
+    const dd = f.channel != null ? d - 400 : d;   // 의식하는 적을 먼저 노린다
+    if (facing && d <= range && dd < bd) { bd = dd; best = { kind: 'unit', u: f }; }
   }
   if (best) return best;
   for (const t of s.towers) {
@@ -324,6 +341,7 @@ function stepAlly(s: SiegeState, u: Unit, dt: number) {
     u.fromLane = u.lane; u.shiftMax = u.shiftT = 1.0 * Math.abs(want - u.lane); u.lane = want;
     return;
   }
+  if (u.dodgeTo != null) { const d = u.dodgeTo - u.x, st = 260 * dt; if (Math.abs(d) <= st) { u.x = u.dodgeTo; u.dodgeTo = undefined; } else u.x += Math.sign(d) * st; return; }
   u.atkT -= dt;
   const tgt = findAllyTarget(s, u);
   if (tgt) {
@@ -381,6 +399,7 @@ function stepAlly(s: SiegeState, u: Unit, dt: number) {
 
 function stepFoe(s: SiegeState, u: Unit, dt: number) {
   if (u.stunT > 0) return;
+  if (u.channel != null) return;   // 의식 중에는 움직이지도 싸우지도 않는다
   u.atkT -= dt;
   let best: Unit | null = null, bd = Infinity;
   for (const a of s.units) {
@@ -446,6 +465,104 @@ function stepTower(s: SiegeState, t: Tower, dt: number) {
   }
 }
 
+// ---------------- 위기 사건 ----------------
+let TID = 1;
+const alliesIn = (s: SiegeState, th: Threat) => s.units.filter((a) => a.side === 'ally' && a.alive && a.shiftT <= 0 &&
+  Math.abs(a.x - th.x) <= th.r && (a.lane === th.lane || (inside(s, a) && th.x > s.castle.mergeX)));
+
+function pickThreat(s: SiegeState): Threat | null {
+  const c = s.castle, allies = s.units.filter((a) => a.side === 'ally' && a.alive);
+  if (!allies.length) return null;
+  const mk = (kind: ThreatKind, lane: Lane, x: number, r: number, warn: number, caster?: Unit): Threat => ({ id: TID++, kind, lane, x, r, t: 0, warn, caster, over: false });
+  // 끓는 기름: 성문 앞에 몰려 있으면
+  const atGate = allies.filter((a) => a.lane === 1 && a.x < c.wallX && c.wallX - a.x <= 110);
+  if (s.gateHp > 0 && atGate.length >= 4 && !s.threats.some((t) => t.kind === 'oil')) return mk('oil', 1, c.wallX - 55, 75, 3);
+  // 수호 의식: 성 안 수비대가 다쳤으면, 가끔
+  const hurt = s.units.filter((f) => f.side === 'foe' && f.alive && f.hp < f.max * 0.7).length;
+  if (hurt >= 3 && s.rng() < 0.3 && !s.threats.some((t) => t.kind === 'ritual')) {
+    const cands = s.units.filter((f) => f.side === 'foe' && f.alive && !f.outpost && f.stunT <= 0 && f.channel == null && f.foeType !== 'captain');
+    if (cands.length) { const f = cands[Math.floor(s.rng() * cands.length)]; f.channel = 7; return mk('ritual', f.lane, f.x, 0, 7, f); }
+  }
+  // 일제 사격: 망루 사거리 근처에서 가장 빽빽한 아군 무리
+  let best: { lane: Lane; x: number; n: number } | null = null;
+  for (const a of allies) {
+    if (a.x < c.wallX - 650 || a.role === 'flying') continue;
+    const n = allies.filter((b) => b.lane === a.lane && Math.abs(b.x - a.x) <= 90).length;
+    if (!best || n > best.n) best = { lane: a.lane, x: a.x, n };
+  }
+  if (best && best.n >= 4) return mk('volley', best.lane, best.x + 20, 85, 3.2);
+  return null;
+}
+
+/** 위기를 넘기면 반격 기회: 근처 적이 4초 동안 받는 피해 +40%, 의식은 성 안 적까지 */
+function counter(s: SiegeState, th: Threat) {
+  for (const f of s.units) if (f.side === 'foe' && f.alive && (th.kind === 'ritual' ? Math.abs(f.x - th.x) <= 300 : f.lane === th.lane || inside(s, f))) { f.vulnT = Math.max(f.vulnT, 4); f.vulnMul = Math.max(f.vulnT > 4 ? f.vulnMul : 1, 1.4); }
+  if (th.kind === 'volley') for (const t of s.towers) if (t.alive && (t.lane === th.lane || t.lane === 1)) t.atkT = Math.max(t.atkT, 5);   // 화살을 다 쏟아 재장전
+  if (th.kind === 'oil' && s.gateHp > 0) { s.gateHp -= s.gateMax * 0.12; if (s.gateHp <= 0) { s.gateHp = 0; s.emit({ t: 'gateBreak', x: s.castle.wallX }); } }
+}
+
+function stepThreats(s: SiegeState, dt: number) {
+  if (s.t >= s.threatNext) {
+    const th = pickThreat(s);
+    s.threatNext = s.t + (th ? 20 + s.rng() * 8 : 3);
+    if (th) { s.threats.push(th); s.emit({ t: 'threat', th }); }
+  }
+  for (const th of s.threats) {
+    if (th.over) continue;
+    th.t += dt;
+    if (th.kind === 'ritual') {
+      const f = th.caster!;
+      if (!f.alive || f.stunT > 0) { th.over = true; f.channel = undefined; counter(s, th); s.emit({ t: 'threatEnd', th, foiled: true, hurt: 0 }); continue; }
+      f.channel = th.warn - th.t; th.x = f.x; th.lane = f.lane;
+      if (th.t >= th.warn) {
+        th.over = true; f.channel = undefined;
+        for (const g of s.units) if (g.side === 'foe' && g.alive) g.hp = Math.min(g.max, g.hp + g.max * 0.3);
+        if (s.gateHp > 0) s.gateHp = Math.min(s.gateMax, s.gateHp + s.gateMax * 0.12);
+        s.emit({ t: 'threatEnd', th, foiled: false, hurt: 0 });
+      }
+      continue;
+    }
+    if (th.t < th.warn) continue;
+    th.over = true;
+    const victims = alliesIn(s, th), pw = s.castle.power;
+    for (const a of victims) damage(s, null, a, (th.kind === 'oil' ? 0.45 : 0.32) * a.max + 8 * pw);
+    if (!victims.length) counter(s, th);
+    s.emit({ t: 'threatEnd', th, foiled: victims.length === 0, hurt: victims.length });
+  }
+  s.threats = s.threats.filter((t) => !t.over);
+}
+
+/** 부대를 잠깐 뒤로 물린다(2초, 그동안 공격하지 않는다) */
+export function fallBack(s: SiegeState, squad: number) {
+  const q = s.squads[squad];
+  if (!q || !q.started || q.retreated) return;
+  q.fallT = 0.55;
+  // 위험 구역 안에 있는 병력만 뒤로 뛴다(나머지는 계속 싸운다). 구역이 없으면 부대 전체
+  const zones = s.threats.filter((t) => t.kind !== 'ritual');
+  for (const u of s.units) {
+    if (u.side !== 'ally' || !u.alive || u.squad !== squad) continue;
+    const t = zones.find((t) => Math.abs(u.x - t.x) <= t.r + 6 && (u.lane === t.lane || (inside(s, u) && t.x > s.castle.mergeX)));
+    if (!zones.length) { u.dodgeTo = Math.max(20, u.x - 120); continue; }
+    if (!t) continue;
+    // 가까운 쪽 가장자리로(앞으로 갈 수 있으면 앞으로도)
+    const back = t.x - t.r - 14, fwd = t.x + t.r + 14;
+    u.dodgeTo = fwd <= allyLimit(s, u) && fwd - u.x < u.x - back ? fwd : Math.max(20, back);
+  }
+}
+
+/** 시뮬레이션용: 위기를 보고 피한다 */
+export function autoDodge(s: SiegeState) {
+  for (const th of s.threats) {
+    if (th.kind === 'ritual') {
+      for (const q of s.squads) if (canCast(s, q.idx) && ['slam', 'charm', 'song', 'charge', 'hex', 'doom', 'swarm'].includes(q.skill!.kind) && Math.abs(q.leader!.x - th.x) <= 360) { cast(s, q.idx, { x: th.x, lane: th.lane }); break; }
+      continue;
+    }
+    if (th.warn - th.t > 0.9) continue;
+    const sqs = new Set(alliesIn(s, th).map((a) => a.squad));
+    for (const i of sqs) fallBack(s, i);
+  }
+}
+
 export function retreat(s: SiegeState, squad: number) {
   const sq = s.squads[squad];
   if (!sq || sq.retreated) return;
@@ -464,7 +581,8 @@ export function step(s: SiegeState, dt: number) {
     if (u.side === 'ally') stepAlly(s, u, dt); else stepFoe(s, u, dt);
   }
   for (const t of s.towers) if (t.alive) stepTower(s, t, dt);
-  for (const q of s.squads) { q.skillCd = Math.max(0, q.skillCd - dt); q.shieldT = Math.max(0, q.shieldT - dt); }
+  for (const q of s.squads) { q.skillCd = Math.max(0, q.skillCd - dt); q.shieldT = Math.max(0, q.shieldT - dt); q.fallT = Math.max(0, q.fallT - dt); }
+  stepThreats(s, dt);
   for (const L of [0, 1, 2] as Lane[]) {
     if (s.outpostCleared[L]) continue;
     const posts = s.units.filter((u) => u.outpost && u.lane === L);
@@ -530,12 +648,35 @@ function hitGate(s: SiegeState, dmg: number) {
 }
 
 /** 부대장 스킬 사용. 성공하면 true */
-export function cast(s: SiegeState, squad: number): boolean {
+/** 땅을 찍어 쓰는 스킬과 그 반경. 없는 스킬은 부대장 자리에서 바로 쓴다 */
+export const AIM: Record<string, { r: number; reach: number; leap?: boolean }> = {
+  slam: { r: 110, reach: 260, leap: true }, feast: { r: 120, reach: 260, leap: true }, charm: { r: 170, reach: 380 },
+  swarm: { r: 150, reach: 420 }, hex: { r: 100, reach: 420 }, song: { r: 280, reach: 300 }, doom: { r: 600, reach: 500 },
+};
+export function aimClamp(s: SiegeState, squad: number, x: number, lane: Lane): { x: number; lane: Lane } {
+  const q = s.squads[squad], L = q.leader!, a = AIM[q.skill!.kind];
+  let tx = Math.max(L.x - a.reach, Math.min(L.x + a.reach, x));
+  let tl = lane;
+  if (tl === 2 && !s.castle.tunnel) tl = 1;
+  if (a.leap) { tx = Math.min(tx, laneLimit(s, { ...L, lane: tl, x: Math.min(L.x, s.castle.wallX - 30) } as Unit)); }
+  return { x: tx, lane: tl };
+}
+
+/** 부대장 스킬 사용. target을 주면 그 자리에(AIM에 있는 스킬만). 성공하면 true */
+export function cast(s: SiegeState, squad: number, target?: { x: number; lane: Lane }): boolean {
   if (!canCast(s, squad)) return false;
   const q = s.squads[squad], L = q.leader!, sk = q.skill!;
   q.skillCd = sk.cd;
   const atk = L.atk * (cmdOf(s, squad).atkMul ?? 1);
-  const lane = L.lane, x = L.x;
+  let lane = L.lane, x = L.x;
+  if (target && AIM[sk.kind]) {
+    const t = aimClamp(s, squad, target.x, target.lane);
+    x = t.x; lane = t.lane;
+    if (AIM[sk.kind].leap && L.x < s.castle.wallX) {   // 부대장이 그 자리로 뛰어든다
+      if (lane !== L.lane) { L.lane = lane; q.plan.lane = lane; q.orders.lane = lane; }
+      L.x = x;
+    }
+  }
   const nearGate = lane === 1 && s.gateHp > 0 && s.castle.wallX - x <= 120;
   s.emit({ t: 'skill', squad, leader: L, skill: sk, x, y: 0, lane });
   switch (sk.kind) {
@@ -574,10 +715,10 @@ export function cast(s: SiegeState, squad: number): boolean {
       s.emit({ t: 'skillHit', kind: 'aegis', x, lane, r: 90 });
       break;
     case 'hex': {
-      const foes = s.units.filter((f) => f.side === 'foe' && f.alive && Math.abs(f.x - x) <= 260);
-      const c = foes.length ? foes.reduce((a, b) => (foesNear(s, a.x, a.lane, 90, true).length >= foesNear(s, b.x, b.lane, 90, true).length ? a : b)) : null;
+      const foes = s.units.filter((f) => f.side === 'foe' && f.alive && Math.abs(f.x - x) <= (target ? 100 : 260));
+      const c = target ? { x, lane } : foes.length ? foes.reduce((a, b) => (foesNear(s, a.x, a.lane, 90, true).length >= foesNear(s, b.x, b.lane, 90, true).length ? a : b)) : null;
       if (!c) break;
-      for (const f of foesNear(s, c.x, c.lane, 100, true)) { damage(s, L, f, atk * 1.5); f.vulnT = 6; f.vulnMul = 1.4; }
+      for (const f of foesNear(s, c.x, c.lane, 100, !target)) { damage(s, L, f, atk * 1.5); f.vulnT = 6; f.vulnMul = 1.4; }
       s.emit({ t: 'skillHit', kind: 'hex', x: c.x, lane: c.lane, r: 100 });
       break;
     }

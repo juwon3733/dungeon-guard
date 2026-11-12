@@ -2,7 +2,7 @@
 // 실행: npm run sim  (빠르게: npm test)
 // 기준(docs/siege/06_roadmap.md): 지휘 효과를 성채에 맞춘 편성은 승률이 높고, 안 맞춘 같은 등급 편성은 확연히 낮아야 한다.
 import { CASTLE } from '../src/data/castles';
-import { createSiege, step, stars, autoCast, setOrders, type SquadPlan, type SiegeState } from '../src/core/siege';
+import { createSiege, step, stars, autoCast, autoDodge, setOrders, type SquadPlan, type SiegeState } from '../src/core/siege';
 
 const quick = process.argv.includes('--quick');
 const N = quick ? 20 : 100;
@@ -77,6 +77,7 @@ function play(s: SiegeState, policy: Policy) {
     for (const q of s.squads) setOrders(s, q.idx, { gate: towersUp && ranged ? 'wait' : 'attack' });
   }
   if (policy !== 'idle') autoCast(s);
+  if (policy === 'smart') autoDodge(s);
 }
 
 function winRate(power: number, plans: SquadPlan[], policy: Policy, n: number) {
