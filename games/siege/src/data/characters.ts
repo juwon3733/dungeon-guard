@@ -40,6 +40,15 @@ export const PEOPLE: Record<string, Person> = {
   cmd_iris: { human: '왕국 여왕 이리스',
     lines: { 2: '왕관이 없으니 목이 가볍군요.', 5: '나라를 다스리는 것과 군단을 다스리는 것, 생각보다 닮았어요.', 10: '밤의 여왕은 한 사람의 곁에만 머물기로 했어요.' },
     mvp: '밤이 내리면, 모두 고개를 숙이죠.', aide: { kind: 'subdue', v: 40, desc: '굴복 확률 +40%' } },
+  cmd_serena: { human: '왕국 하늘 기사 세레나',
+    lines: { 2: '날개가 검게 물들었어요. 그래도 하늘은 그대로네요.', 5: '높이 날수록 땅이 작아 보여요. 당신만 빼고요.', 10: '어디로 날아가든, 돌아올 곳은 여기예요.' },
+    mvp: '하늘은 오늘도 우리 편이었어요.', aide: { kind: 'subdue', v: 35, desc: '굴복 확률 +35%' } },
+  cmd_adel: { human: '대신관 아델',
+    lines: { 2: '축복과 저주는 한 끗 차이예요. 이제야 알았어요.', 5: '제 기도를 들어주는 건 이제 당신뿐이네요.', 10: '당신을 위한 축복이라면, 몇 번이고 올릴게요.' },
+    mvp: '아무도 쓰러지지 않게 기도했어요.', aide: { kind: 'mana', v: 40, desc: '공성 마석 +40%' } },
+  cmd_luna: { human: '왕녀 루나',
+    lines: { 2: '달빛 아래서만 웃으라고 배웠어요. 여기선 아무 때나 웃어도 되나요?', 5: '왕관의 무게를 내려놓으니, 활이 가벼워졌어요.', 10: '달을 버렸어요. 대신 당신을 골랐어요.' },
+    mvp: '달이 가려지는 순간, 끝났죠.', aide: { kind: 'gold', v: 50, desc: '공성 금화 +50%' } },
   succubus: {
     lines: { 2: '던전 생활도 나쁘지 않네. 침대가 조금 딱딱하지만.', 5: '사람의 마음을 빼앗는 건 쉬워. 지키는 게 어렵지.', 10: '이번엔 내가 빼앗긴 것 같아. 인정하기 싫지만.' },
     mvp: '다들 내 쪽을 보느라 바빴지?', aide: { kind: 'subdue', v: 20, desc: '굴복 확률 +20%' } },
@@ -64,6 +73,7 @@ export const PEOPLE: Record<string, Person> = {
 export const COMMANDERS: Record<string, string> = {
   r1: 'cmd_elise', r2: 'cmd_mira', r3: 'cmd_sylvia', r4: 'cmd_aria', r5: 'cmd_vera', r6: 'cmd_celes', r7: 'cmd_reina',
   r9: 'cmd_lucia', r10: 'cmd_ellen', r11: 'cmd_iris',
+  r12: 'cmd_serena', r13: 'cmd_adel', r14: 'cmd_luna',
 };
 export const CORRUPT_NAMED_COST = { hero: 150, legend: 300, myth: 600 } as const;
 

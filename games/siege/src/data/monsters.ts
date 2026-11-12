@@ -101,6 +101,9 @@ export const MONSTERS: Monster[] = [
   M('cmd_lucia', '타락 성녀 루시아', 'legend', 'support', 'fiend', { command: { desc: '부대 공격력 +25%, 병력 체력 회복 2%/초', atkMul: 1.25, regen: 0.02 } }),
   M('cmd_ellen', '마왕의 검 엘렌', 'myth', 'assault', 'fiend', { command: { desc: '부대 공격력 +40%, 첫 공격 2배, 이동 +20%', atkMul: 1.4, firstHitMul: 2, speedMul: 1.2 } }),
   M('cmd_iris', '밤의 여왕 이리스', 'myth', 'support', 'fiend', { command: { desc: '받는 피해 -35%, 망루 명중률 -40%, 해자 무시', dmgTakenMul: 0.65, towerMiss: 0.4, moatIgnore: true } }),
+  M('cmd_serena', '타락 하늘 기사 세레나', 'legend', 'flying', 'fiend', { command: { desc: '부대가 성벽을 넘어 진입, 비행 병력 체력 +30%, 쇠뇌탑 명중률 -30%', wallPass: true, hpMulRole: { role: 'flying', mul: 1.3 }, towerMiss: 0.3 } }),
+  M('cmd_adel', '검은 대신관 아델', 'legend', 'support', 'fiend', { command: { desc: '병력 회복 3%/초, 받는 피해 -20%', regen: 0.03, dmgTakenMul: 0.8 } }),
+  M('cmd_luna', '달을 버린 왕녀 루나', 'myth', 'ranged', 'fiend', { command: { desc: '사격 병력 공격력 +50%, 사거리 +25%, 부대 공격력 +20%', atkMulRole: { role: 'ranged', mul: 1.5 }, rangeMul: 1.25, atkMul: 1.2 } }),
   // 신화
   M('abyss_dragon', '심연의 용', 'myth', 'flying', 'demon', { command: { desc: '성벽 진입, 망루 무력화, 공격력 +30%', wallPass: true, towerMiss: 1, atkMul: 1.3 } }),
 ];
@@ -135,5 +138,8 @@ export const SKILLS: Record<string, Skill> = {
   cmd_lucia: { name: '검은 성가', kind: 'song', cd: 18, desc: '넓은 범위 적 4초 잠재우기' },
   cmd_ellen: { name: '마왕의 일격', kind: 'charge', cd: 9, desc: '앞으로 돌진하며 들이받는다. 성문에 닿으면 큰 피해' },
   cmd_iris: { name: '밤의 장막', kind: 'doom', cd: 24, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
+  cmd_serena: { name: '하늘 낙하', kind: 'swarm', cd: 12, desc: '주변 적과 망루를 세 번 내리친다' },
+  cmd_adel: { name: '검은 축복', kind: 'feast', cd: 14, desc: '주변 적에게 피해, 부대 체력 30% 회복' },
+  cmd_luna: { name: '월식', kind: 'breath', cd: 13, desc: '앞쪽 일직선의 적과 망루·결계에 큰 피해' },
   abyss_dragon: { name: '종말의 불', kind: 'doom', cd: 25, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
 };

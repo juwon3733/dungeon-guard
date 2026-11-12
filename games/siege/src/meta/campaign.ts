@@ -23,7 +23,11 @@ export const REGIONS: Region[] = [
   { id: 'r8', name: '산길 관문', castle: 'iron_gate', basePower: 1.55, gold: 620, mana: 180, wild: ['troll', 'hellhound', 'minotaur'], desc: '2장. 산맥으로 들어가는 관문.' },
   { id: 'r9', name: '산맥 신전', castle: 'mountain_temple', basePower: 1.65, gold: 700, mana: 200, wild: ['gargoyle', 'mushroom_shaman', 'lich'], desc: '성녀가 지키는 신전. 기사가 많다.' },
   { id: 'r10', name: '용사의 마을', castle: 'border_fort', basePower: 1.8, gold: 780, mana: 220, wild: ['orc_warrior', 'wolf_alpha', 'witch'], desc: '용사가 태어난 마을. 용사가 직접 지킨다.' },
-  { id: 'r11', name: '왕도 외성', castle: 'capital_wall', basePower: 1.5, gold: 1200, mana: 360, wild: ['dark_knight', 'bat_queen', 'siren_queen'], desc: '장 보스. 여왕이 지키는 왕도의 바깥 성벽.' },
+  { id: 'r11', name: '왕도 외성', castle: 'capital_wall', basePower: 1.25, gold: 1200, mana: 360, wild: ['dark_knight', 'bat_queen', 'siren_queen'], desc: '장 보스. 여왕이 지키는 왕도의 바깥 성벽.' },
+  // 3장
+  { id: 'r12', name: '성기사 수련장', castle: 'mountain_temple', basePower: 2.2, gold: 1300, mana: 400, wild: ['dark_knight', 'troll', 'lich'], desc: '3장. 왕국 기사들이 마지막으로 모인 수련장.' },
+  { id: 'r13', name: '하늘 성채', castle: 'sky_bastion', basePower: 2.1, gold: 1500, mana: 460, wild: ['gargoyle', 'bat_queen', 'harpy'], desc: '결계 기둥과 쇠뇌탑이 하늘을 막는 성채.' },
+  { id: 'r14', name: '왕성 내성', castle: 'royal_keep', basePower: 1.0, gold: 2500, mana: 800, wild: ['vampire_lord', 'bone_dragon', 'siren_queen'], desc: '최종 보스. 왕녀가 지키는 왕성의 심장.' },
 ];
 export const REGION: Record<string, Region> = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
 

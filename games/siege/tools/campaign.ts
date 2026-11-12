@@ -31,6 +31,15 @@ function siege(m: Meta, rid: string, seed: number) {
   return { win: s.over.win, stars: stars(s), leaders: plans.map((p) => p.leader), mvp: s.over.win ? plans[bi].leader : null, defeated };
 }
 
+/** 약한 몬스터 하나(일반은 3마리)를 내보낸다: 남는 일반 → 겹치는 희귀 → 희귀. 사람 모습 동료와 측근은 남긴다 */
+function makeRoom(m: Meta): boolean {
+  const ids = Object.keys(m.owned).filter((id) => m.owned[id] > 0 && !PEOPLE[id] && m.aide !== id);
+  const pick = ids.filter((id) => MON[id].grade === 'common' && m.owned[id] > 3).sort((a, b) => m.owned[b] - m.owned[a])[0]
+    ?? ids.filter((id) => MON[id].grade === 'rare' && m.owned[id] > 1)[0]
+    ?? ids.filter((id) => MON[id].grade === 'rare').sort((a, b) => lvOf(m, a) - lvOf(m, b))[0];
+  return !!pick && !release(m, pick);
+}
+
 function spend(m: Meta, rng: () => number) {
   // 금화: 작전실 → 둥지(80% 넘게 찼으면) → 소환진(3단계까지) → 광산 → 감옥 → 훈련
   for (let guard = 0; guard < 50; guard++) {
@@ -54,13 +63,22 @@ function spend(m: Meta, rng: () => number) {
     if (!extra || release(m, extra)) break;
   }
   // 마석: 적장 타락 → 계약 → 포로 타락 → 소환
-  for (const id of [...m.named]) corruptNamed(m, id);
+  for (const id of [...m.named]) {
+    // 둥지가 차서 막히면 약한 몬스터부터 내보내 자리를 만든다
+    for (let g = 0; g < 30 && corruptNamed(m, id) === '둥지가 가득 찼습니다.'; g++) if (!makeRoom(m)) break;
+  }
+  // 사로잡은 적장이 남아 있으면(마석이 모자라) 나머지에 쓰지 말고 모은다
+  if (m.named.length) return;
   for (const c of CONTRACTS) if (contractState(m, c) === 'open') signContract(m, c.id);
   for (const t of ['captain', 'knight', 'archer', 'footman'] as PrisonerType[]) {
     // 보병·궁수는 둥지에 여유가 있을 때만(일반 몬스터로 둥지가 차면 소환·계약이 막힌다)
     const roomy = capUsed(m) < capMax(m) * 0.7;
     if ((t === 'footman' || t === 'archer') && !roomy) continue;
-    while (m.prisoners[t] > 0 && m.mana >= PRISONERS[t].cost + 40) if (typeof corrupt(m, t, rng) === 'string') break;
+    while (m.prisoners[t] > 0 && m.mana >= PRISONERS[t].cost + 40) {
+      const r = corrupt(m, t, rng);
+      if (r === '둥지가 가득 찼습니다.' && (t === 'captain' || t === 'knight') && makeRoom(m)) continue;
+      if (typeof r === 'string') break;
+    }
   }
   // 훈련(마석): 부대장 후보 중 레벨이 가장 낮은 것부터, 소환할 몫은 남긴다
   for (let guard = 0; guard < 60; guard++) {
@@ -89,6 +107,7 @@ for (let run = 1; run <= RUNS; run++) {
       if (process.env.DEBUG) {
         const plan = autoForm(m, target);
         console.log('  막힌 곳', target.name, '수비 강도', regionCastle(m, target).power, '금화', m.gold, '마석', m.mana, '명성', m.fame, '시설', JSON.stringify(m.fac), '포로', JSON.stringify(m.prisoners));
+        console.log('  사로잡은 적장', JSON.stringify(m.named), '타락 시도:', m.named.map((id) => corruptNamed(structuredClone(m), id)).join(' / '), '둥지', capUsed(m), '/', capMax(m));
         console.log('  편성', plan.map((p) => `${MON[p.leader].name}[L${p.lane}] ${p.troops.map((t) => MON[t.id].name + t.count).join('+')}`).join(' | '));
         console.log('  보유', Object.entries(m.owned).filter(([, n]) => n > 0).map(([id, n]) => `${MON[id].name}×${n}(Lv${lvOf(m, id)})`).join(', '));
       }

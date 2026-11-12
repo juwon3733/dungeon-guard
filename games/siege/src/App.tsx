@@ -112,7 +112,7 @@ function MapTab({ meta, onSortie }: { meta: Meta; onSortie: (r: Region) => void 
           <Card key={r.id} padding={4}>
             <VStack gap={2}>
               <HStack gap={2}>
-                <Heading level={3}>{i < 7 ? '1장' : '2장'} · {i + 1}. {r.name}</Heading>
+                <Heading level={3}>{i < 7 ? '1장' : i < 11 ? '2장' : '3장'} · {i + 1}. {r.name}</Heading>
                 {done ? <Badge label={`점령 ${'★'.repeat(meta.conquered[r.id])}`} variant="success" /> : open ? <Badge label="공략 가능" variant="info" /> : <Badge label="잠김" />}
               </HStack>
               <Text size="sm" color="secondary">{r.desc}</Text>
@@ -455,10 +455,10 @@ function Battle({ plans, castle, captain, boost, squadBoost, onFinish, onExit, o
                     <Text size="sm" color="secondary">{!q.started ? `출발 대기 ${Math.max(0, Math.ceil(q.plan.delay - s.t))}초` : q.retreated ? '후퇴함' : `생존 ${alive} · 지휘 효과 ${active ? '켜짐' : leaderOk ? '-' : '꺼짐(부대장 쓰러짐)'}`}</Text>
                   </VStack>
                   <HStack gap={2}>
-                    {q.skill && <Button size="sm" variant="primary" label={q.skillCd > 0 ? `${q.idx + 1} ${q.skill.name} ${Math.ceil(q.skillCd)}초` : `${q.idx + 1} ${q.skill.name}`}
+                    {q.skill && <Button size="sm" variant="primary" label={q.skillCd > 0 ? `${q.idx + 1} · ${Math.ceil(q.skillCd)}초` : `${q.idx + 1} ${q.skill.name}`}
                       isDisabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} />}
-                    <Button size="sm" label={q.orders.advance ? '전진 중' : '정지 중'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })} />
-                    {q.plan.lane === 1 && <Button size="sm" label={q.orders.gate === 'attack' ? '성문 공격' : '성문 대기'} isDisabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })} />}
+                    <Button size="sm" label={q.orders.advance ? '전진' : '정지'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })} />
+                    {q.plan.lane === 1 && <Button size="sm" label={q.orders.gate === 'attack' ? '공격' : '대기'} isDisabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })} />}
                     <Button label="후퇴" size="sm" variant="destructive" isDisabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)} />
                   </HStack>
                 </VStack>

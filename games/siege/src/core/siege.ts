@@ -49,7 +49,7 @@ export interface Unit {
   vulnMul: number;
 }
 
-export interface Tower { lane: Lane; x: number; hp: number; max: number; dmg: number; range: number; iv: number; atkT: number; alive: boolean; antiAir?: boolean }
+export interface Tower { lane: Lane; x: number; hp: number; max: number; dmg: number; range: number; iv: number; atkT: number; alive: boolean; antiAir?: boolean; barrier?: boolean }
 
 /** 부대 명령: 전진/정지, 성문 공격/대기 */
 export interface Orders { advance: boolean; gate: 'attack' | 'wait' }
@@ -235,9 +235,12 @@ function damage(s: SiegeState, src: Unit | null, tgt: Unit, raw: number) {
   void src;
 }
 
+/** 결계 기둥이 하나라도 살아 있으면 성 안 아군 공격력 -40% */
+const barrierUp = (s: SiegeState) => s.towers.some((t) => t.barrier && t.alive);
 function allyAtk(s: SiegeState, u: Unit): number {
   const cmd = cmdOf(s, u.squad);
   let a = u.atk * (cmd.atkMul ?? 1);
+  if (u.x > s.castle.wallX && barrierUp(s)) a *= 0.6;
   if (cmd.atkMulRole && cmd.atkMulRole.role === u.role) a *= cmd.atkMulRole.mul;
   if (s.gateHp <= 0 && cmd.afterGateAtkMul) a *= cmd.afterGateAtkMul;
   if (u.firstHit) { a *= cmd.firstHitMul ?? 1; u.firstHit = false; }
@@ -366,6 +369,7 @@ function stepFoe(s: SiegeState, u: Unit, dt: number) {
 }
 
 function stepTower(s: SiegeState, t: Tower, dt: number) {
+  if (t.barrier) return;   // 결계 기둥은 공격하지 않는다
   t.atkT -= dt;
   if (t.atkT > 0) return;
   let best: Unit | null = null, bd = Infinity;

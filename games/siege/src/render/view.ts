@@ -77,7 +77,7 @@ export class SiegeView {
     return { x: u.x, y: laneY + (yardY - laneY) * k };
   }
   laneY(lane: number) { return LANE_CY[lane]; }
-  towerBase(lane: number) { return lane === 0 ? LANE_CY[0] - 10 : LANE_CY[1] - 70; }
+  towerBase(lane: number, t?: { x: number; barrier?: boolean }) { return t?.barrier ? YARD_CY - 60 : lane === 0 ? LANE_CY[0] - 10 : LANE_CY[1] - 70; }
   banner(str: string, col: string) { this.bannerQ.push({ str, col, t: 0 }); }
 
   onEvent(e: SiegeEvent) {
@@ -241,7 +241,7 @@ export class SiegeView {
     const items: Item[] = [];
     for (const u of s.units) if (u.alive || u.hitT > 0) { const p = this.pos(u); items.push({ y: p.y, draw: () => this.drawUnit(c, u, p.x, p.y) }); }
     this.wallItems(items);
-    for (const t of s.towers) { const by = this.towerBase(t.lane); items.push({ y: by + 1, draw: () => this.drawTower(c, t, by) }); }
+    for (const t of s.towers) { const by = this.towerBase(t.lane, t); items.push({ y: by + 1, draw: () => this.drawTower(c, t, by) }); }
     items.push({ y: YARD_CY + 110, draw: () => this.drawKeep(c) });
     items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
 
@@ -396,8 +396,19 @@ export class SiegeView {
     } });
   }
 
-  drawTower(c: CanvasRenderingContext2D, t: { x: number; alive: boolean; hp: number; max: number; range: number }, by: number) {
+  drawTower(c: CanvasRenderingContext2D, t: { x: number; alive: boolean; hp: number; max: number; range: number; barrier?: boolean }, by: number) {
     const r = 24;
+    if (t.barrier) {   // 결계 기둥: 빛나는 수정
+      if (!t.alive) { c.fillStyle = '#5a6a8a'; c.fillRect(t.x - 14, by - 16, 28, 16); return; }
+      const pulse = 0.5 + 0.5 * Math.sin(this.t * 4);
+      c.save(); c.globalCompositeOperation = 'lighter';
+      const g = c.createRadialGradient(t.x, by - 60, 4, t.x, by - 60, 90); g.addColorStop(0, `rgba(140,220,255,${0.5 + 0.3 * pulse})`); g.addColorStop(1, 'rgba(140,220,255,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(t.x, by - 60, 90, 0, 7); c.fill(); c.restore();
+      c.fillStyle = '#9fe6ff'; c.beginPath(); c.moveTo(t.x, by - 120); c.lineTo(t.x + 18, by - 50); c.lineTo(t.x, by); c.lineTo(t.x - 18, by - 50); c.closePath(); c.fill();
+      c.fillStyle = '#e8fbff'; c.beginPath(); c.moveTo(t.x, by - 110); c.lineTo(t.x + 6, by - 55); c.lineTo(t.x, by - 20); c.closePath(); c.fill();
+      bar(c, t.x, by - 134, 44, t.hp / t.max, '#9fe6ff');
+      return;
+    }
     if (!t.alive) {
       c.fillStyle = '#5a5066'; c.beginPath(); c.ellipse(t.x, by, r, r * 0.5, 0, 0, 7); c.fill();
       c.fillStyle = '#4a4252'; c.fillRect(t.x - r, by - 18, r * 2, 18); c.beginPath(); c.ellipse(t.x, by - 18, r, r * 0.5, 0, 0, 7); c.fill();

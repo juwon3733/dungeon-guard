@@ -27,7 +27,7 @@ export interface Castle {
   moatSlow?: number;        // 해자 속도 배율(기본 0.6)
   tunnel: boolean;          // 지하 레인 있음
   tunnelDig: number;        // 굴을 여는 데 필요한 작업량(초·마리)
-  towers: { lane: Lane; x: number; hp: number; dmg: number; range: number; iv: number; antiAir?: boolean }[];   // antiAir: 쇠뇌탑(비행 우선, 성 안까지, 비행 피해 2.5배)
+  towers: { lane: Lane; x: number; hp: number; dmg: number; range: number; iv: number; antiAir?: boolean; barrier?: boolean }[];   // antiAir: 쇠뇌탑(비행 우선, 성 안까지, 비행 피해 2.5배), barrier: 결계 기둥(공격 안 함, 살아 있으면 성 안 아군 공격력 -40%)
   garrison: { lane: Lane | 'core'; x: number; type: FoeType; count: number }[];
   tip: string;
 }
@@ -152,6 +152,46 @@ export const CASTLES: Castle[] = [
       { lane: 'core', x: 1830, type: 'captain', count: 2 },
     ],
     tip: '1부의 마지막 성벽. 성문, 해자, 망루, 쇠뇌탑, 굴, 수비대 모두 가장 강하다. 지금까지 모은 모든 것을 써라.',
+  },
+  {
+    id: 'sky_bastion',
+    name: '하늘 성채',
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 10, timeLimit: 300, power: 1,
+    gateHp: 4000, tunnel: false, tunnelDig: 999,
+    towers: [
+      { lane: 0, x: 980, hp: 1200, dmg: 34, range: 340, iv: 1.5, antiAir: true },
+      { lane: 0, x: 1060, hp: 1200, dmg: 34, range: 340, iv: 1.5, antiAir: true },
+      { lane: 1, x: 1020, hp: 1400, dmg: 42, range: 320, iv: 1.4 },
+      { lane: 1, x: 1400, hp: 2600, dmg: 0, range: 0, iv: 99, barrier: true },
+    ],
+    garrison: [
+      { lane: 0, x: 1060, type: 'archer', count: 5 },
+      { lane: 1, x: 1080, type: 'knight', count: 3 },
+      { lane: 'core', x: 1700, type: 'knight', count: 4 },
+      { lane: 'core', x: 1740, type: 'captain', count: 1 },
+    ],
+    tip: '성문은 약하지만 쇠뇌탑이 하늘을 막고, 안뜰의 결계 기둥이 살아 있으면 성 안에서 힘이 40% 빠진다. 기둥부터 부숴라.',
+  },
+  {
+    id: 'royal_keep',
+    name: '왕성 내성',
+    length: 2100, wallX: 1040, mergeX: 1080, coreX: 1980, holdSec: 14, timeLimit: 360, power: 1,
+    gateHp: 26000, moat: [860, 1000], moatSlow: 0.5, tunnel: true, tunnelDig: 50,
+    towers: [
+      { lane: 0, x: 1040, hp: 1800, dmg: 46, range: 320, iv: 1.4 },
+      { lane: 1, x: 1080, hp: 1800, dmg: 46, range: 340, iv: 1.4 },
+      { lane: 0, x: 1160, hp: 1300, dmg: 36, range: 360, iv: 1.6, antiAir: true },
+      { lane: 1, x: 1380, hp: 2800, dmg: 0, range: 0, iv: 99, barrier: true },
+      { lane: 1, x: 1700, hp: 2800, dmg: 0, range: 0, iv: 99, barrier: true },
+    ],
+    garrison: [
+      { lane: 0, x: 1100, type: 'archer', count: 6 },
+      { lane: 1, x: 1120, type: 'knight', count: 4 },
+      { lane: 2, x: 1120, type: 'knight', count: 3 },
+      { lane: 'core', x: 1860, type: 'knight', count: 5 },
+      { lane: 'core', x: 1920, type: 'captain', count: 2 },
+    ],
+    tip: '최종 성. 가장 단단한 성문과 결계 기둥 둘. 기둥을 하나씩 부수며 본관까지 밀어붙여라. 본관 점거도 오래 걸린다.',
   },
 ];
 
