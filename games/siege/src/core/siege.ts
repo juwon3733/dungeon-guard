@@ -39,7 +39,7 @@ export interface Unit {
   vulnMul: number;
 }
 
-export interface Tower { lane: Lane; x: number; hp: number; max: number; dmg: number; range: number; iv: number; atkT: number; alive: boolean }
+export interface Tower { lane: Lane; x: number; hp: number; max: number; dmg: number; range: number; iv: number; atkT: number; alive: boolean; antiAir?: boolean }
 
 /** 부대 명령: 전진/정지, 성문 공격/대기 */
 export interface Orders { advance: boolean; gate: 'attack' | 'wait' }
@@ -326,7 +326,7 @@ function stepFoe(s: SiegeState, u: Unit, dt: number) {
     if (u.atkT <= 0) {
       u.atkT = u.iv; u.lungeT = 0.15;
       s.emit({ t: 'attack', from: u, to: { x: best.x, lane: best.lane }, ranged: u.range > 60 });
-      damage(s, u, best, u.atk * (0.9 + s.rng() * 0.2));
+      damage(s, u, best, u.atk * (0.9 + s.rng() * 0.2) * (u.foeType === 'archer' && best.role === 'flying' ? 1.5 : 1));
     }
     return;
   }
@@ -348,6 +348,14 @@ function stepTower(s: SiegeState, t: Tower, dt: number) {
   let best: Unit | null = null, bd = Infinity;
   for (const a of s.units) {
     if (a.side !== 'ally' || !a.alive || a.lane === 2) continue;
+    const fly = a.role === 'flying';
+    if (t.antiAir) {
+      // 쇠뇌탑: 비행을 먼저(성 안까지), 없으면 성 밖 아군
+      if (!fly && a.x > s.castle.wallX + 10) continue;
+      const d = Math.abs(a.x - t.x) - (fly ? 1000 : 0);   // 비행 우선
+      if (Math.abs(a.x - t.x) <= t.range && d < bd) { bd = d; best = a; }
+      continue;
+    }
     if (a.x > s.castle.wallX + 10) continue;   // 망루는 성 밖(접근하는 적)만 쏜다
     if (t.lane === 1 && a.lane !== 1) continue;
     const d = Math.abs(a.x - t.x);
@@ -357,7 +365,7 @@ function stepTower(s: SiegeState, t: Tower, dt: number) {
   t.atkT = t.iv;
   const miss = s.rng() < (cmdOf(s, best.squad).towerMiss ?? 0);
   s.emit({ t: 'tower', x: t.x, lane: t.lane, to: best, miss });
-  if (!miss) damage(s, null, best, t.dmg);
+  if (!miss) damage(s, null, best, t.dmg * (t.antiAir && best.role === 'flying' ? 2.5 : 1));
 }
 
 export function retreat(s: SiegeState, squad: number) {

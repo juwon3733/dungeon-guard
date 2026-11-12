@@ -27,7 +27,7 @@ export interface Castle {
   moatSlow?: number;        // 해자 속도 배율(기본 0.6)
   tunnel: boolean;          // 지하 레인 있음
   tunnelDig: number;        // 굴을 여는 데 필요한 작업량(초·마리)
-  towers: { lane: Lane; x: number; hp: number; dmg: number; range: number; iv: number }[];
+  towers: { lane: Lane; x: number; hp: number; dmg: number; range: number; iv: number; antiAir?: boolean }[];   // antiAir: 쇠뇌탑(비행 우선, 성 안까지, 비행 피해 2.5배)
   garrison: { lane: Lane | 'core'; x: number; type: FoeType; count: number }[];
   tip: string;
 }
@@ -56,9 +56,10 @@ export const CASTLES: Castle[] = [
   {
     id: 'rock_keep',
     name: '바위 요새',
-    length: 1800, wallX: 980, mergeX: 1020, coreX: 1680, holdSec: 8, timeLimit: 300, power: 1.1,
+    length: 1800, wallX: 980, mergeX: 1020, coreX: 1680, holdSec: 8, timeLimit: 300, power: 0.95,
     gateHp: 3600, tunnel: false, tunnelDig: 999,
     towers: [
+      { lane: 0, x: 1100, hp: 1000, dmg: 30, range: 320, iv: 1.6, antiAir: true },
       { lane: 0, x: 960, hp: 1200, dmg: 38, range: 280, iv: 1.4 },
       { lane: 0, x: 1010, hp: 1200, dmg: 38, range: 280, iv: 1.4 },
       { lane: 1, x: 1000, hp: 1200, dmg: 38, range: 300, iv: 1.4 },
@@ -75,9 +76,10 @@ export const CASTLES: Castle[] = [
   {
     id: 'lake_castle',
     name: '호수 성',
-    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 300, power: 1.1,
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 300, power: 1.0,
     gateHp: 3200, moat: [560, 960], moatSlow: 0.3, tunnel: false, tunnelDig: 999,
     towers: [
+      { lane: 0, x: 1120, hp: 1000, dmg: 30, range: 320, iv: 1.6, antiAir: true },
       { lane: 0, x: 1000, hp: 1100, dmg: 44, range: 340, iv: 1.4 },
       { lane: 1, x: 1020, hp: 1100, dmg: 44, range: 380, iv: 1.4 },
       { lane: 1, x: 1060, hp: 1100, dmg: 44, range: 380, iv: 1.4 },
@@ -94,9 +96,10 @@ export const CASTLES: Castle[] = [
   {
     id: 'iron_gate',
     name: '철문 성채',
-    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 210, power: 1.35,
+    length: 1900, wallX: 1000, mergeX: 1040, coreX: 1780, holdSec: 8, timeLimit: 210, power: 1.15,
     gateHp: 18000, tunnel: true, tunnelDig: 20,
     towers: [
+      { lane: 0, x: 1120, hp: 1000, dmg: 30, range: 320, iv: 1.6, antiAir: true },
       { lane: 0, x: 1000, hp: 1300, dmg: 36, range: 280, iv: 1.5 },
       { lane: 1, x: 1040, hp: 1300, dmg: 36, range: 300, iv: 1.5 },
     ],

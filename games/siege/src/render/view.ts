@@ -389,7 +389,12 @@ export class SiegeView {
     c.fillStyle = '#6a6079'; c.fillRect(t.x - r, by - TOWER_H, r * 2, TOWER_H);              // 몸통 앞면
     c.fillStyle = '#5a5068'; c.beginPath(); c.ellipse(t.x, by, r, r * 0.5, 0, 0, Math.PI); c.fill();
     c.fillStyle = '#8b8098'; c.beginPath(); c.ellipse(t.x, by - TOWER_H, r, r * 0.5, 0, 0, 7); c.fill();   // 윗면
-    c.fillStyle = '#a33245'; c.beginPath(); c.moveTo(t.x - r - 4, by - TOWER_H); c.lineTo(t.x, by - TOWER_H - 40); c.lineTo(t.x + r + 4, by - TOWER_H); c.fill();   // 지붕
+    if ((t as { antiAir?: boolean }).antiAir) {   // 쇠뇌탑: 지붕 대신 하늘을 향한 쇠뇌
+      c.strokeStyle = '#3a2614'; c.lineWidth = 5; c.beginPath(); c.moveTo(t.x - 22, by - TOWER_H - 6); c.quadraticCurveTo(t.x, by - TOWER_H - 34, t.x + 22, by - TOWER_H - 6); c.stroke();
+      c.strokeStyle = '#c9d2ff'; c.lineWidth = 3; c.beginPath(); c.moveTo(t.x - 4, by - TOWER_H); c.lineTo(t.x + 14, by - TOWER_H - 44); c.stroke();
+    } else {
+      c.fillStyle = '#a33245'; c.beginPath(); c.moveTo(t.x - r - 4, by - TOWER_H); c.lineTo(t.x, by - TOWER_H - 40); c.lineTo(t.x + r + 4, by - TOWER_H); c.fill();   // 지붕
+    }
     c.fillStyle = '#ffcf6e'; c.fillRect(t.x - 4, by - TOWER_H + 20, 8, 12);                 // 창
     bar(c, t.x, by - TOWER_H - 52, 44, t.hp / t.max, '#ff6b6b');
   }
