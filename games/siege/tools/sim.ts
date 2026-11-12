@@ -2,7 +2,7 @@
 // 실행: npm run sim  (빠르게: npm test)
 // 기준(docs/siege/06_roadmap.md): 지휘 효과를 성채에 맞춘 편성은 승률이 높고, 안 맞춘 같은 등급 편성은 확연히 낮아야 한다.
 import { CASTLE } from '../src/data/castles';
-import { createSiege, step, stars, type SquadPlan } from '../src/core/siege';
+import { createSiege, step, stars, autoCast, setOrders, type SquadPlan, type SiegeState } from '../src/core/siege';
 
 const quick = process.argv.includes('--quick');
 const N = quick ? 20 : 100;
@@ -52,31 +52,44 @@ const PRESETS: Record<string, SquadPlan[]> = {
 
 const base = CASTLE[process.argv.find((a) => CASTLE[a]) ?? 'border_fort'];
 
-function winRate(power: number, plans: SquadPlan[], noCommand: boolean, n: number) {
+/** 운영 방식: 방치(아무것도 안 함) / 스킬(자동 사용) / 스킬+명령(망루가 무너질 때까지 성문 대기) */
+type Policy = 'idle' | 'skill' | 'smart';
+function play(s: SiegeState, policy: Policy) {
+  if (policy === 'smart') {
+    // 망루가 남아 있고, 그걸 부술 원거리가 정문 쪽에 있을 때만 성문 공격을 미룬다
+    const towersUp = s.towers.some((t) => t.alive);
+    const ranged = s.units.some((u) => u.side === 'ally' && u.alive && u.lane === 1 && u.role === 'ranged');
+    for (const q of s.squads) setOrders(s, q.idx, { gate: towersUp && ranged ? 'wait' : 'attack' });
+  }
+  if (policy !== 'idle') autoCast(s);
+}
+
+function winRate(power: number, plans: SquadPlan[], policy: Policy, n: number) {
   const castle = { ...base, power };
   let win = 0, time = 0, st = 0;
   for (let seed = 1; seed <= n; seed++) {
-    const s = createSiege(castle, plans, { seed, noCommand });
-    while (!s.over) step(s, DT);
+    const s = createSiege(castle, plans, { seed });
+    let tick = 0;
+    while (!s.over) { if (tick++ % 4 === 0) play(s, policy); step(s, DT); }
     if (s.over.win) { win++; time += s.t; st += stars(s); }
   }
   return { rate: win / n, time: win ? time / win : 0, stars: win ? st / win : 0 };
 }
-/** 이길 수 있는(승률 50% 이상) 최대 수비 배율을 이분 탐색으로 찾는다 */
-function limitPower(plans: SquadPlan[], noCommand: boolean) {
+/** 이길 수 있는(승률 50% 이상) 최대 수비 배율 */
+function limitPower(plans: SquadPlan[], policy: Policy) {
   let lo = 0.3, hi = 3;
   for (let i = 0; i < (quick ? 6 : 9); i++) {
     const mid = (lo + hi) / 2;
-    if (winRate(mid, plans, noCommand, quick ? 6 : 12).rate >= 0.5) lo = mid; else hi = mid;
+    if (winRate(mid, plans, policy, quick ? 6 : 12).rate >= 0.5) lo = mid; else hi = mid;
   }
   return lo;
 }
 
 console.log(`성채: ${base.name}  현재 수비 배율 ${base.power}`);
-console.log('편성'.padEnd(34), '한계배율(효과 켬)', '(효과 끔)', ' 효과 이득', '  현재 배율 승률·시간·★');
+console.log('편성'.padEnd(34), '한계배율: 방치', '  스킬', ' 스킬+명령', '   (스킬+명령) 현재 배율 승률·시간·★');
 for (const [name, plans] of Object.entries(PRESETS)) {
-  const on = limitPower(plans, false), off = limitPower(plans, true);
-  const cur = winRate(base.power, plans, false, N);
-  console.log(name.padEnd(34), on.toFixed(2).padStart(10), off.toFixed(2).padStart(12), `${Math.round((on / off - 1) * 100)}%`.padStart(9),
-    `   ${Math.round(cur.rate * 100)}% ${cur.time ? cur.time.toFixed(0) + '초' : '-'} ${cur.stars ? cur.stars.toFixed(1) : '-'}`);
+  const a = limitPower(plans, 'idle'), b = limitPower(plans, 'skill'), c = limitPower(plans, 'smart');
+  const cur = winRate(base.power, plans, 'smart', N);
+  console.log(name.padEnd(34), a.toFixed(2).padStart(9), b.toFixed(2).padStart(7), c.toFixed(2).padStart(9),
+    `     ${Math.round(cur.rate * 100)}% ${cur.time ? cur.time.toFixed(0) + '초' : '-'} ${cur.stars ? cur.stars.toFixed(1) : '-'}`);
 }

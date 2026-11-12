@@ -95,3 +95,21 @@ export const MON: Record<string, Monster> = Object.fromEntries(MONSTERS.map((m) 
 
 /** 해자 무시(해마녀) 같은 특수 처리는 id로 확인한다. */
 export const SWIMMERS = new Set(['siren_queen', 'slime']);
+
+/** 부대장 고유 스킬(영웅 이상). 부대장이 살아 있을 때 재사용 시간마다 쓸 수 있다. 수치는 초안 */
+export type SkillKind = 'slam' | 'raise' | 'charm' | 'swarm' | 'charge' | 'aegis' | 'hex' | 'feast' | 'breath' | 'hellfire' | 'song' | 'doom';
+export interface Skill { name: string; kind: SkillKind; cd: number; desc: string }
+export const SKILLS: Record<string, Skill> = {
+  ogre_chief: { name: '땅울림', kind: 'slam', cd: 14, desc: '주변 적에게 큰 피해와 2초 기절, 성문 앞이면 성문에도 큰 피해' },
+  lich: { name: '망자 일으키기', kind: 'raise', cd: 26, desc: '해골 병사 2기를 일으킨다' },
+  succubus: { name: '매혹', kind: 'charm', cd: 16, desc: '주변 적 3초 기절, 6초간 받는 피해 +30%' },
+  bat_queen: { name: '박쥐 떼', kind: 'swarm', cd: 12, desc: '주변 적과 망루를 박쥐 떼가 세 번 물어뜯는다' },
+  minotaur: { name: '돌진', kind: 'charge', cd: 12, desc: '앞으로 돌진하며 길 위의 적을 들이받는다. 성문에 닿으면 성문에 큰 피해' },
+  dark_knight: { name: '검은 방패', kind: 'aegis', cd: 18, desc: '5초간 부대가 받는 피해 절반' },
+  witch: { name: '저주 구름', kind: 'hex', cd: 14, desc: '적이 모인 곳에 피해, 6초간 받는 피해 +40%' },
+  vampire_lord: { name: '피의 연회', kind: 'feast', cd: 16, desc: '주변 적에게 피해, 부대 체력 30% 회복' },
+  bone_dragon: { name: '썩은 숨결', kind: 'breath', cd: 15, desc: '앞쪽 일직선의 적과 망루에 큰 피해' },
+  demon_general: { name: '지옥불 투석', kind: 'hellfire', cd: 18, desc: '성문과 가까운 망루에 지옥불을 떨어뜨린다' },
+  siren_queen: { name: '노래', kind: 'song', cd: 20, desc: '넓은 범위 적 4초 잠재우기' },
+  abyss_dragon: { name: '종말의 불', kind: 'doom', cd: 25, desc: '보이는 모든 적과 망루, 성문에 큰 피해' },
+};

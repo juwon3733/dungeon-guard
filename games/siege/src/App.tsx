@@ -10,9 +10,9 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
-import { MONSTERS, MON, GRADES, ROLES } from './data/monsters';
+import { MONSTERS, MON, GRADES, ROLES, SKILLS } from './data/monsters';
 import { CASTLES, LANE_NAMES, type Lane } from './data/castles';
-import { createSiege, step, stars, retreat, troopCap, cmdOf, type SquadPlan, type SiegeState } from './core/siege';
+import { createSiege, step, stars, retreat, troopCap, cmdOf, cast, canCast, setOrders, type SquadPlan, type SiegeState } from './core/siege';
 import { SiegeView, VW, VH } from './render/view';
 
 const LEADERS = MONSTERS.filter((m) => m.grade !== 'common');
@@ -107,6 +107,7 @@ function SquadCard({ idx, plan, onChange, tunnel }: { idx: number; plan: SquadPl
           options={LEADERS.map((m) => ({ value: m.id, label: monLabel(m.id) }))}
           onChange={(v) => onChange((p) => { p.leader = v; let left = troopCap(v); p.troops.forEach((t) => { t.count = Math.min(t.count, left); left -= t.count; }); return p; })} />
         <Text size="sm" color="secondary"><span className="dot" style={{ background: g.color }} />지휘 효과: {leader.command?.desc ?? '없음'}</Text>
+        {SKILLS[plan.leader] && <Text size="sm" color="secondary">스킬 「{SKILLS[plan.leader].name}」({SKILLS[plan.leader].cd}초): {SKILLS[plan.leader].desc}</Text>}
         {plan.troops.map((t, k) => (
           <HStack gap={2} key={k}>
             <Selector label={`병력 ${k + 1}`} value={t.id} options={TROOPS.map((m) => ({ value: m.id, label: monLabel(m.id) }))} onChange={(v) => setTroop(k, { id: v })} />
@@ -146,7 +147,8 @@ function Battle({ plans, castleId, onExit }: { plans: SquadPlan[]; castleId: str
     let last = performance.now(), raf = 0, hud = 0;
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      if (!ctl.current.paused) {
+      if (view!.updateCutin(dt)) { /* 컷인 중에는 전투를 멈춘다 */ }
+      else if (!ctl.current.paused) {
         let rem = dt * ctl.current.speed;
         while (rem > 1e-6) { const d = Math.min(1 / 30, rem); step(s, d); rem -= d; }
         view!.update(dt * ctl.current.speed);
@@ -156,7 +158,9 @@ function Battle({ plans, castleId, onExit }: { plans: SquadPlan[]; castleId: str
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const onKey = (e: KeyboardEvent) => { const n = Number(e.key); if (n >= 1 && n <= s.squads.length) cast(s, n - 1); if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); } };
+    window.addEventListener('keydown', onKey);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); };
   }, [plans, castle, run]);
 
   const s = ref.current?.s;
@@ -181,13 +185,21 @@ function Battle({ plans, castleId, onExit }: { plans: SquadPlan[]; castleId: str
             const active = !!cmdOf(s, q.idx).desc;
             return (
               <Card key={q.idx} padding={3}>
+                <VStack gap={2}>
                 <HStack gap={2}>
                   <VStack gap={0}>
                     <Text weight="bold">{q.idx + 1}부대 · {MON[q.plan.leader].name} ({LANE_NAMES[q.plan.lane]})</Text>
                     <Text size="sm" color="secondary">{!q.started ? `출발 대기 ${Math.max(0, Math.ceil(q.plan.delay - s.t))}초` : q.retreated ? '후퇴함' : `생존 ${alive} · 지휘 효과 ${active ? '켜짐' : leaderOk ? '-' : '꺼짐(부대장 쓰러짐)'}`}</Text>
                   </VStack>
+                </HStack>
+                <HStack gap={2}>
+                  {q.skill && <Button size="sm" variant="primary" label={q.skillCd > 0 ? `${q.idx + 1} ${q.skill.name} ${Math.ceil(q.skillCd)}초` : `${q.idx + 1} ${q.skill.name}`}
+                    isDisabled={!canCast(s, q.idx)} onClick={() => cast(s, q.idx)} />}
+                  <Button size="sm" label={q.orders.advance ? '전진 중' : '정지 중'} onClick={() => setOrders(s, q.idx, { advance: !q.orders.advance })} />
+                  {q.plan.lane === 1 && <Button size="sm" label={q.orders.gate === 'attack' ? '성문 공격' : '성문 대기'} isDisabled={s.gateHp <= 0} onClick={() => setOrders(s, q.idx, { gate: q.orders.gate === 'attack' ? 'wait' : 'attack' })} />}
                   <Button label="후퇴" size="sm" variant="destructive" isDisabled={!q.started || q.retreated || !alive || !!s.over} onClick={() => retreat(s, q.idx)} />
                 </HStack>
+                </VStack>
               </Card>
             );
           })}

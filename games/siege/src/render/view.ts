@@ -3,7 +3,7 @@
 // 규칙은 core/siege.ts. 레인은 위아래로 나란한 띠: 0=북쪽 성벽 구간, 1=가운데 정문 길, 2=남쪽 굴.
 import type { SiegeState, SiegeEvent, Unit } from '../core/siege';
 import { TUNNEL_IN } from '../core/siege';
-import { GRADES, ROLES, type Role } from '../data/monsters';
+import { GRADES, ROLES, MON, type Role } from '../data/monsters';
 
 export const VW = 1280, VH = 720;
 const LANE_CY = [250, 390, 530];          // 레인 띠의 가운데(땅 위 y)
@@ -37,6 +37,8 @@ export class SiegeView {
   t = 0;
   follow = true;
   bannerQ: { str: string; col: string; t: number }[] = [];
+  /** 부대장 스킬 컷인. 이게 있는 동안 전투를 멈춘다 */
+  cutin: null | { name: string; skill: string; grade: string; role: Role; t: number; dur: number } = null;
 
   constructor(public canvas: HTMLCanvasElement, public s: SiegeState) {
     this.ctx = canvas.getContext('2d')!;
@@ -113,6 +115,12 @@ export class SiegeView {
         this.burst(this.s.castle.wallX + TUNNEL_IN, LANE_CY[2], 40, '#8b6a45', 200, 5, 0.9);
         this.banner('굴이 뚫렸다', '#c9a477');
         break;
+      case 'skill': {
+        const g = MON[e.leader.monId!].grade;
+        this.cutin = { name: e.leader.name, skill: e.skill.name, grade: g, role: e.leader.role as Role, t: 0, dur: g === 'hero' ? 0.85 : 1.15 };
+        break;
+      }
+      case 'skillHit': this.skillFx(e.kind, e.x, this.laneY(e.lane), e.r ?? 100); break;
       case 'leaderDown':
         this.banner(`${e.u.name} 쓰러짐 — 지휘 효과 사라짐`, '#ff7a7a');
         break;
@@ -124,6 +132,14 @@ export class SiegeView {
       const a = Math.random() * 6.283, sp = (0.3 + Math.random() * 0.7) * speed;
       this.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: life * (0.6 + Math.random() * 0.4), max: life, col, size });
     }
+  }
+
+  /** 컷인 시간만 진행. 컷인이 끝나면 false */
+  updateCutin(dt: number) {
+    if (!this.cutin) return false;
+    this.cutin.t += dt;
+    if (this.cutin.t >= this.cutin.dur) { this.cutin = null; this.flash = 0.35; this.shake = 8; return false; }
+    return true;
   }
 
   update(dt: number) {
@@ -183,6 +199,71 @@ export class SiegeView {
       c.globalAlpha = a; c.textAlign = 'center'; c.font = 'italic 900 40px sans-serif';
       c.lineWidth = 7; c.strokeStyle = '#140f1f'; c.strokeText(b.str, VW / 2, 70); c.fillStyle = b.col; c.fillText(b.str, VW / 2, 70);
       c.globalAlpha = 1;
+    }
+    if (this.cutin) this.drawCutin(c);
+  }
+
+  /** 컷인: 화면이 어두워지고 등급 색 띠가 사선으로 지나가며 부대장과 스킬 이름이 크게 나온다 */
+  drawCutin(c: CanvasRenderingContext2D) {
+    const ci = this.cutin!, p = ci.t / ci.dur;
+    const inn = Math.min(1, p / 0.2), out = p > 0.82 ? (p - 0.82) / 0.18 : 0;
+    const e = 1 - Math.pow(1 - inn, 3), a = 1 - out;
+    const col = GRADES[ci.grade as keyof typeof GRADES].color;
+    c.save();
+    c.fillStyle = `rgba(0,0,0,${0.6 * a})`; c.fillRect(0, 0, VW, VH);
+    c.globalAlpha = a;
+    c.translate((1 - e) * -VW, 0);
+    const top = 250, h = 220;
+    c.fillStyle = col; c.beginPath(); c.moveTo(-40, top + 40); c.lineTo(VW + 40, top - 20); c.lineTo(VW + 40, top + h - 60); c.lineTo(-40, top + h); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(16,12,28,.85)'; c.beginPath(); c.moveTo(-40, top + 56); c.lineTo(VW + 40, top - 4); c.lineTo(VW + 40, top + h - 76); c.lineTo(-40, top + h - 16); c.closePath(); c.fill();
+    // 집중선
+    c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = 2;
+    for (let i = 0; i < 18; i++) { const y = top + 10 + ((i * 47) % (h - 30)); const xx = VW - ((p * 2600 + i * 170) % (VW + 300)); c.beginPath(); c.moveTo(xx, y); c.lineTo(xx + 80 + (i % 4) * 40, y); c.stroke(); }
+    // 부대장(크게)
+    const fx = 260 + (1 - e) * 80, fy = top + h - 24;
+    this.drawFigure(c, fx, fy, 6.5, ROLE_COL[ci.role], ci.role === 'flying');
+    // 글자
+    c.textAlign = 'right';
+    c.font = 'bold 22px sans-serif'; c.fillStyle = col; c.fillText(`${GRADES[ci.grade as keyof typeof GRADES].label} · ${ci.name}`, VW - 80, top + 70);
+    c.font = 'italic 900 72px sans-serif'; c.lineWidth = 10; c.strokeStyle = '#140f1f'; c.strokeText(ci.skill, VW - 80, top + 150);
+    c.fillStyle = '#ffffff'; c.fillText(ci.skill, VW - 80, top + 150);
+    c.restore();
+  }
+
+  /** 컷인용 큰 캐릭터(유닛 그림과 같은 모양을 크게) */
+  drawFigure(c: CanvasRenderingContext2D, x: number, feet: number, k: number, body: string, flying: boolean) {
+    const bw = 12 * k, bh = 14 * k, hr = 6.5 * k, dark = shade(body, 0.7);
+    c.fillStyle = dark; c.fillRect(x - bw * 0.35, feet - 5 * k, bw * 0.25, 5 * k); c.fillRect(x + bw * 0.1, feet - 5 * k, bw * 0.25, 5 * k);
+    c.fillStyle = body; roundRect(c, x - bw / 2, feet - 5 * k - bh, bw, bh, 3 * k); c.fill();
+    const hy = feet - 5 * k - bh - hr + 2;
+    c.fillStyle = shade(body, 1.15); c.beginPath(); c.arc(x, hy, hr, 0, 7); c.fill();
+    c.fillStyle = '#140f1f'; c.fillRect(x + hr * 0.25, hy - k, 2 * k, 2.5 * k);
+    if (flying) { c.fillStyle = dark; c.beginPath(); c.moveTo(x - 2, feet - bh * 0.8); c.lineTo(x - bw - 10 * k, feet - bh - 10 * k); c.lineTo(x - bw * 0.6, feet - bh * 0.4); c.fill(); }
+  }
+
+  /** 스킬 이펙트 */
+  skillFx(kind: string, x: number, y: number, r: number) {
+    const ring = (col: string, dur: number, w = 8) => this.fx.push({ age: 0, dur, draw: (c, p) => {
+      c.globalAlpha = 1 - p; c.strokeStyle = col; c.lineWidth = w * (1 - p) + 1;
+      c.beginPath(); c.ellipse(x, y, r * (0.3 + p), r * (0.3 + p) * 0.5, 0, 0, 7); c.stroke();
+    } });
+    const glow = (col: string, dur: number) => this.fx.push({ age: 0, dur, draw: (c, p) => {
+      c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.6 * (1 - p);
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g; c.beginPath(); c.ellipse(x, y, r, r * 0.55, 0, 0, 7); c.fill();
+    } });
+    switch (kind) {
+      case 'slam': ring('#ffd08a', 0.6, 14); ring('#ffffff', 0.4, 6); this.burst(x, y, 40, '#c9a477', 280, 6, 0.8); this.shake = 14; break;
+      case 'charm': glow('rgba(255,110,190,1)', 1.0); ring('#ff8ad8', 0.8); this.burst(x, y - 20, 24, '#ff9ad8', 140, 4, 1.0); break;
+      case 'swarm': for (let i = 0; i < 14; i++) this.parts.push({ x: x - 60 + Math.random() * 120, y: y - 60 + Math.random() * 60, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 160, life: 0.6, max: 0.6, col: '#9d7bff', size: 7 }); ring('#9d7bff', 0.4, 5); break;
+      case 'charge': this.burst(x, y, 36, '#d9b48a', 240, 5, 0.7); ring('#ffb070', 0.45, 10); this.shake = 12; break;
+      case 'aegis': this.fx.push({ age: 0, dur: 1.2, draw: (c, p) => { c.globalAlpha = 0.8 * (1 - p); c.strokeStyle = '#8fd0ff'; c.lineWidth = 5; c.beginPath(); c.arc(x, y - 30, 70, Math.PI, 0); c.stroke(); c.fillStyle = 'rgba(143,208,255,.15)'; c.fill(); } }); break;
+      case 'hex': glow('rgba(140,60,200,1)', 1.4); this.burst(x, y - 20, 30, '#a26bff', 90, 6, 1.3); break;
+      case 'feast': glow('rgba(220,30,60,1)', 0.9); ring('#ff4d6d', 0.7, 10); this.burst(x, y - 20, 30, '#ff4d6d', 200, 5, 0.9); break;
+      case 'breath': this.fx.push({ age: 0, dur: 0.9, draw: (c, p) => { c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.7 * (1 - p); const g = c.createLinearGradient(x, 0, x + r, 0); g.addColorStop(0, '#b8ff7a'); g.addColorStop(1, 'rgba(80,200,60,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(x, y - 20); c.lineTo(x + r, y - 90); c.lineTo(x + r, y + 50); c.closePath(); c.fill(); } }); this.shake = 10; break;
+      case 'hellfire': for (let i = 0; i < 6; i++) { const tx = x - 60 + Math.random() * 160, ty = y - 120 + Math.random() * 200, d = i * 0.08; this.fx.push({ age: -d, dur: 0.5, draw: (c, p) => { if (p < 0) return; const fy = ty - 300 * (1 - p); c.globalCompositeOperation = 'lighter'; c.fillStyle = '#ff7a2a'; c.beginPath(); c.arc(tx, fy, 12, 0, 7); c.fill(); } }); } setTimeout(() => { this.burst(x, y - 40, 70, '#ff7a2a', 320, 6, 1); this.shake = 18; this.flash = 0.4; }, 400); break;
+      case 'song': ring('#7ae7ff', 1.2, 6); ring('#c8f6ff', 0.9, 4); for (let i = 0; i < 10; i++) this.texts.push({ x: x - r / 2 + Math.random() * r, y: y - 40 - Math.random() * 60, str: '♪', col: '#9ff0ff', life: 1.2, size: 22 }); break;
+      case 'doom': this.flash = 0.9; this.shake = 24; ring('#ff3df0', 1.0, 18); glow('rgba(170,40,255,1)', 1.2); this.burst(x + 200, y, 120, '#d07bff', 500, 7, 1.2); break;
     }
   }
 
